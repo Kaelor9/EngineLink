@@ -7,7 +7,7 @@
 <p align="center"><a href="https://kaelor9.github.io/EngineLink/"><strong>Firmware Downloads &amp; Installer</strong></a> · <a href="https://github.com/Kaelor9/EngineLink/releases">Releases</a> · <a href="docs/PROJECT_PLAN.md">Project plan</a></p>
 
 > [!NOTE]
-> **Early development.** This is a project foundation, **not a released fuel-monitoring product**. The browser installer is deliberately disabled until an ESP32-S3 firmware binary has been compiled, checked and tested on the actual PCB.
+> **Early development.** This is a project foundation, **not a released fuel-monitoring product**. An experimental Lab v1.1 build can be flashed through the browser for controlled bench use. It compiles in CI, but has **not** been validated as a full release on the actual PCB. Do not connect real engines or the NMEA 2000 bus.
 
 ## Purpose
 
@@ -47,7 +47,7 @@ The [GitHub Pages download page](https://kaelor9.github.io/EngineLink/) includes
 
 1. A link to the repository's source archive.
 2. A link to official GitHub Releases (once releases exist).
-3. A browser-based **ESP Web Tools** installer which **automatically appears only after** a verified merged `.bin` and a compatible manifest are deliberately published.
+3. An **ESP Web Tools** installer for the **experimental Lab v1.1** built by GitHub Actions. Flashing requires acknowledgement of the bench-only warning; this is not approved production firmware.
 
 See [release procedure](docs/RELEASING.md). **Do not flash random or example binaries from other ESP32 projects.**
 
@@ -79,7 +79,7 @@ EngineLink/
 | NMEA 2000 bus communication | Not yet validated |
 | Fuel-rate decoding on real engines | Not yet verified |
 | Production firmware | In design |
-| Browser flashing | Website staged; not yet enabled |
+| Browser flashing | Experimental Lab only; production firmware unavailable |
 
 > The J1708 bench result does not establish full bus arbitration/conformance. The NMEA2000 and engine connections require separate validation.
 
