@@ -21,6 +21,7 @@
 #include <sys/time.h>
 #include <time.h>
 #include <esp_sntp.h>
+#include <esp_system.h>
 #include <math.h>
 #include "ui.h"
 
@@ -169,7 +170,7 @@ void initSD(){
   sdMessage="Logging raw J1708";sdFaultLatched=false;
   lastFlush=millis();
 }
-void reply(bool ok,const String &message,int code);
+void reply(bool ok,const String &message,int code=200);
 void finishCalibration(bool resume);
 void serviceSD(){
   if((sdLogging||calActive)&&!cardInserted()){
@@ -219,7 +220,7 @@ void calibrationMarker(){
   if(!calActive)return;
   const long long epoch=validWall()?(long long)time(nullptr):0;
   char entry[240];
-  int n=snprintf(entry,sizeof(entry),"MARK,%08lX,%llu,%lld,%lu,%s,%u,%.3f,,,,,,\n",
+  int n=snprintf(entry,sizeof(entry),"MARK,%08lX,%llu,%lld,%lu,%s,%u,%.3f,,,,,,,\n",
     (unsigned long)bootId,(unsigned long long)elapsedMs(),epoch,
     (unsigned long)calSteps,calPhase.c_str(),(unsigned)calReferenceRPM,
     calReferenceFuel);
@@ -549,8 +550,8 @@ LedState selectedLED(){
   if(ctr.uartFaults[0]||ctr.uartFaults[1]||ctr.rxDropped[0]||ctr.rxDropped[1])return LS_RX_ERROR;
   if(calActive)return LS_TEST;
   if(!cfg.completed)return LS_SETUP;
-  if(!sdReady||!sdLogging)return LS_NO_SD;
   if(cfg.router&&cfg.ssid.length()&&WiFi.status()!=WL_CONNECTED)return LS_ROUTER;
+  if(!sdReady)return LS_NO_SD;
   return LS_READY;
 }
 void updateLED(){
@@ -619,10 +620,9 @@ void jsonString(String &out,const String &v){
 }
 void sendJSON(int code,const String &s){
   web.sendHeader("Cache-Control","no-store");
-  web.sendHeader("Connection","close");
   web.send(code,"application/json; charset=utf-8",s);
 }
-void reply(bool ok,const String &message,int code=200){
+void reply(bool ok,const String &message,int code){
   String s="{\"ok\":";
   s+=ok?"true":"false";
   s+=",\"message\":";jsonString(s,message);s+='}';
@@ -641,7 +641,7 @@ void handleState(){
   float total=totalAvailable?motor[0].fuelLph+motor[1].fuelLph:0;
   bool speedAvailable=isfinite(sogKnots)&&sogAt&&now-sogAt<7000 && sogKnots>0.5;
   String s;s.reserve(7500);
-  s+="{\"version\":\"0.1.0-alpha\",\"setup\":";
+  s+="{\"version\":\"0.2.0-alpha\",\"setup\":";
   s+=cfg.completed?"true":"false";
   s+=",\"mode\":\"PASSIVE\",\"uptime\":";
   s+=(unsigned long)(now/1000ULL);
@@ -659,6 +659,10 @@ void handleState(){
   s+=",\"apJoins\":";s+=(unsigned long)apJoins;
   s+=",\"apLeaves\":";s+=(unsigned long)apLeaves;
   s+=",\"apReason\":";s+=(unsigned int)apReason;
+  s+=",\"apStarts\":";s+=(unsigned long)apStarts;
+  s+=",\"apStops\":";s+=(unsigned long)apStops;
+  s+=",\"staDisconnects\":";s+=(unsigned long)staDisconnects;
+  s+=",\"apStarted\":";s+=apStarted?"true":"false";
   s+="},\"config\":{\"router\":";
   s+=cfg.router?"true":"false";
   s+=",\"portChannel\":";s+=cfg.portChannel;
@@ -671,6 +675,20 @@ void handleState(){
   s+=",\"errors\":";s+=sdErrors;
   s+=",\"filename\":";jsonString(s,sessionName);
   s+=",\"status\":";jsonString(s,sdMessage);
+  s+="},\"test\":{\"running\":";s+=calActive?"true":"false";
+  s+=",\"rows\":";s+=calRows;
+  s+=",\"invalid\":";s+=calInvalid;
+  s+=",\"step\":";s+=calSteps;
+  s+=",\"phase\":";jsonString(s,calPhase);
+  s+=",\"channel\":";s+=calChannel;
+  s+=",\"referenceRPM\":";s+=calReferenceRPM;
+  s+=",\"referenceFuel\":";if(calReferenceFuel>=0)s+=String(calReferenceFuel,3);else s+="null";
+  s+=",\"file\":";jsonString(s,calName);
+  s+=",\"seconds\":";s+=calActive?((millis()-calStartMs)/1000UL):0;
+  s+=",\"available\":";s+=(sdReady&&!calActive&&calName.length()&&SD.exists(calName))?"true":"false";
+  s+="},\"led\":{\"name\":";jsonString(s,ledStateName(selectedLED()));
+  s+=",\"status\":";s+=(unsigned)selectedLED();
+  s+=",\"testing\":";s+=(ledTestStartedMs&&(uint32_t)(millis()-ledTestStartedMs)<16000UL)?"true":"false";
   s+="},\"hardware\":{\"heap\":";
   s+=ESP.getFreeHeap();
   s+=",\"minHeap\":";s+=ESP.getMinFreeHeap();
@@ -678,6 +696,8 @@ void handleState(){
   s+=",\"opto\":";s+=digitalRead(OPTO_PIN);
   s+=",\"canReady\":";s+=canReady?"true":"false";
   s+=",\"nmeaRx\":";s+=ctr.nmeaFrames;
+  s+=",\"resetReason\":";s+=(unsigned int)esp_reset_reason();
+  s+=",\"uartReady\":[";s+=uartReady[0]?"true":"false";s+=",";s+=uartReady[1]?"true":"false";s+="]";
   s+="},\"channels\":[";
   for(int c=0;c<2;c++){
     if(c)s+=',';
@@ -777,8 +797,7 @@ void handleDownload(){
 }
 void initializeWeb(){
   web.on("/",HTTP_GET,[](){
-    web.sendHeader("Cache-Control","no-store");
-    web.sendHeader("Connection","close");
+    web.sendHeader("Cache-Control","private, max-age=3600");
     web.send_P(200,"text/html; charset=utf-8",ENGINE_UI);
   });
   web.on("/favicon.ico",HTTP_GET,[](){web.send(204,"text/plain","");});
@@ -807,7 +826,7 @@ void setup(){
   led.begin();led.setBrightness(ledBrightness);led.clear();led.show();
   Serial.begin(115200);
   delay(1200); // do not block boot for USB Serial Monitor
-  Serial.println("\nEngineLink 0.1.0-alpha - passive engine monitoring");
+  Serial.println("\nEngineLink 0.2.0-alpha - passive engine monitoring");
   bootId=esp_random();
   pinMode(SD_DETECT,INPUT);
   pinMode(OPTO_PIN,INPUT);
