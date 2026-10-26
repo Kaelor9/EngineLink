@@ -15,7 +15,7 @@ Run engines only under the manufacturer's operating procedures, with the vessel 
 1. Insert a microSD card; confirm **Device → SD status** indicates that it is mounted.
 2. In **Traffic → Engine Test & Calibration**, select **Both channels**, **J7**, or **J6**.
 3. Select **Start recording**. The unit pauses its ordinary CSV stream while the test capture uses the SD card, avoiding two simultaneous high-rate writers.
-4. With the engine at idle, let the unit record for 30–60 seconds. The first marker is **idle**. The test may be started before the engine starts if that is useful.
+4. With the engine at idle, let the unit record for 30–60 seconds. The first automatic marker is **unlabelled**, with no reference values. Use **Mark current stage** to label stable idle after you have an actual reference. The test may be started before the engine starts if useful.
 5. For the next reference point, choose **Low / Medium / High RPM / Cruise / Custom**, enter an independent *observed* RPM and optional fuel-flow reference (L/h), then select **Mark current stage**. Hold stable for 30–60 seconds.
 6. Repeat for as many reference points as needed. Stage markers never change engine RPM; they simply label incoming data.
 7. Select **Stop & save**, then **Download test CSV**. Safari should offer the CSV through its download/File handling; desktop browsers download it directly.
@@ -34,7 +34,7 @@ kind,boot_id,uptime_ms,utc_epoch,step,phase,reference_rpm,reference_fuel_lph,cha
 - **MARK** records a chosen stage, reference RPM and optional reference fuel rate.
 - **FRAME** records each received J1708 message, its physical channel, raw HEX bytes, checksum result, optional decoded standard parameters and current manual references.
 - **utc_epoch=0** means the unit did not have confirmed wall-clock time. \`uptime_ms\` remains useful for aligning samples within the boot session.
-- **reference_fuel_lph=-1** means the operator did not supply a reference fuel measurement; it is *not* a real negative fuel flow.
+- **reference_rpm=-1** and **reference_fuel_lph=-1** mean the operator did not supply those reference measurements; they are *not* real negative physical readings.
 - **checksum=0** means the captured data failed J1708 checksum validation. Framing still needs verification; a checksum failure does not automatically prove an ECU problem.
 - Captures may have gaps if \`uartFaults\`, \`drops\`, or SD write errors occur. Review hardware diagnostics together with raw capture.
 
@@ -62,7 +62,7 @@ The previous free color picker has been removed; the LED is controlled by actual
 | J1708 UART queue overflow | Red double flash |
 | Motor test recording | Cyan pulse |
 
-The **Test all LED signals** button shows a 16-second diagnostic sequence, then returns to actual system indication.
+The **Test all LED signals** button shows a 16-second diagnostic sequence, then returns to actual system indication. A J1708 overflow indication automatically clears after 30 seconds without a new overflow; historical counters remain visible.
 
 ## Wi-Fi troubleshooting
 
