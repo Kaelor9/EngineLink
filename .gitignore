@@ -1,0 +1,14 @@
+# Editor / OS
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+# Arduino outputs
+build/
+*.elf
+*.map
+*.bin
+# Python
+__pycache__/
+# Future approved release binaries are explicitly committed to site/
+!site/firmware.bin
