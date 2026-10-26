@@ -1,11 +1,11 @@
-name: Build Lab firmware and publish EngineLink downloads
+name: Build EngineLink app and publish downloads
 
 on:
   push:
     branches: [main]
     paths:
       - 'site/**'
-      - 'experiments/EngineLink_Lab_v1_2/**'
+      - 'firmware/EngineLink/**'
       - '.github/workflows/pages.yml'
   workflow_dispatch:
 
@@ -40,14 +40,14 @@ jobs:
           arduino-cli core install esp32:esp32 --additional-urls "$ARDUINO_CORE_URL"
           arduino-cli lib install "Adafruit NeoPixel"
 
-      - name: Compile experimental Lab firmware
+      - name: Compile EngineLink application
         run: |
           mkdir -p build
           arduino-cli compile \
             --fqbn "$FQBN" \
             --output-dir build \
             --export-binaries \
-            experiments/EngineLink_Lab_v1_2
+            firmware/EngineLink
 
       - name: Stage ESP32-S3 merged binary and manifest
         shell: bash
@@ -62,13 +62,13 @@ jobs:
           p=pathlib.Path("site/firmware.bin")
           assert 100_000 < p.stat().st_size <= 8*1024*1024, p.stat().st_size
           manifest={
-            "name":"EngineLink Lab (experimental)",
-            "version":"1.2.0-lab",
+            "name":"EngineLink App (alpha)",
+            "version":"0.1.0-alpha",
             "new_install_prompt_erase":True,
             "builds":[{"chipFamily":"ESP32-S3","parts":[{"path":"firmware.bin","offset":0}]}]
           }
           pathlib.Path("site/manifest.json").write_text(json.dumps(manifest,indent=2)+"\n")
-          print("Staged experimental ESP32-S3 image:",p.stat().st_size,"bytes")
+          print("Staged EngineLink alpha ESP32-S3 image:",p.stat().st_size,"bytes")
           PY
 
       - name: Configure GitHub Pages
@@ -79,10 +79,10 @@ jobs:
         with:
           path: site
 
-      - name: Archive compiled experimental binary
+      - name: Archive compiled EngineLink alpha binary
         uses: actions/upload-artifact@v4
         with:
-          name: EngineLink-Lab-v1.2-Experimental-ESP32S3
+          name: EngineLink-App-v0.1.0-alpha-ESP32S3
           path: |
             site/firmware.bin
             site/manifest.json
