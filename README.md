@@ -7,7 +7,7 @@
 <p align="center"><a href="https://kaelor9.github.io/EngineLink/"><strong>Firmware Downloads &amp; Installer</strong></a> · <a href="https://github.com/Kaelor9/EngineLink/releases">Releases</a> · <a href="docs/PROJECT_PLAN.md">Project plan</a></p>
 
 > [!NOTE]
-> **EngineLink application v0.2.0-alpha** is now implemented and CI-compiled. It provides an offline onboard web app, first-time setup, passive dual-J1708 capture, standard PID183 fuel decoding and automatic SD session logging. **Actual engine compatibility and hardware reliability remain unverified.** Disconnect engine/NMEA2000 networks for initial flashing and bring-up. See [Alpha status and safety](docs/PRODUCTION_ALPHA.md).
+> **EngineLink application v0.2.1-alpha** is now implemented and CI-compiled. It provides an offline onboard web app, first-time setup, passive dual-J1708 capture, standard PID183 fuel decoding and automatic SD session logging. **Actual engine compatibility and hardware reliability remain unverified.** Disconnect engine/NMEA2000 networks for initial flashing and bring-up. See [Alpha status and safety](docs/PRODUCTION_ALPHA.md).
 
 ## Purpose
 
@@ -47,7 +47,7 @@ The [GitHub Pages download page](https://kaelor9.github.io/EngineLink/) includes
 
 1. A link to the repository's source archive.
 2. A link to official GitHub Releases (once releases exist).
-3. An **ESP Web Tools** installer for the **EngineLink 0.2.0-alpha application** compiled by GitHub Actions. Flashing requires acknowledgement of the safety warning. Do not treat this as hardware-validated production firmware.
+3. An **ESP Web Tools** installer for the **EngineLink 0.2.1-alpha application** compiled by GitHub Actions. Flashing requires acknowledgement of the safety warning. Do not treat this as hardware-validated production firmware.
 
 See [release procedure](docs/RELEASING.md). **Do not flash random or example binaries from other ESP32 projects.**
 

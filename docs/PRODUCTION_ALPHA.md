@@ -1,6 +1,20 @@
-# EngineLink application v0.2.0-alpha
+# EngineLink application v0.2.1-alpha
 
 This is a **working application foundation**, not a validated production release. The former Lab firmware is retained under \`experiments/\`. The application is in \`firmware/EngineLink/\`.
+
+## Changes in 0.2.1-alpha
+
+- J1708 frame backlog moved to PSRAM (2048 frames). A CSV download or SD flush blocks the web server loop; the old 72-frame queue could overflow in well under a second of bus traffic, dropping frames and triggering the red J1708 LED alarm.
+- Frames up to 64 bytes are captured intact. J1708 limits messages to 21 bytes only while the vehicle moves; longer stationary/diagnostic messages were previously marked malformed.
+- microSD hot-plug: card removal is detected in every state (not only while recording) and the card is unmounted; a re-inserted card mounts and resumes session logging automatically.
+- A motor test that fails to start no longer leaves ordinary SD logging switched off.
+- SD write failures at end of row are detected.
+- Settings: a failed NMEA2000 start no longer leaves half-applied settings in memory. The Settings form is now filled correctly right after the setup wizard.
+- NTP no longer overrides an active GPS time source in Automatic mode.
+- The onboard UI is served with `Cache-Control: no-cache`, so Safari does not keep showing an old UI for an hour after a firmware update.
+- Device page: reset reason shown as text (e.g. *Brownout*), UART line-error counter and frame backlog; the LED panel shows the real system state even while the LED demo runs.
+- No status-poll SD lookups: test-file availability is cached.
+- Version metadata aligned across firmware, installer, workflows and docs; RELEASING.md no longer describes the Lab build.
 
 ## What is implemented
 

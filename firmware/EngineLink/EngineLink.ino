@@ -1,5 +1,5 @@
 /*
- * EngineLink 0.2.0-alpha — actual application firmware
+ * EngineLink 0.2.1-alpha — actual application firmware
  * ESP32-S3-WROOM-1-N8R8, 8 MB flash / 8 MB PSRAM.
  *
  * Captures actual J1708 / J1587 RX bytes on J7 and J6. No J1708 TX pins
@@ -22,14 +22,22 @@
 #include <time.h>
 #include <esp_sntp.h>
 #include <esp_system.h>
+#include <esp_heap_caps.h>
 #include <math.h>
 #include "ui.h"
+
+#define EL_VERSION "0.2.1-alpha"
 
 constexpr uint8_t RX_J7=21, RX_J6=17; // TX GPIO47/GPIO18 deliberately NOT assigned
 constexpr uint8_t LED_PIN=48;
 constexpr uint8_t SD_CS=10, SD_MOSI=11, SD_SCK=12, SD_MISO=13, SD_DETECT=14;
 constexpr uint8_t OPTO_PIN=38, CAN_TX=15, CAN_RX=16;
-constexpr uint8_t MAX_FRAME=21;
+// SAE J1708 limits messages to 21 bytes only while the vehicle is moving;
+// longer stationary/diagnostic messages must still be captured intact.
+constexpr uint8_t MAX_FRAME=64;
+// Frame backlog lives in PSRAM so a blocking CSV download or SD flush does
+// not drop engine traffic (~2048 frames is tens of seconds of bus load).
+constexpr UBaseType_t FRAME_QUEUE_PSRAM=2048, FRAME_QUEUE_FALLBACK=96;
 constexpr uint32_t FRAME_FRESH_MS=6000;
 constexpr uint32_t RPM_FRESH_MS=12000;
 constexpr uint32_t CSV_FLUSH_MS=1200;
@@ -80,6 +88,7 @@ struct Counters {
   uint32_t overflows[2]={0,0};
   volatile uint32_t rxDropped[2]={0,0};
   volatile uint32_t uartFaults[2]={0,0};
+  volatile uint32_t lineErrors[2]={0,0};
   uint32_t nmeaFrames=0;
   uint32_t canErrors=0;
 };
@@ -92,6 +101,8 @@ Counters ctr;
 Motor motor[2];
 Channel channels[2]={{UART_NUM_1,0},{UART_NUM_2,1}};
 QueueHandle_t framesQueue=nullptr;
+StaticQueue_t framesQueueState;
+UBaseType_t framesQueueLength=0;
 Recent recent[24];
 uint8_t recentIndex=0,recentCount=0;
 uint32_t bootId=0,lastFlush=0,lastWifiRetry=0,lastLed=0,ledPrev=0xFFFFFFFF;
@@ -115,6 +126,8 @@ float calReferenceFuel=-1.0f;
 String calName="",calPhase="idle";
 uint32_t sdRows=0,sdErrors=0;
 bool apStarted=false;
+bool testFileAvailable=false,spiStarted=false,cardWasInserted=false;
+uint32_t lastCardCheck=0,cardChangeAt=0;
 volatile uint32_t apJoins=0,apLeaves=0,apStarts=0,apStops=0,staDisconnects=0;
 volatile uint8_t apReason=0;
 float sogKnots=NAN;
@@ -154,7 +167,7 @@ void stopLog(){
 }
 void initSD(){
   if(!cardInserted()){sdReady=false;sdMessage="No card";return;}
-  SPI.begin(SD_SCK,SD_MISO,SD_MOSI,SD_CS);
+  if(!spiStarted){SPI.begin(SD_SCK,SD_MISO,SD_MOSI,SD_CS);spiStarted=true;}
   sdReady=SD.begin(SD_CS,SPI,4000000);
   sdMessage=sdReady?"Card mounted":"Mount failed";
   if(!sdReady)sdFaultLatched=true;
@@ -171,15 +184,34 @@ void initSD(){
   sdMessage="Logging raw J1708";sdFaultLatched=false;
   lastFlush=millis();
 }
+void refreshTestAvailable(){
+  testFileAvailable=sdReady&&cardInserted()&&calName.length()&&SD.exists(calName);
+}
 void reply(bool ok,const String &message,int code=200);
 void finishCalibration(bool resume);
 void serviceSD(){
-  if((sdLogging||calActive)&&!cardInserted()){
-    if(calActive)finishCalibration(false);
-    if(sdLogging)stopLog();
-    sdReady=false;sdFaultLatched=true;
-    sdMessage="SD removed - recording stopped";
-    return;
+  // Card detect is checked for every state, not only while recording, so a
+  // removed card unmounts cleanly and a re-inserted card mounts again.
+  if((uint32_t)(millis()-lastCardCheck)>=250){
+    lastCardCheck=millis();
+    const bool inserted=cardInserted();
+    if(inserted!=cardWasInserted){cardWasInserted=inserted;cardChangeAt=millis();}
+    if(!inserted&&(sdReady||sdLogging||calActive)){
+      const bool wasRecording=sdLogging||calActive;
+      if(calActive)finishCalibration(false);
+      if(sdLogging)stopLog();
+      SD.end();
+      sdReady=false;testFileAvailable=false;
+      if(wasRecording){sdFaultLatched=true;sdMessage="SD removed - recording stopped";}
+      else sdMessage="No card";
+      return;
+    }
+    // Debounced insertion: mount and resume automatic session logging.
+    if(inserted&&!sdReady&&cardChangeAt&&(uint32_t)(millis()-cardChangeAt)>=1000){
+      cardChangeAt=0;
+      initSD();
+      refreshTestAvailable();
+    }
   }
   if(sdLogging && (uint32_t)(millis()-lastFlush)>=CSV_FLUSH_MS){
     logFile.flush();lastFlush=millis();
@@ -201,7 +233,7 @@ void writeRecord(const Frame &f,uint8_t mid,bool valid,const char *hex,bool gotF
   if(gotFuel)logFile.print(lph,3);
   logFile.print(',');
   if(gotRPM)logFile.print(rpm,2);
-  logFile.println();
+  if(logFile.println()==0){sdMessage="SD write failed";sdFaultLatched=true;++sdErrors;stopLog();return;}
   ++sdRows;
 }
 
@@ -210,6 +242,7 @@ void writeRecord(const Frame &f,uint8_t mid,bool valid,const char *hex,bool gotF
 void finishCalibration(bool resume){
   if(calFile){if(cardInserted())calFile.flush();calFile.close();}
   calActive=false;
+  refreshTestAvailable();
   if(resume && calResumeLogging && sdReady && cardInserted()){
     logFile=SD.open(sessionName,FILE_APPEND);
     sdLogging=(bool)logFile;
@@ -236,8 +269,7 @@ bool startCalibration(int channel){
   if(channel<-1||channel>1)return false;
   calChannel=channel;
   calRows=0;calInvalid=0;calSteps=1;calReferenceRPM=-1;calReferenceFuel=-1;
-  calPhase="unlabelled";calStartMs=millis();calResumeLogging=sdLogging;
-  if(sdLogging)stopLog(); // Do not duplicate high-rate writes to the same SD card.
+  calPhase="unlabelled";calStartMs=millis();
   char name[28];
   snprintf(name,sizeof(name),"/TEST%08lX.CSV",(unsigned long)bootId);
   calName=name;
@@ -250,11 +282,20 @@ bool startCalibration(int channel){
   }
   calFile=SD.open(calName,FILE_WRITE);
   if(!calFile){sdFaultLatched=true;sdMessage="Could not create motor test file";return false;}
+  // Only pause session logging once the test file exists, so a failed start
+  // never leaves ordinary logging silently switched off.
+  calResumeLogging=sdLogging;
+  if(sdLogging)stopLog(); // Do not duplicate high-rate writes to the same SD card.
+  testFileAvailable=false;
   calFile.println("kind,boot_id,uptime_ms,utc_epoch,step,phase,reference_rpm,reference_fuel_lph,channel,mid,length,checksum,raw_hex,decoded_fuel_lph,decoded_rpm");
   calActive=true;
   lastTestFlush=millis();
+  const bool resumeAfterFailure=calResumeLogging;
   calibrationMarker();
-  if(!calActive)return false;
+  if(!calActive){
+    if(resumeAfterFailure)initSD();
+    return false;
+  }
   pref.begin("enginelink",false);pref.putString("testfile",calName);pref.end();
   sdMessage="Motor calibration test capturing";
   return true;
@@ -262,12 +303,12 @@ bool startCalibration(int channel){
 void appendCalibrationFrame(const Frame &f,uint8_t mid,bool valid,const char *hex,bool gotFuel,float lph,bool gotRPM,float rpm){
   if(!calActive || (calChannel>=0 && f.channel!=(uint8_t)calChannel))return;
   const long long epoch=validWall()?(long long)time(nullptr):0;
-  char entry[285];
+  char entry[480];
   int n=snprintf(entry,sizeof(entry),"FRAME,%08lX,%llu,%lld,%lu,%s,%ld,%.3f,J%u,%u,%u,%u,%s,",
     (unsigned long)bootId,(unsigned long long)f.bootMs,epoch,
     (unsigned long)calSteps,calPhase.c_str(),(long)calReferenceRPM,calReferenceFuel,
     f.channel==0?7:6,(unsigned)mid,(unsigned)f.length,valid?1:0,hex);
-  if(n<=0||n>(int)sizeof(entry)-45){++sdErrors;sdFaultLatched=true;sdMessage="Motor test row too large";finishCalibration(false);return;}
+  if(n<=0||n>(int)sizeof(entry)-48){++sdErrors;sdFaultLatched=true;sdMessage="Motor test row too large";finishCalibration(false);return;}
   if(gotFuel)n+=snprintf(entry+n,sizeof(entry)-n,"%.3f",lph);
   entry[n++]=',';
   if(gotRPM)n+=snprintf(entry+n,sizeof(entry)-n,"%.2f",rpm);
@@ -352,6 +393,9 @@ void receiverTask(void *arg){
       // UART hardware timeout delineates messages, NOT timing of main loop().
       // One UART symbol (~10 bit times); physical engine framing still needs validation.
       if(evt.timeout_flag)queueFrame(c);
+    }else if(evt.type==UART_FRAME_ERR||evt.type==UART_PARITY_ERR){
+      // Bus noise/collisions: bytes still arrive and fail the checksum; count only.
+      ++ctr.lineErrors[c->id];
     }else if(evt.type==UART_FIFO_OVF||evt.type==UART_BUFFER_FULL){
       ++ctr.uartFaults[c->id];lastUARTFaultMs=millis();
       uart_flush_input(c->port);
@@ -521,8 +565,7 @@ void serviceNetwork(){
       WiFi.softAPgetStationNum()==0){
     WiFi.reconnect();lastWifiRetry=millis();
   }
-  if(cfg.router&&WiFi.status()==WL_CONNECTED&&!ntpStarted &&
-     (cfg.timePreference=="auto"||cfg.timePreference=="ntp")){
+  if(cfg.router&&WiFi.status()==WL_CONNECTED&&!ntpStarted&&allowTime("ntp")){
     configTime(0,0,"pool.ntp.org","time.google.com");
     ntpStarted=true;
   }
@@ -544,8 +587,9 @@ const char *ledStateName(LedState st){
   }
   return "Unknown";
 }
-LedState selectedLED(){
-  if(ledTestStartedMs && (uint32_t)(millis()-ledTestStartedMs)<16000UL){
+bool ledTestRunning(){return ledTestStartedMs && (uint32_t)(millis()-ledTestStartedMs)<16000UL;}
+LedState ledFor(bool includeDemo){
+  if(includeDemo&&ledTestRunning()){
     constexpr LedState demo[]={LS_SETUP,LS_READY,LS_ROUTER,LS_NO_SD,LS_WRITE_ERROR,LS_RX_ERROR,LS_TEST};
     return demo[((millis()-ledTestStartedMs)/2200UL)%7];
   }
@@ -557,6 +601,7 @@ LedState selectedLED(){
   if(!sdReady)return LS_NO_SD;
   return LS_READY;
 }
+LedState selectedLED(){return ledFor(true);}
 void updateLED(){
   if((uint32_t)(millis()-lastLed)<75)return;
   lastLed=millis();
@@ -643,8 +688,8 @@ void handleState(){
   bool totalAvailable=mapped&&freshFuel[0]&&freshFuel[1];
   float total=totalAvailable?motor[0].fuelLph+motor[1].fuelLph:0;
   bool speedAvailable=isfinite(sogKnots)&&sogAt&&now-sogAt<7000 && sogKnots>0.5;
-  String s;s.reserve(7500);
-  s+="{\"version\":\"0.2.0-alpha\",\"setup\":";
+  String s;s.reserve(12000);
+  s+="{\"version\":\"" EL_VERSION "\",\"setup\":";
   s+=cfg.completed?"true":"false";
   s+=",\"mode\":\"PASSIVE\",\"uptime\":";
   s+=(unsigned long)(now/1000ULL);
@@ -688,10 +733,13 @@ void handleState(){
   s+=",\"referenceFuel\":";if(calReferenceFuel>=0)s+=String(calReferenceFuel,3);else s+="null";
   s+=",\"file\":";jsonString(s,calName);
   s+=",\"seconds\":";s+=calActive?((millis()-calStartMs)/1000UL):0;
-  s+=",\"available\":";s+=(sdReady&&!calActive&&calName.length()&&SD.exists(calName))?"true":"false";
-  s+="},\"led\":{\"name\":";jsonString(s,ledStateName(selectedLED()));
-  s+=",\"status\":";s+=(unsigned)selectedLED();
-  s+=",\"testing\":";s+=(ledTestStartedMs&&(uint32_t)(millis()-ledTestStartedMs)<16000UL)?"true":"false";
+  // Cached: avoid an SD directory lookup on every status poll.
+  s+=",\"available\":";s+=(sdReady&&!calActive&&testFileAvailable)?"true":"false";
+  // Report the real system state even while the LED demo sequence runs, so a
+  // test never hides an active fault in the UI.
+  s+="},\"led\":{\"name\":";jsonString(s,ledStateName(ledFor(false)));
+  s+=",\"status\":";s+=(unsigned)ledFor(false);
+  s+=",\"testing\":";s+=ledTestRunning()?"true":"false";
   s+="},\"hardware\":{\"heap\":";
   s+=ESP.getFreeHeap();
   s+=",\"minHeap\":";s+=ESP.getMinFreeHeap();
@@ -709,6 +757,7 @@ void handleState(){
     s+=",\"invalid\":";s+=ctr.invalid[c];
     s+=",\"drops\":";s+=(unsigned long)ctr.rxDropped[c];
     s+=",\"uartFaults\":";s+=(unsigned long)ctr.uartFaults[c];
+    s+=",\"lineErrors\":";s+=(unsigned long)ctr.lineErrors[c];
     s+=",\"fuel\":";
     if(freshFuel[c])s+=String(motor[c].fuelLph,3);else s+="null";
     s+=",\"rpm\":";
@@ -719,7 +768,9 @@ void handleState(){
     s+=",\"lastMID\":";s+=motor[c].lastMID;
     s+="}";
   }
-  s+="],\"fuel\":{\"total\":";
+  s+="],\"queue\":{\"capacity\":";s+=(unsigned long)framesQueueLength;
+  s+=",\"waiting\":";s+=framesQueue?(unsigned long)uxQueueMessagesWaiting(framesQueue):0UL;
+  s+="},\"fuel\":{\"total\":";
   if(totalAvailable)s+=String(total,3);else s+="null";
   s+=",\"portChannel\":";s+=port;
   s+=",\"starboardChannel\":";s+=starboard;
@@ -728,7 +779,7 @@ void handleState(){
   s+=",\"litersPerNm\":";
   if(speedAvailable&&totalAvailable)s+=String(total/sogKnots,3);else s+="null";
   s+="},\"recent\":[";
-  uint8_t n=min((uint8_t)12,recentCount);
+  uint8_t n=recentCount; // all 24, so the per-channel filter is not starved
   for(int i=0;i<n;i++){
     const Recent &e=recent[(recentIndex+24-1-i)%24];
     if(i)s+=',';
@@ -756,6 +807,13 @@ void handleOptions(){
   }
   int port=web.arg("port").toInt();
   if(port<0||port>2){reply(false,"Invalid engine assignment",400);return;}
+  // Start/stop CAN first: a failure must not leave half-applied settings in RAM.
+  bool newCAN=web.arg("can")=="1";
+  if(newCAN!=cfg.canListen){
+    if(!newCAN)stopCAN();
+    else if(!startCAN()){reply(false,"NMEA2000 listen-only interface could not start",409);return;}
+    cfg.canListen=newCAN;
+  }
   bool changeNetwork=cfg.router!=(network=="router")||cfg.ssid!=ssid;
   String newRouterPass=web.arg("pass");
   if(newRouterPass.length()){cfg.wifiPassword=newRouterPass;changeNetwork=true;}
@@ -764,12 +822,6 @@ void handleOptions(){
   cfg.ssid=ssid;
   cfg.timePreference=preference;
   cfg.portChannel=(uint8_t)port;
-  bool newCAN=web.arg("can")=="1";
-  if(newCAN!=cfg.canListen){
-    cfg.canListen=newCAN;
-    if(!newCAN)stopCAN();
-    else if(!startCAN()){reply(false,"NMEA2000 listen-only interface could not start",409);return;}
-  }
   cfg.completed=true;
   saveSettings();
   reply(true,"Settings saved. Direct EngineLink Wi-Fi remains available.");
@@ -800,7 +852,8 @@ void handleDownload(){
 }
 void initializeWeb(){
   web.on("/",HTTP_GET,[](){
-    web.sendHeader("Cache-Control","private, max-age=3600");
+    // no-cache: after a firmware update Safari must not keep an old UI.
+    web.sendHeader("Cache-Control","no-cache");
     web.send_P(200,"text/html; charset=utf-8",ENGINE_UI);
   });
   web.on("/favicon.ico",HTTP_GET,[](){web.send(204,"text/plain","");});
@@ -815,7 +868,7 @@ void initializeWeb(){
   web.on("/api/test/download",HTTP_GET,handleCalibrationDownload);
   web.on("/api/sd/remount",HTTP_POST,[](){
     if(sdLogging||calActive){reply(false,"Stop recording before remount",409);return;}
-    SD.end();sdReady=false;initSD();reply(sdReady,sdMessage);
+    SD.end();sdReady=false;initSD();refreshTestAvailable();reply(sdReady,sdMessage);
   });
   web.on("/api/sd/stop",HTTP_POST,[](){if(calActive){reply(false,"Stop motor test first",409);return;}stopLog();reply(true,"Session recording stopped");});
   web.on("/api/sd/start",HTTP_POST,[](){if(calActive){reply(false,"Stop motor test first",409);return;}if(sdLogging){reply(true,"Already recording");return;}initSD();reply(sdLogging,sdMessage);});
@@ -829,20 +882,31 @@ void setup(){
   led.begin();led.setBrightness(ledBrightness);led.clear();led.show();
   Serial.begin(115200);
   delay(1200); // do not block boot for USB Serial Monitor
-  Serial.println("\nEngineLink 0.2.0-alpha - passive engine monitoring");
+  Serial.println("\nEngineLink " EL_VERSION " - passive engine monitoring");
   bootId=esp_random();
   pinMode(SD_DETECT,INPUT);
   pinMode(OPTO_PIN,INPUT);
   loadSettings();
   pref.begin("enginelink",true);calName=pref.getString("testfile","");pref.end();
-  framesQueue=xQueueCreate(72,sizeof(Frame));
+  uint8_t *queueStorage=(uint8_t*)heap_caps_malloc(FRAME_QUEUE_PSRAM*sizeof(Frame),MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);
+  if(queueStorage){
+    framesQueue=xQueueCreateStatic(FRAME_QUEUE_PSRAM,sizeof(Frame),queueStorage,&framesQueueState);
+    framesQueueLength=FRAME_QUEUE_PSRAM;
+  }
+  if(!framesQueue){
+    framesQueue=xQueueCreate(FRAME_QUEUE_FALLBACK,sizeof(Frame));
+    framesQueueLength=framesQueue?FRAME_QUEUE_FALLBACK:0;
+    Serial.println("PSRAM frame queue unavailable; using small internal queue");
+  }
   if(framesQueue){
     uartReady[0]=initUART(channels[0],RX_J7);
     uartReady[1]=initUART(channels[1],RX_J6);
     if(!uartReady[0])Serial.println("J7 UART init failed");
     if(!uartReady[1])Serial.println("J6 UART init failed");
   }
+  cardWasInserted=cardInserted();
   initSD();
+  refreshTestAvailable();
   WiFi.onEvent(onWiFi);
   applyNetwork();
   initializeWeb();
@@ -855,7 +919,7 @@ void loop(){
   // Give the UART data priority over serving the user interface.
   Frame f;
   int handled=0;
-  while(framesQueue&&handled<12&&xQueueReceive(framesQueue,&f,0)==pdTRUE){processFrame(f);handled++;}
+  while(framesQueue&&handled<32&&xQueueReceive(framesQueue,&f,0)==pdTRUE){processFrame(f);handled++;}
   serviceCAN();
   web.handleClient();
   serviceSD();
