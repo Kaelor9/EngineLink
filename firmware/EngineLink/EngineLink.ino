@@ -214,7 +214,7 @@ void receiverTask(void *arg){
         }
       }
       // UART hardware timeout delineates messages, NOT timing of main loop().
-      // Set to ~12 bit times at 9600 baud; pending physical validation.
+      // One UART symbol (~10 bit times); physical engine framing still needs validation.
       if(evt.timeout_flag)queueFrame(c);
     }else if(evt.type==UART_FIFO_OVF||evt.type==UART_BUFFER_FULL){
       ++ctr.uartFaults[c->id];
@@ -237,7 +237,9 @@ bool initUART(Channel &c,uint8_t rx){
   if(uart_set_pin(c.port,UART_PIN_NO_CHANGE,rx,UART_PIN_NO_CHANGE,UART_PIN_NO_CHANGE)!=ESP_OK)return false;
   if(uart_driver_install(c.port,4096,0,32,&c.uartEvents,0)!=ESP_OK)return false;
   uart_set_rx_full_threshold(c.port,120);
-  uart_set_rx_timeout(c.port,12);
+  // 1 UART symbol at 9600 8N1 ~1.04 ms. J1708 message idle gap
+  // is >=10 bit times; larger RX timeout merges adjacent messages.
+  if(uart_set_rx_timeout(c.port,1)!=ESP_OK)return false;
   return xTaskCreatePinnedToCore(receiverTask,c.id==0?"J7RX":"J6RX",4096,&c,4,nullptr,0)==pdPASS;
 }
 bool validChecksum(const Frame &f){
