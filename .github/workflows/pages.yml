@@ -63,7 +63,7 @@ jobs:
           assert 100_000 < p.stat().st_size <= 8*1024*1024, p.stat().st_size
           manifest={
             "name":"EngineLink Lab (experimental)",
-            "version":"1.1.0-lab",
+            "version":"1.1.1-lab",
             "new_install_prompt_erase":True,
             "builds":[{"chipFamily":"ESP32-S3","parts":[{"path":"firmware.bin","offset":0}]}]
           }
