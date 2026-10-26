@@ -1,4 +1,4 @@
-name: Build EngineLink app and publish downloads
+name: Build EngineLink 0.2 alpha and publish downloads
 
 on:
   push:
@@ -63,7 +63,7 @@ jobs:
           assert 100_000 < p.stat().st_size <= 8*1024*1024, p.stat().st_size
           manifest={
             "name":"EngineLink App (alpha)",
-            "version":"0.1.0-alpha",
+            "version":"0.2.0-alpha",
             "new_install_prompt_erase":True,
             "builds":[{"chipFamily":"ESP32-S3","parts":[{"path":"firmware.bin","offset":0}]}]
           }
@@ -82,7 +82,7 @@ jobs:
       - name: Archive compiled EngineLink alpha binary
         uses: actions/upload-artifact@v4
         with:
-          name: EngineLink-App-v0.1.0-alpha-ESP32S3
+          name: EngineLink-App-v0.2.0-alpha-ESP32S3
           path: |
             site/firmware.bin
             site/manifest.json
