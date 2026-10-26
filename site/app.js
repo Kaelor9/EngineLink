@@ -1,4 +1,4 @@
-// EngineLink Lab experimental browser installer.
+// EngineLink alpha application browser installer.
 // The page must never present an unsigned/unbuilt download as a validated release.
 // GitHub Pages publishes the generated merged binary only after successful compilation.
 (async () => {
@@ -15,10 +15,10 @@
   try {
     const manifestUrl = new URL('manifest.json', document.baseURI);
     const response = await fetch(manifestUrl.toString(), { cache: 'no-store' });
-    if (!response.ok) return unavailable('No compiled Lab firmware has been published.');
+    if (!response.ok) return unavailable('No compiled EngineLink application firmware has been published.');
     const manifest = await response.json();
-    if (manifest.name !== 'EngineLink Lab (experimental)' || manifest.version !== '1.2.0-lab') {
-      return unavailable('Installer metadata does not match the experimental Lab build.');
+    if (manifest.name !== 'EngineLink App (alpha)' || manifest.version !== '0.1.0-alpha') {
+      return unavailable('Installer metadata does not match the EngineLink application build.');
     }
     const build = (manifest.builds || []).find(b => b.chipFamily === 'ESP32-S3');
     const part = build?.parts?.find(p => p.path === 'firmware.bin' && p.offset === 0);
@@ -33,7 +33,7 @@
     await import('https://unpkg.com/esp-web-tools@10/dist/web/install-button.js?module');
     const install = document.createElement('esp-web-install-button');
     install.setAttribute('manifest', manifestUrl.toString());
-    install.innerHTML = '<button slot="activate" class="installbutton">Flash experimental Lab v1.2</button>' +
+    install.innerHTML = '<button slot="activate" class="installbutton">Install EngineLink App 0.1.0 alpha</button>' +
        '<span slot="unsupported" class="hint">Use Chrome or Edge with Web Serial on a desktop.</span>' +
        '<span slot="not-allowed" class="hint">Open the HTTPS GitHub Pages URL.</span>';
     ready.appendChild(install);
@@ -41,8 +41,8 @@
     waiting.hidden = consent.checked;
 
     const prompt = waiting.querySelector('button');
-    prompt.textContent = 'Confirm bench-use warning above';
-    status.textContent = 'Compiled Lab build available · Experimental, not hardware-verified';
+    prompt.textContent = 'Confirm hardware safety warning above';
+    status.textContent = 'EngineLink application alpha available · Hardware verification required';
     status.classList.add('ready');
 
     consent.addEventListener('change', () => {
