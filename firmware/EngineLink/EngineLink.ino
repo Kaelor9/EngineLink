@@ -109,7 +109,8 @@ bool calActive=false,calResumeLogging=false;
 int8_t calChannel=-1; // -1 both, 0 J7, 1 J6
 uint32_t calRows=0,calInvalid=0,calSteps=0,calStartMs=0;
 uint32_t lastTestFlush=0;
-uint16_t calReferenceRPM=0;
+volatile uint32_t lastUARTFaultMs=0;
+int32_t calReferenceRPM=-1;
 float calReferenceFuel=-1.0f;
 String calName="",calPhase="idle";
 uint32_t sdRows=0,sdErrors=0;
@@ -220,9 +221,9 @@ void calibrationMarker(){
   if(!calActive)return;
   const long long epoch=validWall()?(long long)time(nullptr):0;
   char entry[240];
-  int n=snprintf(entry,sizeof(entry),"MARK,%08lX,%llu,%lld,%lu,%s,%u,%.3f,,,,,,,\n",
+  int n=snprintf(entry,sizeof(entry),"MARK,%08lX,%llu,%lld,%lu,%s,%ld,%.3f,,,,,,,\n",
     (unsigned long)bootId,(unsigned long long)elapsedMs(),epoch,
-    (unsigned long)calSteps,calPhase.c_str(),(unsigned)calReferenceRPM,
+    (unsigned long)calSteps,calPhase.c_str(),(long)calReferenceRPM,
     calReferenceFuel);
   if(n<=0 || n >= (int)sizeof(entry) || calFile.write((const uint8_t*)entry,n)!=(size_t)n){
     sdFaultLatched=true;sdMessage="Calibration marker write failed";finishCalibration(false);
@@ -234,8 +235,8 @@ bool startCalibration(int channel){
   if(calActive||!sdReady||!cardInserted())return false;
   if(channel<-1||channel>1)return false;
   calChannel=channel;
-  calRows=0;calInvalid=0;calSteps=1;calReferenceRPM=0;calReferenceFuel=-1;
-  calPhase="idle";calStartMs=millis();calResumeLogging=sdLogging;
+  calRows=0;calInvalid=0;calSteps=1;calReferenceRPM=-1;calReferenceFuel=-1;
+  calPhase="unlabelled";calStartMs=millis();calResumeLogging=sdLogging;
   if(sdLogging)stopLog(); // Do not duplicate high-rate writes to the same SD card.
   char name[28];
   snprintf(name,sizeof(name),"/TEST%08lX.CSV",(unsigned long)bootId);
@@ -262,9 +263,9 @@ void appendCalibrationFrame(const Frame &f,uint8_t mid,bool valid,const char *he
   if(!calActive || (calChannel>=0 && f.channel!=(uint8_t)calChannel))return;
   const long long epoch=validWall()?(long long)time(nullptr):0;
   char entry[285];
-  int n=snprintf(entry,sizeof(entry),"FRAME,%08lX,%llu,%lld,%lu,%s,%u,%.3f,J%u,%u,%u,%u,%s,",
+  int n=snprintf(entry,sizeof(entry),"FRAME,%08lX,%llu,%lld,%lu,%s,%ld,%.3f,J%u,%u,%u,%u,%s,",
     (unsigned long)bootId,(unsigned long long)f.bootMs,epoch,
-    (unsigned long)calSteps,calPhase.c_str(),(unsigned)calReferenceRPM,calReferenceFuel,
+    (unsigned long)calSteps,calPhase.c_str(),(long)calReferenceRPM,calReferenceFuel,
     f.channel==0?7:6,(unsigned)mid,(unsigned)f.length,valid?1:0,hex);
   if(n<=0||n>(int)sizeof(entry)-45){++sdErrors;sdFaultLatched=true;sdMessage="Motor test row too large";finishCalibration(false);return;}
   if(gotFuel)n+=snprintf(entry+n,sizeof(entry)-n,"%.3f",lph);
@@ -288,8 +289,10 @@ void handleCalibrationMark(){
   if(phase!="idle"&&phase!="low"&&phase!="medium"&&phase!="high"&&phase!="cruise"&&phase!="custom"){
     reply(false,"Invalid phase",400);return;
   }
-  int rpm=web.arg("rpm").toInt();
-  if(rpm<0||rpm>6000){reply(false,"Reference RPM must be 0-6000",400);return;}
+  String refRpm=web.arg("rpm");
+  for(size_t i=0;i<refRpm.length();i++)if(!isDigit(refRpm[i])){reply(false,"Invalid reference RPM",400);return;}
+  int rpm=refRpm.length()?refRpm.toInt():-1;
+  if(rpm<-1||rpm>6000){reply(false,"Reference RPM must be 0-6000",400);return;}
   String fuel=web.arg("fuel");
   float flow=-1;
   if(fuel.length()){
@@ -297,7 +300,7 @@ void handleCalibrationMark(){
     flow=fuel.toFloat();
     if(flow<0||flow>2000){reply(false,"Reference fuel rate out of range",400);return;}
   }
-  calPhase=phase;calReferenceRPM=(uint16_t)rpm;calReferenceFuel=flow;
+  calPhase=phase;calReferenceRPM=rpm;calReferenceFuel=flow;
   ++calSteps;calibrationMarker();
   reply(calActive,calActive?"Motor test step marked. Continue collecting data.":"SD write error stopped recording",calActive?200:500);
 }
@@ -325,7 +328,7 @@ void queueFrame(Channel *c){
   memcpy(f.data,c->assembling,c->count);
   f.bootMs=elapsedMs();
   f.overflow=c->overflow;
-  if(xQueueSend(framesQueue,&f,0)!=pdTRUE)++ctr.rxDropped[c->id];
+  if(xQueueSend(framesQueue,&f,0)!=pdTRUE){++ctr.rxDropped[c->id];lastUARTFaultMs=millis();}
   c->count=0;c->overflow=false;
 }
 void receiverTask(void *arg){
@@ -350,7 +353,7 @@ void receiverTask(void *arg){
       // One UART symbol (~10 bit times); physical engine framing still needs validation.
       if(evt.timeout_flag)queueFrame(c);
     }else if(evt.type==UART_FIFO_OVF||evt.type==UART_BUFFER_FULL){
-      ++ctr.uartFaults[c->id];
+      ++ctr.uartFaults[c->id];lastUARTFaultMs=millis();
       uart_flush_input(c->port);
       xQueueReset(c->uartEvents);
       c->count=0;c->overflow=false;
@@ -547,7 +550,7 @@ LedState selectedLED(){
     return demo[((millis()-ledTestStartedMs)/2200UL)%7];
   }
   if(sdFaultLatched)return LS_WRITE_ERROR;
-  if(ctr.uartFaults[0]||ctr.uartFaults[1]||ctr.rxDropped[0]||ctr.rxDropped[1])return LS_RX_ERROR;
+  if(lastUARTFaultMs && (uint32_t)(millis()-lastUARTFaultMs)<30000UL)return LS_RX_ERROR;
   if(calActive)return LS_TEST;
   if(!cfg.completed)return LS_SETUP;
   if(cfg.router&&cfg.ssid.length()&&WiFi.status()!=WL_CONNECTED)return LS_ROUTER;
@@ -681,7 +684,7 @@ void handleState(){
   s+=",\"step\":";s+=calSteps;
   s+=",\"phase\":";jsonString(s,calPhase);
   s+=",\"channel\":";s+=calChannel;
-  s+=",\"referenceRPM\":";s+=calReferenceRPM;
+  s+=",\"referenceRPM\":";if(calReferenceRPM>=0)s+=calReferenceRPM;else s+="null";
   s+=",\"referenceFuel\":";if(calReferenceFuel>=0)s+=String(calReferenceFuel,3);else s+="null";
   s+=",\"file\":";jsonString(s,calName);
   s+=",\"seconds\":";s+=calActive?((millis()-calStartMs)/1000UL):0;
