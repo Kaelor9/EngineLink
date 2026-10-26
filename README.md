@@ -17,14 +17,14 @@ EngineLink is a dedicated onboard device designed to collect fuel-consumption an
 
 - Individual and combined fuel rate (L/h), subject to verifying real engine data.
 - Fuel economy in L/nm when a valid speed source is available.
-- Continuous fuel history across engine stops without requiring users to start/finish trips manually.
+- Continuous fuel history across engine stops without requiring users to start/finish trips manually (cross-restart grouping still under development).
 - Local storage to microSD, with careful handling of missing data and power loss.
 - First-run setup: **EngineLink Wi-Fi** or **Connect to a router**, engine-to-channel mapping, automatic time selection.
 - Permanent direct-access SoftAP capability; external Wi-Fi is optional.
 - Time sources: browser/phone, NMEA 2000 GPS, optional NTP, monotonic timestamps when no absolute clock is available.
-- Advanced J1708 packet monitor and **bench-only** transmission terminal.
+- Advanced passive J1708 packet monitor and read-only terminal; an on-device **Engine Test & Calibration** capture can export raw J1708 evidence with manually supplied reference RPM/fuel readings.
 
-The alpha firmware implements a substantial subset. Automatic durable multi-day trip grouping, engine-specific proprietary decoders, transmitted NMEA 2000 PGNs, and J1708 transmit commands remain future work. See [application status](docs/PRODUCTION_ALPHA.md).
+The alpha firmware implements a substantial subset, including fixed automatic LED fault/status indications and a passive motor calibration test with downloadable CSV. [Engine test instructions](docs/ENGINE_TEST.md). Automatic durable multi-day trip grouping, engine-specific proprietary decoders, transmitted NMEA 2000 PGNs, and J1708 transmit commands remain future work. See [application status](docs/PRODUCTION_ALPHA.md).
 
 ## Hardware (current board)
 
