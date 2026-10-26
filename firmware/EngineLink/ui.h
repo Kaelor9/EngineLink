@@ -122,16 +122,21 @@ static const char ENGINE_UI[] PROGMEM=R"ELWEB(<!doctype html>
 'use strict';
 const el=id=>document.getElementById(id);
 let state=null,appStarted=false,wizardStep=1,networkChoice='ap',settingsNetwork='ap';
-let trafficPaused=false, trafficSnapshot=[],pollTimer=null,pollAbort=null,pollFailures=0,commandBusy=false,lastOk=0,currentPage='fuel';
+let trafficPaused=false, trafficSnapshot=[],pollTimer=null,pollAbort=null,pollBusy=false,pollFailures=0,commandBusy=false,lastOk=0,currentPage='fuel',lastBootId=null,updateInterrupted=false;
 const fmt=(n,d=1)=>n===null||n===undefined||!Number.isFinite(Number(n))?'—':Number(n).toLocaleString('da-DK',{minimumFractionDigits:d,maximumFractionDigits:d});
 const txt=(id,s)=>{const e=el(id);if(e)e.textContent=s};
 function toast(message,bad=false){const e=el('toast');e.textContent=message;e.style.borderColor=bad?'#c98286':'#49887f';e.style.display='block';clearTimeout(window.__toast);window.__toast=setTimeout(()=>e.style.display='none',4300)}
-function setOnline(ok){const d=el('onlineDot');d.className='dot '+(ok?'good':'bad');txt('online',ok?'Connected':'Reconnecting'+(lastOk?' · '+Math.round((Date.now()-lastOk)/1000)+' s':''))}
+function setOnline(ok){
+ const d=el('onlineDot');
+ // Do not flash an "offline" warning for a single slow request on Safari.
+ d.className='dot '+(ok?'good':pollFailures>2?'bad':'');
+ txt('online',ok?'Connected':pollFailures>2?'Reconnecting'+(lastOk?' · '+Math.round((Date.now()-lastOk)/1000)+' s':''):'Checking connection…');
+}
 function schedulePoll(ms){clearTimeout(pollTimer);pollTimer=setTimeout(poll,ms)}
 async function request(path,params){
  if(commandBusy){toast('Another command is in progress.',true);return null}
  commandBusy=true;
- if(pollAbort)pollAbort.abort();
+ if(pollAbort)pollAbort.abort(); // release WebServer for the user command
  const c=new AbortController(),t=setTimeout(()=>c.abort(),6500);
  try{
   const r=await fetch(path,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams(params||{}),cache:'no-store',signal:c.signal});
@@ -287,22 +292,36 @@ function render(s){
  txt('alertbar',warning);
 }
 async function poll(){
- if(commandBusy){schedulePoll(700);return}
+ if(pollBusy||commandBusy){schedulePoll(700);return}
+ pollBusy=true;
  const c=new AbortController();
  pollAbort=c;
- const timeout=setTimeout(()=>c.abort(),4700);
+ const timeout=setTimeout(()=>c.abort(),5000);
  try{
   const response=await fetch('/api/state',{cache:'no-store',signal:c.signal});
   if(!response.ok)throw new Error('HTTP '+response.status);
   const data=await response.json();
+  if(lastBootId!==null && data.bootId!==lastBootId && !updateInterrupted){
+    updateInterrupted=true;
+    toast('EngineLink restarted. Check power and reset diagnostics.',true);
+  }
+  lastBootId=data.bootId;
   pollFailures=0;lastOk=Date.now();setOnline(true);
   render(data);
-  if(!state.timeKnown&&(state.config.timePref==='phone'||state.config.timePref==='auto')&&state.setup&&!window.__clockRequested){window.__clockRequested=true;setTimeout(syncPhone,900)}
- }catch(e){if(!commandBusy){pollFailures++;setOnline(false)}}
- finally{clearTimeout(timeout);pollAbort=null;schedulePoll(commandBusy?900:document.hidden?12000:pollFailures?Math.min(10000,2000+pollFailures*2000):3600)}
+  if(!state.timeKnown&&(state.config.timePref==='phone'||state.config.timePref==='auto')&&state.setup&&!window.__clockRequested){
+   window.__clockRequested=true;setTimeout(syncPhone,900)
+  }
+ }catch(e){
+  if(!commandBusy){pollFailures++;setOnline(false)}
+ }finally{
+  clearTimeout(timeout);
+  if(pollAbort===c)pollAbort=null;
+  pollBusy=false;
+  schedulePoll(commandBusy?800:document.hidden?14000:pollFailures?Math.min(12000,2500+pollFailures*1500):4000);
+ }
 }
-document.addEventListener('visibilitychange',()=>{if(!document.hidden)schedulePoll(150)});
-window.addEventListener('pageshow',()=>schedulePoll(150));
+document.addEventListener('visibilitychange',()=>{if(!document.hidden&&!pollBusy)schedulePoll(180)});
+window.addEventListener('pageshow',()=>{if(!pollBusy)schedulePoll(180)});
 schedulePoll(100);
 })();
 </script>
