@@ -1,45 +1,100 @@
-name: Publish EngineLink downloads
+name: Build Lab firmware and publish EngineLink downloads
+
 on:
   push:
     branches: [main]
     paths:
       - 'site/**'
+      - 'experiments/EngineLink_Lab_v1_1/**'
       - '.github/workflows/pages.yml'
   workflow_dispatch:
+
 permissions:
   contents: read
   pages: write
   id-token: write
+
 concurrency:
   group: enginelink-pages
   cancel-in-progress: true
+
+env:
+  ARDUINO_CORE_URL: https://espressif.github.io/arduino-esp32/package_esp32_index.json
+  FQBN: esp32:esp32:esp32s3:FlashSize=8M,PartitionScheme=default_8MB,PSRAM=opi,USBMode=hwcdc,CDCOnBoot=cdc
+
 jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v4
+
+      - name: Set up Arduino CLI
+        uses: arduino/setup-arduino-cli@v2
+        with:
+          version: "1.x"
+
+      - name: Install ESP32 core and NeoPixel
+        run: |
+          arduino-cli core update-index --additional-urls "$ARDUINO_CORE_URL"
+          arduino-cli core install esp32:esp32 --additional-urls "$ARDUINO_CORE_URL"
+          arduino-cli lib install "Adafruit NeoPixel"
+
+      - name: Compile experimental Lab firmware
+        run: |
+          mkdir -p build
+          arduino-cli compile \
+            --fqbn "$FQBN" \
+            --output-dir build \
+            --export-binaries \
+            experiments/EngineLink_Lab_v1_1
+
+      - name: Stage ESP32-S3 merged binary and manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          MERGED_FILE="$(find build -maxdepth 1 -name '*.merged.bin' -type f | head -n 1)"
+          test -n "$MERGED_FILE"
+          test -s "$MERGED_FILE"
+          cp "$MERGED_FILE" site/firmware.bin
+          python3 - <<'PY'
+          import json, pathlib
+          p=pathlib.Path("site/firmware.bin")
+          assert 100_000 < p.stat().st_size < 8*1024*1024, p.stat().st_size
+          manifest={
+            "name":"EngineLink Lab (experimental)",
+            "version":"1.1.0-lab",
+            "new_install_prompt_erase":True,
+            "builds":[{"chipFamily":"ESP32-S3","parts":[{"path":"firmware.bin","offset":0}]}]
+          }
+          pathlib.Path("site/manifest.json").write_text(json.dumps(manifest,indent=2)+"\n")
+          print("Staged experimental ESP32-S3 image:",p.stat().st_size,"bytes")
+          PY
+
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: site
+
+      - name: Archive compiled experimental binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: EngineLink-Lab-v1.1-Experimental-ESP32S3
+          path: |
+            site/firmware.bin
+            site/manifest.json
+          if-no-files-found: error
+
   deploy:
+    needs: build
     runs-on: ubuntu-latest
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      - uses: actions/checkout@v4
-      - name: Validate installer files
-        shell: bash
-        run: |
-          set -euo pipefail
-          if [ -e site/manifest.json ] || [ -e site/firmware.bin ]; then
-            test -s site/manifest.json
-            test -s site/firmware.bin
-            python3 - <<'PY'
-          import json, pathlib
-          root=pathlib.Path('site')
-          manifest=json.loads((root/'manifest.json').read_text())
-          assert any(b.get('chipFamily')=='ESP32-S3' and any(p.get('path')=='firmware.bin' and p.get('offset')==0 for p in b.get('parts',[])) for b in manifest.get('builds',[]))
-          assert (root/'firmware.bin').stat().st_size>1024
-          PY
-          fi
-      - uses: actions/configure-pages@v5
-      - uses: actions/upload-pages-artifact@v4
-        with:
-          path: site
-      - name: Publish website
+      - name: Publish to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
