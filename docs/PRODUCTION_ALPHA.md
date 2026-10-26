@@ -1,4 +1,4 @@
-# EngineLink application v0.1.0-alpha
+# EngineLink application v0.2.0-alpha
 
 This is a **working application foundation**, not a validated production release. The former Lab firmware is retained under \`experiments/\`. The application is in \`firmware/EngineLink/\`.
 
@@ -16,7 +16,9 @@ This is a **working application foundation**, not a validated production release
 - microSD session CSV logging of raw J1708 bytes, physical channel, checksum result, MID, uptime and UTC if time is known. Auto-generated per-boot file IDs. Logging stops on card removal. Writes are periodically flushed; sudden power loss can lose unflushed records.
 - Browser/phone UTC synchronization and optional NTP after connecting a router.
 - Optional NMEA 2000 listen-only TWAI input at 250 kbit/s: PGN 126992 UTC and PGN 129026 speed over ground. **Physical CAN interface has not been validated.** Do not enable until verified. No NMEA transmission/ACK.
-- Status LED GPIO48, GPIO38 input, PSRAM/heap/network diagnostics, raw J1708 Packet Inspector, channel-selected read-only advanced terminal with ℹ️ help.
+- Fixed LED GPIO48 patterns reflect actual status (setup, normal, Wi-Fi/router reconnect, missing SD, write fault, J1708 RX fault, passive motor test). The user color selector was intentionally removed. GPIO38, PSRAM/heap/network diagnostics, raw J1708 Packet Inspector, read-only advanced terminal with ℹ️ help.
+- **Engine Test & Calibration**: passive J1708 capture with stable-RPM phase markers, optional independent reference RPM and fuel flow, SD CSV, download to phone or computer. [Test procedure](ENGINE_TEST.md).
+- SoftAP stability changes: avoid AP-mode Wi-Fi.disconnect(), avoid frequent router reconnection scans with an AP client present, and serialize Safari polling to prevent overlapping status requests.
 - Arduino build and embedded browser JavaScript syntax validation in GitHub Actions.
 
 ## Known gaps that must be resolved before any "production" claim
@@ -28,7 +30,7 @@ This is a **working application foundation**, not a validated production release
 5. Implement robust queue overflow/SD loss reporting under high-rate traffic; verify actual SD write performance and power-loss recovery.
 6. Current advanced terminal is **read-only**. Bench-only transmit requires a separate electrical and SAE timing/arbitration safety review.
 7. User/admin authorization has not been implemented. Anyone with the Wi-Fi password can currently change settings. Change the AP password from the shared factory value.
-8. Test actual iPhone Safari connectivity, AP-only mode, AP+STA fallback and memory stability on the assembled PCB.
+8. Test actual iPhone Safari connectivity, AP-only mode, AP+STA fallback and memory stability on the assembled PCB. An automated build cannot prove RF stability; review AP disconnect counters and reset reason under Device.
 9. The optional NMEA2000 listener requires verifying ISO1042 power isolation, 250 kbit/s traffic, bus termination, and source correctness before connection.
 10. A battery RTC is not fitted. The clock cannot know elapsed power-off time without a new time source; logs store uptime and boot ID when UTC is unavailable.
 
