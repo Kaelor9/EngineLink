@@ -5,7 +5,7 @@ on:
     branches: [main]
     paths:
       - 'site/**'
-      - 'experiments/EngineLink_Lab_v1_1/**'
+      - 'experiments/EngineLink_Lab_v1_2/**'
       - '.github/workflows/pages.yml'
   workflow_dispatch:
 
@@ -47,7 +47,7 @@ jobs:
             --fqbn "$FQBN" \
             --output-dir build \
             --export-binaries \
-            experiments/EngineLink_Lab_v1_1
+            experiments/EngineLink_Lab_v1_2
 
       - name: Stage ESP32-S3 merged binary and manifest
         shell: bash
@@ -63,7 +63,7 @@ jobs:
           assert 100_000 < p.stat().st_size <= 8*1024*1024, p.stat().st_size
           manifest={
             "name":"EngineLink Lab (experimental)",
-            "version":"1.1.1-lab",
+            "version":"1.2.0-lab",
             "new_install_prompt_erase":True,
             "builds":[{"chipFamily":"ESP32-S3","parts":[{"path":"firmware.bin","offset":0}]}]
           }
@@ -82,7 +82,7 @@ jobs:
       - name: Archive compiled experimental binary
         uses: actions/upload-artifact@v4
         with:
-          name: EngineLink-Lab-v1.1-Experimental-ESP32S3
+          name: EngineLink-Lab-v1.2-Experimental-ESP32S3
           path: |
             site/firmware.bin
             site/manifest.json
