@@ -29,6 +29,9 @@
 #include <esp_system.h>
 #include <esp_wifi.h>
 
+// Required ahead of Arduino-generated function prototypes.
+struct Event;
+
 // Change these before long-term use. SoftAP is a SEPARATE Wi-Fi network.
 const char* AP_SSID = "EngineLink";
 const char* AP_PASS = "12345678"; // min. 8 chars; change as desired
@@ -116,6 +119,7 @@ struct Event {
   char hex[3 * FRAME_LEN + 2] = {};
   char comment[20] = {};
 };
+void appendLog(const Event &e); // Explicit prototype, avoids Arduino's type-ordering heuristic.
 Event events[EVENT_CAP];
 uint8_t eventWrite = 0, eventSize = 0;
 uint32_t eventId = 0;
