@@ -16,7 +16,8 @@ jobs:
         run: |
           test -s site/index.html
           test -s site/styles.css
-          test -s site/assets/enginelink-mark.svg      - name: Validate inline browser JavaScript from Lab v1.2
+          test -s site/assets/enginelink-mark.svg
+      - name: Validate inline browser JavaScript from Lab v1.2
         shell: bash
         run: |
           python3 - <<'PY'
