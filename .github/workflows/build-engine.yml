@@ -1,0 +1,63 @@
+name: Compile EngineLink application
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'firmware/EngineLink/**'
+      - '.github/workflows/build-engine.yml'
+  pull_request:
+    paths:
+      - 'firmware/EngineLink/**'
+      - '.github/workflows/build-engine.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  compile:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: arduino/setup-arduino-cli@v2
+        with:
+          version: "1.x"
+      - name: Install ESP32-S3 board and required library
+        run: |
+          arduino-cli core update-index --additional-urls https://espressif.github.io/arduino-esp32/package_esp32_index.json
+          arduino-cli core install esp32:esp32 --additional-urls https://espressif.github.io/arduino-esp32/package_esp32_index.json
+          arduino-cli lib install "Adafruit NeoPixel"
+      - name: Validate embedded browser JavaScript
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          header=Path('firmware/EngineLink/ui.h').read_text(encoding='utf-8')
+          start=header.index('<script>')+len('<script>')
+          end=header.index('</script>',start)
+          Path('/tmp/enginelink-app.js').write_text(header[start:end], encoding='utf-8')
+          PY
+          node --check /tmp/enginelink-app.js
+      - name: Compile application
+        run: |
+          mkdir -p build-app
+          arduino-cli compile \
+            --fqbn "esp32:esp32:esp32s3:FlashSize=8M,PartitionScheme=default_8MB,PSRAM=opi,USBMode=hwcdc,CDCOnBoot=cdc" \
+            --output-dir build-app \
+            --export-binaries \
+            firmware/EngineLink
+      - name: Verify merged image
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          builds=list(Path('build-app').glob('*.merged.bin'))
+          assert builds, 'No merged flash image'
+          for p in builds:
+              assert p.stat().st_size==8*1024*1024, (p,p.stat().st_size)
+              print('Binary:',p,'Size:',p.stat().st_size)
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: EngineLink-0.1.0-alpha-ESP32S3
+          path: build-app/*.merged.bin
+          if-no-files-found: error
