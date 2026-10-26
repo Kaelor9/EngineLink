@@ -189,17 +189,17 @@ function render(s){
   const x=idx<0?null:a[idx];
   txt(prefix+'Fuel',x?.fuel===null||!x?'— L/h':fmt(x.fuel)+' L/h');
   txt(prefix+'Rpm',x?.rpm===null||!x?'—':fmt(x.rpm,0)+' RPM');
-  txt(prefix+'Observed',x?fmt(x.observedLiters,3)+' L*':'—');
+  txt(prefix+'Observed',x&&x.fuelSamples>0?fmt(x.observedLiters,3)+' L*':'—');
  }
  renderMotor('port',port);renderMotor('stbd',stbd);
  txt('fuelEconomy',s.fuel.litersPerNm===null?'— L/nm':fmt(s.fuel.litersPerNm,2)+' L/nm');
  txt('speed',s.fuel.sogKnots===null?'— kn':fmt(s.fuel.sogKnots,1)+' kn');
- txt('sessionFuel',fmt(a[0].observedLiters+a[1].observedLiters,3)+' L*');
+ txt('sessionFuel',(a[0].fuelSamples>0||a[1].fuelSamples>0)?fmt(a[0].observedLiters+a[1].observedLiters,3)+' L*':'—');
  txt('logName',s.sd.filename||'None');
  txt('logRows',s.sd.rows);
  txt('logStatus',s.sd.status);
  txt('logRunning',s.sd.logging?'Recording':'Stopped');
- txt('histJ7',fmt(a[0].observedLiters,3)+' L*');txt('histJ6',fmt(a[1].observedLiters,3)+' L*');
+ txt('histJ7',a[0].fuelSamples>0?fmt(a[0].observedLiters,3)+' L*':'—');txt('histJ6',a[1].fuelSamples>0?fmt(a[1].observedLiters,3)+' L*':'—');
  txt('histGaps',a[0].gaps+a[1].gaps);
  txt('uptime',Math.floor(s.uptime/3600)+'h '+Math.floor(s.uptime%3600/60)+'m '+s.uptime%60+'s');
  txt('freeHeap',Math.round(s.hardware.heap/1024)+' KB');
