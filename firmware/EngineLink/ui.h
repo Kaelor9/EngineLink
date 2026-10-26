@@ -109,20 +109,20 @@ static const char ENGINE_UI[] PROGMEM=R"ELWEB(<!doctype html>
  <button class="btn secondary" id="ledTestBtn" style="margin-top:18px" onclick="runLedTest()">Test all LED signals · 16 s</button>
  <p class="mini" style="margin-top:14px">LED test temporarily displays the sequence, then automatically returns to the actual system status. Faults always take priority over decorative settings.</p>
 </div>
-<div class="panel"><h2>Communication health</h2><div class="statrow"><span>J7 frames / invalid</span><strong id="healthJ7">—</strong></div><div class="statrow"><span>J6 frames / invalid</span><strong id="healthJ6">—</strong></div><div class="statrow"><span>UART buffer drops</span><strong id="healthDrops">—</strong></div><div class="statrow"><span>Minimum heap</span><strong id="minHeap">—</strong></div><div class="notice" style="margin-top:18px">The PCB cannot measure its isolated 5 V rails in software. Verify both separately before attaching any engine bus.</div></div></div></section>
+<div class="panel"><h2>Communication health</h2><div class="statrow"><span>J7 frames / invalid</span><strong id="healthJ7">—</strong></div><div class="statrow"><span>J6 frames / invalid</span><strong id="healthJ6">—</strong></div><div class="statrow"><span>UART buffer drops</span><strong id="healthDrops">—</strong></div><div class="statrow"><span>UART line errors (noise)</span><strong id="healthLine">—</strong></div><div class="statrow"><span>Frame backlog</span><strong id="healthQueue">—</strong></div><div class="statrow"><span>Minimum heap</span><strong id="minHeap">—</strong></div><div class="notice" style="margin-top:18px">The PCB cannot measure its isolated 5 V rails in software. Verify both separately before attaching any engine bus.</div></div></div></section>
 <section id="settings" class="page"><div class="top"><div><div class="eyebrow">SYSTEM CONFIGURATION</div><h1>Settings</h1><div class="subtext">Change onboarding choices without resetting the device</div></div><span class="chip">LOCAL</span></div>
-<div class="columns"><div class="panel"><h2>Connection</h2><div class="choose" style="margin-bottom:18px"><button class="choice" data-settings-network="ap" onclick="pickSettingsNetwork('ap')"><strong>EngineLink Wi-Fi</strong><span class="hint">Direct connection without a router.</span></button><button class="choice" data-settings-network="router" onclick="pickSettingsNetwork('router')"><strong>Connect to a router</strong><span class="hint">Use an existing local network.</span></button></div><div id="settingsRouterFields"><div class="field"><label for="settingsSSID">Router network name</label><input class="input" id="settingsSSID" placeholder="Wi-Fi SSID"></div><div class="field"><label for="settingsPass">Router password</label><input class="input" id="settingsPass" placeholder="Leave blank to keep existing" type="password"></div></div><div class="field"><label for="settingsAPPass">EngineLink Wi-Fi password</label><input class="input" id="settingsAPPass" type="password" placeholder="Leave blank to keep existing"></div></div>
+<div class="columns"><div class="panel"><h2>Connection</h2><div class="choose" style="margin-bottom:18px"><button class="choice" data-settings-network="ap" onclick="pickSettingsNetwork('ap')"><strong>EngineLink Wi-Fi</strong><span class="hint">Direct connection without a router.</span></button><button class="choice" data-settings-network="router" onclick="pickSettingsNetwork('router')"><strong>Connect to a router</strong><span class="hint">Use an existing local network.</span></button></div><div id="settingsRouterFields" class="hide"><div class="field"><label for="settingsSSID">Router network name</label><input class="input" id="settingsSSID" placeholder="Wi-Fi SSID"></div><div class="field"><label for="settingsPass">Router password</label><input class="input" id="settingsPass" placeholder="Leave blank to keep existing" type="password"></div></div><div class="field"><label for="settingsAPPass">EngineLink Wi-Fi password</label><input class="input" id="settingsAPPass" type="password" placeholder="Leave blank to keep existing"></div></div>
 <div class="panel"><h2>Engines & time</h2><div class="field"><label for="settingsPort">Port engine connector</label><select class="input" id="settingsPort"><option value="1">J7 / Channel 1</option><option value="2">J6 / Channel 2</option><option value="0">Unassigned</option></select></div><div class="field"><label for="settingsTime">Time source</label><select class="input" id="settingsTime"><option value="auto">Automatic</option><option value="phone">Phone / browser</option><option value="gps">NMEA2000 / GPS</option><option value="ntp">Router / NTP</option><option value="manual">Manual / none</option></select></div><div class="field"><label style="display:flex;gap:12px;align-items:center"><input id="settingsCAN" type="checkbox">Enable NMEA2000 listen-only receiver</label><div class="notice">CAN hardware has not been fully validated. Listen-only mode never transmits CAN frames or acknowledgments.</div></div><button class="btn primary" onclick="saveSettings()" style="width:100%">Save settings</button></div></div>
 <div class="panel" style="margin-top:16px"><div class="split"><div><div class="eyebrow">ADVANCED SETTINGS</div><h2 style="margin-top:8px">J1708 Terminal</h2></div><span class="badge">READ ONLY</span></div><div class="row" style="margin-bottom:16px"><select class="input" style="max-width:230px" id="terminalChannel" onchange="drawTerminal()"><option value="0">Channel 1 · J7</option><option value="1">Channel 2 · J6</option></select><span class="hint">9600 baud / 8N1</span></div><div class="eyebrow" style="margin-bottom:8px">SERIAL MONITOR</div><div class="traffic" id="terminalMonitor"><span class="hint">Waiting for J1708 frames…</span></div><div class="eyebrow" style="margin-top:22px">TERMINAL / HEX COMPOSER</div><div class="field"><label for="terminalDraft">HEX message</label><input class="input code" id="terminalDraft" placeholder="e.g. 80 BE 00 00" disabled></div><button class="btn" disabled>Send frame (not enabled)</button> <button class="inline-link" style="margin:10px" onclick="toggleHelp()">Having trouble writing? ℹ️</button><div class="termhelp" id="termHelp"><strong>About J1708 messages</strong><p>J1708 / J1587 uses binary bytes, not normal text commands. A frame begins with an MID, followed by parameter IDs (PIDs), data bytes and an additive checksum.</p><p>PID 190 is engine speed (0.25 RPM/bit). PID 183 is instantaneous fuel rate (1/64 US gallon/hour per bit). Parameters and ECU support must be validated against real traffic.</p><p>Transmission is intentionally disabled until J1708 arbitration, electrical safety and command protocols have been separately verified. These help examples must never be sent to a live engine.</p></div></div>
 </section></main></div>
-<div id="toast" class="toast" role="status"></div><div class="footer">EngineLink · Marine Precision · 0.2.0 alpha · Passive capture only · Fuel data subject to ECU support</div>
+<div id="toast" class="toast" role="status"></div><div class="footer">EngineLink · Marine Precision · 0.2.1 alpha · Passive capture only · Fuel data subject to ECU support</div>
 </div>
 <script>
 (function(){
 'use strict';
 const el=id=>document.getElementById(id);
 let state=null,appStarted=false,wizardStep=1,networkChoice='ap',settingsNetwork='ap';
-let trafficPaused=false, trafficSnapshot=[],pollTimer=null,pollAbort=null,pollBusy=false,pollFailures=0,commandBusy=false,lastOk=0,currentPage='fuel',lastBootId=null,updateInterrupted=false,downloadPauseUntil=0;
+let settingsLoaded=false,trafficPaused=false, trafficSnapshot=[],pollTimer=null,pollAbort=null,pollBusy=false,pollFailures=0,commandBusy=false,lastOk=0,currentPage='fuel',lastBootId=null,updateInterrupted=false,downloadPauseUntil=0;
 const fmt=(n,d=1)=>n===null||n===undefined||!Number.isFinite(Number(n))?'—':Number(n).toLocaleString('da-DK',{minimumFractionDigits:d,maximumFractionDigits:d});
 const txt=(id,s)=>{const e=el(id);if(e)e.textContent=s};
 function toast(message,bad=false){const e=el('toast');e.textContent=message;e.style.borderColor=bad?'#c98286':'#49887f';e.style.display='block';clearTimeout(window.__toast);window.__toast=setTimeout(()=>e.style.display='none',4300)}
@@ -176,7 +176,7 @@ window.saveSettings=async function(){
  const oldPass=el('settingsAPPass').value;
  const success=await request('/api/settings',{network:settingsNetwork,ssid:el('settingsSSID').value.trim(),pass:el('settingsPass').value,apPass:oldPass,port:el('settingsPort').value,time:el('settingsTime').value,can:el('settingsCAN').checked?'1':'0'});
  if(success){
-  el('settingsAPPass').value='';el('settingsPass').value='';
+  el('settingsAPPass').value='';el('settingsPass').value='';settingsLoaded=false;
   if(oldPass)toast('Wi-Fi password changed. Reconnect to EngineLink with your new password.');
  }
 }
@@ -234,7 +234,8 @@ window.copyLastPacket=async function(){
  try{await navigator.clipboard.writeText(p.hex);toast('HEX copied')}catch(e){toast('Copy unavailable in this browser.',true)}
 }
 function render(s){
- if(!appStarted){el('wizard').classList.toggle('hide',s.setup);el('application').classList.toggle('hide',!s.setup);appStarted=s.setup;if(s.setup)loadSettings(s)}
+ if(!appStarted){el('wizard').classList.toggle('hide',s.setup);el('application').classList.toggle('hide',!s.setup);appStarted=s.setup}
+ if(s.setup&&!settingsLoaded){loadSettings(s);settingsLoaded=true}
  state=s;
  const a=s.channels;
  const port=s.fuel.portChannel,stbd=s.fuel.starboardChannel;
@@ -272,8 +273,9 @@ function render(s){
  txt('apLeaves',s.network.apLeaves+' (reason '+s.network.apReason+')');
  txt('apRestarts',s.network.apStops+' stops / '+s.network.apStarts+' starts');
  txt('staDrops',s.network.staDisconnects);
- txt('resetReason',s.hardware.resetReason);
- txt('ledStatusName',s.led.name);
+ const resetNames=['Unknown','Power on','External pin','Software restart','Crash (panic)','Interrupt watchdog','Task watchdog','Watchdog','Deep sleep','Brownout (low supply voltage)','SDIO','USB','JTAG'];
+ txt('resetReason',(resetNames[s.hardware.resetReason]||'Code')+' ('+s.hardware.resetReason+')');
+ txt('ledStatusName',s.led.name+(s.led.testing?' · LED demo running':''));
  const ledColors=['#1C6EED','#1C6EED','#17A77E','#E59A21','#DF9D30','#E92E35','#DF4150','#16C7CD'];
  const shown=ledColors[s.led.status]||'#172B3A';
  el('ledSample').style.background=shown;
@@ -290,11 +292,13 @@ function render(s){
  txt('healthJ7',a[0].frames+' / '+a[0].invalid);
  txt('healthJ6',a[1].frames+' / '+a[1].invalid);
  txt('healthDrops',a[0].drops+a[1].drops);
+ txt('healthLine',(a[0].lineErrors||0)+' / '+(a[1].lineErrors||0));
+ txt('healthQueue',s.queue?s.queue.waiting+' of '+s.queue.capacity:'—');
  txt('modeBadge','PASSIVE');
  if(!trafficPaused)trafficSnapshot=s.recent||[];
  if(currentPage==='traffic')drawTraffic();
  if(currentPage==='settings')drawTerminal();
- const warning=!s.sd.logging?'SD logging is off. Raw data may not survive a restart.':(!s.timeKnown?'No absolute time source available. Recording uses uptime timestamps.':'');
+ const warning=s.test.running?'':!s.sd.logging?'SD logging is off. Raw data may not survive a restart.':(!s.timeKnown?'No absolute time source available. Recording uses uptime timestamps.':'');
  el('alertbar').classList.toggle('hide',!warning);
  txt('alertbar',warning);
 }

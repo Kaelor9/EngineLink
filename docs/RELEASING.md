@@ -1,6 +1,6 @@
 # EngineLink firmware releases and web installer
 
-The GitHub Pages website now provides an **experimental Lab v1.2** browser installer after a successful GitHub Actions compilation. This firmware is **bench only**, not hardware-verified production firmware. A separate approved release process remains mandatory for actual engine installations.
+The GitHub Pages website provides a browser installer for the **EngineLink application alpha** (`firmware/EngineLink/`) after a successful GitHub Actions compilation. It is **not** hardware-verified production firmware. A separate approved release process remains mandatory for actual engine installations. The old Lab sketches under `experiments/` are no longer published.
 
 ## Before release
 
@@ -12,21 +12,23 @@ The GitHub Pages website now provides an **experimental Lab v1.2** browser insta
 
 ## Publishing
 
-For a future approved production firmware release, publish separately from the experimental Lab build. The current build workflow generates the following files in the GitHub Pages artifact (they are not committed to the repository):
+The Pages workflow (`.github/workflows/pages.yml`) compiles `firmware/EngineLink` and generates these files in the Pages artifact (they are not committed):
 
-- `firmware.bin`: CI-compiled **merged** ESP32-S3 experimental binary intended for flashing at address 0, only for bench use.
-- `manifest.json`: ESP Web Tools manifest pointing to that file. The current CI build uses `EngineLink Lab (experimental)` version `1.2.0-lab`.
+- `firmware.bin`: CI-compiled **merged** ESP32-S3 image (bootloader + partitions + app) flashed at address 0.
+- `manifest.json`: ESP Web Tools manifest pointing to that file.
 
 ```json
 {
-  "name": "EngineLink Lab (experimental)",
-  "version": "1.2.0-lab",
+  "name": "EngineLink App (alpha)",
+  "version": "0.2.1-alpha",
   "new_install_prompt_erase": true,
   "builds": [{"chipFamily":"ESP32-S3","parts":[{"path":"firmware.bin","offset":0}]}]
 }
 ```
 
-The example above describes the experimental build. The website checks that its manifest and binary exist before it displays the flashing option, and requires explicit acknowledgment of the bench safety warning. Successful compilation alone does **not** establish suitability for a real engine network.
+When the version changes, update **all** of these together: `EL_VERSION` in `firmware/EngineLink/EngineLink.ino`, the footer in `ui.h`, the manifest in `pages.yml`, the version check and button text in `site/app.js`, `site/index.html`, the artifact name in `build-engine.yml`, and the README/docs. `site/app.js` refuses to offer a manifest whose version does not match.
+
+The website checks that its manifest and binary exist before it displays the flashing option, and requires explicit acknowledgment of the safety warning. Successful compilation alone does **not** establish suitability for a real engine network.
 
 Create a GitHub Release with version, compatible hardware revisions, flashing notes, change log, merged binary, checksum and any settings/data migration information.
 

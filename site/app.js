@@ -17,7 +17,7 @@
     const response = await fetch(manifestUrl.toString(), { cache: 'no-store' });
     if (!response.ok) return unavailable('No compiled EngineLink application firmware has been published.');
     const manifest = await response.json();
-    if (manifest.name !== 'EngineLink App (alpha)' || manifest.version !== '0.2.0-alpha') {
+    if (manifest.name !== 'EngineLink App (alpha)' || manifest.version !== '0.2.1-alpha') {
       return unavailable('Installer metadata does not match the EngineLink application build.');
     }
     const build = (manifest.builds || []).find(b => b.chipFamily === 'ESP32-S3');
@@ -33,7 +33,7 @@
     await import('https://unpkg.com/esp-web-tools@10/dist/web/install-button.js?module');
     const install = document.createElement('esp-web-install-button');
     install.setAttribute('manifest', manifestUrl.toString());
-    install.innerHTML = '<button slot="activate" class="installbutton">Install EngineLink App 0.2.0 alpha</button>' +
+    install.innerHTML = '<button slot="activate" class="installbutton">Install EngineLink App 0.2.1 alpha</button>' +
        '<span slot="unsupported" class="hint">Use Chrome or Edge with Web Serial on a desktop.</span>' +
        '<span slot="not-allowed" class="hint">Open the HTTPS GitHub Pages URL.</span>';
     ready.appendChild(install);

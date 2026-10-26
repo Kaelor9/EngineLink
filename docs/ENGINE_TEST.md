@@ -1,6 +1,6 @@
 # EngineLink — Passive engine calibration and J1708 capture
 
-Applies to **EngineLink 0.2.0-alpha**. The test is designed to collect *actual* J1708/J1587 data and independent reference observations. It does not send commands or operate an engine.
+Applies to **EngineLink 0.2.1-alpha**. The test is designed to collect *actual* J1708/J1587 data and independent reference observations. It does not send commands or operate an engine.
 
 ## Safety prerequisites
 
