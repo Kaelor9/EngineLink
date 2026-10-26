@@ -28,8 +28,8 @@
 #include <math.h>
 
 // Change these before long-term use. SoftAP is a SEPARATE Wi-Fi network.
-const char* AP_SSID = "EngineLink-Lab";
-const char* AP_PASS = "EngineLab26!"; // min. 8 chars; change as desired
+const char* AP_SSID = "EngineLink";
+const char* AP_PASS = "12345678"; // min. 8 chars; change as desired
 
 constexpr uint8_t PIN_J7_RX = 21, PIN_J7_TX = 47; // J1708 #1
 constexpr uint8_t PIN_J6_RX = 17, PIN_J6_TX = 18; // J1708 #2
