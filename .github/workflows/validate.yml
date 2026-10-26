@@ -16,4 +16,15 @@ jobs:
         run: |
           test -s site/index.html
           test -s site/styles.css
-          test -s site/assets/enginelink-mark.svg
+          test -s site/assets/enginelink-mark.svg      - name: Validate inline browser JavaScript from Lab v1.2
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          firmware=Path("experiments/EngineLink_Lab_v1_2/EngineLink_Lab_v1_2.ino").read_text(encoding="utf-8")
+          start=firmware.index('<script>',firmware.index('R"ENGINELAB('))+len('<script>')
+          end=firmware.index('</script>',start)
+          Path('/tmp/enginelink-ui.js').write_text(firmware[start:end],encoding="utf-8")
+          print("UI JS size:",end-start)
+          PY
+          node --check /tmp/enginelink-ui.js
