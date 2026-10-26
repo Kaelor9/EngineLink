@@ -1,0 +1,45 @@
+name: Publish EngineLink downloads
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'site/**'
+      - '.github/workflows/pages.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+concurrency:
+  group: enginelink-pages
+  cancel-in-progress: true
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate installer files
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -e site/manifest.json ] || [ -e site/firmware.bin ]; then
+            test -s site/manifest.json
+            test -s site/firmware.bin
+            python3 - <<'PY'
+          import json, pathlib
+          root=pathlib.Path('site')
+          manifest=json.loads((root/'manifest.json').read_text())
+          assert any(b.get('chipFamily')=='ESP32-S3' and any(p.get('path')=='firmware.bin' and p.get('offset')==0 for p in b.get('parts',[])) for b in manifest.get('builds',[]))
+          assert (root/'firmware.bin').stat().st_size>1024
+          PY
+          fi
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v4
+        with:
+          path: site
+      - name: Publish website
+        id: deployment
+        uses: actions/deploy-pages@v4
