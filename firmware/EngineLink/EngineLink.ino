@@ -508,6 +508,7 @@ void handleState(){
     s+=",\"rpm\":";
     if(freshRPM[c])s+=String(motor[c].rpm,1);else s+="null";
     s+=",\"observedLiters\":";s+=String(motor[c].observedLiters,4);
+    s+=",\"fuelSamples\":";s+=motor[c].fuelSamples;
     s+=",\"gaps\":";s+=motor[c].gaps;
     s+=",\"lastMID\":";s+=motor[c].lastMID;
     s+="}";
