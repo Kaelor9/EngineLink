@@ -1,6 +1,6 @@
 # EngineLink firmware releases and web installer
 
-The GitHub Pages website now provides an **experimental Lab v1.1** browser installer after a successful GitHub Actions compilation. This firmware is **bench only**, not hardware-verified production firmware. A separate approved release process remains mandatory for actual engine installations.
+The GitHub Pages website now provides an **experimental Lab v1.2** browser installer after a successful GitHub Actions compilation. This firmware is **bench only**, not hardware-verified production firmware. A separate approved release process remains mandatory for actual engine installations.
 
 ## Before release
 
@@ -15,12 +15,12 @@ The GitHub Pages website now provides an **experimental Lab v1.1** browser insta
 For a future approved production firmware release, publish separately from the experimental Lab build. The current build workflow generates the following files in the GitHub Pages artifact (they are not committed to the repository):
 
 - `firmware.bin`: CI-compiled **merged** ESP32-S3 experimental binary intended for flashing at address 0, only for bench use.
-- `manifest.json`: ESP Web Tools manifest pointing to that file. The current CI build uses `EngineLink Lab (experimental)` version `1.1.1-lab`.
+- `manifest.json`: ESP Web Tools manifest pointing to that file. The current CI build uses `EngineLink Lab (experimental)` version `1.2.0-lab`.
 
 ```json
 {
   "name": "EngineLink Lab (experimental)",
-  "version": "1.1.1-lab",
+  "version": "1.2.0-lab",
   "new_install_prompt_erase": true,
   "builds": [{"chipFamily":"ESP32-S3","parts":[{"path":"firmware.bin","offset":0}]}]
 }
