@@ -1,0 +1,19 @@
+name: Validate EngineLink
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check page JavaScript
+        run: node --check site/app.js
+      - name: Check required assets
+        run: |
+          test -s site/index.html
+          test -s site/styles.css
+          test -s site/assets/enginelink-mark.svg
