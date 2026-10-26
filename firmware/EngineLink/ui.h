@@ -71,14 +71,14 @@ static const char ENGINE_UI[] PROGMEM=R"ELWEB(<!doctype html>
  <div class="formgrid" style="margin-top:19px">
   <div class="field"><label for="testChannel">Capture channel</label><select class="input" id="testChannel"><option value="0">Both channels</option><option value="1">Channel 1 · J7</option><option value="2">Channel 2 · J6</option></select></div>
   <div class="field"><label for="testPhase">Current test stage</label><select class="input" id="testPhase"><option value="idle">Idle</option><option value="low">Low RPM</option><option value="medium">Medium RPM</option><option value="high">High RPM</option><option value="cruise">Cruise</option><option value="custom">Custom reference</option></select></div>
-  <div class="field"><label for="referenceRPM">Reference engine RPM</label><input class="input" type="number" min="0" max="6000" step="1" value="0" id="referenceRPM"><span class="hint">Read from an independent instrument if possible.</span></div>
+  <div class="field"><label for="referenceRPM">Reference engine RPM</label><input class="input" type="number" min="0" max="6000" step="1" placeholder="Enter measured RPM · optional" id="referenceRPM"><span class="hint">Read from an independent instrument if possible.</span></div>
   <div class="field"><label for="referenceFuel">Reference fuel rate (L/h) · optional</label><input class="input" type="number" min="0" max="2000" step="0.1" placeholder="Leave empty if unknown" id="referenceFuel"></div>
  </div>
  <div class="row" style="margin:3px 0 18px">
    <button id="testStart" class="btn primary" onclick="startMotorTest()">Start recording</button>
    <button id="testMark" class="btn" onclick="markMotorTest()" disabled>Mark current stage</button>
    <button id="testStop" class="btn secondary" onclick="stopMotorTest()" disabled>Stop & save</button>
-   <a class="btn secondary" id="testDownload" href="/api/test/download" download="EngineLink-Motor-Test.csv" target="_blank" rel="noopener" aria-disabled="true">Download test CSV</a>
+   <a class="btn secondary" id="testDownload" onclick="prepareDownload()" href="/api/test/download" download="EngineLink-Motor-Test.csv" target="_blank" rel="noopener" aria-disabled="true">Download test CSV</a>
  </div>
  <div class="grid3">
   <div class="kpi"><div class="eyebrow">RECORDED FRAMES</div><div class="number" id="testRows">0</div></div>
@@ -91,7 +91,7 @@ static const char ENGINE_UI[] PROGMEM=R"ELWEB(<!doctype html>
 </div>
 </section>
 <section id="history" class="page"><div class="top"><div><div class="eyebrow">RECORDING & HISTORY</div><h1>Fuel History</h1><div class="subtext">Automatic engine-period capture · Raw evidence preserved</div></div><span class="chip">SESSION BASED</span></div><div class="columns">
-<div class="panel"><h2>Current boot session</h2><div class="statrow"><span>Session file</span><strong id="logName">—</strong></div><div class="statrow"><span>Raw frames saved</span><strong id="logRows">0</strong></div><div class="statrow"><span>SD status</span><strong id="logStatus">—</strong></div><div class="statrow"><span>Logging</span><strong id="logRunning">—</strong></div><div class="row" style="margin-top:23px"><a class="btn primary" href="/api/log" target="_blank" rel="noopener">Download CSV</a><button class="btn" onclick="post('/api/sd/start')">Start logging</button><button class="btn secondary" onclick="post('/api/sd/stop')">Stop logging</button></div></div>
+<div class="panel"><h2>Current boot session</h2><div class="statrow"><span>Session file</span><strong id="logName">—</strong></div><div class="statrow"><span>Raw frames saved</span><strong id="logRows">0</strong></div><div class="statrow"><span>SD status</span><strong id="logStatus">—</strong></div><div class="statrow"><span>Logging</span><strong id="logRunning">—</strong></div><div class="row" style="margin-top:23px"><a class="btn primary" href="/api/log" onclick="prepareDownload()" target="_blank" rel="noopener">Download CSV</a><button class="btn" onclick="post('/api/sd/start')">Start logging</button><button class="btn secondary" onclick="post('/api/sd/stop')">Stop logging</button></div></div>
 <div class="panel"><h2>Fuel accounting</h2><p>The firmware automatically accumulates fuel during consecutive valid PID 183 readings. Engine stops do not automatically create or close boat trips.</p><div class="statrow"><span>J7 · observed fuel</span><strong id="histJ7">—</strong></div><div class="statrow"><span>J6 · observed fuel</span><strong id="histJ6">—</strong></div><div class="statrow"><span>Data gaps</span><strong id="histGaps">—</strong></div><div class="notice" style="margin-top:20px">These boot-session totals are incomplete if time or fuel data are missing. Cross-restart trip grouping and persistent trip totals are not yet implemented.</div></div></div></section>
 <section id="device" class="page"><div class="top"><div><div class="eyebrow">SYSTEM & HARDWARE</div><h1>EngineLink Device</h1><div class="subtext">Live hardware health and diagnostics</div></div><span class="chip" id="timeBadge">TIME UNKNOWN</span></div>
 <div class="columns"><div class="panel"><h2>Hardware status</h2><div class="statrow"><span>Uptime</span><strong id="uptime">—</strong></div><div class="statrow"><span>Heap available</span><strong id="freeHeap">—</strong></div><div class="statrow"><span>PSRAM</span><strong id="psram">—</strong></div><div class="statrow"><span>Optoisolated GPIO38</span><strong id="opto">—</strong></div><div class="statrow"><span>NMEA2000 controller</span><strong id="canStatus">—</strong></div><div class="statrow"><span>NMEA2000 RX frames</span><strong id="canFrames">—</strong></div></div>
@@ -122,7 +122,7 @@ static const char ENGINE_UI[] PROGMEM=R"ELWEB(<!doctype html>
 'use strict';
 const el=id=>document.getElementById(id);
 let state=null,appStarted=false,wizardStep=1,networkChoice='ap',settingsNetwork='ap';
-let trafficPaused=false, trafficSnapshot=[],pollTimer=null,pollAbort=null,pollBusy=false,pollFailures=0,commandBusy=false,lastOk=0,currentPage='fuel',lastBootId=null,updateInterrupted=false;
+let trafficPaused=false, trafficSnapshot=[],pollTimer=null,pollAbort=null,pollBusy=false,pollFailures=0,commandBusy=false,lastOk=0,currentPage='fuel',lastBootId=null,updateInterrupted=false,downloadPauseUntil=0;
 const fmt=(n,d=1)=>n===null||n===undefined||!Number.isFinite(Number(n))?'—':Number(n).toLocaleString('da-DK',{minimumFractionDigits:d,maximumFractionDigits:d});
 const txt=(id,s)=>{const e=el(id);if(e)e.textContent=s};
 function toast(message,bad=false){const e=el('toast');e.textContent=message;e.style.borderColor=bad?'#c98286':'#49887f';e.style.display='block';clearTimeout(window.__toast);window.__toast=setTimeout(()=>e.style.display='none',4300)}
@@ -186,6 +186,13 @@ window.syncPhone=async function(){
  await request('/api/phone-time',{ms:String(Date.now()),zone:Intl.DateTimeFormat().resolvedOptions().timeZone||'UTC'});
 }
 window.runLedTest=()=>request('/api/led/test',{});
+window.prepareDownload=function(){
+ // The ESP32 WebServer streams a CSV using its one HTTP client handler.
+ // Avoid competing status polls while Safari saves the file.
+ downloadPauseUntil=Date.now()+45000;
+ if(pollAbort)pollAbort.abort();
+ schedulePoll(45000);
+};
 window.startMotorTest=async function(){
  const result=await request('/api/test/start',{channel:el('testChannel').value});
  if(result)toast('Recording real J1708 data. Mark the next stage when RPM changes.');
@@ -292,6 +299,7 @@ function render(s){
  txt('alertbar',warning);
 }
 async function poll(){
+ if(Date.now()<downloadPauseUntil){schedulePoll(Math.max(300,downloadPauseUntil-Date.now()));return}
  if(pollBusy||commandBusy){schedulePoll(700);return}
  pollBusy=true;
  const c=new AbortController();
