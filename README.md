@@ -7,7 +7,7 @@
 <p align="center"><a href="https://kaelor9.github.io/EngineLink/"><strong>Firmware Downloads &amp; Installer</strong></a> · <a href="https://github.com/Kaelor9/EngineLink/releases">Releases</a> · <a href="docs/PROJECT_PLAN.md">Project plan</a></p>
 
 > [!NOTE]
-> **Early development.** This is a project foundation, **not a released fuel-monitoring product**. An experimental Lab v1.2 build can be flashed through the browser for controlled bench use. It compiles in CI, but has **not** been validated as a full release on the actual PCB. Do not connect real engines or the NMEA 2000 bus.
+> **EngineLink application v0.1.0-alpha** is now implemented and CI-compiled. It provides an offline onboard web app, first-time setup, passive dual-J1708 capture, standard PID183 fuel decoding and automatic SD session logging. **Actual engine compatibility and hardware reliability remain unverified.** Disconnect engine/NMEA2000 networks for initial flashing and bring-up. See [Alpha status and safety](docs/PRODUCTION_ALPHA.md).
 
 ## Purpose
 
@@ -24,7 +24,7 @@ EngineLink is a dedicated onboard device designed to collect fuel-consumption an
 - Time sources: browser/phone, NMEA 2000 GPS, optional NTP, monotonic timestamps when no absolute clock is available.
 - Advanced J1708 packet monitor and **bench-only** transmission terminal.
 
-**The features above are planned, not claims of current functionality.** See [project status](docs/PROJECT_PLAN.md).
+The alpha firmware implements a substantial subset. Automatic durable multi-day trip grouping, engine-specific proprietary decoders, transmitted NMEA 2000 PGNs, and J1708 transmit commands remain future work. See [application status](docs/PRODUCTION_ALPHA.md).
 
 ## Hardware (current board)
 
@@ -47,13 +47,13 @@ The [GitHub Pages download page](https://kaelor9.github.io/EngineLink/) includes
 
 1. A link to the repository's source archive.
 2. A link to official GitHub Releases (once releases exist).
-3. An **ESP Web Tools** installer for the **experimental Lab v1.2** built by GitHub Actions. Flashing requires acknowledgement of the bench-only warning; this is not approved production firmware.
+3. An **ESP Web Tools** installer for the **EngineLink 0.1.0-alpha application** compiled by GitHub Actions. Flashing requires acknowledgement of the safety warning. Do not treat this as hardware-validated production firmware.
 
 See [release procedure](docs/RELEASING.md). **Do not flash random or example binaries from other ESP32 projects.**
 
 ## Development material
 
-The previous bench dashboard is stored under [`experiments/`](experiments/README.md). It demonstrates SoftAP, LED control, SD and dual UART J1708 bench traffic. It is **not** the planned final product firmware, a validated fuel decoder, or an approved production release.
+The earlier bench dashboard is stored under [`experiments/`](experiments/README.md). It demonstrates SoftAP, LED control, SD and dual UART J1708 bench traffic. It is **not** the planned final product firmware, a validated fuel decoder, or an approved production release.
 
 ## Repository layout
 
@@ -62,7 +62,7 @@ EngineLink/
 ├── .github/workflows/      # Pages publishing and basic checks
 ├── docs/                   # Design decisions, pinout and release process
 ├── experiments/            # Development sketches (bench only)
-├── firmware/               # Future production firmware source
+├── firmware/EngineLink/     # Actual alpha application, embedded offline UI
 ├── hardware/               # Hardware documentation / later public assets
 ├── site/                   # GitHub Pages download + installer website
 ├── .gitignore
@@ -78,8 +78,8 @@ EngineLink/
 | Addressable status LED | Bench tested |
 | NMEA 2000 bus communication | Not yet validated |
 | Fuel-rate decoding on real engines | Not yet verified |
-| Production firmware | In design |
-| Browser flashing | Experimental Lab only; production firmware unavailable |
+| EngineLink application alpha | CI compiled; no real-engine validation yet |
+| Browser flashing | EngineLink application alpha; hardware test pending |
 
 > The J1708 bench result does not establish full bus arbitration/conformance. The NMEA2000 and engine connections require separate validation.
 
