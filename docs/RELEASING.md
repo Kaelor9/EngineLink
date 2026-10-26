@@ -1,6 +1,6 @@
 # EngineLink firmware releases and web installer
 
-The GitHub Pages website is staged. Browser flashing is **intentionally disabled** until a real ESP32-S3 firmware image has been verified.
+The GitHub Pages website now provides an **experimental Lab v1.1** browser installer after a successful GitHub Actions compilation. This firmware is **bench only**, not hardware-verified production firmware. A separate approved release process remains mandatory for actual engine installations.
 
 ## Before release
 
@@ -12,21 +12,21 @@ The GitHub Pages website is staged. Browser flashing is **intentionally disabled
 
 ## Publishing
 
-After hardware validation, put these in `site/`:
+For a future approved production firmware release, publish separately from the experimental Lab build. The current build workflow generates the following files in the GitHub Pages artifact (they are not committed to the repository):
 
-- `firmware.bin`: verified **merged** ESP32-S3 binary intended for flashing at address 0.
-- `manifest.json`: ESP Web Tools manifest pointing to that file, such as:
+- `firmware.bin`: CI-compiled **merged** ESP32-S3 experimental binary intended for flashing at address 0, only for bench use.
+- `manifest.json`: ESP Web Tools manifest pointing to that file. The current CI build uses `EngineLink Lab (experimental)` version `1.1.0-lab`.
 
 ```json
 {
-  "name": "EngineLink",
-  "version": "v1.0.0",
+  "name": "EngineLink Lab (experimental)",
+  "version": "1.1.0-lab",
   "new_install_prompt_erase": true,
   "builds": [{"chipFamily":"ESP32-S3","parts":[{"path":"firmware.bin","offset":0}]}]
 }
 ```
 
-The version shown is **illustrative, not released**. Publish only after test. The installer page automatically checks both files and enables the ESP Web Tools component if valid resources exist. Asset checks alone do **not** prove a binary is safe; bench validation remains mandatory.
+The example above describes the experimental build. The website checks that its manifest and binary exist before it displays the flashing option, and requires explicit acknowledgment of the bench safety warning. Successful compilation alone does **not** establish suitability for a real engine network.
 
 Create a GitHub Release with version, compatible hardware revisions, flashing notes, change log, merged binary, checksum and any settings/data migration information.
 
