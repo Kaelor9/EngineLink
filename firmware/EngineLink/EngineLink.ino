@@ -1,5 +1,5 @@
 /*
- * EngineLink 0.1.0-alpha — actual application firmware
+ * EngineLink 0.2.0-alpha — actual application firmware
  * ESP32-S3-WROOM-1-N8R8, 8 MB flash / 8 MB PSRAM.
  *
  * Captures actual J1708 / J1587 RX bytes on J7 and J6. No J1708 TX pins
@@ -31,7 +31,7 @@ constexpr uint8_t OPTO_PIN=38, CAN_TX=15, CAN_RX=16;
 constexpr uint8_t MAX_FRAME=21;
 constexpr uint32_t FRAME_FRESH_MS=6000;
 constexpr uint32_t RPM_FRESH_MS=12000;
-constexpr uint32_t CSV_FLUSH_MS=2000;
+constexpr uint32_t CSV_FLUSH_MS=1200;
 
 struct Frame {
   uint8_t channel=0;
@@ -94,16 +94,26 @@ QueueHandle_t framesQueue=nullptr;
 Recent recent[24];
 uint8_t recentIndex=0,recentCount=0;
 uint32_t bootId=0,lastFlush=0,lastWifiRetry=0,lastLed=0,ledPrev=0xFFFFFFFF;
-uint8_t ledBrightness=34;
-uint32_t manualLedColor=0x26B8AE;
-bool manualLED=false;
+uint32_t ledTestStartedMs=0;
+uint8_t ledBrightness=42;
+enum LedState : uint8_t { LS_BOOT, LS_SETUP, LS_READY, LS_ROUTER, LS_NO_SD, LS_WRITE_ERROR, LS_RX_ERROR, LS_TEST };
+LedState currentLED=LS_BOOT;
+bool sdFaultLatched=false;
+bool uartReady[2]={false,false};
 bool sdReady=false,sdLogging=false,canReady=false,pendingNetwork=false;
 bool hasTime=false,ntpStarted=false;
 String timeSource="none",sdMessage="No card",sessionName;
-File logFile;
+File logFile,calFile;
+bool calActive=false,calResumeLogging=false;
+int8_t calChannel=-1; // -1 both, 0 J7, 1 J6
+uint32_t calRows=0,calInvalid=0,calSteps=0,calStartMs=0;
+uint32_t lastTestFlush=0;
+uint16_t calReferenceRPM=0;
+float calReferenceFuel=-1.0f;
+String calName="",calPhase="idle";
 uint32_t sdRows=0,sdErrors=0;
-uint32_t lastAPCheck=0;
-volatile uint32_t apJoins=0,apLeaves=0;
+bool apStarted=false;
+volatile uint32_t apJoins=0,apLeaves=0,apStarts=0,apStops=0,staDisconnects=0;
 volatile uint8_t apReason=0;
 float sogKnots=NAN;
 uint64_t sogAt=0;
@@ -128,16 +138,16 @@ bool allowTime(const String &source){
 }
 void ntpCallback(struct timeval *tv){(void)tv;ntpNotification=true;}
 void onWiFi(WiFiEvent_t e,WiFiEventInfo_t info){
+  if(e==ARDUINO_EVENT_WIFI_AP_START)++apStarts;
+  if(e==ARDUINO_EVENT_WIFI_AP_STOP)++apStops;
   if(e==ARDUINO_EVENT_WIFI_AP_STACONNECTED)++apJoins;
-  if(e==ARDUINO_EVENT_WIFI_AP_STADISCONNECTED){
-    ++apLeaves;
-    apReason=info.wifi_ap_stadisconnected.reason;
-  }
+  if(e==ARDUINO_EVENT_WIFI_AP_STADISCONNECTED){++apLeaves;apReason=info.wifi_ap_stadisconnected.reason;}
+  if(e==ARDUINO_EVENT_WIFI_STA_DISCONNECTED)++staDisconnects;
 }
 bool cardInserted(){return digitalRead(SD_DETECT)==LOW;}
 
 void stopLog(){
-  if(logFile){logFile.flush();logFile.close();}
+  if(logFile){if(cardInserted())logFile.flush();logFile.close();}
   sdLogging=false;
 }
 void initSD(){
@@ -145,27 +155,35 @@ void initSD(){
   SPI.begin(SD_SCK,SD_MISO,SD_MOSI,SD_CS);
   sdReady=SD.begin(SD_CS,SPI,4000000);
   sdMessage=sdReady?"Card mounted":"Mount failed";
+  if(!sdReady)sdFaultLatched=true;
   if(!sdReady)return;
   char name[25];
   snprintf(name,sizeof(name),"/EL%08lX.CSV",(unsigned long)bootId);
   sessionName=name;
   logFile=SD.open(sessionName,FILE_APPEND);
-  if(!logFile){sdMessage="Cannot open session";return;}
+  if(!logFile){sdMessage="Cannot open session";sdFaultLatched=true;return;}
   if(logFile.size()==0){
     logFile.println("boot_id,uptime_ms,utc_epoch,channel,mid,checksum,raw_hex,engine,fuel_lph,rpm");
   }
   sdLogging=true;
-  sdMessage="Logging raw J1708";
+  sdMessage="Logging raw J1708";sdFaultLatched=false;
   lastFlush=millis();
 }
+void reply(bool ok,const String &message,int code);
+void finishCalibration(bool resume);
 void serviceSD(){
-  if(sdLogging&&!cardInserted()){
-    stopLog();sdReady=false;sdMessage="Card removed - logging stopped";
+  if((sdLogging||calActive)&&!cardInserted()){
+    if(calActive)finishCalibration(false);
+    if(sdLogging)stopLog();
+    sdReady=false;sdFaultLatched=true;
+    sdMessage="SD removed - recording stopped";
     return;
   }
   if(sdLogging && (uint32_t)(millis()-lastFlush)>=CSV_FLUSH_MS){
-    logFile.flush();
-    lastFlush=millis();
+    logFile.flush();lastFlush=millis();
+  }
+  if(calActive && (uint32_t)(millis()-lastTestFlush)>=CSV_FLUSH_MS){
+    calFile.flush();lastTestFlush=millis();
   }
 }
 void writeRecord(const Frame &f,uint8_t mid,bool valid,const char *hex,bool gotFuel,float lph,bool gotRPM,float rpm){
@@ -177,13 +195,127 @@ void writeRecord(const Frame &f,uint8_t mid,bool valid,const char *hex,bool gotF
       (unsigned long)bootId,(unsigned long long)f.bootMs,(long long)utc,
       f.channel==0?7:6,(unsigned)mid,valid?1:0,hex,
       engineId==0?"port":engineId==1?"starboard":"unassigned");
-  if(result<=0){sdMessage="SD write failed";++sdErrors;stopLog();return;}
+  if(result<=0){sdMessage="SD write failed";sdFaultLatched=true;++sdErrors;stopLog();return;}
   if(gotFuel)logFile.print(lph,3);
   logFile.print(',');
   if(gotRPM)logFile.print(rpm,2);
   logFile.println();
   ++sdRows;
 }
+
+// A calibration capture consists of original RX bytes plus operator reference
+// markers. Nothing in this workflow transmits or commands an engine.
+void finishCalibration(bool resume){
+  if(calFile){if(cardInserted())calFile.flush();calFile.close();}
+  calActive=false;
+  if(resume && calResumeLogging && sdReady && cardInserted()){
+    logFile=SD.open(sessionName,FILE_APPEND);
+    sdLogging=(bool)logFile;
+    if(!sdLogging){sdFaultLatched=true;sdMessage="Could not resume raw logging";}
+  }
+  calResumeLogging=false;
+}
+void calibrationMarker(){
+  if(!calActive)return;
+  const long long epoch=validWall()?(long long)time(nullptr):0;
+  char entry[240];
+  int n=snprintf(entry,sizeof(entry),"MARK,%08lX,%llu,%lld,%lu,%s,%u,%.3f,,,,,,\n",
+    (unsigned long)bootId,(unsigned long long)elapsedMs(),epoch,
+    (unsigned long)calSteps,calPhase.c_str(),(unsigned)calReferenceRPM,
+    calReferenceFuel);
+  if(n<=0 || n >= (int)sizeof(entry) || calFile.write((const uint8_t*)entry,n)!=(size_t)n){
+    sdFaultLatched=true;sdMessage="Calibration marker write failed";finishCalibration(false);
+    return;
+  }
+  calFile.flush();
+}
+bool startCalibration(int channel){
+  if(calActive||!sdReady||!cardInserted())return false;
+  if(channel<-1||channel>1)return false;
+  calChannel=channel;
+  calRows=0;calInvalid=0;calSteps=1;calReferenceRPM=0;calReferenceFuel=-1;
+  calPhase="idle";calStartMs=millis();calResumeLogging=sdLogging;
+  if(sdLogging)stopLog(); // Do not duplicate high-rate writes to the same SD card.
+  char name[28];
+  snprintf(name,sizeof(name),"/TEST%08lX.CSV",(unsigned long)bootId);
+  calName=name;
+  if(SD.exists(calName)){ // Do not overwrite an older test if a boot ID collides.
+    for(uint8_t i=1;i<50;i++){
+      snprintf(name,sizeof(name),"/T%08lX%02u.CSV",(unsigned long)bootId,(unsigned)i);
+      if(!SD.exists(name)){calName=name;break;}
+    }
+    if(SD.exists(calName))return false;
+  }
+  calFile=SD.open(calName,FILE_WRITE);
+  if(!calFile){sdFaultLatched=true;sdMessage="Could not create motor test file";return false;}
+  calFile.println("kind,boot_id,uptime_ms,utc_epoch,step,phase,reference_rpm,reference_fuel_lph,channel,mid,length,checksum,raw_hex,decoded_fuel_lph,decoded_rpm");
+  calActive=true;
+  lastTestFlush=millis();
+  calibrationMarker();
+  if(!calActive)return false;
+  pref.begin("enginelink",false);pref.putString("testfile",calName);pref.end();
+  sdMessage="Motor calibration test capturing";
+  return true;
+}
+void appendCalibrationFrame(const Frame &f,uint8_t mid,bool valid,const char *hex,bool gotFuel,float lph,bool gotRPM,float rpm){
+  if(!calActive || (calChannel>=0 && f.channel!=(uint8_t)calChannel))return;
+  const long long epoch=validWall()?(long long)time(nullptr):0;
+  char entry[285];
+  int n=snprintf(entry,sizeof(entry),"FRAME,%08lX,%llu,%lld,%lu,%s,%u,%.3f,J%u,%u,%u,%u,%s,",
+    (unsigned long)bootId,(unsigned long long)f.bootMs,epoch,
+    (unsigned long)calSteps,calPhase.c_str(),(unsigned)calReferenceRPM,calReferenceFuel,
+    f.channel==0?7:6,(unsigned)mid,(unsigned)f.length,valid?1:0,hex);
+  if(n<=0||n>(int)sizeof(entry)-45){++sdErrors;sdFaultLatched=true;sdMessage="Motor test row too large";finishCalibration(false);return;}
+  if(gotFuel)n+=snprintf(entry+n,sizeof(entry)-n,"%.3f",lph);
+  entry[n++]=',';
+  if(gotRPM)n+=snprintf(entry+n,sizeof(entry)-n,"%.2f",rpm);
+  entry[n++]='\n';
+  if(calFile.write((const uint8_t*)entry,n)!=(size_t)n){
+    ++sdErrors;sdFaultLatched=true;sdMessage="Motor test SD write error";finishCalibration(false);
+  }else{++calRows;if(!valid)++calInvalid;}
+}
+void handleCalibrationStart(){
+  int channel=web.arg("channel").toInt(); // 0=both,1=J7,2=J6
+  if(channel<0||channel>2){reply(false,"Invalid channel",400);return;}
+  if(!sdReady||!cardInserted()){reply(false,"Insert a microSD card before motor test",409);return;}
+  bool ok=startCalibration(channel-1);
+  reply(ok,ok?"Passive motor test started. Record idle and RPM steps before export.":"Could not start motor test",ok?200:409);
+}
+void handleCalibrationMark(){
+  if(!calActive){reply(false,"No active motor test",409);return;}
+  String phase=web.arg("phase");
+  if(phase!="idle"&&phase!="low"&&phase!="medium"&&phase!="high"&&phase!="cruise"&&phase!="custom"){
+    reply(false,"Invalid phase",400);return;
+  }
+  int rpm=web.arg("rpm").toInt();
+  if(rpm<0||rpm>6000){reply(false,"Reference RPM must be 0-6000",400);return;}
+  String fuel=web.arg("fuel");
+  float flow=-1;
+  if(fuel.length()){
+    for(size_t i=0;i<fuel.length();i++)if(!isDigit(fuel[i])&&fuel[i]!='.'){reply(false,"Invalid reference fuel rate",400);return;}
+    flow=fuel.toFloat();
+    if(flow<0||flow>2000){reply(false,"Reference fuel rate out of range",400);return;}
+  }
+  calPhase=phase;calReferenceRPM=(uint16_t)rpm;calReferenceFuel=flow;
+  ++calSteps;calibrationMarker();
+  reply(calActive,calActive?"Motor test step marked. Continue collecting data.":"SD write error stopped recording",calActive?200:500);
+}
+void handleCalibrationStop(){
+  if(!calActive){reply(false,"No motor test is running",409);return;}
+  finishCalibration(true);
+  reply(true,"Motor test saved. Download the CSV to your device.");
+}
+void handleCalibrationDownload(){
+  if(calActive){web.send(409,"text/plain","Stop the motor test before downloading its CSV");return;}
+  if(!sdReady || !calName.length() || !SD.exists(calName)){
+    web.send(404,"text/plain","No saved motor test on the inserted SD card");return;
+  }
+  File f=SD.open(calName,FILE_READ);
+  if(!f){web.send(500,"text/plain","Unable to open test log");return;}
+  web.sendHeader("Content-Disposition","attachment; filename=EngineLink-Motor-Test.csv");
+  web.streamFile(f,"text/csv");f.close();
+}
+
 void queueFrame(Channel *c){
   if(c->count<2 && !c->overflow){c->count=0;return;}
   Frame f;
@@ -320,6 +452,7 @@ void processFrame(const Frame &f){
     if(gotRPM){m.rpm=rpm;m.rpmAt=f.bootMs;m.rpmEver=true;++m.rpmSamples;}
   }
   writeRecord(f,mid,ok,r.hex,gotFuel,lph,gotRPM,rpm);
+  appendCalibrationFrame(f,mid,ok,r.hex,gotFuel,lph,gotRPM,rpm);
 }
 uint32_t nmeaPGN(uint32_t canid){
   uint32_t pgn=(canid>>8)&0x3FFFF;
@@ -359,27 +492,33 @@ void serviceCAN(){
   }
 }
 void applyNetwork(){
-  WiFi.mode(cfg.router?WIFI_AP_STA:WIFI_AP);
+  // Only a saved network configuration change may rebuild Wi-Fi interfaces.
+  // Never periodically restart the AP just because STA lost its router.
+  const bool withRouter=cfg.router&&cfg.ssid.length();
+  WiFi.mode(withRouter?WIFI_AP_STA:WIFI_AP);
   WiFi.setSleep(false);
   WiFi.softAPConfig(IPAddress(192,168,4,1),IPAddress(192,168,4,1),IPAddress(255,255,255,0));
-  WiFi.softAP("EngineLink",cfg.apPassword.c_str(),6,false,4);
-  if(cfg.router && cfg.ssid.length()){
-    WiFi.setAutoReconnect(true);
+  apStarted=WiFi.softAP("EngineLink",cfg.apPassword.c_str(),6,false,4);
+  if(withRouter){
+    WiFi.setAutoReconnect(false);
     WiFi.begin(cfg.ssid.c_str(),cfg.wifiPassword.c_str());
     lastWifiRetry=millis();
-  }else{WiFi.disconnect(false,false);ntpStarted=false;}
+  }else{
+    ntpStarted=false;
+    // In AP-only mode do not call WiFi.disconnect(): it can disturb AP state.
+  }
 }
 void serviceNetwork(){
   if(pendingNetwork){pendingNetwork=false;applyNetwork();}
-  if(cfg.router && WiFi.status()!=WL_CONNECTED&&(uint32_t)(millis()-lastWifiRetry)>30000UL){
+  // STA scans can force the AP radio onto another channel. Defer retries while
+  // an AP client is using the control page; no router must not break direct Wi-Fi.
+  if(cfg.router&&cfg.ssid.length()&&WiFi.status()!=WL_CONNECTED &&
+      (uint32_t)(millis()-lastWifiRetry)>120000UL &&
+      WiFi.softAPgetStationNum()==0){
     WiFi.reconnect();lastWifiRetry=millis();
   }
-  // AP remains available regardless of router connectivity.
-  if((uint32_t)(millis()-lastAPCheck)>15000UL){
-    lastAPCheck=millis();
-    if(WiFi.softAPIP()==IPAddress(0,0,0,0))applyNetwork();
-  }
-  if(cfg.router&&WiFi.status()==WL_CONNECTED&&!ntpStarted && (cfg.timePreference=="auto"||cfg.timePreference=="ntp")){
+  if(cfg.router&&WiFi.status()==WL_CONNECTED&&!ntpStarted &&
+     (cfg.timePreference=="auto"||cfg.timePreference=="ntp")){
     configTime(0,0,"pool.ntp.org","time.google.com");
     ntpStarted=true;
   }
@@ -388,15 +527,59 @@ void serviceNetwork(){
     if(allowTime("ntp")&&validWall()){hasTime=true;timeSource="ntp";}
   }
 }
+const char *ledStateName(LedState st){
+  switch(st){
+    case LS_BOOT:return "Starting";
+    case LS_SETUP:return "Setup: blue pulse";
+    case LS_READY:return "Normal: green";
+    case LS_ROUTER:return "Router reconnect: amber pulse";
+    case LS_NO_SD:return "SD unavailable: amber double flash";
+    case LS_WRITE_ERROR:return "SD error: red rapid flash";
+    case LS_RX_ERROR:return "J1708 overflow: red double flash";
+    case LS_TEST:return "Motor test recording: cyan pulse";
+  }
+  return "Unknown";
+}
+LedState selectedLED(){
+  if(ledTestStartedMs && (uint32_t)(millis()-ledTestStartedMs)<16000UL){
+    constexpr LedState demo[]={LS_SETUP,LS_READY,LS_ROUTER,LS_NO_SD,LS_WRITE_ERROR,LS_RX_ERROR,LS_TEST};
+    return demo[((millis()-ledTestStartedMs)/2200UL)%7];
+  }
+  if(sdFaultLatched)return LS_WRITE_ERROR;
+  if(ctr.uartFaults[0]||ctr.uartFaults[1]||ctr.rxDropped[0]||ctr.rxDropped[1])return LS_RX_ERROR;
+  if(calActive)return LS_TEST;
+  if(!cfg.completed)return LS_SETUP;
+  if(!sdReady||!sdLogging)return LS_NO_SD;
+  if(cfg.router&&cfg.ssid.length()&&WiFi.status()!=WL_CONNECTED)return LS_ROUTER;
+  return LS_READY;
+}
 void updateLED(){
-  if((uint32_t)(millis()-lastLed)<100)return;
+  if((uint32_t)(millis()-lastLed)<75)return;
   lastLed=millis();
-  uint32_t c=manualLED?manualLedColor:
-     !sdReady?0xCC7A14:(!cfg.completed?0x1858AA:0x169E83);
-  c=led.Color((c>>16)&255,(c>>8)&255,c&255);
-  if(c==ledPrev)return;
-  led.setBrightness(ledBrightness);
-  led.setPixelColor(0,c);led.show();ledPrev=c;
+  currentLED=selectedLED();
+  const uint32_t t=millis();
+  const uint32_t beat=t%1800;
+  bool on=true;
+  uint8_t level=ledBrightness;
+  uint32_t color=0x13A880;
+  switch(currentLED){
+    case LS_SETUP: color=0x1C6EED;level=10+(uint8_t)(32.0f*(0.5f+0.5f*sinf((t%2000)*0.00314159f)));break;
+    case LS_ROUTER: color=0xE59A21;on=(t%1200)<450;break;
+    case LS_NO_SD: color=0xDF9D30;on=beat<120||((beat>250)&&(beat<380));break;
+    case LS_WRITE_ERROR: color=0xE92E35;on=(t%360)<180;break;
+    case LS_RX_ERROR: color=0xDF4150;on=beat<160||(beat>320&&beat<480);break;
+    case LS_TEST: color=0x16C7CD;on=(t%1100)<200;break;
+    case LS_BOOT: color=0x1C6EED;break;
+    case LS_READY: color=0x17A77E;level=27;break;
+  }
+  if(!on)level=0;
+  uint32_t rgb=level?color:0;
+  uint32_t fingerprint=(rgb<<8)|level;
+  if(fingerprint==ledPrev)return;
+  led.setBrightness(level);
+  led.setPixelColor(0,led.Color((rgb>>16)&255,(rgb>>8)&255,rgb&255));
+  led.show();
+  ledPrev=fingerprint;
 }
 void saveSettings(){
   pref.begin("enginelink",false);
@@ -579,17 +762,9 @@ void handleTime(){
   setClockFromUtc(sec,"phone");
   reply(true,"Clock synchronized from phone");
 }
-void handleLED(){
-  if(web.arg("mode")=="auto"){manualLED=false;}
-  else if(web.arg("mode")=="manual"){
-    String hex=web.arg("hex");
-    if(hex.length()!=6){reply(false,"Invalid RGB color",400);return;}
-    manualLedColor=strtoul(hex.c_str(),nullptr,16)&0xFFFFFF;
-    manualLED=true;
-  }else{reply(false,"Invalid LED mode",400);return;}
-  ledBrightness=(uint8_t)constrain(web.arg("brightness").toInt(),1,180);
-  ledPrev=0xFFFFFFFF;
-  reply(true,"Status LED updated");
+void handleLEDTest(){
+  ledTestStartedMs=millis();ledPrev=0xFFFFFFFF;
+  reply(true,"LED status sequence started (16 seconds).");
 }
 void handleDownload(){
   if(!sdReady||!sessionName.length()||!SD.exists(sessionName)){web.send(404,"text/plain","No session file");return;}
@@ -611,13 +786,17 @@ void initializeWeb(){
   web.on("/api/setup",HTTP_POST,handleOptions);
   web.on("/api/settings",HTTP_POST,handleOptions);
   web.on("/api/phone-time",HTTP_POST,handleTime);
-  web.on("/api/led",HTTP_POST,handleLED);
+  web.on("/api/led/test",HTTP_POST,handleLEDTest);
+  web.on("/api/test/start",HTTP_POST,handleCalibrationStart);
+  web.on("/api/test/mark",HTTP_POST,handleCalibrationMark);
+  web.on("/api/test/stop",HTTP_POST,handleCalibrationStop);
+  web.on("/api/test/download",HTTP_GET,handleCalibrationDownload);
   web.on("/api/sd/remount",HTTP_POST,[](){
-    if(sdLogging){reply(false,"Stop logging before remount",409);return;}
+    if(sdLogging||calActive){reply(false,"Stop recording before remount",409);return;}
     SD.end();sdReady=false;initSD();reply(sdReady,sdMessage);
   });
-  web.on("/api/sd/stop",HTTP_POST,[](){stopLog();reply(true,"Session recording stopped");});
-  web.on("/api/sd/start",HTTP_POST,[](){if(sdLogging){reply(true,"Already recording");return;}initSD();reply(sdLogging,sdMessage);});
+  web.on("/api/sd/stop",HTTP_POST,[](){if(calActive){reply(false,"Stop motor test first",409);return;}stopLog();reply(true,"Session recording stopped");});
+  web.on("/api/sd/start",HTTP_POST,[](){if(calActive){reply(false,"Stop motor test first",409);return;}if(sdLogging){reply(true,"Already recording");return;}initSD();reply(sdLogging,sdMessage);});
   web.on("/api/log",HTTP_GET,handleDownload);
   web.on("/api/health",HTTP_GET,[](){web.send(200,"text/plain","OK");});
   web.onNotFound([](){web.send(404,"text/plain","Not found");});
@@ -633,14 +812,16 @@ void setup(){
   pinMode(SD_DETECT,INPUT);
   pinMode(OPTO_PIN,INPUT);
   loadSettings();
+  pref.begin("enginelink",true);calName=pref.getString("testfile","");pref.end();
   framesQueue=xQueueCreate(72,sizeof(Frame));
   if(framesQueue){
-    if(!initUART(channels[0],RX_J7))Serial.println("J7 UART init failed");
-    if(!initUART(channels[1],RX_J6))Serial.println("J6 UART init failed");
+    uartReady[0]=initUART(channels[0],RX_J7);
+    uartReady[1]=initUART(channels[1],RX_J6);
+    if(!uartReady[0])Serial.println("J7 UART init failed");
+    if(!uartReady[1])Serial.println("J6 UART init failed");
   }
   initSD();
   WiFi.onEvent(onWiFi);
-  WiFi.setSleep(false);
   applyNetwork();
   initializeWeb();
   if(cfg.canListen && !startCAN())Serial.println("CAN listen-only init failed");
