@@ -20,6 +20,7 @@
 #include <esp_timer.h>
 #include <sys/time.h>
 #include <time.h>
+#include <esp_sntp.h>
 #include <math.h>
 #include "ui.h"
 
