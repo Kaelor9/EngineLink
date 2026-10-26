@@ -7,7 +7,7 @@
 <p align="center"><a href="https://kaelor9.github.io/EngineLink/"><strong>Firmware Downloads &amp; Installer</strong></a> · <a href="https://github.com/Kaelor9/EngineLink/releases">Releases</a> · <a href="docs/PROJECT_PLAN.md">Project plan</a></p>
 
 > [!NOTE]
-> **Early development.** This is a project foundation, **not a released fuel-monitoring product**. An experimental Lab v1.1 build can be flashed through the browser for controlled bench use. It compiles in CI, but has **not** been validated as a full release on the actual PCB. Do not connect real engines or the NMEA 2000 bus.
+> **Early development.** This is a project foundation, **not a released fuel-monitoring product**. An experimental Lab v1.2 build can be flashed through the browser for controlled bench use. It compiles in CI, but has **not** been validated as a full release on the actual PCB. Do not connect real engines or the NMEA 2000 bus.
 
 ## Purpose
 
@@ -47,7 +47,7 @@ The [GitHub Pages download page](https://kaelor9.github.io/EngineLink/) includes
 
 1. A link to the repository's source archive.
 2. A link to official GitHub Releases (once releases exist).
-3. An **ESP Web Tools** installer for the **experimental Lab v1.1** built by GitHub Actions. Flashing requires acknowledgement of the bench-only warning; this is not approved production firmware.
+3. An **ESP Web Tools** installer for the **experimental Lab v1.2** built by GitHub Actions. Flashing requires acknowledgement of the bench-only warning; this is not approved production firmware.
 
 See [release procedure](docs/RELEASING.md). **Do not flash random or example binaries from other ESP32 projects.**
 
