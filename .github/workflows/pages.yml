@@ -60,7 +60,7 @@ jobs:
           python3 - <<'PY'
           import json, pathlib
           p=pathlib.Path("site/firmware.bin")
-          assert 100_000 < p.stat().st_size < 8*1024*1024, p.stat().st_size
+          assert 100_000 < p.stat().st_size <= 8*1024*1024, p.stat().st_size
           manifest={
             "name":"EngineLink Lab (experimental)",
             "version":"1.1.0-lab",
