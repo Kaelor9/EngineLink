@@ -505,7 +505,7 @@ function showDetail(e){
  const parts=parseFrame(hexBytes(e.hex));
  html('dPids',parts.length?'<div class="eyebrow" style="margin-bottom:6px">Parameters</div>'+parts.map(p=>p.ext?'<div class="param"><span>PID '+p.pid+' · extended page</span><span>not decoded</span></div>':p.trunc?'<div class="param"><span>PID '+p.pid+'</span><span>truncated</span></div>':'<div class="param"><span>'+p.pid+' · '+esc(pidName(p.pid))+'</span><span class="mono">'+p.data.map(b=>b.toString(16).toUpperCase().padStart(2,'0')).join(' ')+(pidValue(p.pid,p.data)?' → '+esc(pidValue(p.pid,p.data)):'')+'</span></div>').join(''):'<p class="mini">No parameters.</p>');
 }
-async function fetchPids(force){if(page!=='traffic')return;if(!force&&Date.now()-lastPidFetch<(S&&S.channels.some(c=>c.link.polling)?2500:5000))return;lastPidFetch=Date.now();const j=await getJSON('/api/pids');if(j){pidData=j;renderPids()}}
+async function fetchPids(force){if(page!=='traffic')return;if(!force&&Date.now()-lastPidFetch<(S&&S.channels.some(c=>c.link.polling)?2500:5000))return;lastPidFetch=Date.now();const j=await getJSON('/api/pids');if(j){pidData=j;renderPids();if(isKad())renderKad()}}
 function renderPids(){
  if(!pidData)return;
  if(isKad()){
