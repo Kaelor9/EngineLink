@@ -4,6 +4,25 @@ This page summarises the findings from the owner's own VODIA (PentaEDC1) analysi
 
 The analysis files themselves are not stored in this repository. That includes the disassembly addresses, the database export and the decoded ECU firmware. Neither are Volvo's credentials, keys or decoding tables. Volvo's PC tool and ECU firmware are copyrighted, and EngineLink does not need them. Only the protocol facts and scalings below are used.
 
+## First wire capture (port engine on J6, 2026-10-27)
+
+EngineLink 0.4.0 was connected to the port KAD300 on J6. It polled for about 6 minutes, with the engine cold-started, at idle and briefly revved to ~1100 rpm. The capture contained 1,431 requests, **1,391 answers (97 %)** and **0 checksum errors**.
+
+| Finding | Evidence | Status |
+|---|---|---|
+| Request `01 43 21 <hi> <lo> <cs>` works | ECU answers ~immediately; request echo and answer arrive in one burst | **CONFIRMED** |
+| Answer format `83 C1 <n>1 <value> <cs>` | 1,353 × `83 C1 21` + 2 bytes; 38 × `83 C1 31` + 3 bytes (index 266). High nibble = value width | **CONFIRMED** |
+| Byte order big-endian | RPM `09 A8` = 2472 → 618 rpm. Little-endian would give 10,754 rpm | **CONFIRMED** |
+| 256 engine speed × 0.25 | Idle 600–618 rpm. Index 291 (speed reference) reads exactly 600 rpm at idle. The analog tachometer showed 565 (about 7 % low) | **CONFIRMED** |
+| 266 engine hours × 0.0027778 | Counter rose 0.0917 h over 330 s of running (= 10 s per count). Total 772.1 h | **CONFIRMED** |
+| 259 coolant × 0.25 °C | Rose steadily from 19 to 35 °C after a cold start | **CONFIRMED** (plausible and consistent) |
+| 260 / 261 fuel / boost temperature × 0.25 °C | 12–14 °C / 13–17 °C | Plausible |
+| 258 / 265 pressure × 0.03125 kPa | 258 − 265 ≈ 102 kPa = atmospheric throughout, so the abs/rel pair is consistent. About 45 kPa relative at idle | Consistent, meaning to confirm |
+| 264 gear bits | `0x4965` → bits 0x18 = 0 → neutral | Plausible (only neutral seen) |
+| 293 voltage | 1033 raw → **13.51 V** (VODIA) or 12.91 V (Yacht Devices), with the engine running | Needs a multimeter reading |
+| 289 fuel rate | About 407 raw at idle → **3.2 L/h** (× 1/128) or 1.6 L/h (× 1/256) | Tank to tank |
+| 288 relative load / 295 rod position | 87–91 % / 52–55 % at idle | Meaning unclear; not used |
+
 ## Evidence levels
 
 | Level | Meaning |
@@ -12,7 +31,7 @@ The analysis files themselves are not stored in this repository. That includes t
 | **RECONSTRUCTED** | Derived from static analysis of the PC tool; not measured on the bus |
 | **HYPOTHESIS** | Reasonable, but needs a measurement on the engine |
 
-## 1. Protocol ("NIRA EDC1"), RECONSTRUCTED
+## 1. Protocol ("NIRA EDC1"), reconstructed and now confirmed on the wire (see above)
 
 - The physical layer is J1708-style: 9600 bit/s 8N1, differential A/B.
 - **KAD is request/response.** The ECU does not broadcast by itself. A quiet bus is normal unless a Volvo EDC display (or EngineLink) asks.
@@ -24,7 +43,7 @@ The analysis files themselves are not stored in this repository. That includes t
 
   The index is big-endian. Example for fuel rate, index 289 = 0x0121: `01 43 21 01 21 79`.
 - **Checksum:** J1708 rule. All bytes including the checksum sum to 0 mod 256.
-- **Reply:** a few header bytes, then the value, then the checksum (same rule). The value width follows the VODIA DataLength (mostly 2 bytes). **Byte order and exact header length are not confirmed.**
+- **Reply:** `83 C1 <n>1 <value…> <checksum>`. The high nibble of the third byte is the value width (`21` = 2 bytes, `31` = 3 bytes). The value is big-endian. This was confirmed on a KAD300 in 2026-10, and EngineLink uses the header width when present.
 - Other commands exist (`01 42 …`: info, calibration, memory read/write, timer). **EngineLink can only build `01 43 21`. It has no code path for any other command.**
 
 ## 2. Parameter scaling, CONFIRMED (VODIA ParameterList, program type M_902)
