@@ -1,5 +1,5 @@
 /*
- * EngineLink 0.2.1-alpha — actual application firmware
+ * EngineLink 0.3.0-alpha — actual application firmware
  * ESP32-S3-WROOM-1-N8R8, 8 MB flash / 8 MB PSRAM.
  *
  * Captures actual J1708 / J1587 RX bytes on J7 and J6. No J1708 TX pins
@@ -11,6 +11,8 @@
 #include <Arduino.h>
 #include <WiFi.h>
 #include <WebServer.h>
+#include <ESPmDNS.h>
+#include <Update.h>
 #include <Preferences.h>
 #include <SPI.h>
 #include <SD.h>
@@ -26,7 +28,7 @@
 #include <math.h>
 #include "ui.h"
 
-#define EL_VERSION "0.2.1-alpha"
+#define EL_VERSION "0.3.0-alpha"
 
 constexpr uint8_t RX_J7=21, RX_J6=17; // TX GPIO47/GPIO18 deliberately NOT assigned
 constexpr uint8_t LED_PIN=48;
@@ -40,7 +42,32 @@ constexpr uint8_t MAX_FRAME=64;
 constexpr UBaseType_t FRAME_QUEUE_PSRAM=2048, FRAME_QUEUE_FALLBACK=96;
 constexpr uint32_t FRAME_FRESH_MS=6000;
 constexpr uint32_t RPM_FRESH_MS=12000;
+constexpr uint32_t PARAM_FRESH_MS=30000;
 constexpr uint32_t CSV_FLUSH_MS=1200;
+constexpr float ENGINE_RUN_RPM=300.0f;        // above cranking speed
+constexpr uint32_t ENGINE_STOP_DEBOUNCE_MS=10000;
+constexpr uint32_t TOTALS_SAVE_MS=300000;      // NVS wear: at most every 5 min
+constexpr uint16_t HISTORY_LEN=360;            // 1 hour at 10 s
+constexpr uint32_t HISTORY_STEP_MS=10000;
+constexpr uint8_t MAX_SEGMENTS=12;
+constexpr uint8_t MAX_PIDS=96;
+// Safari opens speculative TCP connections that never send a request. The
+// stock WebServer then waits 5 s on that socket and serves nobody else, which
+// shows up as "network connection was lost". Idle sockets are dropped sooner.
+constexpr uint32_t HTTP_IDLE_DROP_MS=600;
+
+class EngineLinkWebServer : public WebServer {
+public:
+  explicit EngineLinkWebServer(int port):WebServer(port){}
+  void handleClient() override {
+    if(_currentStatus==HC_WAIT_READ && !_currentClient.available() &&
+       (millis()-_statusChange)>HTTP_IDLE_DROP_MS){
+      _currentClient.stop();
+      _currentStatus=HC_NONE;
+    }
+    WebServer::handleClient();
+  }
+};
 
 struct Frame {
   uint8_t channel=0;
@@ -71,12 +98,43 @@ struct Motor {
   double observedLiters=0;
   uint32_t fuelSamples=0, rpmSamples=0, gaps=0;
   uint8_t lastMID=0;
+  // Engine-run segment tracking (physical channel based)
+  bool running=false;
+  uint64_t runStartMs=0,lastRunMs=0,lastTickMs=0;
+  int64_t runStartUtc=0;
+  double runStartLiters=0;
+  float runMaxRpm=0;
+};
+// Persistent per physical channel. Only fuel integrated between valid,
+// recent ECU samples is counted; gaps are never filled in.
+struct Totals {
+  uint32_t magic=0xE1170003;
+  double lifetimeL[2]={0,0};
+  double tripL[2]={0,0};
+  uint32_t runSeconds[2]={0,0};
+  uint32_t tripRunSeconds[2]={0,0};
+  int64_t tripStartUtc=0;
+  uint32_t tripResets=0;
+};
+struct Segment {
+  uint32_t boot=0;
+  uint64_t startMs=0,endMs=0;
+  int64_t startUtc=0;
+  float liters=0,maxRpm=0;
+  uint8_t ch=0;
+};
+struct PidSeen {
+  uint8_t ch=0,mid=0,pid=0,len=0;
+  uint8_t data[8]={};
+  uint32_t count=0;
+  uint64_t at=0;
 };
 struct Settings {
   bool completed=false;
   bool router=false;
   bool canListen=false;
   uint8_t portChannel=1; // 1=J7 port, 2=J6 port, 0=unassigned
+  uint8_t apChannel=6;
   String apPassword="12345678";
   String ssid="";
   String wifiPassword="";
@@ -90,15 +148,27 @@ struct Counters {
   volatile uint32_t uartFaults[2]={0,0};
   volatile uint32_t lineErrors[2]={0,0};
   uint32_t nmeaFrames=0;
-  uint32_t canErrors=0;
+  uint32_t pidTableFull=0;
 };
 
-WebServer web(80);
+EngineLinkWebServer web(80);
 Preferences pref;
 Adafruit_NeoPixel led(1, LED_PIN, NEO_GRB+NEO_KHZ800);
 Settings cfg;
 Counters ctr;
 Motor motor[2];
+Totals totals;
+bool totalsDirty=false;
+uint32_t lastTotalsSave=0;
+Segment segments[MAX_SEGMENTS];
+uint8_t segmentIndex=0,segmentCount=0;
+PidSeen pids[MAX_PIDS];
+uint8_t pidCount=0;
+int16_t histFuel[2][HISTORY_LEN];   // centi-L/h, -1 = unknown
+uint16_t histRpm[2][HISTORY_LEN];   // RPM, 0xFFFF = unknown
+int16_t histSog[HISTORY_LEN];       // centi-knots, -1 = unknown
+uint16_t histIndex=0,histCount=0;
+uint32_t lastHistory=0,lastEngineService=0,lastSerialStatus=0;
 Channel channels[2]={{UART_NUM_1,0},{UART_NUM_2,1}};
 QueueHandle_t framesQueue=nullptr;
 StaticQueue_t framesQueueState;
@@ -108,17 +178,17 @@ uint8_t recentIndex=0,recentCount=0;
 uint32_t bootId=0,lastFlush=0,lastWifiRetry=0,lastLed=0,ledPrev=0xFFFFFFFF;
 uint32_t ledTestStartedMs=0;
 uint8_t ledBrightness=42;
-enum LedState : uint8_t { LS_BOOT, LS_SETUP, LS_READY, LS_ROUTER, LS_NO_SD, LS_WRITE_ERROR, LS_RX_ERROR, LS_TEST };
+enum LedState : uint8_t { LS_BOOT, LS_SETUP, LS_READY, LS_ROUTER, LS_NO_SD, LS_WRITE_ERROR, LS_RX_ERROR, LS_TEST, LS_UPDATE };
 LedState currentLED=LS_BOOT;
 bool sdFaultLatched=false;
 bool uartReady[2]={false,false};
-bool sdReady=false,sdLogging=false,canReady=false,pendingNetwork=false;
+bool sdReady=false,sdLogging=false,canReady=false,pendingNetwork=false,mdnsReady=false;
 bool hasTime=false,ntpStarted=false;
 String timeSource="none",sdMessage="No card",sessionName;
 File logFile,calFile;
 bool calActive=false,calResumeLogging=false;
 int8_t calChannel=-1; // -1 both, 0 J7, 1 J6
-uint32_t calRows=0,calInvalid=0,calSteps=0,calStartMs=0;
+uint32_t calRows=0,calInvalid=0,calSteps=0,calStartMs=0,calStepStartMs=0;
 uint32_t lastTestFlush=0;
 volatile uint32_t lastUARTFaultMs=0;
 int32_t calReferenceRPM=-1;
@@ -133,6 +203,12 @@ volatile uint8_t apReason=0;
 float sogKnots=NAN;
 uint64_t sogAt=0;
 volatile bool ntpNotification=false;
+// Wi-Fi firmware update
+bool otaActive=false,otaResumeLogging=false,otaChecked=false;
+String otaError="";
+size_t otaBytes=0;
+uint32_t restartAt=0;
+uint32_t sketchKB=0; // cached: getSketchSize() verifies the whole image
 
 uint64_t elapsedMs(){return (uint64_t)esp_timer_get_time()/1000ULL;}
 bool validWall(){return time(nullptr)>1700000000;}
@@ -161,6 +237,27 @@ void onWiFi(WiFiEvent_t e,WiFiEventInfo_t info){
 }
 bool cardInserted(){return digitalRead(SD_DETECT)==LOW;}
 
+// ---------- Persistent fuel totals ----------
+void loadTotals(){
+  pref.begin("totals",true);
+  Totals t;
+  const size_t n=pref.getBytes("t",&t,sizeof(t));
+  pref.end();
+  if(n==sizeof(t)&&t.magic==totals.magic)totals=t;
+}
+void saveTotals(){
+  pref.begin("totals",false);
+  pref.putBytes("t",&totals,sizeof(totals));
+  pref.end();
+  totalsDirty=false;lastTotalsSave=millis();
+}
+void resetTrip(){
+  for(int c=0;c<2;c++){totals.tripL[c]=0;totals.tripRunSeconds[c]=0;}
+  totals.tripStartUtc=validWall()?(int64_t)time(nullptr):0;
+  ++totals.tripResets;
+  saveTotals();
+}
+
 void stopLog(){
   if(logFile){if(cardInserted())logFile.flush();logFile.close();}
   sdLogging=false;
@@ -187,6 +284,8 @@ void initSD(){
 void refreshTestAvailable(){
   testFileAvailable=sdReady&&cardInserted()&&calName.length()&&SD.exists(calName);
 }
+uint64_t sdTotalMB(){return sdReady?SD.totalBytes()/(1024ULL*1024ULL):0;}
+uint64_t sdUsedMB(){return sdReady?SD.usedBytes()/(1024ULL*1024ULL):0;}
 void reply(bool ok,const String &message,int code=200);
 void finishCalibration(bool resume);
 void serviceSD(){
@@ -207,7 +306,7 @@ void serviceSD(){
       return;
     }
     // Debounced insertion: mount and resume automatic session logging.
-    if(inserted&&!sdReady&&cardChangeAt&&(uint32_t)(millis()-cardChangeAt)>=1000){
+    if(inserted&&!sdReady&&cardChangeAt&&(uint32_t)(millis()-cardChangeAt)>=1000&&!otaActive){
       cardChangeAt=0;
       initSD();
       refreshTestAvailable();
@@ -263,6 +362,7 @@ void calibrationMarker(){
     return;
   }
   calFile.flush();
+  calStepStartMs=millis();
 }
 bool startCalibration(int channel){
   if(calActive||!sdReady||!cardInserted())return false;
@@ -322,7 +422,7 @@ void handleCalibrationStart(){
   if(channel<0||channel>2){reply(false,"Invalid channel",400);return;}
   if(!sdReady||!cardInserted()){reply(false,"Insert a microSD card before motor test",409);return;}
   bool ok=startCalibration(channel-1);
-  reply(ok,ok?"Passive motor test started. Record idle and RPM steps before export.":"Could not start motor test",ok?200:409);
+  reply(ok,ok?"Recording started. Hold each RPM stage 30-60 s and mark it.":"Could not start motor test",ok?200:409);
 }
 void handleCalibrationMark(){
   if(!calActive){reply(false,"No active motor test",409);return;}
@@ -343,12 +443,12 @@ void handleCalibrationMark(){
   }
   calPhase=phase;calReferenceRPM=rpm;calReferenceFuel=flow;
   ++calSteps;calibrationMarker();
-  reply(calActive,calActive?"Motor test step marked. Continue collecting data.":"SD write error stopped recording",calActive?200:500);
+  reply(calActive,calActive?"Stage marked. Hold it steady while data is recorded.":"SD write error stopped recording",calActive?200:500);
 }
 void handleCalibrationStop(){
   if(!calActive){reply(false,"No motor test is running",409);return;}
   finishCalibration(true);
-  reply(true,"Motor test saved. Download the CSV to your device.");
+  reply(true,"Motor test saved. You can now download the CSV.");
 }
 void handleCalibrationDownload(){
   if(calActive){web.send(409,"text/plain","Stop the motor test before downloading its CSV");return;}
@@ -428,15 +528,36 @@ bool validChecksum(const Frame &f){
   for(uint8_t i=0;i<f.length;i++)sum=(uint8_t)(sum+f.data[i]);
   return sum==0;
 }
-void updateFuel(Motor &m,float newRate,uint64_t timestamp){
+void updateFuel(Motor &m,uint8_t ch,float newRate,uint64_t timestamp){
   if(m.fuelEver && timestamp>m.prevFuelAt) {
     const uint64_t dt=timestamp-m.prevFuelAt;
     if(dt<=5000) {
-      m.observedLiters+=((double)m.previousFuelLph+(double)newRate)*0.5*(double)dt/3600000.0;
+      const double liters=((double)m.previousFuelLph+(double)newRate)*0.5*(double)dt/3600000.0;
+      m.observedLiters+=liters;
+      totals.lifetimeL[ch]+=liters;
+      totals.tripL[ch]+=liters;
+      totalsDirty=true;
     }else ++m.gaps;
   }
   m.fuelLph=newRate;m.fuelAt=timestamp;m.prevFuelAt=timestamp;
   m.previousFuelLph=newRate;m.fuelEver=true;++m.fuelSamples;
+}
+// Remembers the latest bytes of every page-0 PID seen on each channel, so the
+// UI can show what an ECU really transmits before any decoder is trusted.
+void rememberPid(uint8_t ch,uint8_t mid,uint8_t pid,const uint8_t *data,uint8_t width,uint64_t at){
+  PidSeen *slot=nullptr;
+  for(uint8_t i=0;i<pidCount;i++){
+    if(pids[i].ch==ch&&pids[i].mid==mid&&pids[i].pid==pid){slot=&pids[i];break;}
+  }
+  if(!slot){
+    if(pidCount>=MAX_PIDS){++ctr.pidTableFull;return;}
+    slot=&pids[pidCount++];
+    slot->ch=ch;slot->mid=mid;slot->pid=pid;
+  }
+  slot->len=width;
+  memset(slot->data,0,sizeof(slot->data));
+  memcpy(slot->data,data,min((uint8_t)sizeof(slot->data),width));
+  ++slot->count;slot->at=at;
 }
 void decodeJ1587(const Frame &f,uint8_t &mid,bool &gotFuel,float &lph,bool &gotRPM,float &rpm){
   // SAE J1587: PID 0..127 has 1 byte, 128..191 has 2 bytes;
@@ -458,6 +579,7 @@ void decodeJ1587(const Frame &f,uint8_t &mid,bool &gotFuel,float &lph,bool &gotR
       return;
     }
     if((size_t)width>end-i)return;
+    rememberPid(f.channel,mid,pid,&f.data[i],width,f.bootMs);
     if(pid==183&&width==2){
       uint16_t raw=(uint16_t)f.data[i]|((uint16_t)f.data[i+1]<<8);
       if(raw!=0xFFFF) {
@@ -496,12 +618,85 @@ void processFrame(const Frame &f){
     decodeJ1587(f,mid,gotFuel,lph,gotRPM,rpm);
     Motor &m=motor[f.channel];
     m.lastMID=mid;
-    if(gotFuel)updateFuel(m,lph,f.bootMs);
+    if(gotFuel)updateFuel(m,f.channel,lph,f.bootMs);
     if(gotRPM){m.rpm=rpm;m.rpmAt=f.bootMs;m.rpmEver=true;++m.rpmSamples;}
   }
   writeRecord(f,mid,ok,r.hex,gotFuel,lph,gotRPM,rpm);
   appendCalibrationFrame(f,mid,ok,r.hex,gotFuel,lph,gotRPM,rpm);
 }
+bool fuelFresh(uint8_t c,uint64_t now){return motor[c].fuelEver&&now>=motor[c].fuelAt&&(now-motor[c].fuelAt)<FRAME_FRESH_MS;}
+bool rpmFresh(uint8_t c,uint64_t now){return motor[c].rpmEver&&now>=motor[c].rpmAt&&(now-motor[c].rpmAt)<RPM_FRESH_MS;}
+
+// ---------- Engine-run segments ----------
+// A segment is one continuous period with fresh RPM above cranking speed on a
+// physical channel. Segments are only recorded, never merged into "trips".
+void writeSegmentCSV(const Segment &s){
+  if(!sdReady||!cardInserted()||otaActive)return;
+  File f=SD.open("/SEGMENTS.CSV",FILE_APPEND);
+  if(!f)return;
+  if(f.size()==0)f.println("boot_id,channel,engine,start_uptime_ms,end_uptime_ms,start_utc,duration_s,observed_fuel_l,max_rpm");
+  const int engineId=cfg.portChannel==0?-1:((s.ch+1)==cfg.portChannel?0:1);
+  f.printf("%08lX,J%u,%s,%llu,%llu,%lld,%lu,%.3f,%.0f\n",(unsigned long)s.boot,s.ch==0?7:6,
+    engineId==0?"port":engineId==1?"starboard":"unassigned",
+    (unsigned long long)s.startMs,(unsigned long long)s.endMs,(long long)s.startUtc,
+    (unsigned long)((s.endMs-s.startMs)/1000ULL),s.liters,s.maxRpm);
+  f.close();
+}
+void closeSegment(uint8_t c){
+  Motor &m=motor[c];
+  Segment &s=segments[segmentIndex];
+  s.boot=bootId;s.ch=c;s.startMs=m.runStartMs;s.endMs=m.lastRunMs;
+  s.startUtc=m.runStartUtc;s.liters=(float)(m.observedLiters-m.runStartLiters);s.maxRpm=m.runMaxRpm;
+  segmentIndex=(segmentIndex+1)%MAX_SEGMENTS;
+  if(segmentCount<MAX_SEGMENTS)segmentCount++;
+  m.running=false;
+  writeSegmentCSV(s);
+  saveTotals();
+}
+void serviceEngines(){
+  if((uint32_t)(millis()-lastEngineService)<1000)return;
+  lastEngineService=millis();
+  const uint64_t now=elapsedMs();
+  for(uint8_t c=0;c<2;c++){
+    Motor &m=motor[c];
+    const bool on=rpmFresh(c,now)&&m.rpm>=ENGINE_RUN_RPM;
+    if(on){
+      if(!m.running){
+        m.running=true;m.runStartMs=now;m.lastTickMs=now;m.runMaxRpm=0;
+        m.runStartUtc=validWall()?(int64_t)time(nullptr):0;
+        m.runStartLiters=m.observedLiters;
+      }
+      const uint64_t dt=now-m.lastTickMs;
+      if(dt>=1000){
+        const uint32_t sec=(uint32_t)(dt/1000ULL);
+        totals.runSeconds[c]+=sec;totals.tripRunSeconds[c]+=sec;
+        m.lastTickMs+=sec*1000ULL;totalsDirty=true;
+      }
+      m.lastRunMs=now;
+      if(m.rpm>m.runMaxRpm)m.runMaxRpm=m.rpm;
+    }else if(m.running){
+      m.lastTickMs=now;
+      if(now-m.lastRunMs>=ENGINE_STOP_DEBOUNCE_MS)closeSegment(c);
+    }
+  }
+  if(totalsDirty&&(uint32_t)(millis()-lastTotalsSave)>=TOTALS_SAVE_MS)saveTotals();
+}
+
+// ---------- One-hour trend ----------
+void serviceHistory(){
+  if((uint32_t)(millis()-lastHistory)<HISTORY_STEP_MS)return;
+  lastHistory=millis();
+  const uint64_t now=elapsedMs();
+  for(uint8_t c=0;c<2;c++){
+    histFuel[c][histIndex]=fuelFresh(c,now)?(int16_t)lroundf(min(motor[c].fuelLph,320.0f)*100.0f):-1;
+    histRpm[c][histIndex]=rpmFresh(c,now)?(uint16_t)lroundf(min(motor[c].rpm,8000.0f)):0xFFFF;
+  }
+  const bool sog=isfinite(sogKnots)&&sogAt&&now-sogAt<7000;
+  histSog[histIndex]=sog?(int16_t)lroundf(min(sogKnots,320.0f)*100.0f):-1;
+  histIndex=(histIndex+1)%HISTORY_LEN;
+  if(histCount<HISTORY_LEN)histCount++;
+}
+
 uint32_t nmeaPGN(uint32_t canid){
   uint32_t pgn=(canid>>8)&0x3FFFF;
   if(((canid>>16)&0xFF)<240)pgn&=0x3FF00;
@@ -546,7 +741,7 @@ void applyNetwork(){
   WiFi.mode(withRouter?WIFI_AP_STA:WIFI_AP);
   WiFi.setSleep(false);
   WiFi.softAPConfig(IPAddress(192,168,4,1),IPAddress(192,168,4,1),IPAddress(255,255,255,0));
-  apStarted=WiFi.softAP("EngineLink",cfg.apPassword.c_str(),6,false,4);
+  apStarted=WiFi.softAP("EngineLink",cfg.apPassword.c_str(),cfg.apChannel,false,4);
   if(withRouter){
     WiFi.setAutoReconnect(false);
     WiFi.begin(cfg.ssid.c_str(),cfg.wifiPassword.c_str());
@@ -554,6 +749,10 @@ void applyNetwork(){
   }else{
     ntpStarted=false;
     // In AP-only mode do not call WiFi.disconnect(): it can disturb AP state.
+  }
+  if(!mdnsReady&&MDNS.begin("enginelink")){
+    MDNS.addService("http","tcp",80);
+    mdnsReady=true;
   }
 }
 void serviceNetwork(){
@@ -584,11 +783,13 @@ const char *ledStateName(LedState st){
     case LS_WRITE_ERROR:return "SD error: red rapid flash";
     case LS_RX_ERROR:return "J1708 overflow: red double flash";
     case LS_TEST:return "Motor test recording: cyan pulse";
+    case LS_UPDATE:return "Firmware update: white pulse";
   }
   return "Unknown";
 }
 bool ledTestRunning(){return ledTestStartedMs && (uint32_t)(millis()-ledTestStartedMs)<16000UL;}
 LedState ledFor(bool includeDemo){
+  if(otaActive)return LS_UPDATE;
   if(includeDemo&&ledTestRunning()){
     constexpr LedState demo[]={LS_SETUP,LS_READY,LS_ROUTER,LS_NO_SD,LS_WRITE_ERROR,LS_RX_ERROR,LS_TEST};
     return demo[((millis()-ledTestStartedMs)/2200UL)%7];
@@ -618,6 +819,7 @@ void updateLED(){
     case LS_WRITE_ERROR: color=0xE92E35;on=(t%360)<180;break;
     case LS_RX_ERROR: color=0xDF4150;on=beat<160||(beat>320&&beat<480);break;
     case LS_TEST: color=0x16C7CD;on=(t%1100)<200;break;
+    case LS_UPDATE: color=0xD8E4EA;on=(t%600)<300;break;
     case LS_BOOT: color=0x1C6EED;break;
     case LS_READY: color=0x17A77E;level=27;break;
   }
@@ -636,6 +838,7 @@ void saveSettings(){
   pref.putBool("router",cfg.router);
   pref.putBool("can",cfg.canListen);
   pref.putUChar("port",cfg.portChannel);
+  pref.putUChar("apch",cfg.apChannel);
   pref.putString("appass",cfg.apPassword);
   pref.putString("ssid",cfg.ssid);
   pref.putString("wpass",cfg.wifiPassword);
@@ -648,6 +851,7 @@ void loadSettings(){
   cfg.router=pref.getBool("router",false);
   cfg.canListen=pref.getBool("can",false);
   cfg.portChannel=pref.getUChar("port",1);
+  cfg.apChannel=pref.getUChar("apch",6);
   cfg.apPassword=pref.getString("appass","12345678");
   cfg.ssid=pref.getString("ssid","");
   cfg.wifiPassword=pref.getString("wpass","");
@@ -655,6 +859,7 @@ void loadSettings(){
   pref.end();
   if(cfg.apPassword.length()<8)cfg.apPassword="12345678";
   if(cfg.portChannel>2)cfg.portChannel=0;
+  if(cfg.apChannel<1||cfg.apChannel>13)cfg.apChannel=6;
 }
 void jsonString(String &out,const String &v){
   out+='"';
@@ -676,20 +881,42 @@ void reply(bool ok,const String &message,int code){
   s+=",\"message\":";jsonString(s,message);s+='}';
   sendJSON(code,s);
 }
+// Standard J1587 parameters shown on the overview when an ECU sends them.
+// Scaling is applied in the UI and is labelled as unverified for the ECU.
+constexpr uint8_t OVERVIEW_PIDS[]={91,92,94,96,100,102,105,110,168,174,175,247,250};
+void appendParams(String &s,uint8_t c,uint64_t now){
+  s+=",\"params\":{";
+  bool first=true;
+  for(uint8_t pid:OVERVIEW_PIDS){
+    const PidSeen *best=nullptr;
+    for(uint8_t i=0;i<pidCount;i++){
+      if(pids[i].ch==c&&pids[i].pid==pid&&(!best||pids[i].at>best->at))best=&pids[i];
+    }
+    if(!best||now<best->at||now-best->at>PARAM_FRESH_MS)continue;
+    uint32_t raw=0;
+    const uint8_t n=min(best->len,(uint8_t)4);
+    for(uint8_t b=0;b<n;b++)raw|=(uint32_t)best->data[b]<<(8*b);
+    if(!first)s+=',';
+    first=false;
+    s+='"';s+=pid;s+="\":{\"raw\":";s+=raw;
+    s+=",\"len\":";s+=best->len;
+    s+=",\"mid\":";s+=best->mid;
+    s+=",\"age\":";s+=(unsigned long)(now-best->at);
+    s+='}';
+  }
+  s+='}';
+}
 void handleState(){
   const uint64_t now=elapsedMs();
-  bool freshFuel[2]={false,false},freshRPM[2]={false,false};
-  for(int c=0;c<2;c++){
-    freshFuel[c]=motor[c].fuelEver&&now>=motor[c].fuelAt&&(now-motor[c].fuelAt)<FRAME_FRESH_MS;
-    freshRPM[c]=motor[c].rpmEver&&now>=motor[c].rpmAt&&(now-motor[c].rpmAt)<RPM_FRESH_MS;
-  }
+  bool freshFuel[2]={fuelFresh(0,now),fuelFresh(1,now)};
+  bool freshRPM[2]={rpmFresh(0,now),rpmFresh(1,now)};
   bool mapped=cfg.portChannel==1||cfg.portChannel==2;
   int port=mapped?(cfg.portChannel-1):-1,starboard=mapped?(1-port):-1;
   bool totalAvailable=mapped&&freshFuel[0]&&freshFuel[1];
   float total=totalAvailable?motor[0].fuelLph+motor[1].fuelLph:0;
   bool speedAvailable=isfinite(sogKnots)&&sogAt&&now-sogAt<7000 && sogKnots>0.5;
-  String s;s.reserve(12000);
-  s+="{\"version\":\"" EL_VERSION "\",\"setup\":";
+  String s;s.reserve(14000);
+  s+="{\"version\":\"" EL_VERSION "\",\"build\":\"" __DATE__ " " __TIME__ "\",\"setup\":";
   s+=cfg.completed?"true":"false";
   s+=",\"mode\":\"PASSIVE\",\"uptime\":";
   s+=(unsigned long)(now/1000ULL);
@@ -699,10 +926,12 @@ void handleState(){
   s+=",\"utc\":";s+=validWall()?(long long)time(nullptr):0;
   s+=",\"network\":{\"apSsid\":\"EngineLink\",\"apClients\":";
   s+=WiFi.softAPgetStationNum();
-  s+=",\"apIP\":\"192.168.4.1\",\"router\":";
-  s+=cfg.router?"true":"false";
+  s+=",\"apIP\":\"192.168.4.1\",\"apChannel\":";s+=cfg.apChannel;
+  s+=",\"mdns\":";s+=mdnsReady?"true":"false";
+  s+=",\"router\":";s+=cfg.router?"true":"false";
   s+=",\"staConnected\":";s+=WiFi.status()==WL_CONNECTED?"true":"false";
   s+=",\"staIP\":";jsonString(s,WiFi.status()==WL_CONNECTED?WiFi.localIP().toString():String(""));
+  s+=",\"rssi\":";if(WiFi.status()==WL_CONNECTED)s+=WiFi.RSSI();else s+="null";
   s+=",\"ssid\":";jsonString(s,cfg.ssid);
   s+=",\"apJoins\":";s+=(unsigned long)apJoins;
   s+=",\"apLeaves\":";s+=(unsigned long)apLeaves;
@@ -714,11 +943,15 @@ void handleState(){
   s+="},\"config\":{\"router\":";
   s+=cfg.router?"true":"false";
   s+=",\"portChannel\":";s+=cfg.portChannel;
+  s+=",\"apChannel\":";s+=cfg.apChannel;
   s+=",\"timePref\":";jsonString(s,cfg.timePreference);
   s+=",\"canListen\":";s+=cfg.canListen?"true":"false";
+  s+=",\"defaultPassword\":";s+=cfg.apPassword=="12345678"?"true":"false";
   s+="},\"sd\":{\"ready\":";
   s+=sdReady?"true":"false";
+  s+=",\"inserted\":";s+=cardInserted()?"true":"false";
   s+=",\"logging\":";s+=sdLogging?"true":"false";
+  s+=",\"fault\":";s+=sdFaultLatched?"true":"false";
   s+=",\"rows\":";s+=sdRows;
   s+=",\"errors\":";s+=sdErrors;
   s+=",\"filename\":";jsonString(s,sessionName);
@@ -733,6 +966,7 @@ void handleState(){
   s+=",\"referenceFuel\":";if(calReferenceFuel>=0)s+=String(calReferenceFuel,3);else s+="null";
   s+=",\"file\":";jsonString(s,calName);
   s+=",\"seconds\":";s+=calActive?((millis()-calStartMs)/1000UL):0;
+  s+=",\"stepSeconds\":";s+=calActive?((millis()-calStepStartMs)/1000UL):0;
   // Cached: avoid an SD directory lookup on every status poll.
   s+=",\"available\":";s+=(sdReady&&!calActive&&testFileAvailable)?"true":"false";
   // Report the real system state even while the LED demo sequence runs, so a
@@ -744,10 +978,12 @@ void handleState(){
   s+=ESP.getFreeHeap();
   s+=",\"minHeap\":";s+=ESP.getMinFreeHeap();
   s+=",\"psram\":";s+=psramFound()?ESP.getPsramSize():0;
+  s+=",\"freePsram\":";s+=psramFound()?ESP.getFreePsram():0;
   s+=",\"opto\":";s+=digitalRead(OPTO_PIN);
   s+=",\"canReady\":";s+=canReady?"true":"false";
   s+=",\"nmeaRx\":";s+=ctr.nmeaFrames;
   s+=",\"resetReason\":";s+=(unsigned int)esp_reset_reason();
+  s+=",\"sketchKB\":";s+=sketchKB;
   s+=",\"uartReady\":[";s+=uartReady[0]?"true":"false";s+=",";s+=uartReady[1]?"true":"false";s+="]";
   s+="},\"channels\":[";
   for(int c=0;c<2;c++){
@@ -760,13 +996,36 @@ void handleState(){
     s+=",\"lineErrors\":";s+=(unsigned long)ctr.lineErrors[c];
     s+=",\"fuel\":";
     if(freshFuel[c])s+=String(motor[c].fuelLph,3);else s+="null";
+    s+=",\"fuelAge\":";if(motor[c].fuelEver)s+=(unsigned long)(now-motor[c].fuelAt);else s+="null";
     s+=",\"rpm\":";
     if(freshRPM[c])s+=String(motor[c].rpm,1);else s+="null";
+    s+=",\"running\":";s+=motor[c].running?"true":"false";
+    s+=",\"runSeconds\":";s+=motor[c].running?(unsigned long)((now-motor[c].runStartMs)/1000ULL):0UL;
     s+=",\"observedLiters\":";s+=String(motor[c].observedLiters,4);
     s+=",\"fuelSamples\":";s+=motor[c].fuelSamples;
+    s+=",\"rpmSamples\":";s+=motor[c].rpmSamples;
     s+=",\"gaps\":";s+=motor[c].gaps;
     s+=",\"lastMID\":";s+=motor[c].lastMID;
+    s+=",\"tripLiters\":";s+=String(totals.tripL[c],3);
+    s+=",\"lifetimeLiters\":";s+=String(totals.lifetimeL[c],2);
+    s+=",\"engineSeconds\":";s+=totals.runSeconds[c];
+    s+=",\"tripSeconds\":";s+=totals.tripRunSeconds[c];
+    appendParams(s,c,now);
     s+="}";
+  }
+  s+="],\"trip\":{\"startUtc\":";s+=(long long)totals.tripStartUtc;
+  s+=",\"resets\":";s+=totals.tripResets;
+  s+="},\"segments\":[";
+  for(uint8_t i=0;i<segmentCount;i++){
+    const Segment &g=segments[(segmentIndex+MAX_SEGMENTS-1-i)%MAX_SEGMENTS];
+    if(i)s+=',';
+    s+="{\"ch\":";s+=g.ch;
+    s+=",\"start\":";s+=(unsigned long)(g.startMs/1000ULL);
+    s+=",\"end\":";s+=(unsigned long)(g.endMs/1000ULL);
+    s+=",\"utc\":";s+=(long long)g.startUtc;
+    s+=",\"liters\":";s+=String(g.liters,3);
+    s+=",\"maxRpm\":";s+=String(g.maxRpm,0);
+    s+='}';
   }
   s+="],\"queue\":{\"capacity\":";s+=(unsigned long)framesQueueLength;
   s+=",\"waiting\":";s+=framesQueue?(unsigned long)uxQueueMessagesWaiting(framesQueue):0UL;
@@ -793,6 +1052,48 @@ void handleState(){
   s+="]}";
   sendJSON(200,s);
 }
+void handlePids(){
+  const uint64_t now=elapsedMs();
+  String s;s.reserve(9000);
+  s+="{\"full\":";s+=ctr.pidTableFull;
+  s+=",\"pids\":[";
+  for(uint8_t i=0;i<pidCount;i++){
+    const PidSeen &p=pids[i];
+    if(i)s+=',';
+    s+="{\"ch\":";s+=p.ch;
+    s+=",\"mid\":";s+=p.mid;
+    s+=",\"pid\":";s+=p.pid;
+    s+=",\"len\":";s+=p.len;
+    s+=",\"count\":";s+=p.count;
+    s+=",\"age\":";s+=(unsigned long)(now>=p.at?now-p.at:0);
+    s+=",\"hex\":\"";
+    const uint8_t n=min(p.len,(uint8_t)sizeof(p.data));
+    for(uint8_t b=0;b<n;b++){char h[4];snprintf(h,sizeof(h),b?" %02X":"%02X",p.data[b]);s+=h;}
+    if(p.len>sizeof(p.data))s+=" …";
+    s+="\"}";
+  }
+  s+="]}";
+  sendJSON(200,s);
+}
+void handleHistory(){
+  String s;s.reserve(HISTORY_LEN*24+200);
+  s+="{\"step\":";s+=HISTORY_STEP_MS/1000;
+  s+=",\"count\":";s+=histCount;
+  const char *names[]={"fuel0","fuel1","rpm0","rpm1","sog"};
+  for(uint8_t k=0;k<5;k++){
+    s+=",\"";s+=names[k];s+="\":[";
+    for(uint16_t i=0;i<histCount;i++){
+      const uint16_t idx=(histIndex+HISTORY_LEN-histCount+i)%HISTORY_LEN;
+      if(i)s+=',';
+      if(k<2){int16_t v=histFuel[k][idx];if(v<0)s+="null";else s+=String(v/100.0f,2);}
+      else if(k<4){uint16_t v=histRpm[k-2][idx];if(v==0xFFFF)s+="null";else s+=v;}
+      else{int16_t v=histSog[idx];if(v<0)s+="null";else s+=String(v/100.0f,2);}
+    }
+    s+=']';
+  }
+  s+='}';
+  sendJSON(200,s);
+}
 void handleOptions(){
   if(!web.hasArg("port")||!web.hasArg("network")){reply(false,"Missing fields",400);return;}
   String network=web.arg("network");
@@ -807,6 +1108,8 @@ void handleOptions(){
   }
   int port=web.arg("port").toInt();
   if(port<0||port>2){reply(false,"Invalid engine assignment",400);return;}
+  int apch=web.hasArg("apch")?web.arg("apch").toInt():cfg.apChannel;
+  if(apch!=1&&apch!=6&&apch!=11){reply(false,"Wi-Fi channel must be 1, 6 or 11",400);return;}
   // Start/stop CAN first: a failure must not leave half-applied settings in RAM.
   bool newCAN=web.arg("can")=="1";
   if(newCAN!=cfg.canListen){
@@ -814,17 +1117,18 @@ void handleOptions(){
     else if(!startCAN()){reply(false,"NMEA2000 listen-only interface could not start",409);return;}
     cfg.canListen=newCAN;
   }
-  bool changeNetwork=cfg.router!=(network=="router")||cfg.ssid!=ssid;
+  bool changeNetwork=cfg.router!=(network=="router")||cfg.ssid!=ssid||cfg.apChannel!=(uint8_t)apch;
   String newRouterPass=web.arg("pass");
   if(newRouterPass.length()){cfg.wifiPassword=newRouterPass;changeNetwork=true;}
   if(apPass.length()&&apPass!=cfg.apPassword){cfg.apPassword=apPass;changeNetwork=true;}
   cfg.router=network=="router";
   cfg.ssid=ssid;
+  cfg.apChannel=(uint8_t)apch;
   cfg.timePreference=preference;
   cfg.portChannel=(uint8_t)port;
   cfg.completed=true;
   saveSettings();
-  reply(true,"Settings saved. Direct EngineLink Wi-Fi remains available.");
+  reply(true,changeNetwork?"Saved. Wi-Fi restarts now; reconnect to EngineLink if your phone drops.":"Settings saved.");
   if(changeNetwork)pendingNetwork=true;
 }
 void handleTime(){
@@ -835,6 +1139,7 @@ void handleTime(){
   time_t sec=(time_t)(epochMs/1000ULL);
   if(sec<1700000000||sec>4102444800LL){reply(false,"Phone time out of range",400);return;}
   setClockFromUtc(sec,"phone");
+  if(!totals.tripStartUtc&&totals.tripResets==0){totals.tripStartUtc=sec;totalsDirty=true;}
   reply(true,"Clock synchronized from phone");
 }
 void handleLEDTest(){
@@ -850,6 +1155,65 @@ void handleDownload(){
   web.streamFile(f,"text/csv");
   f.close();
 }
+void handleSegmentsDownload(){
+  if(!sdReady||!SD.exists("/SEGMENTS.CSV")){web.send(404,"text/plain","No engine-run segments recorded on this SD card yet");return;}
+  File f=SD.open("/SEGMENTS.CSV",FILE_READ);
+  if(!f){web.send(500,"text/plain","Cannot open segments file");return;}
+  web.sendHeader("Content-Disposition","attachment; filename=EngineLink-engine-runs.csv");
+  web.streamFile(f,"text/csv");
+  f.close();
+}
+// Closes files and stores totals before any deliberate restart.
+void prepareRestart(){
+  if(calActive)finishCalibration(false);
+  for(uint8_t c=0;c<2;c++)if(motor[c].running)closeSegment(c);
+  if(sdLogging)stopLog();
+  saveTotals();
+}
+
+// ---------- Wi-Fi firmware update (application image only) ----------
+void handleUpdateUpload(){
+  HTTPUpload &u=web.upload();
+  if(u.status==UPLOAD_FILE_START){
+    otaError="";otaBytes=0;otaChecked=false;
+    if(calActive){otaError="Stop the motor test first";return;}
+    if(u.filename.indexOf("merged")>=0){otaError="This is the USB (merged) image. Use the Wi-Fi update file enginelink-update.bin";return;}
+    otaResumeLogging=sdLogging;
+    if(sdLogging)stopLog();
+    otaActive=true;
+    if(!Update.begin(UPDATE_SIZE_UNKNOWN,U_FLASH)){otaError=Update.errorString();otaActive=false;}
+  }else if(u.status==UPLOAD_FILE_WRITE){
+    if(otaError.length()||!otaActive)return;
+    // An ESP32 application image carries its app descriptor magic at 0x20.
+    if(!otaChecked){
+      otaChecked=true;
+      if(u.currentSize<0x30||u.buf[0]!=0xE9||u.buf[0x20]!=0x32||u.buf[0x21]!=0x54||u.buf[0x22]!=0xCD||u.buf[0x23]!=0xAB){
+        otaError="Not an ESP32 application image";Update.abort();otaActive=false;return;
+      }
+    }
+    if(Update.write(u.buf,u.currentSize)!=u.currentSize){otaError=Update.errorString();Update.abort();otaActive=false;return;}
+    otaBytes+=u.currentSize;
+  }else if(u.status==UPLOAD_FILE_END){
+    if(otaError.length()||!otaActive)return;
+    if(!Update.end(true))otaError=Update.errorString();
+  }else if(u.status==UPLOAD_FILE_ABORTED){
+    if(otaActive)Update.abort();
+    otaError="Upload interrupted";
+  }
+}
+void handleUpdateDone(){
+  const bool ok=otaActive&&!otaError.length()&&!Update.hasError()&&otaBytes>0;
+  otaActive=false;
+  if(!ok){
+    if(otaResumeLogging&&!sdLogging)initSD();
+    otaResumeLogging=false;
+    reply(false,"Update failed: "+(otaError.length()?otaError:String("no data received")),400);
+    return;
+  }
+  prepareRestart();
+  reply(true,"Update installed. EngineLink restarts now; reconnect in about 20 seconds.");
+  restartAt=millis()+1500;
+}
 void initializeWeb(){
   web.on("/",HTTP_GET,[](){
     // no-cache: after a firmware update Safari must not keep an old UI.
@@ -858,6 +1222,8 @@ void initializeWeb(){
   });
   web.on("/favicon.ico",HTTP_GET,[](){web.send(204,"text/plain","");});
   web.on("/api/state",HTTP_GET,handleState);
+  web.on("/api/pids",HTTP_GET,handlePids);
+  web.on("/api/history",HTTP_GET,handleHistory);
   web.on("/api/setup",HTTP_POST,handleOptions);
   web.on("/api/settings",HTTP_POST,handleOptions);
   web.on("/api/phone-time",HTTP_POST,handleTime);
@@ -873,9 +1239,30 @@ void initializeWeb(){
   web.on("/api/sd/stop",HTTP_POST,[](){if(calActive){reply(false,"Stop motor test first",409);return;}stopLog();reply(true,"Session recording stopped");});
   web.on("/api/sd/start",HTTP_POST,[](){if(calActive){reply(false,"Stop motor test first",409);return;}if(sdLogging){reply(true,"Already recording");return;}initSD();reply(sdLogging,sdMessage);});
   web.on("/api/log",HTTP_GET,handleDownload);
+  web.on("/api/segments.csv",HTTP_GET,handleSegmentsDownload);
+  web.on("/api/trip/reset",HTTP_POST,[](){resetTrip();reply(true,"Trip counter reset. Lifetime totals are kept.");});
+  web.on("/api/reboot",HTTP_POST,[](){prepareRestart();reply(true,"EngineLink restarts now.");restartAt=millis()+1000;});
+  web.on("/api/factory-reset",HTTP_POST,[](){
+    if(web.arg("confirm")!="ERASE"){reply(false,"Confirmation missing",400);return;}
+    prepareRestart();
+    pref.begin("enginelink",false);pref.clear();pref.end();
+    pref.begin("totals",false);pref.clear();pref.end();
+    reply(true,"Settings and totals erased. EngineLink restarts with factory Wi-Fi (password 12345678).");
+    restartAt=millis()+1200;
+  });
+  web.on("/api/update",HTTP_POST,handleUpdateDone,handleUpdateUpload);
   web.on("/api/health",HTTP_GET,[](){web.send(200,"text/plain","OK");});
   web.onNotFound([](){web.send(404,"text/plain","Not found");});
   web.begin();
+}
+void serialStatus(){
+  if((uint32_t)(millis()-lastSerialStatus)<60000UL)return;
+  lastSerialStatus=millis();
+  Serial.printf("[%lus] J7 %lu/%lu  J6 %lu/%lu frames/invalid  drops %lu  heap %u  AP clients %u  SD %s\n",
+    (unsigned long)(elapsedMs()/1000ULL),(unsigned long)ctr.frames[0],(unsigned long)ctr.invalid[0],
+    (unsigned long)ctr.frames[1],(unsigned long)ctr.invalid[1],
+    (unsigned long)(ctr.rxDropped[0]+ctr.rxDropped[1]),(unsigned)ESP.getFreeHeap(),
+    (unsigned)WiFi.softAPgetStationNum(),sdMessage.c_str());
 }
 void setup(){
   pinMode(LED_PIN,OUTPUT);digitalWrite(LED_PIN,LOW);
@@ -884,9 +1271,11 @@ void setup(){
   delay(1200); // do not block boot for USB Serial Monitor
   Serial.println("\nEngineLink " EL_VERSION " - passive engine monitoring");
   bootId=esp_random();
+  sketchKB=ESP.getSketchSize()/1024;
   pinMode(SD_DETECT,INPUT);
   pinMode(OPTO_PIN,INPUT);
   loadSettings();
+  loadTotals();
   pref.begin("enginelink",true);calName=pref.getString("testfile","");pref.end();
   uint8_t *queueStorage=(uint8_t*)heap_caps_malloc(FRAME_QUEUE_PSRAM*sizeof(Frame),MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);
   if(queueStorage){
@@ -913,7 +1302,7 @@ void setup(){
   if(cfg.canListen && !startCAN())Serial.println("CAN listen-only init failed");
   // NTP time sync callback is non-blocking.
   sntp_set_time_sync_notification_cb(ntpCallback);
-  Serial.printf("SoftAP EngineLink at http://%s ; passive J1708 only\n",WiFi.softAPIP().toString().c_str());
+  Serial.printf("SoftAP EngineLink at http://%s (http://enginelink.local) ; passive J1708 only\n",WiFi.softAPIP().toString().c_str());
 }
 void loop(){
   // Give the UART data priority over serving the user interface.
@@ -923,7 +1312,11 @@ void loop(){
   serviceCAN();
   web.handleClient();
   serviceSD();
+  serviceEngines();
+  serviceHistory();
   serviceNetwork();
   updateLED();
+  serialStatus();
+  if(restartAt&&(int32_t)(millis()-restartAt)>=0){delay(100);ESP.restart();}
   delay(1);
 }
