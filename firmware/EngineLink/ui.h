@@ -279,7 +279,7 @@ nav.tabs{position:fixed;left:0;right:0;bottom:0;z-index:20;margin:0;padding:6px 
   <div class="list mono" id="term" style="padding:10px;font-size:12px;max-height:260px"></div>
   <div class="field" style="margin-top:14px"><label for="termIn">HEX message</label><input class="input mono" id="termIn" placeholder="80 BE 00 00" disabled></div>
   <div class="row"><button class="btn" disabled>Send (disabled)</button><button class="btn ghost small" id="termHelpBtn">Having trouble writing? ℹ️</button></div>
-  <div class="notice info hide" id="termHelp" style="margin-top:12px"><b>About J1708 messages</b><br>J1708/J1587 is binary, not text commands. A message is: MID (who sends) → one or more PIDs with data → checksum (all bytes sum to 0). PID 190 is engine speed (0.25 RPM/bit); PID 183 is fuel rate (1/64 US gal/h per bit). Sending is disabled until bus arbitration and electrical safety are verified; never send examples to a live engine.</div>
+  <div class="notice info hide" id="termHelp" style="margin-top:12px"><b>About J1708 messages</b><br>J1708/J1587 is binary, not text commands. A message is: MID (who sends) → one or more PIDs with data → checksum (all bytes sum to 0). PID 190 is engine speed (0.25 RPM/bit); PID 183 is fuel rate (1/64 US gal/h per bit). Volvo Penta KAD / EDC I is different: request <span class="mono">01 43 21 &lt;index hi&gt; &lt;index lo&gt; &lt;checksum&gt;</span>, answer = header + value + checksum. Free-form sending stays disabled. The only thing EngineLink can send is that KAD read request, via polling on the Data page.</div>
  </div></details>
 
  <details class="more"><summary><span>Maintenance <span class="mini">· restart, LED test, factory reset</span></span></summary><div class="body">

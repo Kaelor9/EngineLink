@@ -202,10 +202,6 @@ constexpr KadParam KAD_PARAMS[]={
   {295,'S',2,0.0061035f},  // rod position, %
   {296,'S',2,0.015625f},   // alpha, deg
 };
-const KadParam *kadParam(uint16_t index){
-  for(const KadParam &p:KAD_PARAMS)if(p.index==index)return &p;
-  return nullptr;
-}
 // RPM and fuel are asked for twice as often as the rest.
 constexpr uint16_t KAD_POLL_FAST[]={256,289};
 constexpr uint16_t KAD_POLL_SLOW[]={293,259,258,265,260,261,288,291,264,266,295,263};
@@ -723,6 +719,10 @@ void decodeJ1587(const Frame &f,uint8_t &mid,bool &gotFuel,float &lph,bool &gotR
     i+=width;
   }
 }
+const KadParam *kadParam(uint16_t index){
+  for(const KadParam &p:KAD_PARAMS)if(p.index==index)return &p;
+  return nullptr;
+}
 bool isKadRequest(const uint8_t *d,uint8_t n){
   if(n!=6||d[0]!=0x01||d[1]!=0x43||d[2]!=0x21)return false;
   uint8_t sum=0;for(uint8_t i=0;i<6;i++)sum=(uint8_t)(sum+d[i]);
@@ -740,10 +740,6 @@ void rememberKad(uint8_t ch,uint16_t index,const Frame &f,uint32_t be,uint32_t l
   memcpy(slot->reply,f.data,min((uint8_t)sizeof(slot->reply),f.length));
   slot->be=be;slot->le=le;slot->at=f.bootMs;++slot->count;
 }
-const KadSeen *kadLatest(uint8_t ch,uint16_t index){
-  for(uint8_t i=0;i<kadSeenCount;i++)if(kadSeen[i].ch==ch&&kadSeen[i].index==index)return &kadSeen[i];
-  return nullptr;
-}
 int32_t kadSigned(uint32_t v,const KadParam *p){
   if(!p||p->type!='S')return (int32_t)v;
   const uint32_t bits=8u*p->len,sign=1u<<(bits-1);
@@ -758,7 +754,9 @@ void decodeKad(const Frame &f,Decoded &d){
   if(isKadRequest(f.data,f.length)){
     const uint16_t index=((uint16_t)f.data[3]<<8)|f.data[4];
     d.kadRequest=true;d.kadIndex=index;
-    const bool own=k.ownPending&&k.pendingIndex==index&&f.bootMs-k.pendingAt<KAD_REPLY_MS;
+    // Timestamps come from two tasks, so compare without unsigned wrap-around.
+    const int64_t since=(int64_t)f.bootMs-(int64_t)k.pendingAt;
+    const bool own=k.ownPending&&k.pendingIndex==index&&since>-50&&since<(int64_t)KAD_REPLY_MS;
     d.kadOwn=own;d.kadEcho=own;
     if(!own){
       ++k.foreignRequests;k.lastForeignAt=f.bootMs;

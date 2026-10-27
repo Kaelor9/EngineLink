@@ -1,6 +1,18 @@
-# EngineLink application v0.3.0-alpha
+# EngineLink application v0.4.0-alpha
 
 This is a **working application foundation**, not a validated production release. The former Lab firmware is retained under \`experiments/\`. The application is in \`firmware/EngineLink/\`.
+
+## Changes in 0.4.0-alpha: Volvo Penta KAD300 / EDC I
+
+Based on the owner's VODIA analysis; details and evidence levels in [KAD300_EDC1.md](KAD300_EDC1.md).
+
+- **Engine protocol setting:** *Volvo Penta KAD / EDC I* (default) or *SAE J1587*, in the setup wizard and under Settings → Engine data decoding. In KAD mode J1587 decoding is off.
+- **KAD decoding:** recognises the read request `01 43 21 <index> <cs>` from any device, pairs the next valid frame within 300 ms as the answer, and reads the value (parameter width before the checksum) in both byte orders. Request echoes merged with an answer are split. KAD frames are split on 2 idle symbols.
+- **VODIA M_902 scaling** for 16 parameters, including fuel rate 289 × 1/128 (1/256 selectable), RPM 256 × 0.25, voltage 293 × 0.01308 (0.0125 selectable), coolant, boost, air inlet, load, gear bits and engine hours.
+- **Opt-in polling per connector** (Data page, typed confirmation). It is off after every restart and attaches the TX pin only while running. It can only send `01 43 21`, waits for 20 ms of bus silence, keeps one request in flight, and sends about 4.5 requests/s. It stops by itself after 40 unanswered requests, when another device polls, on a protocol change, OTA or restart.
+- **Verification tools:** a voltage check against a multimeter (picks byte order and voltage factor), a KAD discovery table showing BE and LE values, and decoded answer details.
+- **Tank-to-tank fuel calibration:** trip totals at ×1/128 and ×1/256 side by side, refilled litres per tank → scale and per-engine correction. Totals are stored as the raw integral, so a later calibration recalculates all recorded litres. 0.3 totals are migrated.
+- **Logging:** session and test CSVs gain `direction` (RX/REQ/TX/ECHO), `kad_index`, `kad_value`. Sent requests are logged too.
 
 ## Changes in 0.3.0-alpha
 
@@ -37,7 +49,7 @@ This is a **working application foundation**, not a validated production release
 - First-time wizard: direct EngineLink Wi-Fi vs. router, J7/J6 → port assignment, time-source preference. Both connection choices are presented neutrally.
 - AP SSID \`EngineLink\`, initial development password \`12345678\`. A new password can be set in the wizard. **These shared default credentials are not suitable for deployment without changing them.**
 - Router credentials saved using ESP32 Preferences; SoftAP remains on as a fallback. ESP32 AP+STA uses a shared 2.4 GHz radio and router connection may briefly change SoftAP channel.
-- **RX-only** collection from J7 GPIO21 and J6 GPIO17, 9600 8N1. Firmware does **not configure** J7 TX GPIO47 or J6 TX GPIO18 and contains no J1708 transmit endpoint.
+- Collection from J7 GPIO21 and J6 GPIO17, 9600 8N1. **Listen-only at every boot.** J7 TX GPIO47 / J6 TX GPIO18 are attached only while the user runs KAD polling on that connector, and then only the read request `01 43 21` can be sent. There is no free-form transmit endpoint.
 - UART RX timeout frame separation and 8-bit J1708 additive checksum checking. Physical framing and actual engine compatibility still need testing.
 - SAE J1587 PID 190 (engine RPM, 0.25 rpm/bit), PID 183 (instantaneous fuel rate, 1/64 US gallon/hour per bit), only on valid full frames with supported page-0 PID layout. Unrecognized proprietary traffic remains raw. **Do not assume Volvo Penta ECUs send PID 183.**
 - Display values as **unknown** (—) when missing or stale, not fake zeroes. Combined L/h requires fresh fuel values from both assigned channels.
