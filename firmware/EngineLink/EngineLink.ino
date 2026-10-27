@@ -771,7 +771,14 @@ void decodeKad(const Frame &f,Decoded &d){
   if(k.ownPending){k.ownPending=false;++k.replies;k.unanswered=0;}
   k.lastReplyAt=f.bootMs;
   const KadParam *p=kadParam(index);
-  const uint8_t w=p?p->len:2;
+  // Confirmed on a KAD300 (2026-10): answers are 83 C1 <n>1 <value...> <cs>,
+  // where the high nibble of the third byte is the value width (0x21 = 2
+  // bytes, 0x31 = 3 bytes) and the value is big-endian.
+  uint8_t w=p?p->len:2;
+  if(f.length>=4&&f.data[0]==0x83&&f.data[1]==0xC1){
+    const uint8_t hw=f.data[2]>>4;
+    if(hw>=1&&hw<=4&&f.length==hw+4)w=hw;
+  }
   if(f.length<w+2)return;
   const uint8_t *v=&f.data[f.length-1-w];
   uint32_t be=0,le=0;
