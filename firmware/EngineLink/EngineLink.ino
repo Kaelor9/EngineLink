@@ -1,9 +1,12 @@
 /*
- * EngineLink 0.3.0-alpha — actual application firmware
+ * EngineLink 0.4.0-alpha — actual application firmware
  * ESP32-S3-WROOM-1-N8R8, 8 MB flash / 8 MB PSRAM.
  *
- * Captures actual J1708 / J1587 RX bytes on J7 and J6. No J1708 TX pins
- * are configured. CAN is listen-only if user enables it.
+ * Captures actual J1708 RX bytes on J7 and J6. Engines are decoded either as
+ * Volvo Penta KAD/EDC1 (request/response, VODIA scaling) or SAE J1587.
+ * J1708 TX pins are attached ONLY while the user has switched on KAD polling
+ * for a channel in this session, and only the read-parameter request can be
+ * sent. CAN is listen-only if user enables it.
  * Never claim a simulated or missing value is measured.
  *
  * Read docs/PRODUCTION_ALPHA.md before attaching to any engine or CAN bus.
@@ -19,6 +22,7 @@
 #include <Adafruit_NeoPixel.h>
 #include <driver/uart.h>
 #include <driver/twai.h>
+#include <driver/gpio.h>
 #include <esp_timer.h>
 #include <sys/time.h>
 #include <time.h>
@@ -28,9 +32,10 @@
 #include <math.h>
 #include "ui.h"
 
-#define EL_VERSION "0.3.0-alpha"
+#define EL_VERSION "0.4.0-alpha"
 
-constexpr uint8_t RX_J7=21, RX_J6=17; // TX GPIO47/GPIO18 deliberately NOT assigned
+constexpr uint8_t RX_J7=21, RX_J6=17;
+constexpr uint8_t TX_J7=47, TX_J6=18; // attached only while KAD polling is on
 constexpr uint8_t LED_PIN=48;
 constexpr uint8_t SD_CS=10, SD_MOSI=11, SD_SCK=12, SD_MISO=13, SD_DETECT=14;
 constexpr uint8_t OPTO_PIN=38, CAN_TX=15, CAN_RX=16;
@@ -87,6 +92,8 @@ struct Channel {
 struct Recent {
   uint8_t channel=0, mid=0, len=0;
   bool checksum=false, malformed=false;
+  char dir='R';          // R = received, Q = request seen on bus, T = our own request
+  int16_t kadIndex=-1;
   uint64_t bootMs=0;
   char hex[3*MAX_FRAME+1]={};
 };
@@ -107,7 +114,7 @@ struct Motor {
 };
 // Persistent per physical channel. Only fuel integrated between valid,
 // recent ECU samples is counted; gaps are never filled in.
-struct Totals {
+struct TotalsV3 {
   uint32_t magic=0xE1170003;
   double lifetimeL[2]={0,0};
   double tripL[2]={0,0};
@@ -115,6 +122,20 @@ struct Totals {
   uint32_t tripRunSeconds[2]={0,0};
   int64_t tripStartUtc=0;
   uint32_t tripResets=0;
+};
+struct Totals {
+  uint32_t magic=0xE1170004;
+  double lifetimeL[2]={0,0};   // J1587 path: liters as decoded
+  double tripL[2]={0,0};
+  uint32_t runSeconds[2]={0,0};
+  uint32_t tripRunSeconds[2]={0,0};
+  int64_t tripStartUtc=0;
+  uint32_t tripResets=0;
+  // KAD path: integral of the RAW fuel-rate count over hours. Liters are
+  // raw x scale x correction, so a later scale/correction choice applies to
+  // everything already recorded.
+  double lifeRawH[2]={0,0};
+  double tripRawH[2]={0,0};
 };
 struct Segment {
   uint32_t boot=0;
@@ -139,7 +160,13 @@ struct Settings {
   String ssid="";
   String wifiPassword="";
   String timePreference="auto";
+  uint8_t protocol=1;        // 1 = Volvo Penta KAD/EDC1, 0 = SAE J1587
+  bool kadBigEndian=true;    // byte order of KAD reply values (unverified)
+  uint16_t kadFuelDiv=128;   // PID289 scale 1/128 (M_902) or 1/256
+  uint8_t kadVolt=0;         // PID293: 0 = VODIA 0.01308 V, 1 = Yacht Devices 0.0125 V
+  float fuelCorr[2]={1.0f,1.0f}; // per physical channel, from tank-to-tank
 };
+constexpr uint8_t PROTO_J1587=0, PROTO_KAD=1;
 struct Counters {
   uint32_t frames[2]={0,0};
   uint32_t invalid[2]={0,0};
@@ -149,6 +176,69 @@ struct Counters {
   volatile uint32_t lineErrors[2]={0,0};
   uint32_t nmeaFrames=0;
   uint32_t pidTableFull=0;
+};
+
+// ---------- Volvo Penta KAD / EDC1 ("NIRA EDC1") ----------
+// Request frame and checksum are RECONSTRUCTED from PentaEDC1.exe; the reply
+// layout (header, value position, byte order) is NOT wire-verified. Scalings
+// come from the VODIA ParameterList for program type M_902 (KAD300).
+// See docs/KAD300_EDC1.md. Raw bytes are always logged.
+struct KadParam { uint16_t index; char type; uint8_t len; float factor; };
+constexpr KadParam KAD_PARAMS[]={
+  {256,'U',2,0.25f},       // engine speed, rpm
+  {258,'U',2,0.03125f},    // air inlet pressure, kPa abs
+  {259,'S',2,0.25f},       // coolant temperature, C
+  {260,'S',2,0.25f},       // fuel temperature, C
+  {261,'S',2,0.25f},       // boost temperature, C
+  {263,'B',2,0},           // panel buttons / start input (bitfield)
+  {264,'B',2,0},           // gear bits 0x18, relays, indicators (bitfield)
+  {265,'S',2,0.03125f},    // boost pressure, kPa rel
+  {266,'U',3,0.0027778f},  // total engine hours, h
+  {267,'U',1,1.0f},        // active MS unit
+  {288,'U',2,0.012207f},   // relative load, %
+  {289,'U',2,0.0078125f},  // fuel rate, L/h (1/128 M_902; 1/256 alternative)
+  {291,'U',2,0.25f},       // engine speed reference, rpm
+  {293,'U',2,0.01308f},    // system voltage, V (VODIA; Yacht Devices 0.0125)
+  {295,'S',2,0.0061035f},  // rod position, %
+  {296,'S',2,0.015625f},   // alpha, deg
+};
+const KadParam *kadParam(uint16_t index){
+  for(const KadParam &p:KAD_PARAMS)if(p.index==index)return &p;
+  return nullptr;
+}
+// RPM and fuel are asked for twice as often as the rest.
+constexpr uint16_t KAD_POLL_FAST[]={256,289};
+constexpr uint16_t KAD_POLL_SLOW[]={293,259,258,265,260,261,288,291,264,266,295,263};
+constexpr uint32_t KAD_POLL_MS=220;       // <= ~4.5 requests/s per channel
+constexpr uint32_t KAD_REPLY_MS=300;      // reply must follow its request
+constexpr uint32_t KAD_BUS_IDLE_MS=20;    // never start a request on a busy bus
+constexpr uint32_t KAD_MAX_UNANSWERED=40; // then stop polling by itself
+struct KadSeen {
+  uint8_t ch=0,len=0;
+  uint16_t index=0;
+  uint8_t reply[12]={};
+  uint32_t count=0;
+  uint64_t at=0;
+  uint32_t be=0,le=0;
+};
+constexpr uint8_t MAX_KAD_SEEN=48;
+struct KadLink {
+  bool pending=false,ownPending=false,polling=false,txAttached=false;
+  uint16_t pendingIndex=0;
+  uint64_t pendingAt=0,lastReplyAt=0,lastForeignAt=0;
+  uint32_t requests=0,replies=0,foreignRequests=0,unanswered=0,txErrors=0,orphanReplies=0;
+  uint32_t lastPollMs=0,startedMs=0;
+  uint8_t seq=0,slowPos=0;
+  String stopReason="";
+};
+// Result of decoding one frame, used for logging.
+struct Decoded {
+  uint8_t mid=0;
+  bool gotFuel=false,gotRPM=false;
+  float lph=0,rpm=0;
+  int32_t kadIndex=-1;      // DataINDEX of a KAD request or matched reply
+  bool kadRequest=false,kadOwn=false,kadEcho=false,kadValueOk=false;
+  int32_t kadValue=0;
 };
 
 EngineLinkWebServer web(80);
@@ -164,6 +254,10 @@ Segment segments[MAX_SEGMENTS];
 uint8_t segmentIndex=0,segmentCount=0;
 PidSeen pids[MAX_PIDS];
 uint8_t pidCount=0;
+KadSeen kadSeen[MAX_KAD_SEEN];
+uint8_t kadSeenCount=0;
+KadLink kad[2];
+volatile uint32_t lastRxActivityMs[2]={0,0};
 int16_t histFuel[2][HISTORY_LEN];   // centi-L/h, -1 = unknown
 uint16_t histRpm[2][HISTORY_LEN];   // RPM, 0xFFFF = unknown
 int16_t histSog[HISTORY_LEN];       // centi-knots, -1 = unknown
@@ -240,10 +334,19 @@ bool cardInserted(){return digitalRead(SD_DETECT)==LOW;}
 // ---------- Persistent fuel totals ----------
 void loadTotals(){
   pref.begin("totals",true);
-  Totals t;
-  const size_t n=pref.getBytes("t",&t,sizeof(t));
+  const size_t stored=pref.getBytesLength("t");
+  if(stored==sizeof(Totals)){
+    Totals t;
+    if(pref.getBytes("t",&t,sizeof(t))==sizeof(t)&&t.magic==totals.magic)totals=t;
+  }else if(stored==sizeof(TotalsV3)){
+    TotalsV3 o;
+    if(pref.getBytes("t",&o,sizeof(o))==sizeof(o)&&o.magic==0xE1170003){
+      for(int c=0;c<2;c++){totals.lifetimeL[c]=o.lifetimeL[c];totals.tripL[c]=o.tripL[c];
+        totals.runSeconds[c]=o.runSeconds[c];totals.tripRunSeconds[c]=o.tripRunSeconds[c];}
+      totals.tripStartUtc=o.tripStartUtc;totals.tripResets=o.tripResets;
+    }
+  }
   pref.end();
-  if(n==sizeof(t)&&t.magic==totals.magic)totals=t;
 }
 void saveTotals(){
   pref.begin("totals",false);
@@ -252,7 +355,7 @@ void saveTotals(){
   totalsDirty=false;lastTotalsSave=millis();
 }
 void resetTrip(){
-  for(int c=0;c<2;c++){totals.tripL[c]=0;totals.tripRunSeconds[c]=0;}
+  for(int c=0;c<2;c++){totals.tripL[c]=0;totals.tripRawH[c]=0;totals.tripRunSeconds[c]=0;}
   totals.tripStartUtc=validWall()?(int64_t)time(nullptr):0;
   ++totals.tripResets;
   saveTotals();
@@ -275,7 +378,7 @@ void initSD(){
   logFile=SD.open(sessionName,FILE_APPEND);
   if(!logFile){sdMessage="Cannot open session";sdFaultLatched=true;return;}
   if(logFile.size()==0){
-    logFile.println("boot_id,uptime_ms,utc_epoch,channel,mid,checksum,raw_hex,engine,fuel_lph,rpm");
+    logFile.println("boot_id,uptime_ms,utc_epoch,channel,mid,checksum,raw_hex,engine,fuel_lph,rpm,direction,kad_index,kad_value");
   }
   sdLogging=true;
   sdMessage="Logging raw J1708";sdFaultLatched=false;
@@ -319,19 +422,24 @@ void serviceSD(){
     calFile.flush();lastTestFlush=millis();
   }
 }
-void writeRecord(const Frame &f,uint8_t mid,bool valid,const char *hex,bool gotFuel,float lph,bool gotRPM,float rpm){
+const char *frameDirection(const Decoded &d){return d.kadEcho?"ECHO":d.kadOwn?"TX":d.kadRequest?"REQ":"RX";}
+void writeRecord(const Frame &f,const Decoded &d,bool valid,const char *hex){
   if(!sdLogging)return;
   int engineId = cfg.portChannel==0?-1:((f.channel+1)==cfg.portChannel?0:1);
   time_t utc=validWall()?time(nullptr):0;
   // Single short append; UART receiver tasks buffer independently.
   int result=logFile.printf("%08lX,%llu,%lld,J%u,%u,%u,%s,%s,",
       (unsigned long)bootId,(unsigned long long)f.bootMs,(long long)utc,
-      f.channel==0?7:6,(unsigned)mid,valid?1:0,hex,
+      f.channel==0?7:6,(unsigned)d.mid,valid?1:0,hex,
       engineId==0?"port":engineId==1?"starboard":"unassigned");
   if(result<=0){sdMessage="SD write failed";sdFaultLatched=true;++sdErrors;stopLog();return;}
-  if(gotFuel)logFile.print(lph,3);
+  if(d.gotFuel)logFile.print(d.lph,3);
   logFile.print(',');
-  if(gotRPM)logFile.print(rpm,2);
+  if(d.gotRPM)logFile.print(d.rpm,2);
+  logFile.printf(",%s,",frameDirection(d));
+  if(d.kadIndex>=0)logFile.print(d.kadIndex);
+  logFile.print(',');
+  if(d.kadValueOk)logFile.print(d.kadValue);
   if(logFile.println()==0){sdMessage="SD write failed";sdFaultLatched=true;++sdErrors;stopLog();return;}
   ++sdRows;
 }
@@ -353,7 +461,7 @@ void calibrationMarker(){
   if(!calActive)return;
   const long long epoch=validWall()?(long long)time(nullptr):0;
   char entry[240];
-  int n=snprintf(entry,sizeof(entry),"MARK,%08lX,%llu,%lld,%lu,%s,%ld,%.3f,,,,,,,\n",
+  int n=snprintf(entry,sizeof(entry),"MARK,%08lX,%llu,%lld,%lu,%s,%ld,%.3f,,,,,,,,,,\n",
     (unsigned long)bootId,(unsigned long long)elapsedMs(),epoch,
     (unsigned long)calSteps,calPhase.c_str(),(long)calReferenceRPM,
     calReferenceFuel);
@@ -387,7 +495,7 @@ bool startCalibration(int channel){
   calResumeLogging=sdLogging;
   if(sdLogging)stopLog(); // Do not duplicate high-rate writes to the same SD card.
   testFileAvailable=false;
-  calFile.println("kind,boot_id,uptime_ms,utc_epoch,step,phase,reference_rpm,reference_fuel_lph,channel,mid,length,checksum,raw_hex,decoded_fuel_lph,decoded_rpm");
+  calFile.println("kind,boot_id,uptime_ms,utc_epoch,step,phase,reference_rpm,reference_fuel_lph,channel,mid,length,checksum,raw_hex,decoded_fuel_lph,decoded_rpm,direction,kad_index,kad_value");
   calActive=true;
   lastTestFlush=millis();
   const bool resumeAfterFailure=calResumeLogging;
@@ -400,18 +508,22 @@ bool startCalibration(int channel){
   sdMessage="Motor calibration test capturing";
   return true;
 }
-void appendCalibrationFrame(const Frame &f,uint8_t mid,bool valid,const char *hex,bool gotFuel,float lph,bool gotRPM,float rpm){
+void appendCalibrationFrame(const Frame &f,const Decoded &d,bool valid,const char *hex){
   if(!calActive || (calChannel>=0 && f.channel!=(uint8_t)calChannel))return;
   const long long epoch=validWall()?(long long)time(nullptr):0;
-  char entry[480];
+  char entry[520];
   int n=snprintf(entry,sizeof(entry),"FRAME,%08lX,%llu,%lld,%lu,%s,%ld,%.3f,J%u,%u,%u,%u,%s,",
     (unsigned long)bootId,(unsigned long long)f.bootMs,epoch,
     (unsigned long)calSteps,calPhase.c_str(),(long)calReferenceRPM,calReferenceFuel,
-    f.channel==0?7:6,(unsigned)mid,(unsigned)f.length,valid?1:0,hex);
-  if(n<=0||n>(int)sizeof(entry)-48){++sdErrors;sdFaultLatched=true;sdMessage="Motor test row too large";finishCalibration(false);return;}
-  if(gotFuel)n+=snprintf(entry+n,sizeof(entry)-n,"%.3f",lph);
+    f.channel==0?7:6,(unsigned)d.mid,(unsigned)f.length,valid?1:0,hex);
+  if(n<=0||n>(int)sizeof(entry)-80){++sdErrors;sdFaultLatched=true;sdMessage="Motor test row too large";finishCalibration(false);return;}
+  if(d.gotFuel)n+=snprintf(entry+n,sizeof(entry)-n,"%.3f",d.lph);
   entry[n++]=',';
-  if(gotRPM)n+=snprintf(entry+n,sizeof(entry)-n,"%.2f",rpm);
+  if(d.gotRPM)n+=snprintf(entry+n,sizeof(entry)-n,"%.2f",d.rpm);
+  n+=snprintf(entry+n,sizeof(entry)-n,",%s,",frameDirection(d));
+  if(d.kadIndex>=0)n+=snprintf(entry+n,sizeof(entry)-n,"%ld",(long)d.kadIndex);
+  entry[n++]=',';
+  if(d.kadValueOk)n+=snprintf(entry+n,sizeof(entry)-n,"%ld",(long)d.kadValue);
   entry[n++]='\n';
   if(calFile.write((const uint8_t*)entry,n)!=(size_t)n){
     ++sdErrors;sdFaultLatched=true;sdMessage="Motor test SD write error";finishCalibration(false);
@@ -479,6 +591,7 @@ void receiverTask(void *arg){
   for(;;){
     if(xQueueReceive(c->uartEvents,&evt,pdMS_TO_TICKS(250))!=pdTRUE)continue;
     if(evt.type==UART_DATA){
+      lastRxActivityMs[c->id]=millis();
       size_t remaining=evt.size;
       while(remaining){
         const size_t want=min((size_t)sizeof(buf),remaining);
@@ -504,6 +617,9 @@ void receiverTask(void *arg){
     }
   }
 }
+// KAD replies from a 1990s ECU may carry small inter-byte gaps, so frames are
+// split on 2 idle symbols there; J1587 uses 1 symbol (its message gap is short).
+uint8_t rxTimeoutSymbols(){return cfg.protocol==PROTO_KAD?2:1;}
 bool initUART(Channel &c,uint8_t rx){
   uart_config_t conf={};
   conf.baud_rate=9600;
@@ -519,7 +635,7 @@ bool initUART(Channel &c,uint8_t rx){
   uart_set_rx_full_threshold(c.port,120);
   // 1 UART symbol at 9600 8N1 ~1.04 ms. J1708 message idle gap
   // is >=10 bit times; larger RX timeout merges adjacent messages.
-  if(uart_set_rx_timeout(c.port,1)!=ESP_OK)return false;
+  if(uart_set_rx_timeout(c.port,rxTimeoutSymbols())!=ESP_OK)return false;
   return xTaskCreatePinnedToCore(receiverTask,c.id==0?"J7RX":"J6RX",4096,&c,4,nullptr,0)==pdPASS;
 }
 bool validChecksum(const Frame &f){
@@ -528,20 +644,33 @@ bool validChecksum(const Frame &f){
   for(uint8_t i=0;i<f.length;i++)sum=(uint8_t)(sum+f.data[i]);
   return sum==0;
 }
-void updateFuel(Motor &m,uint8_t ch,float newRate,uint64_t timestamp){
+double prevFuelRaw[2]={0,0};
+// rawRate < 0 means J1587 (liters are stored directly); otherwise the KAD raw
+// count is integrated too, so later scale/correction changes stay exact.
+void updateFuel(Motor &m,uint8_t ch,float newRate,uint64_t timestamp,double rawRate){
   if(m.fuelEver && timestamp>m.prevFuelAt) {
     const uint64_t dt=timestamp-m.prevFuelAt;
     if(dt<=5000) {
-      const double liters=((double)m.previousFuelLph+(double)newRate)*0.5*(double)dt/3600000.0;
+      const double hours=(double)dt/3600000.0;
+      const double liters=((double)m.previousFuelLph+(double)newRate)*0.5*hours;
       m.observedLiters+=liters;
-      totals.lifetimeL[ch]+=liters;
-      totals.tripL[ch]+=liters;
+      if(rawRate>=0){
+        const double rawH=(prevFuelRaw[ch]+rawRate)*0.5*hours;
+        totals.lifeRawH[ch]+=rawH;totals.tripRawH[ch]+=rawH;
+      }else{
+        totals.lifetimeL[ch]+=liters;
+        totals.tripL[ch]+=liters;
+      }
       totalsDirty=true;
     }else ++m.gaps;
   }
+  if(rawRate>=0)prevFuelRaw[ch]=rawRate;
   m.fuelLph=newRate;m.fuelAt=timestamp;m.prevFuelAt=timestamp;
   m.previousFuelLph=newRate;m.fuelEver=true;++m.fuelSamples;
 }
+double kadFuelScale(uint8_t ch){return (1.0/(double)cfg.kadFuelDiv)*(double)cfg.fuelCorr[ch];}
+double tripLitersFor(uint8_t ch){return cfg.protocol==PROTO_KAD?totals.tripRawH[ch]*kadFuelScale(ch):totals.tripL[ch];}
+double lifetimeLitersFor(uint8_t ch){return cfg.protocol==PROTO_KAD?totals.lifeRawH[ch]*kadFuelScale(ch):totals.lifetimeL[ch];}
 // Remembers the latest bytes of every page-0 PID seen on each channel, so the
 // UI can show what an ECU really transmits before any decoder is trusted.
 void rememberPid(uint8_t ch,uint8_t mid,uint8_t pid,const uint8_t *data,uint8_t width,uint64_t at){
@@ -594,35 +723,186 @@ void decodeJ1587(const Frame &f,uint8_t &mid,bool &gotFuel,float &lph,bool &gotR
     i+=width;
   }
 }
+bool isKadRequest(const uint8_t *d,uint8_t n){
+  if(n!=6||d[0]!=0x01||d[1]!=0x43||d[2]!=0x21)return false;
+  uint8_t sum=0;for(uint8_t i=0;i<6;i++)sum=(uint8_t)(sum+d[i]);
+  return sum==0;
+}
+void rememberKad(uint8_t ch,uint16_t index,const Frame &f,uint32_t be,uint32_t le){
+  KadSeen *slot=nullptr;
+  for(uint8_t i=0;i<kadSeenCount;i++)if(kadSeen[i].ch==ch&&kadSeen[i].index==index){slot=&kadSeen[i];break;}
+  if(!slot){
+    if(kadSeenCount>=MAX_KAD_SEEN)return;
+    slot=&kadSeen[kadSeenCount++];slot->ch=ch;slot->index=index;
+  }
+  slot->len=f.length;
+  memset(slot->reply,0,sizeof(slot->reply));
+  memcpy(slot->reply,f.data,min((uint8_t)sizeof(slot->reply),f.length));
+  slot->be=be;slot->le=le;slot->at=f.bootMs;++slot->count;
+}
+const KadSeen *kadLatest(uint8_t ch,uint16_t index){
+  for(uint8_t i=0;i<kadSeenCount;i++)if(kadSeen[i].ch==ch&&kadSeen[i].index==index)return &kadSeen[i];
+  return nullptr;
+}
+int32_t kadSigned(uint32_t v,const KadParam *p){
+  if(!p||p->type!='S')return (int32_t)v;
+  const uint32_t bits=8u*p->len,sign=1u<<(bits-1);
+  return (v&sign)?(int32_t)v-(int32_t)(1u<<bits):(int32_t)v;
+}
+void stopPolling(uint8_t ch,const String &why);
+// Pairs requests (ours or another device's, e.g. an EDC display) with the
+// next checksum-valid frame. The value is taken as the parameter's width in
+// bytes just before the checksum; both byte orders are kept.
+void decodeKad(const Frame &f,Decoded &d){
+  KadLink &k=kad[f.channel];
+  if(isKadRequest(f.data,f.length)){
+    const uint16_t index=((uint16_t)f.data[3]<<8)|f.data[4];
+    d.kadRequest=true;d.kadIndex=index;
+    const bool own=k.ownPending&&k.pendingIndex==index&&f.bootMs-k.pendingAt<KAD_REPLY_MS;
+    d.kadOwn=own;d.kadEcho=own;
+    if(!own){
+      ++k.foreignRequests;k.lastForeignAt=f.bootMs;
+      if(k.polling)stopPolling(f.channel,"Another device already polls this engine, so EngineLink only listens");
+      k.pending=true;k.pendingIndex=index;k.pendingAt=f.bootMs;
+    }
+    return;
+  }
+  if(!k.pending||f.bootMs<k.pendingAt||f.bootMs-k.pendingAt>KAD_REPLY_MS){++k.orphanReplies;return;}
+  const uint16_t index=k.pendingIndex;
+  k.pending=false;
+  if(k.ownPending){k.ownPending=false;++k.replies;k.unanswered=0;}
+  k.lastReplyAt=f.bootMs;
+  const KadParam *p=kadParam(index);
+  const uint8_t w=p?p->len:2;
+  if(f.length<w+2)return;
+  const uint8_t *v=&f.data[f.length-1-w];
+  uint32_t be=0,le=0;
+  for(uint8_t i=0;i<w;i++){be=(be<<8)|v[i];le|=(uint32_t)v[i]<<(8*i);}
+  rememberKad(f.channel,index,f,be,le);
+  const uint32_t raw=cfg.kadBigEndian?be:le;
+  const uint32_t invalid=w>=4?0xFFFFFFFFUL:((1UL<<(8*w))-1UL);
+  d.kadIndex=index;d.kadValue=kadSigned(raw,p);d.kadValueOk=true;
+  if(raw==invalid)return; // all-ones = not available
+  Motor &m=motor[f.channel];
+  if(index==256){
+    d.rpm=(float)raw*0.25f;d.gotRPM=true;
+    m.rpm=d.rpm;m.rpmAt=f.bootMs;m.rpmEver=true;++m.rpmSamples;
+  }else if(index==289){
+    d.lph=(float)((double)raw*kadFuelScale(f.channel));d.gotFuel=true;
+    updateFuel(m,f.channel,d.lph,f.bootMs,(double)raw);
+  }
+}
 void processFrame(const Frame &f){
   if(f.channel>1)return;
+  // A KAD request echo and the ECU reply can arrive as one burst; split it.
+  if(cfg.protocol==PROTO_KAD&&!f.overflow&&f.length>6&&isKadRequest(f.data,6)){
+    Frame a=f,b=f;
+    a.length=6;
+    b.length=f.length-6;memmove(b.data,f.data+6,b.length);
+    processFrame(a);processFrame(b);
+    return;
+  }
   ++ctr.frames[f.channel];
   const bool ok=validChecksum(f);
   if(!ok)++ctr.invalid[f.channel];
   if(f.overflow)++ctr.overflows[f.channel];
+  Decoded d;
+  if(ok){
+    if(cfg.protocol==PROTO_KAD){
+      d.mid=f.data[0];
+      decodeKad(f,d);
+    }else{
+      decodeJ1587(f,d.mid,d.gotFuel,d.lph,d.gotRPM,d.rpm);
+      Motor &m=motor[f.channel];
+      m.lastMID=d.mid;
+      if(d.gotFuel)updateFuel(m,f.channel,d.lph,f.bootMs,-1);
+      if(d.gotRPM){m.rpm=d.rpm;m.rpmAt=f.bootMs;m.rpmEver=true;++m.rpmSamples;}
+    }
+  }
   Recent &r=recent[recentIndex];
   r=Recent();
   r.channel=f.channel;
   r.mid=f.length?f.data[0]:0;
   r.len=f.length;r.checksum=ok;r.malformed=f.overflow;r.bootMs=f.bootMs;
+  r.dir=d.kadOwn?'T':d.kadRequest?'Q':'R';
+  r.kadIndex=(int16_t)d.kadIndex;
   size_t n=0;
   for(uint8_t i=0;i<f.length&&i<MAX_FRAME;i++){
     n+=(size_t)snprintf(r.hex+n,sizeof(r.hex)-n,"%02X%s",f.data[i],i+1<f.length?" ":"");
   }
   recentIndex=(recentIndex+1)%24;
   if(recentCount<24)recentCount++;
-  uint8_t mid=0;
-  bool gotFuel=false,gotRPM=false;
-  float lph=0,rpm=0;
-  if(ok){
-    decodeJ1587(f,mid,gotFuel,lph,gotRPM,rpm);
-    Motor &m=motor[f.channel];
-    m.lastMID=mid;
-    if(gotFuel)updateFuel(m,f.channel,lph,f.bootMs);
-    if(gotRPM){m.rpm=rpm;m.rpmAt=f.bootMs;m.rpmEver=true;++m.rpmSamples;}
+  writeRecord(f,d,ok,r.hex);
+  appendCalibrationFrame(f,d,ok,r.hex);
+}
+
+// ---------- KAD polling (opt-in, this session only) ----------
+// Sends only the reconstructed read-parameter request 01 43 21 <hi> <lo> <cs>.
+// The TX pin is attached when polling starts and released when it stops.
+uart_port_t portFor(uint8_t ch){return ch==0?UART_NUM_1:UART_NUM_2;}
+uint8_t txPinFor(uint8_t ch){return ch==0?TX_J7:TX_J6;}
+void stopPolling(uint8_t ch,const String &why){
+  KadLink &k=kad[ch];
+  k.polling=false;k.ownPending=false;k.stopReason=why;
+  if(k.txAttached){
+    uart_wait_tx_done(portFor(ch),pdMS_TO_TICKS(20));
+    gpio_reset_pin((gpio_num_t)txPinFor(ch));
+    k.txAttached=false;
   }
-  writeRecord(f,mid,ok,r.hex,gotFuel,lph,gotRPM,rpm);
-  appendCalibrationFrame(f,mid,ok,r.hex,gotFuel,lph,gotRPM,rpm);
+}
+bool startPolling(uint8_t ch,String &why){
+  KadLink &k=kad[ch];
+  if(cfg.protocol!=PROTO_KAD){why="Select the Volvo Penta KAD / EDC1 protocol first";return false;}
+  if(!uartReady[ch]){why="Receiver for this connector did not start";return false;}
+  if(k.foreignRequests&&elapsedMs()-k.lastForeignAt<60000){why="Another device is polling this engine. Listening is enough";return false;}
+  if(uart_set_pin(portFor(ch),txPinFor(ch),UART_PIN_NO_CHANGE,UART_PIN_NO_CHANGE,UART_PIN_NO_CHANGE)!=ESP_OK){why="Could not attach the TX pin";return false;}
+  k.txAttached=true;k.polling=true;k.stopReason="";k.unanswered=0;k.ownPending=false;
+  k.startedMs=millis();k.lastPollMs=0;
+  return true;
+}
+void writeTxRecord(uint8_t ch,const uint8_t *req,uint16_t index){
+  if(!sdLogging&&!calActive)return;
+  Frame f;f.channel=ch;f.length=6;memcpy(f.data,req,6);f.bootMs=elapsedMs();
+  Decoded d;d.mid=req[0];d.kadIndex=index;d.kadRequest=true;d.kadOwn=true;
+  char hex[20];snprintf(hex,sizeof(hex),"%02X %02X %02X %02X %02X %02X",req[0],req[1],req[2],req[3],req[4],req[5]);
+  writeRecord(f,d,true,hex);
+  appendCalibrationFrame(f,d,true,hex);
+}
+void serviceKad(){
+  if(cfg.protocol!=PROTO_KAD)return;
+  const uint64_t now=elapsedMs();
+  for(uint8_t ch=0;ch<2;ch++){
+    KadLink &k=kad[ch];
+    if(k.pending&&now-k.pendingAt>KAD_REPLY_MS)k.pending=false;
+    if(!k.polling)continue;
+    if(k.ownPending){
+      if(now-k.pendingAt<=KAD_REPLY_MS)continue;
+      k.ownPending=false;++k.unanswered;
+      if(k.unanswered>=KAD_MAX_UNANSWERED){
+        stopPolling(ch,"No answer to "+String(KAD_MAX_UNANSWERED)+" requests. Check ignition, the J1708 cable and that the TX jumper for this connector is closed");
+        continue;
+      }
+    }
+    if((uint32_t)(millis()-k.lastPollMs)<KAD_POLL_MS)continue;
+    if((uint32_t)(millis()-lastRxActivityMs[ch])<KAD_BUS_IDLE_MS)continue; // bus busy
+    uint16_t index;
+    const uint8_t slot=k.seq%3;
+    if(slot<2)index=KAD_POLL_FAST[slot];
+    else{index=KAD_POLL_SLOW[k.slowPos];k.slowPos=(k.slowPos+1)%(sizeof(KAD_POLL_SLOW)/sizeof(KAD_POLL_SLOW[0]));}
+    ++k.seq;
+    uint8_t req[6]={0x01,0x43,0x21,(uint8_t)(index>>8),(uint8_t)(index&0xFF),0};
+    uint8_t sum=0;for(uint8_t i=0;i<5;i++)sum=(uint8_t)(sum+req[i]);
+    req[5]=(uint8_t)(0x100-sum);
+    k.lastPollMs=millis();
+    if(uart_write_bytes(portFor(ch),(const char*)req,6)!=6){
+      ++k.txErrors;
+      if(k.txErrors>=5)stopPolling(ch,"UART transmit error");
+      continue;
+    }
+    ++k.requests;
+    k.ownPending=true;k.pending=true;k.pendingIndex=index;k.pendingAt=elapsedMs();
+    writeTxRecord(ch,req,index);
+  }
 }
 bool fuelFresh(uint8_t c,uint64_t now){return motor[c].fuelEver&&now>=motor[c].fuelAt&&(now-motor[c].fuelAt)<FRAME_FRESH_MS;}
 bool rpmFresh(uint8_t c,uint64_t now){return motor[c].rpmEver&&now>=motor[c].rpmAt&&(now-motor[c].rpmAt)<RPM_FRESH_MS;}
@@ -843,6 +1123,12 @@ void saveSettings(){
   pref.putString("ssid",cfg.ssid);
   pref.putString("wpass",cfg.wifiPassword);
   pref.putString("time",cfg.timePreference);
+  pref.putUChar("proto",cfg.protocol);
+  pref.putBool("kbe",cfg.kadBigEndian);
+  pref.putUShort("kdiv",cfg.kadFuelDiv);
+  pref.putUChar("kvolt",cfg.kadVolt);
+  pref.putFloat("corr0",cfg.fuelCorr[0]);
+  pref.putFloat("corr1",cfg.fuelCorr[1]);
   pref.end();
 }
 void loadSettings(){
@@ -856,7 +1142,16 @@ void loadSettings(){
   cfg.ssid=pref.getString("ssid","");
   cfg.wifiPassword=pref.getString("wpass","");
   cfg.timePreference=pref.getString("time","auto");
+  cfg.protocol=pref.getUChar("proto",PROTO_KAD);
+  cfg.kadBigEndian=pref.getBool("kbe",true);
+  cfg.kadFuelDiv=pref.getUShort("kdiv",128);
+  cfg.kadVolt=pref.getUChar("kvolt",0);
+  cfg.fuelCorr[0]=pref.getFloat("corr0",1.0f);
+  cfg.fuelCorr[1]=pref.getFloat("corr1",1.0f);
   pref.end();
+  if(cfg.protocol>1)cfg.protocol=PROTO_KAD;
+  if(cfg.kadFuelDiv!=128&&cfg.kadFuelDiv!=256)cfg.kadFuelDiv=128;
+  for(int c=0;c<2;c++)if(!(cfg.fuelCorr[c]>=0.5f&&cfg.fuelCorr[c]<=2.0f))cfg.fuelCorr[c]=1.0f;
   if(cfg.apPassword.length()<8)cfg.apPassword="12345678";
   if(cfg.portChannel>2)cfg.portChannel=0;
   if(cfg.apChannel<1||cfg.apChannel>13)cfg.apChannel=6;
@@ -884,7 +1179,26 @@ void reply(bool ok,const String &message,int code){
 // Standard J1587 parameters shown on the overview when an ECU sends them.
 // Scaling is applied in the UI and is labelled as unverified for the ECU.
 constexpr uint8_t OVERVIEW_PIDS[]={91,92,94,96,100,102,105,110,168,174,175,247,250};
+// KAD: latest reply per DataINDEX with both byte orders; the UI applies the
+// VODIA scale and shows the chosen order.
+void appendKadParams(String &s,uint8_t c,uint64_t now){
+  s+=",\"kad\":{";
+  bool first=true;
+  for(uint8_t i=0;i<kadSeenCount;i++){
+    const KadSeen &k=kadSeen[i];
+    if(k.ch!=c||now<k.at||now-k.at>PARAM_FRESH_MS)continue;
+    const KadParam *p=kadParam(k.index);
+    if(!first)s+=',';
+    first=false;
+    s+='"';s+=k.index;s+="\":{\"v\":";s+=kadSigned(cfg.kadBigEndian?k.be:k.le,p);
+    s+=",\"be\":";s+=k.be;s+=",\"le\":";s+=k.le;
+    s+=",\"age\":";s+=(unsigned long)(now-k.at);
+    s+='}';
+  }
+  s+='}';
+}
 void appendParams(String &s,uint8_t c,uint64_t now){
+  if(cfg.protocol==PROTO_KAD){appendKadParams(s,c,now);return;}
   s+=",\"params\":{";
   bool first=true;
   for(uint8_t pid:OVERVIEW_PIDS){
@@ -947,6 +1261,11 @@ void handleState(){
   s+=",\"timePref\":";jsonString(s,cfg.timePreference);
   s+=",\"canListen\":";s+=cfg.canListen?"true":"false";
   s+=",\"defaultPassword\":";s+=cfg.apPassword=="12345678"?"true":"false";
+  s+=",\"protocol\":";s+=cfg.protocol==PROTO_KAD?"\"kad\"":"\"j1587\"";
+  s+=",\"kadBigEndian\":";s+=cfg.kadBigEndian?"true":"false";
+  s+=",\"kadFuelDiv\":";s+=cfg.kadFuelDiv;
+  s+=",\"kadVolt\":";s+=cfg.kadVolt;
+  s+=",\"fuelCorr\":[";s+=String(cfg.fuelCorr[0],4);s+=',';s+=String(cfg.fuelCorr[1],4);s+=']';
   s+="},\"sd\":{\"ready\":";
   s+=sdReady?"true":"false";
   s+=",\"inserted\":";s+=cardInserted()?"true":"false";
@@ -1006,8 +1325,23 @@ void handleState(){
     s+=",\"rpmSamples\":";s+=motor[c].rpmSamples;
     s+=",\"gaps\":";s+=motor[c].gaps;
     s+=",\"lastMID\":";s+=motor[c].lastMID;
-    s+=",\"tripLiters\":";s+=String(totals.tripL[c],3);
-    s+=",\"lifetimeLiters\":";s+=String(totals.lifetimeL[c],2);
+    s+=",\"tripLiters\":";s+=String(tripLitersFor(c),3);
+    s+=",\"lifetimeLiters\":";s+=String(lifetimeLitersFor(c),2);
+    // Uncorrected candidates for the tank-to-tank scale decision.
+    s+=",\"trip128\":";s+=String(totals.tripRawH[c]/128.0,3);
+    s+=",\"trip256\":";s+=String(totals.tripRawH[c]/256.0,3);
+    const KadLink &k=kad[c];
+    s+=",\"link\":{\"polling\":";s+=k.polling?"true":"false";
+    s+=",\"requests\":";s+=k.requests;
+    s+=",\"replies\":";s+=k.replies;
+    s+=",\"foreign\":";s+=k.foreignRequests;
+    s+=",\"foreignAge\":";if(k.foreignRequests)s+=(unsigned long)(now-k.lastForeignAt);else s+="null";
+    s+=",\"unanswered\":";s+=k.unanswered;
+    s+=",\"orphans\":";s+=k.orphanReplies;
+    s+=",\"replyAge\":";if(k.lastReplyAt)s+=(unsigned long)(now-k.lastReplyAt);else s+="null";
+    s+=",\"pollSeconds\":";s+=k.polling?(unsigned long)((millis()-k.startedMs)/1000UL):0UL;
+    s+=",\"stopReason\":";jsonString(s,k.stopReason);
+    s+='}';
     s+=",\"engineSeconds\":";s+=totals.runSeconds[c];
     s+=",\"tripSeconds\":";s+=totals.tripRunSeconds[c];
     appendParams(s,c,now);
@@ -1046,6 +1380,8 @@ void handleState(){
     s+=",\"mid\":";s+=e.mid;
     s+=",\"ms\":";s+=(unsigned long)(e.bootMs%4294967295ULL);
     s+=",\"ok\":";s+=e.checksum?"true":"false";
+    s+=",\"dir\":\"";s+=e.dir;s+='"';
+    s+=",\"kad\":";s+=e.kadIndex;
     s+=",\"hex\":";jsonString(s,e.hex);
     s+="}";
   }
@@ -1070,6 +1406,22 @@ void handlePids(){
     const uint8_t n=min(p.len,(uint8_t)sizeof(p.data));
     for(uint8_t b=0;b<n;b++){char h[4];snprintf(h,sizeof(h),b?" %02X":"%02X",p.data[b]);s+=h;}
     if(p.len>sizeof(p.data))s+=" …";
+    s+="\"}";
+  }
+  s+="],\"kad\":[";
+  for(uint8_t i=0;i<kadSeenCount;i++){
+    const KadSeen &k=kadSeen[i];
+    if(i)s+=',';
+    s+="{\"ch\":";s+=k.ch;
+    s+=",\"index\":";s+=k.index;
+    s+=",\"len\":";s+=k.len;
+    s+=",\"count\":";s+=k.count;
+    s+=",\"age\":";s+=(unsigned long)(now>=k.at?now-k.at:0);
+    s+=",\"be\":";s+=k.be;s+=",\"le\":";s+=k.le;
+    s+=",\"hex\":\"";
+    const uint8_t n=min(k.len,(uint8_t)sizeof(k.reply));
+    for(uint8_t b=0;b<n;b++){char h[4];snprintf(h,sizeof(h),b?" %02X":"%02X",k.reply[b]);s+=h;}
+    if(k.len>sizeof(k.reply))s+=" …";
     s+="\"}";
   }
   s+="]}";
@@ -1163,8 +1515,58 @@ void handleSegmentsDownload(){
   web.streamFile(f,"text/csv");
   f.close();
 }
+// Polling is never persisted: after any restart EngineLink only listens.
+void handleKadPoll(){
+  const int ch=web.arg("ch").toInt();
+  if(ch<0||ch>1){reply(false,"Invalid connector",400);return;}
+  if(web.arg("on")!="1"){
+    if(kad[ch].polling)stopPolling(ch,"Stopped by user");
+    reply(true,"Polling stopped. EngineLink only listens on this connector.");return;
+  }
+  if(web.arg("confirm")!="POLL"){reply(false,"Confirmation missing",400);return;}
+  String why;
+  if(!startPolling(ch,why)){reply(false,why,409);return;}
+  reply(true,String("Polling ")+(ch==0?"J7":"J6")+": reading parameters about 4 times per second. It stops after a restart.");
+}
+void applyProtocol(){
+  for(uint8_t c=0;c<2;c++){
+    if(kad[c].polling)stopPolling(c,"Protocol changed");
+    kad[c].pending=false;
+    if(uartReady[c])uart_set_rx_timeout(portFor(c),rxTimeoutSymbols());
+  }
+}
+void handleKadConfig(){
+  if(web.hasArg("protocol")){
+    const String v=web.arg("protocol");
+    if(v!="kad"&&v!="j1587"){reply(false,"Invalid protocol",400);return;}
+    const uint8_t np=v=="kad"?PROTO_KAD:PROTO_J1587;
+    if(np!=cfg.protocol){cfg.protocol=np;applyProtocol();}
+  }
+  if(web.hasArg("endian"))cfg.kadBigEndian=web.arg("endian")!="le";
+  if(web.hasArg("fuelDiv")){
+    const int d=web.arg("fuelDiv").toInt();
+    if(d!=128&&d!=256){reply(false,"Fuel scale must be 1/128 or 1/256",400);return;}
+    cfg.kadFuelDiv=(uint16_t)d;
+  }
+  if(web.hasArg("volt")){
+    const int v=web.arg("volt").toInt();
+    if(v!=0&&v!=1){reply(false,"Invalid voltage scale",400);return;}
+    cfg.kadVolt=(uint8_t)v;
+  }
+  for(uint8_t c=0;c<2;c++){
+    const String key=String("corr")+c;
+    if(!web.hasArg(key))continue;
+    const float f=web.arg(key).toFloat();
+    if(!(f>=0.5f&&f<=2.0f)){reply(false,"Correction must be between 0.5 and 2.0",400);return;}
+    cfg.fuelCorr[c]=f;
+  }
+  saveSettings();
+  reply(true,"Engine data settings saved. Totals are recalculated from the raw record.");
+}
+
 // Closes files and stores totals before any deliberate restart.
 void prepareRestart(){
+  for(uint8_t c=0;c<2;c++)if(kad[c].polling)stopPolling(c,"Restart");
   if(calActive)finishCalibration(false);
   for(uint8_t c=0;c<2;c++)if(motor[c].running)closeSegment(c);
   if(sdLogging)stopLog();
@@ -1177,6 +1579,7 @@ void handleUpdateUpload(){
   if(u.status==UPLOAD_FILE_START){
     otaError="";otaBytes=0;otaChecked=false;
     if(calActive){otaError="Stop the motor test first";return;}
+    for(uint8_t c=0;c<2;c++)if(kad[c].polling)stopPolling(c,"Firmware update");
     if(u.filename.indexOf("merged")>=0){otaError="This is the USB (merged) image. Use the Wi-Fi update file enginelink-update.bin";return;}
     otaResumeLogging=sdLogging;
     if(sdLogging)stopLog();
@@ -1251,6 +1654,8 @@ void initializeWeb(){
     restartAt=millis()+1200;
   });
   web.on("/api/update",HTTP_POST,handleUpdateDone,handleUpdateUpload);
+  web.on("/api/kad/poll",HTTP_POST,handleKadPoll);
+  web.on("/api/kad/config",HTTP_POST,handleKadConfig);
   web.on("/api/health",HTTP_GET,[](){web.send(200,"text/plain","OK");});
   web.onNotFound([](){web.send(404,"text/plain","Not found");});
   web.begin();
@@ -1269,7 +1674,7 @@ void setup(){
   led.begin();led.setBrightness(ledBrightness);led.clear();led.show();
   Serial.begin(115200);
   delay(1200); // do not block boot for USB Serial Monitor
-  Serial.println("\nEngineLink " EL_VERSION " - passive engine monitoring");
+  Serial.println("\nEngineLink " EL_VERSION " - engine monitoring, listen-only at boot");
   bootId=esp_random();
   sketchKB=ESP.getSketchSize()/1024;
   pinMode(SD_DETECT,INPUT);
@@ -1312,6 +1717,7 @@ void loop(){
   serviceCAN();
   web.handleClient();
   serviceSD();
+  serviceKad();
   serviceEngines();
   serviceHistory();
   serviceNetwork();
