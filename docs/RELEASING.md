@@ -20,13 +20,15 @@ The Pages workflow (`.github/workflows/pages.yml`) compiles `firmware/EngineLink
 ```json
 {
   "name": "EngineLink App (alpha)",
-  "version": "0.2.1-alpha",
+  "version": "0.3.0-alpha",
   "new_install_prompt_erase": true,
   "builds": [{"chipFamily":"ESP32-S3","parts":[{"path":"firmware.bin","offset":0}]}]
 }
 ```
 
-When the version changes, update **all** of these together: `EL_VERSION` in `firmware/EngineLink/EngineLink.ino`, the footer in `ui.h`, the manifest in `pages.yml`, the version check and button text in `site/app.js`, `site/index.html`, the artifact name in `build-engine.yml`, and the README/docs. `site/app.js` refuses to offer a manifest whose version does not match.
+The version is defined **once**, as `EL_VERSION` in `firmware/EngineLink/EngineLink.ino`. The Pages workflow reads it from there to write `manifest.json` and `release.json`, and to cache-bust `index.html` (`__VERSION__`). `site/app.js` shows whatever version the manifest contains. Only the README badge and the docs mention the version by hand.
+
+The workflow also publishes **`enginelink-update.bin`**, the application-only image for Wi-Fi updates (Settings → Firmware update). It is checked for the ESP32 app descriptor before publishing. Never upload `firmware.bin` (the merged USB image) as a Wi-Fi update; the device rejects it.
 
 The website checks that its manifest and binary exist before it displays the flashing option, and requires explicit acknowledgment of the safety warning. Successful compilation alone does **not** establish suitability for a real engine network.
 

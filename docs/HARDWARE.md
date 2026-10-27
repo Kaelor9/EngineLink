@@ -1,4 +1,6 @@
-# EngineLink hardware — current board
+# EngineLink hardware: current board
+
+![EngineLink PCB](images/board-3d.png)
 
 ## Pinout
 
