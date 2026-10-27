@@ -71,8 +71,9 @@ nav.tabs{position:fixed;left:0;right:0;bottom:0;z-index:20;margin:0;padding:6px 
  <div class="wstep" id="ws2">
   <h2 style="margin-bottom:6px">Which connector is the port engine?</h2><p class="muted" style="margin-bottom:14px">Start one engine and watch which connector shows activity below.</p>
   <div class="grid g2" style="margin-bottom:14px"><div class="kpi"><div class="eyebrow">J7 · Channel 1</div><div class="num" id="wAct0">—</div><div class="mini" id="wActT0">No traffic</div></div><div class="kpi"><div class="eyebrow">J6 · Channel 2</div><div class="num" id="wAct1">—</div><div class="mini" id="wActT1">No traffic</div></div></div>
+  <div class="field"><label for="wProto">Engine type</label><select class="input" id="wProto"><option value="kad">Volvo Penta KAD / EDC I (e.g. KAD300)</option><option value="j1587">SAE J1587 broadcast (other engines)</option></select><span class="hint">KAD engines only answer when asked, so a quiet connector is normal until polling is switched on under Data.</span></div>
   <div class="field"><label for="wPort">Port engine is on</label><select class="input" id="wPort"><option value="1">J7 · Channel 1 (starboard on J6)</option><option value="2">J6 · Channel 2 (starboard on J7)</option><option value="0">Not sure yet · decide later</option></select></div>
-  <div class="notice info">EngineLink only listens. It never sends anything to the engines.</div>
+  <div class="notice info">After every start-up EngineLink only listens. Sending read requests is a separate, deliberate step.</div>
  </div>
  <div class="wstep" id="ws3">
   <h2 style="margin-bottom:6px">Date and time</h2><p class="muted" style="margin-bottom:14px">EngineLink has no clock battery. It takes the time from your phone, GPS or the internet.</p>
@@ -122,6 +123,17 @@ nav.tabs{position:fixed;left:0;right:0;bottom:0;z-index:20;margin:0;padding:6px 
    <p class="mini" style="margin-top:8px">Counted only between valid ECU readings at most 5 s apart. Gaps are not filled in, so totals can be lower than reality.</p>
   </div>
  </div>
+ <details class="more kadonly" id="calCard"><summary><span>Fuel calibration · tank to tank <span class="mini" id="calSum">· scale 1/128, not yet confirmed</span></span></summary><div class="body">
+  <p class="mini" style="margin-bottom:12px">The KAD300 fuel rate is ×1/128 L/h according to VODIA (program type M_902). The only alternative is ×1/256, exactly half. One normal trip settles it, and no full throttle is needed. The ECU calculates fuel from rod position and RPM, so a correction per engine also covers wear such as a tired turbo.</p>
+  <div class="flow" style="margin-bottom:14px">
+   <div class="flowstep"><div><b>Fill both tanks completely, then reset the trip</b><div class="mini">Use the "Reset trip" button above right after filling.</div></div></div>
+   <div class="flowstep"><div><b>Make a normal trip with polling on</b><div class="mini">Low or medium load is fine. Both candidates are counted at the same time.</div></div></div>
+   <div class="flowstep"><div><b>Refill and enter the litres per tank</b><div class="mini">EngineLink picks the scale that matches and computes a correction per engine.</div></div></div>
+  </div>
+  <div class="tablewrap" style="margin-bottom:12px"><table><thead><tr><th>Engine</th><th class="right">× 1/128</th><th class="right">× 1/256</th><th class="right">Correction now</th><th>Refilled (L)</th></tr></thead><tbody id="calRows"></tbody></table></div>
+  <div class="row"><button class="btn primary" id="calApply">Calculate and save</button><button class="btn ghost small" id="calReset">Reset corrections to 1.00</button></div>
+  <p class="mini" id="calResult" style="margin-top:10px"></p>
+ </div></details>
 </section>
 
 <!-- DATA / TRAFFIC -->
@@ -133,6 +145,13 @@ nav.tabs{position:fixed;left:0;right:0;bottom:0;z-index:20;margin:0;padding:6px 
   <div class="kpi"><div class="eyebrow">Checksum errors</div><div class="num" id="invalid">—</div></div>
   <div class="kpi"><div class="eyebrow">Lost in buffer</div><div class="num" id="drops">—</div></div>
  </div>
+ <div class="card kadonly" id="kadCard" style="margin-bottom:14px">
+  <div class="split"><div><div class="eyebrow">Volvo Penta KAD / EDC I</div><h2 style="margin:6px 0 0">Engine connection · <span id="kadName">J7</span></h2></div><span class="chip" id="kadChip">Listening</span></div>
+  <p class="mini" id="kadText" style="margin:10px 0 12px">—</p>
+  <div class="grid g4" style="margin-bottom:12px"><div class="kpi"><div class="eyebrow">Requests sent</div><div class="num" id="kReq">0</div></div><div class="kpi"><div class="eyebrow">Answers</div><div class="num" id="kRep">0</div></div><div class="kpi"><div class="eyebrow">Last answer</div><div class="num" id="kAge">—</div></div><div class="kpi"><div class="eyebrow">Other device polling</div><div class="num" id="kFor">No</div></div></div>
+  <div class="row"><button class="btn primary" id="kStart">Start polling this engine</button><button class="btn ghost hide" id="kStop">Stop polling</button></div>
+  <p class="mini" style="margin-top:10px">Polling sends only the read-parameter request <span class="mono">01 43 21 &lt;index&gt; &lt;checksum&gt;</span> about 4 times per second. It never writes to the ECU, waits for a quiet bus, stops by itself if the engine does not answer, and is always off after a restart.</p>
+ </div>
  <div class="grid g2">
   <div class="card"><div class="split" style="margin-bottom:12px"><h2 style="margin:0">Live messages</h2><button class="btn small ghost" id="pauseBtn">Pause</button></div>
    <div class="list" id="pktList"><div class="mini" style="padding:14px">Waiting for J1708 messages…</div></div>
@@ -143,13 +162,27 @@ nav.tabs{position:fixed;left:0;right:0;bottom:0;z-index:20;margin:0;padding:6px 
    <div id="dPids" style="margin-top:10px"></div></div>
  </div>
  <div class="card" style="margin-top:14px"><div class="split" style="margin-bottom:6px"><h2 style="margin:0">Bus discovery</h2><span class="chip" id="pidCount">0 parameters</span></div>
-  <p class="mini" style="margin-bottom:12px">Every parameter (PID) the ECU has sent on this connector, with its latest raw bytes. "Standard value" uses SAE J1587 scaling and is <b>not yet verified</b> for your engines.</p>
-  <div class="tablewrap"><table><thead><tr><th>MID</th><th>PID</th><th>Parameter</th><th>Raw</th><th class="right">Value</th><th class="right wide">Count</th><th class="right wide">Age</th></tr></thead><tbody id="pidRows"><tr><td colspan="7" class="mini">Nothing received yet.</td></tr></tbody></table></div>
+  <p class="mini" style="margin-bottom:12px" id="discText">—</p>
+  <div class="tablewrap"><table><thead id="pidHead"></thead><tbody id="pidRows"><tr><td colspan="7" class="mini">Nothing received yet.</td></tr></tbody></table></div>
+ </div>
+ <div class="card kadonly" style="margin-top:14px" id="verifyCard">
+  <div class="split"><div><div class="eyebrow">First test · engine off, ignition on</div><h2 style="margin:6px 0 0">Verify the decoding</h2></div><span class="chip" id="vChip">Not verified</span></div>
+  <p class="mini" style="margin:10px 0 14px">The request format is reconstructed from Volvo's PC tool and the reply layout is not yet confirmed. Battery voltage is the best first check: it can be measured exactly with a multimeter and confirms frame format, byte order and voltage scale in one go.</p>
+  <div class="grid g2">
+   <div class="kpi"><div class="eyebrow">Reported voltage (index 293)</div>
+    <div class="stat"><span>Raw · big-endian / little-endian</span><strong id="vRaw" class="mono">—</strong></div>
+    <div class="stat"><span>× 0,01308 V (VODIA)</span><strong id="vA">—</strong></div>
+    <div class="stat"><span>× 0,0125 V (Yacht Devices)</span><strong id="vB">—</strong></div>
+    <div class="stat"><span>Engine speed (index 256) BE / LE</span><strong id="vRpm">—</strong></div>
+   </div>
+   <div><div class="field"><label for="vMeter">Multimeter on the battery (V)</label><input class="input" id="vMeter" type="number" inputmode="decimal" step="0.01" placeholder="e.g. 12.62"></div>
+    <button class="btn" id="vCheck">Compare and choose</button><p class="mini" id="vResult" style="margin-top:10px"></p></div>
+  </div>
  </div>
  <div class="card" style="margin-top:14px" id="testCard">
   <div class="split"><div><div class="eyebrow">Passive capture · guided</div><h2 style="margin:6px 0 0">Engine Test &amp; Calibration</h2></div><span class="chip" id="testChip">Ready</span></div>
   <p style="margin:10px 0 14px">Record raw data while you run the engine at a few steady RPM levels. With reference readings from your own instruments, the real fuel scaling can be identified later.</p>
-  <div class="notice" style="margin-bottom:14px">Only run engines with the vessel safely secured. Keep jumpers SJ1/SJ2 open and confirm both isolated 5 V supplies first.</div>
+  <div class="notice" style="margin-bottom:14px">Only run engines with the vessel safely secured. Confirm both isolated 5 V supplies first. For KAD engines, start polling above before recording: the requests and answers are both saved in the test file.</div>
   <div class="flow">
    <div class="flowstep" id="fs1"><div><b>Choose connector and start</b><div class="row" style="margin-top:9px"><select class="input" id="tCh" style="max-width:220px"><option value="0">Both connectors</option><option value="1">J7 · Channel 1</option><option value="2">J6 · Channel 2</option></select><button class="btn primary" id="tStart">Start recording</button></div><div class="mini" style="margin-top:6px" id="tNeedSD"></div></div></div>
    <div class="flowstep" id="fs2"><div><b>Mark each steady stage</b><div class="mini">Hold each stage 30–60 s. Enter what your own gauge shows.</div>
@@ -222,6 +255,19 @@ nav.tabs{position:fixed;left:0;right:0;bottom:0;z-index:20;margin:0;padding:6px 
  </div>
  <button class="btn primary block" id="saveBtn" style="margin-top:14px">Save settings</button>
 
+ <details class="more"><summary><span>Engine data decoding <span class="mini" id="protoSum">· Volvo Penta KAD / EDC I</span></span></summary><div class="body">
+  <div class="grid g2">
+   <div class="field"><label for="pProto">Engine protocol</label><select class="input" id="pProto"><option value="kad">Volvo Penta KAD / EDC I (request/response)</option><option value="j1587">SAE J1587 broadcast</option></select></div>
+   <div class="field"><label for="pEndian">KAD value byte order</label><select class="input" id="pEndian"><option value="be">Big-endian (expected)</option><option value="le">Little-endian</option></select><span class="hint">Confirm with the voltage check on the Data page.</span></div>
+   <div class="field"><label for="pFuel">KAD fuel-rate scale (index 289)</label><select class="input" id="pFuel"><option value="128">× 1/128 L/h · M_902 / KAD300</option><option value="256">× 1/256 L/h · other program group</option></select></div>
+   <div class="field"><label for="pVolt">KAD voltage scale (index 293)</label><select class="input" id="pVolt"><option value="0">× 0,01308 V · VODIA</option><option value="1">× 0,0125 V · Yacht Devices</option></select></div>
+   <div class="field"><label for="pC0">Fuel correction J7</label><input class="input" id="pC0" type="number" inputmode="decimal" step="0.001" min="0.5" max="2"></div>
+   <div class="field"><label for="pC1">Fuel correction J6</label><input class="input" id="pC1" type="number" inputmode="decimal" step="0.001" min="0.5" max="2"></div>
+  </div>
+  <button class="btn" id="pSave">Save decoding settings</button>
+  <p class="mini" style="margin-top:10px">Fuel totals are stored as the raw ECU count, so changing the scale or a correction recalculates all recorded litres. Scalings come from the VODIA parameter list; see docs/KAD300_EDC1.md.</p>
+ </div></details>
+
  <details class="more"><summary><span>Firmware update <span class="mini">· over Wi-Fi, no cable</span></span></summary><div class="body">
   <p class="mini" style="margin-bottom:12px">Download <b>enginelink-update.bin</b> from the EngineLink download page on a phone or computer, then select it here. Settings and fuel totals are kept. Do not use the USB file (firmware.bin).</p>
   <div class="row"><input type="file" id="otaFile" accept=".bin,application/octet-stream" class="input" style="max-width:360px"><button class="btn" id="otaBtn">Install update</button></div>
@@ -233,7 +279,7 @@ nav.tabs{position:fixed;left:0;right:0;bottom:0;z-index:20;margin:0;padding:6px 
   <div class="list mono" id="term" style="padding:10px;font-size:12px;max-height:260px"></div>
   <div class="field" style="margin-top:14px"><label for="termIn">HEX message</label><input class="input mono" id="termIn" placeholder="80 BE 00 00" disabled></div>
   <div class="row"><button class="btn" disabled>Send (disabled)</button><button class="btn ghost small" id="termHelpBtn">Having trouble writing? ℹ️</button></div>
-  <div class="notice info hide" id="termHelp" style="margin-top:12px"><b>About J1708 messages</b><br>J1708/J1587 is binary, not text commands. A message is: MID (who sends) → one or more PIDs with data → checksum (all bytes sum to 0). PID 190 is engine speed (0.25 RPM/bit); PID 183 is fuel rate (1/64 US gal/h per bit). Sending is disabled until bus arbitration and electrical safety are verified; never send examples to a live engine.</div>
+  <div class="notice info hide" id="termHelp" style="margin-top:12px"><b>About J1708 messages</b><br>J1708/J1587 is binary, not text commands. A message is: MID (who sends) → one or more PIDs with data → checksum (all bytes sum to 0). PID 190 is engine speed (0.25 RPM/bit); PID 183 is fuel rate (1/64 US gal/h per bit). Volvo Penta KAD / EDC I is different: request <span class="mono">01 43 21 &lt;index hi&gt; &lt;index lo&gt; &lt;checksum&gt;</span>, answer = header + value + checksum. Free-form sending stays disabled. The only thing EngineLink can send is that KAD read request, via polling on the Data page.</div>
  </div></details>
 
  <details class="more"><summary><span>Maintenance <span class="mini">· restart, LED test, factory reset</span></span></summary><div class="body">
@@ -282,6 +328,24 @@ function pidValue(p,bytes){
  const allFF=bytes.slice(0,4).every(b=>b===255);if(allFF)return'not available';
  const v=d[2](raw);return fmt(v,d[3])+' '+d[1];
 }
+// Volvo Penta KAD / EDC I (program type M_902). Scalings from the VODIA
+// ParameterList. Request format reconstructed, reply layout not wire-verified.
+const KADP={256:['Engine speed','rpm',0.25,0],258:['Air inlet pressure','kPa',0.03125,0],259:['Coolant temperature','°C',0.25,1],260:['Fuel temperature','°C',0.25,1],261:['Boost temperature','°C',0.25,1],
+ 263:['Panel buttons / start input','bits'],264:['Gear, relays, indicators','bits'],265:['Boost pressure','kPa',0.03125,0],266:['Total engine hours (ECU)','h',0.0027778,1],267:['Active MS unit','',1,0],
+ 288:['Relative load','%',0.012207,0],289:['Fuel rate','L/h',null,2],291:['Engine speed reference','rpm',0.25,0],293:['System voltage','V',null,2],295:['Rod position','%',0.0061035,1],296:['Injection angle (alpha)','°',0.015625,1]};
+const KSIGNED={259:1,260:1,261:1,265:1,295:1,296:1},KLEN={266:3,267:1};
+const isKad=()=>!!S&&S.config.protocol==='kad';
+const kadName=i=>KADP[i]?KADP[i][0]:'Unknown index';
+function kadFactor(i){if(i===289)return 1/(S?S.config.kadFuelDiv:128);if(i===293)return S&&S.config.kadVolt?0.0125:0.01308;return KADP[i]?KADP[i][2]:null}
+function kadSign(i,v){const w=(KLEN[i]||2)*8;return KSIGNED[i]&&v>=Math.pow(2,w-1)?v-Math.pow(2,w):v}
+const GEAR={0:'Neutral',8:'Forward',16:'Reverse',24:'invalid'};
+function kadText(i,v){
+ const d=KADP[i];if(!d||!ok(v))return'';
+ if(i===264)return(GEAR[v&0x18]||'?')+' · bits 0x'+(v>>>0).toString(16).toUpperCase();
+ if(d[1]==='bits')return'0x'+(v>>>0).toString(16).toUpperCase();
+ const f=kadFactor(i);if(f===null)return'';
+ return fmt(v*f,d[3])+(d[1]?' '+d[1]:'');
+}
 const hexBytes=h=>String(h||'').split(' ').filter(x=>/^[0-9A-F]{2}$/i.test(x)).map(x=>parseInt(x,16));
 function parseFrame(bytes){
  const out=[];if(bytes.length<3)return out;
@@ -323,6 +387,7 @@ $('wNext').onclick=async()=>{
  if(wizStep===1){if(wizNet==='router'&&!$('wSSID').value.trim()){txt('wErr','Enter the router network name.');return}const p=$('wAP').value;if(p&&p.length<8){txt('wErr','The EngineLink password needs at least 8 characters.');return}}
  if(wizStep<3){wizShow(wizStep+1);return}
  const r=await post('/api/setup',{network:wizNet,ssid:$('wSSID').value.trim(),pass:$('wPass').value,apPass:$('wAP').value,port:$('wPort').value,time:$('wTime').value,can:'0'});
+ if(r)await post('/api/kad/config',{protocol:$('wProto').value},true);
  if(r){$('wizard').classList.add('hide');$('app').classList.remove('hide');started=true;settingsLoaded=false;const tp=$('wTime').value;if(tp==='auto'||tp==='phone')setTimeout(()=>syncPhone(true),900)}
 };
 function wizActivity(s){for(let c=0;c<2;c++){const f=s.channels[c].frames;if(wizRef[c]===null)wizRef[c]=f;const d=f-wizRef[c];txt('wAct'+c,f?f.toLocaleString('da-DK'):'—');txt('wActT'+c,!f?'No traffic':d>0?'Active · '+d+' new since you opened this':'Traffic seen earlier')}}
@@ -342,19 +407,23 @@ function engineCard(slot,idx){
  if(idx<0){root.innerHTML='<div class="head"><span class="name">'+engName(slot)+' engine</span><span class="chip amber">Not assigned</span></div><p class="mini">Choose which connector belongs to which engine in Settings.</p><button class="btn small" onclick="document.querySelector(\'[data-page=settings]\').click()">Assign connectors</button>';return}
  const c=S0.channels[idx],run=c.running,has=ok(c.fuel)||ok(c.rpm);
  const state=run?'<span class="chip green"><span class="dot good"></span>Running · '+dur(c.runSeconds)+'</span>':has?'<span class="chip">Stopped</span>':c.frames?'<span class="chip amber">No engine values</span>':'<span class="chip red">No data on '+c.name+'</span>';
- const rpm=ok(c.rpm)?c.rpm:null;
- let params='';const P=c.params||{};
- [110,100,168,92,102,175,247,250].forEach(p=>{const x=P[p];if(!x)return;const bytes=[];for(let i=0;i<Math.min(x.len,4);i++)bytes.push(Math.floor(x.raw/Math.pow(256,i))%256);params+='<div class="param"><span>'+esc(pidName(p))+'</span><span>'+esc(pidValue(p,bytes))+'</span></div>'});
+ const rpm=ok(c.rpm)?c.rpm:null,kadMode=isKad();
+ let params='';
+ if(kadMode){const K=c.kad||{};[259,265,258,293,288,260,261,264,266].forEach(i=>{const x=K[i];if(!x)return;params+='<div class="param"><span>'+esc(kadName(i))+'</span><span>'+esc(kadText(i,x.v))+'</span></div>'})}
+ else{const P=c.params||{};[110,100,168,92,102,175,247,250].forEach(p=>{const x=P[p];if(!x)return;const bytes=[];for(let i=0;i<Math.min(x.len,4);i++)bytes.push(Math.floor(x.raw/Math.pow(256,i))%256);params+='<div class="param"><span>'+esc(pidName(p))+'</span><span>'+esc(pidValue(p,bytes))+'</span></div>'})}
+ const corr=S0.config.fuelCorr[idx];
+ const src=kadMode?'KAD index 289 × 1/'+S0.config.kadFuelDiv+(Math.abs(corr-1)>0.0005?' × '+fmt(corr,3):''):'ECU · PID 183';
+ const none=kadMode?(c.link.polling?'Waiting for an answer':'Start polling under Data'):'No fuel rate received';
  root.innerHTML='<div class="head"><div><span class="name">'+engName(slot)+' engine</span> <span class="chip">'+c.name+'</span></div>'+state+'</div>'+
- '<div class="grid g2"><div><div class="eyebrow">Fuel flow</div><div class="num">'+unit(c.fuel,1,'L/h')+'</div><div class="mini">'+(ok(c.fuel)?'ECU · PID 183 · '+ago(c.fuelAge):c.fuelSamples?'Last value '+ago(c.fuelAge):'No fuel rate received')+'</div></div>'+
+ '<div class="grid g2"><div><div class="eyebrow">Fuel flow</div><div class="num">'+unit(c.fuel,1,'L/h')+'</div><div class="mini">'+(ok(c.fuel)?src+' · '+ago(c.fuelAge):c.fuelSamples?'Last value '+ago(c.fuelAge):none)+'</div></div>'+
  '<div><div class="eyebrow">Engine speed</div><div class="num">'+(rpm===null?'—':fmt(rpm,0))+'<span class="u">RPM</span></div><div class="bar"><div style="width:'+(rpm===null?0:Math.min(100,rpm/40))+'%"></div></div></div></div>'+
- (params?'<div style="margin-top:14px"><div class="split"><span class="eyebrow">Engine details</span><span class="mini">Standard J1587 · unverified</span></div>'+params+'</div>':'');
+ (params?'<div style="margin-top:14px"><div class="split"><span class="eyebrow">Engine details</span><span class="mini">'+(kadMode?'VODIA scaling · reply layout unverified':'Standard J1587 · unverified')+'</span></div>'+params+'</div>':'');
 }
 function renderFuel(){
  const f=S.fuel,a=S.channels;
  html('total',unit(f.total,1,'L/h'));
  const anyFuel=ok(a[0].fuel)||ok(a[1].fuel);
- txt('totalNote',ok(f.total)?'Sum of both engines · ECU-reported':f.portChannel<0?'Assign the engine connectors in Settings to see a total.':anyFuel?'Only one engine reports fuel rate right now.':'Waiting for fuel rate (PID 183) from the engines.');
+ txt('totalNote',ok(f.total)?'Sum of both engines · ECU-reported':f.portChannel<0?'Assign the engine connectors in Settings to see a total.':anyFuel?'Only one engine reports fuel rate right now.':isKad()?'Waiting for fuel rate (KAD index 289). KAD engines answer only when polled: see Data.':'Waiting for fuel rate (PID 183) from the engines.');
  const chip=$('fuelChip');if(ok(f.total)||anyFuel){chip.className='chip green';chip.textContent='Live ECU data'}else if(a[0].frames||a[1].frames){chip.className='chip amber';chip.textContent='Traffic, no fuel rate'}else{chip.className='chip';chip.textContent='Waiting for data'}
  html('lnm',unit(f.litersPerNm,2,'L/nm'));html('sog',unit(f.sogKnots,1,'kn'));
  engineCard(0,f.portChannel);engineCard(1,f.starboardChannel);
@@ -366,7 +435,34 @@ function renderFuel(){
  txt('life0',fmt(a[0].lifetimeLiters,1)+' L');txt('life1',fmt(a[1].lifetimeLiters,1)+' L');
  txt('lifeH',fmt(a[0].engineSeconds/3600,1)+' h / '+fmt(a[1].engineSeconds/3600,1)+' h');
  txt('bootFuel',(a[0].fuelSamples||a[1].fuelSamples)?fmt(a[0].observedLiters+a[1].observedLiters,2)+' L · '+(a[0].gaps+a[1].gaps)+' gaps':'—');
+ if(isKad())renderCal();
 }
+// ---------- KAD tank-to-tank calibration ----------
+let calBuilt=false;
+function renderCal(){
+ const a=S.channels,c=S.config,p=S.fuel.portChannel;
+ const label=i=>(p<0?'':i===p?'Port · ':'Starboard · ')+a[i].name;
+ if(!calBuilt){html('calRows',[0,1].map(i=>'<tr><td id="calN'+i+'"></td><td class="right" id="calA'+i+'"></td><td class="right" id="calB'+i+'"></td><td class="right" id="calC'+i+'"></td><td><input class="input" id="calF'+i+'" type="number" inputmode="decimal" step="0.1" min="0" placeholder="litres" style="min-width:90px"></td></tr>').join(''));calBuilt=true}
+ for(const i of [0,1]){txt('calN'+i,label(i));txt('calA'+i,fmt(a[i].trip128,1)+' L');txt('calB'+i,fmt(a[i].trip256,1)+' L');txt('calC'+i,fmt(c.fuelCorr[i],3))}
+ const corrected=Math.abs(c.fuelCorr[0]-1)>0.0005||Math.abs(c.fuelCorr[1]-1)>0.0005;
+ txt('calSum','· scale 1/'+c.kadFuelDiv+(corrected?' · corrected per engine':' · not yet confirmed'));
+}
+$('calApply').onclick=async()=>{
+ const a=S.channels,out={},notes=[];let votes128=0,votes256=0;
+ for(const i of [0,1]){const v=parseFloat($('calF'+i).value);if(!(v>0))continue;
+  const d128=Math.abs(a[i].trip128-v),d256=Math.abs(a[i].trip256-v);
+  if(a[i].trip128<=0){notes.push(a[i].name+': no fuel recorded on this trip.');continue}
+  if(d128<=d256)votes128++;else votes256++;out[i]=v}
+ const keys=Object.keys(out);if(!keys.length){txt('calResult','Enter the refilled litres for at least one tank. '+notes.join(' '));return}
+ if(votes128&&votes256){txt('calResult','The two engines point to different scales. Check the litres entered and that polling ran the whole trip.');return}
+ const div=votes256?256:128,params={fuelDiv:String(div)};
+ for(const k of keys){const i=Number(k),base=div===128?a[i].trip128:a[i].trip256,corr=out[i]/base;
+  if(corr<0.5||corr>2){notes.push(a[i].name+': correction '+fmt(corr,2)+' is outside 0.5–2. Check the numbers; not saved.');continue}
+  params['corr'+i]=corr.toFixed(4);notes.push(a[i].name+': scale 1/'+div+', correction '+fmt(corr,3)+'.')}
+ const ok2=await confirmBox('Save fuel calibration?',notes.join(' '),{yes:'Save'});if(!ok2)return;
+ const r=await post('/api/kad/config',params);if(r)txt('calResult','Saved. '+notes.join(' '));
+};
+$('calReset').onclick=async()=>{if(await confirmBox('Reset corrections?','Both engine corrections go back to 1.000. The scale stays as it is.',{yes:'Reset'}))post('/api/kad/config',{corr0:'1',corr1:'1'})};
 async function fetchHistory(force){if(page!=='fuel')return;if(!force&&Date.now()-lastHistFetch<20000)return;lastHistFetch=Date.now();const h=await getJSON('/api/history');if(h){hist=h;renderChart()}}
 function renderChart(){
  const svg=$('chart');if(!hist||!hist.count){svg.innerHTML='';txt('chartNote','Collecting data… the trend appears after a few minutes');return}
@@ -392,22 +488,76 @@ function renderTraffic(){
  const list=$('pktList'),items=snap.filter(e=>e.ch===dataCh);
  if(!items.length){list.innerHTML='<div class="mini" style="padding:14px">No messages on '+c.name+' yet. Check the cable and that the engine ignition is on.</div>';return}
  list.replaceChildren(...items.map(e=>{const d=document.createElement('div');const key=e.ms+':'+e.hex;d.className='pkt'+(key===selKey?' sel':'');
-  d.innerHTML='<span class="tag'+(e.ok?'':' bad')+'">'+(e.ok?'MID '+e.mid:'ERROR')+'</span><span class="t">'+(e.ms/1000).toFixed(2)+' s</span><span class="hex mono">'+esc(e.hex)+'</span>';
+  const tag=!e.ok?'ERROR':isKad()?(e.dir==='T'?'SENT':e.dir==='Q'?'REQUEST':e.kad>=0?'ANSWER':'RX'):'MID '+e.mid;
+  d.innerHTML='<span class="tag'+(e.ok?'':' bad')+'"'+(e.dir==='T'?' style="color:var(--amber)"':'')+'>'+tag+'</span><span class="t">'+(e.ms/1000).toFixed(2)+' s</span><span class="hex mono">'+esc(e.hex)+'</span>';
   d.onclick=()=>{selKey=key;showDetail(e);renderTraffic()};return d}));
  if(!selKey)showDetail(items[0]);
 }
 function showDetail(e){
  txt('dHex',e.hex);txt('dMid',midName(e.mid));txt('dSum',e.ok?'Valid':'Invalid · message ignored');txt('dTime',dur(e.ms/1000)+' after start-up');
  if(!e.ok){html('dPids','<p class="mini">Messages with a bad checksum are logged but never decoded.</p>');return}
+ if(isKad()){
+  const b=hexBytes(e.hex);txt('dMid','First byte 0x'+(b[0]||0).toString(16).toUpperCase().padStart(2,'0'));
+  if(e.dir==='T'||e.dir==='Q'){html('dPids','<div class="param"><span>'+(e.dir==='T'?'Read request sent by EngineLink':'Read request from another device')+'</span><span>index '+e.kad+' · '+esc(kadName(e.kad))+'</span></div>');return}
+  if(e.kad>=0){const w=KLEN[e.kad]||2,v=b.slice(b.length-1-w,b.length-1),be=v.reduce((x,y)=>x*256+y,0),le=v.reduceRight((x,y)=>x*256+y,0);
+   html('dPids','<div class="eyebrow" style="margin-bottom:6px">Answer to index '+e.kad+' · '+esc(kadName(e.kad))+'</div><div class="param"><span>Value bytes (before checksum)</span><span class="mono">'+v.map(x=>x.toString(16).toUpperCase().padStart(2,'0')).join(' ')+'</span></div><div class="param"><span>Big-endian</span><span>'+be+' → '+esc(kadText(e.kad,kadSign(e.kad,be)))+'</span></div><div class="param"><span>Little-endian</span><span>'+le+' → '+esc(kadText(e.kad,kadSign(e.kad,le)))+'</span></div>');return}
+  html('dPids','<p class="mini">Not matched to a request (no request seen within 300 ms before it).</p>');return}
  const parts=parseFrame(hexBytes(e.hex));
  html('dPids',parts.length?'<div class="eyebrow" style="margin-bottom:6px">Parameters</div>'+parts.map(p=>p.ext?'<div class="param"><span>PID '+p.pid+' · extended page</span><span>not decoded</span></div>':p.trunc?'<div class="param"><span>PID '+p.pid+'</span><span>truncated</span></div>':'<div class="param"><span>'+p.pid+' · '+esc(pidName(p.pid))+'</span><span class="mono">'+p.data.map(b=>b.toString(16).toUpperCase().padStart(2,'0')).join(' ')+(pidValue(p.pid,p.data)?' → '+esc(pidValue(p.pid,p.data)):'')+'</span></div>').join(''):'<p class="mini">No parameters.</p>');
 }
-async function fetchPids(force){if(page!=='traffic')return;if(!force&&Date.now()-lastPidFetch<5000)return;lastPidFetch=Date.now();const j=await getJSON('/api/pids');if(j){pidData=j;renderPids()}}
+async function fetchPids(force){if(page!=='traffic')return;if(!force&&Date.now()-lastPidFetch<(S&&S.channels.some(c=>c.link.polling)?2500:5000))return;lastPidFetch=Date.now();const j=await getJSON('/api/pids');if(j){pidData=j;renderPids();if(isKad())renderKad()}}
 function renderPids(){
- if(!pidData)return;const rows=pidData.pids.filter(p=>p.ch===dataCh).sort((a,b)=>a.mid-b.mid||a.pid-b.pid);
+ if(!pidData)return;
+ if(isKad()){
+  html('pidHead','<tr><th>Index</th><th>Parameter</th><th>Answer</th><th class="right">BE</th><th class="right">LE</th><th class="right wide">Count</th><th class="right wide">Age</th></tr>');
+  txt('discText','Every KAD parameter answered on this connector, with the full answer and the value decoded both ways (big- and little-endian). The chosen byte order is marked; confirm it with the voltage check below.');
+  const rows=(pidData.kad||[]).filter(k=>k.ch===dataCh).sort((a,b)=>a.index-b.index),be=S.config.kadBigEndian;
+  txt('pidCount',rows.length+' parameters');
+  html('pidRows',rows.length?rows.map(k=>'<tr><td class="mono">'+k.index+'</td><td>'+esc(kadName(k.index))+'</td><td class="mono">'+esc(k.hex)+'</td><td class="right nowrap"'+(be?' style="color:var(--teal2)"':'')+'>'+esc(kadText(k.index,kadSign(k.index,k.be))||k.be)+'</td><td class="right nowrap"'+(be?'':' style="color:var(--teal2)"')+'>'+esc(kadText(k.index,kadSign(k.index,k.le))||k.le)+'</td><td class="right wide">'+k.count.toLocaleString('da-DK')+'</td><td class="right nowrap wide">'+ago(k.age)+'</td></tr>').join(''):'<tr><td colspan="7" class="mini">No answers yet. KAD engines answer only when polled (above) or when a Volvo EDC display on the bus asks.</td></tr>');
+  return}
+ html('pidHead','<tr><th>MID</th><th>PID</th><th>Parameter</th><th>Raw</th><th class="right">Value</th><th class="right wide">Count</th><th class="right wide">Age</th></tr>');
+ txt('discText','Every parameter (PID) the ECU has sent on this connector, with its latest raw bytes. "Value" uses SAE J1587 scaling and is not yet verified for your engines.');
+ const rows=pidData.pids.filter(p=>p.ch===dataCh).sort((a,b)=>a.mid-b.mid||a.pid-b.pid);
  txt('pidCount',rows.length+' parameters');
  html('pidRows',rows.length?rows.map(p=>{const v=pidValue(p.pid,hexBytes(p.hex));return'<tr><td title="'+esc(midName(p.mid))+'">'+p.mid+'</td><td class="mono">'+p.pid+'</td><td>'+esc(pidName(p.pid))+'</td><td class="mono">'+esc(p.hex)+'</td><td class="right nowrap">'+esc(v||'—')+'</td><td class="right wide">'+p.count.toLocaleString('da-DK')+'</td><td class="right nowrap wide">'+ago(p.age)+'</td></tr>'}).join(''):'<tr><td colspan="7" class="mini">Nothing decoded on this connector yet.</td></tr>');
 }
+// ---------- KAD connection & verification ----------
+function renderKad(){
+ const c=S.channels[dataCh],k=c.link;
+ txt('kadName',c.name);
+ const chip=$('kadChip');
+ const foreignNow=k.foreign&&ok(k.foreignAge)&&k.foreignAge<10000;
+ let text;
+ if(k.polling){chip.className='chip teal';chip.textContent='Polling · '+dur(k.pollSeconds);text=k.replies?'The engine answers. Values appear on the Fuel page.':'Sending requests, no answer yet. Ignition on? Is the TX jumper for '+c.name+' closed?'}
+ else if(foreignNow){chip.className='chip green';chip.textContent='Display is polling';text='Another device (probably a Volvo EDC display) is asking the engine. EngineLink decodes those answers without sending anything.'}
+ else{chip.className='chip';chip.textContent='Listening';text=(k.stopReason?'Stopped: '+k.stopReason+'. ':'')+'KAD engines only answer when asked. A quiet connector is normal. To read values, close the TX jumper ('+(dataCh===0?'SJ1':'SJ2')+') for this connector and start polling.'}
+ txt('kadText',text);
+ txt('kReq',k.requests.toLocaleString('da-DK'));txt('kRep',k.replies.toLocaleString('da-DK'));txt('kAge',k.replyAge===null?'—':ago(k.replyAge));txt('kFor',foreignNow?'Yes':k.foreign?'Earlier':'No');
+ $('kStart').classList.toggle('hide',k.polling);$('kStop').classList.toggle('hide',!k.polling);$('kStart').disabled=!!foreignNow;
+ // voltage verification
+ const v=(pidData&&pidData.kad||[]).find(x=>x.ch===dataCh&&x.index===293),r=(pidData&&pidData.kad||[]).find(x=>x.ch===dataCh&&x.index===256);
+ const raw=v?(S.config.kadBigEndian?v.be:v.le):null;
+ txt('vRaw',v?v.be+' / '+v.le:'—');txt('vA',raw===null?'—':fmt(raw*0.01308,2)+' V');txt('vB',raw===null?'—':fmt(raw*0.0125,2)+' V');
+ txt('vRpm',r?fmt(r.be*0.25,0)+' / '+fmt(r.le*0.25,0)+' rpm':'—');
+ txt('vChip','Using '+(S.config.kadBigEndian?'big-endian':'little-endian')+' · '+(S.config.kadVolt?'0,0125 V':'0,01308 V'));
+}
+$('kStart').onclick=async()=>{
+ const c=S.channels[dataCh];
+ const yes=await confirmBox('Start polling '+c.name+'?','EngineLink will send the read request 01 43 21 <index> <checksum> on '+c.name+' about 4 times per second. Before you start: (1) the TX jumper '+(dataCh===0?'SJ1':'SJ2')+' for this connector is closed, (2) for the first test the engine is OFF with ignition ON, (3) no Volvo diagnostic tool (VODIA) is connected. Polling stops by itself after a restart or if the engine does not answer.',{word:'POLL',yes:'Start polling'});
+ if(yes)post('/api/kad/poll',{ch:String(dataCh),on:'1',confirm:'POLL'});
+};
+$('kStop').onclick=()=>post('/api/kad/poll',{ch:String(dataCh),on:'0'});
+$('vCheck').onclick=async()=>{
+ const m=parseFloat($('vMeter').value),k=(pidData&&pidData.kad||[]).find(x=>x.ch===dataCh&&x.index===293);
+ if(!(m>5&&m<35)){txt('vResult','Enter the voltage your multimeter shows on the battery.');return}
+ if(!k){txt('vResult','No voltage answer yet (index 293). Start polling first and wait a few seconds.');return}
+ const cands=[['be',0,k.be*0.01308],['be',1,k.be*0.0125],['le',0,k.le*0.01308],['le',1,k.le*0.0125]].map(x=>x.concat(Math.abs(x[2]-m)/m));
+ cands.sort((a,b)=>a[3]-b[3]);const best=cands[0];
+ if(best[3]>0.08){txt('vResult','None of the combinations is within 8 % of '+fmt(m,2)+' V (closest '+fmt(best[2],2)+' V). The reply layout may differ from the reconstruction. Download the session CSV and keep it for analysis; nothing was changed.');return}
+ const desc=(best[0]==='be'?'big-endian':'little-endian')+', '+(best[1]?'× 0,0125 V (Yacht Devices)':'× 0,01308 V (VODIA)');
+ if(await confirmBox('Use this decoding?','Best match: '+fmt(best[2],2)+' V vs. '+fmt(m,2)+' V on the meter ('+fmt(best[3]*100,1)+' % off) with '+desc+'. The second best was '+fmt(cands[1][2],2)+' V.',{yes:'Use it'})){
+  const r=await post('/api/kad/config',{endian:best[0],volt:String(best[1])});if(r)txt('vResult','Saved: '+desc+'. Check that RPM looks right too (idle ≈ 600–750 rpm on a KAD300).')}
+};
 $('pauseBtn').onclick=()=>{paused=!paused;txt('pauseBtn',paused?'Resume':'Pause');if(!paused)renderTraffic()};
 $('copyBtn').onclick=async()=>{const h=$('dHex').textContent;if(!h||h==='Select a message')return;try{await navigator.clipboard.writeText(h);toast('HEX copied')}catch(e){toast('Copying is not available here. Select the text instead.',true)}};
 function renderTest(){
@@ -445,7 +595,9 @@ function healthItems(){
  add(s.network.apStarted?'good':'bad','EngineLink Wi-Fi',s.network.apClients+' phone'+(s.network.apClients===1?'':'s')+' connected · channel '+s.network.apChannel+(s.config.defaultPassword?' · factory password':''));
  if(s.config.router)add(s.network.staConnected?'good':'warn','Router',s.network.staConnected?s.network.ssid+' · '+s.network.staIP:'Not connected to '+s.network.ssid+'. Retries while no phone is connected.');
  add(s.sd.fault?'bad':s.sd.logging?'good':s.sd.ready?'warn':'warn','SD card',s.sd.fault?s.sd.status+'. Check or replace the card, then re-read it in Settings.':s.sd.logging?'Recording · '+s.sd.rows.toLocaleString('da-DK')+' messages':s.sd.ready?'Inserted, logging stopped':'No card inserted');
- for(let c=0;c<2;c++){const x=a[c];add(!s.hardware.uartReady[c]?'bad':x.drops||x.uartFaults?'warn':x.frames?'good':'off','Connector '+x.name,!s.hardware.uartReady[c]?'Receiver failed to start':x.frames?x.frames.toLocaleString('da-DK')+' messages'+(x.invalid?' · '+x.invalid+' invalid':'')+(x.drops?' · '+x.drops+' lost':''):'No traffic yet')}
+ for(let c=0;c<2;c++){const x=a[c],k=x.link;
+  if(s.config.protocol==='kad'&&s.hardware.uartReady[c]){add(k.polling?(k.replies?'good':'warn'):x.frames?'good':'off','Connector '+x.name+' · KAD',k.polling?(k.replies?'Polling · '+k.replies.toLocaleString('da-DK')+' answers':'Polling, no answer yet'):k.foreign?'Listening to another device polling':'Listening · quiet until polled');continue}
+  add(!s.hardware.uartReady[c]?'bad':x.drops||x.uartFaults?'warn':x.frames?'good':'off','Connector '+x.name,!s.hardware.uartReady[c]?'Receiver failed to start':x.frames?x.frames.toLocaleString('da-DK')+' messages'+(x.invalid?' · '+x.invalid+' invalid':'')+(x.drops?' · '+x.drops+' lost':''):'No traffic yet')}
  add(s.timeKnown?'good':'warn','Clock',s.timeKnown?'From '+s.timeSource:'Unknown · tap "Set time from this phone"');
  if(s.config.canListen)add(s.hardware.canReady?'good':'bad','NMEA 2000',s.hardware.canReady?s.hardware.nmeaRx+' frames received':'Receiver failed to start');
  const rr=s.hardware.resetReason;add(rr===4||rr===5||rr===6||rr===7||rr===9?'warn':'good','Last restart',RESET[rr]||('Code '+rr));
@@ -475,7 +627,15 @@ async function syncPhone(auto){if(!S)return;if(!(S.config.timePref==='auto'||S.c
 // ---------- Settings ----------
 document.querySelectorAll('[data-snet]').forEach(b=>b.onclick=()=>pickNet(b.dataset.snet));
 function pickNet(n){setNet=n;document.querySelectorAll('[data-snet]').forEach(x=>x.classList.toggle('active',x.dataset.snet===n));$('sRouter').classList.toggle('hide',n!=='router')}
-function loadSettings(s){pickNet(s.config.router?'router':'ap');$('sSSID').value=s.network.ssid||'';$('sPort').value=String(s.config.portChannel);$('sTime').value=s.config.timePref;$('sCAN').checked=s.config.canListen;$('sCh').value=String(s.config.apChannel);txt('sAPHint',s.config.defaultPassword?'Still the factory password 12345678. Changing it is a good idea.':'A custom password is set.')}
+function loadSettings(s){pickNet(s.config.router?'router':'ap');$('sSSID').value=s.network.ssid||'';$('sPort').value=String(s.config.portChannel);$('sTime').value=s.config.timePref;$('sCAN').checked=s.config.canListen;$('sCh').value=String(s.config.apChannel);txt('sAPHint',s.config.defaultPassword?'Still the factory password 12345678. Changing it is a good idea.':'A custom password is set.');
+ const c=s.config;$('pProto').value=c.protocol;$('pEndian').value=c.kadBigEndian?'be':'le';$('pFuel').value=String(c.kadFuelDiv);$('pVolt').value=String(c.kadVolt);$('pC0').value=c.fuelCorr[0].toFixed(3);$('pC1').value=c.fuelCorr[1].toFixed(3);
+ txt('protoSum','· '+(c.protocol==='kad'?'Volvo Penta KAD / EDC I':'SAE J1587'))}
+$('pSave').onclick=async()=>{
+ const c0=parseFloat($('pC0').value),c1=parseFloat($('pC1').value);
+ if(!(c0>=0.5&&c0<=2&&c1>=0.5&&c1<=2)){toast('Corrections must be between 0.5 and 2.0.',true);return}
+ const r=await post('/api/kad/config',{protocol:$('pProto').value,endian:$('pEndian').value,fuelDiv:$('pFuel').value,volt:$('pVolt').value,corr0:String(c0),corr1:String(c1)});
+ if(r)settingsLoaded=false;
+};
 $('saveBtn').onclick=async()=>{
  const ap=$('sAP').value;if(ap&&ap.length<8){toast('The EngineLink password needs at least 8 characters.',true);return}
  if(setNet==='router'&&!$('sSSID').value.trim()){toast('Enter the router network name.',true);return}
@@ -483,7 +643,7 @@ $('saveBtn').onclick=async()=>{
  if(r){$('sAP').value='';$('sPass').value='';settingsLoaded=false}
 };
 $('termHelpBtn').onclick=()=>$('termHelp').classList.toggle('hide');
-function renderTerminal(){const items=snap.filter(e=>e.ch===termCh).slice().reverse();html('term',items.length?items.map(e=>'<div><span style="color:'+(e.ok?'#46cabc':'#f39a96')+'">'+(e.ok?'RX ':'ERR')+'</span> <span class="subtle">'+(e.ms/1000).toFixed(2).padStart(9,' ')+'</span>  '+esc(e.hex)+'</div>').join(''):'<span class="mini">Waiting for J1708 messages…</span>');const t=$('term');t.scrollTop=t.scrollHeight}
+function renderTerminal(){const items=snap.filter(e=>e.ch===termCh).slice().reverse();html('term',items.length?items.map(e=>'<div><span style="color:'+(!e.ok?'#f39a96':e.dir==='T'?'#f0c06e':'#46cabc')+'">'+(!e.ok?'ERR':e.dir==='T'?'TX ':'RX ')+'</span> <span class="subtle">'+(e.ms/1000).toFixed(2).padStart(9,' ')+'</span>  '+esc(e.hex)+'</div>').join(''):'<span class="mini">Waiting for J1708 messages…</span>');const t=$('term');t.scrollTop=t.scrollHeight}
 $('rebootBtn').onclick=async()=>{if(await confirmBox('Restart EngineLink?','Logging pauses for about 20 seconds while it restarts.',{yes:'Restart'}))post('/api/reboot',{})};
 $('remountBtn').onclick=()=>post('/api/sd/remount',{});
 $('factoryBtn').onclick=async()=>{if(await confirmBox('Factory reset','This erases all settings, the trip counter and lifetime fuel totals. Wi-Fi returns to EngineLink / 12345678.',{word:'ERASE',yes:'Erase everything',danger:true})){post('/api/factory-reset',{confirm:'ERASE'})}};
@@ -516,13 +676,15 @@ function topAlert(){
 function renderAlert(){const a=topAlert(),root=$('alert');if(!a){root.classList.add('hide');return}root.className='notice alert '+a[0];txt('alertText',a[1]);const b=$('alertAction');b.classList.toggle('hide',!a[2]);if(a[2]){b.textContent=a[2];b.onclick=a[3]}}
 
 // ---------- Render & poll ----------
-function renderPage(){if(page==='fuel')renderFuel();else if(page==='traffic'){renderTraffic();renderTest();renderPids()}else if(page==='history')renderHistory();else if(page==='device')renderDevice();else if(page==='settings')renderTerminal()}
+function renderPage(){if(page==='fuel')renderFuel();else if(page==='traffic'){renderTraffic();renderTest();renderPids();if(isKad())renderKad()}else if(page==='history')renderHistory();else if(page==='device')renderDevice();else if(page==='settings')renderTerminal()}
 function render(s){
  S=s;
  if(!started){$('wizard').classList.toggle('hide',s.setup);$('app').classList.toggle('hide',!s.setup);started=s.setup}
  if(!s.setup)wizActivity(s);
  if(s.setup&&!settingsLoaded){loadSettings(s);settingsLoaded=true}
  if(!paused)snap=s.recent||[];
+ const kadMode=s.config.protocol==='kad';
+ document.querySelectorAll('.kadonly').forEach(e=>e.classList.toggle('hide',!kadMode));
  rateUpdate();renderAlert();renderPage();
  txt('footVer','EngineLink '+s.version);
  txt('clockPill',s.timeKnown?new Date(s.utc*1000).toLocaleTimeString('da-DK',{hour:'2-digit',minute:'2-digit'}):'Time unknown');

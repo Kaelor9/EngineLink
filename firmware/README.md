@@ -2,7 +2,7 @@
 
 The application firmware is in [`EngineLink/`](EngineLink/):
 
-- `EngineLink.ino`: device logic. J1708 receive tasks, J1587 parsing, fuel integration, totals, engine-run segments, SD logging, NMEA 2000 listen-only, Wi-Fi/HTTP API, OTA update, status LED.
+- `EngineLink.ino`: device logic. J1708 receive tasks, Volvo Penta KAD / EDC I decoding and opt-in polling (see [docs/KAD300_EDC1.md](../docs/KAD300_EDC1.md)), J1587 parsing, fuel integration, totals, engine-run segments, SD logging, NMEA 2000 listen-only, Wi-Fi/HTTP API, OTA update, status LED.
 - `ui.h`: the complete web app (HTML/CSS/JS) served from flash. No CDN, works offline.
 
 Build settings: ESP32S3 Dev Module, 8 MB flash, `default_8MB` partitions (two OTA slots), OPI PSRAM, USB CDC on boot. Library: **Adafruit NeoPixel**.
@@ -13,7 +13,9 @@ Build settings: ESP32S3 Dev Module, 8 MB flash, `default_8MB` partitions (two OT
 |---|---|---|
 | GET | `/` | Web app |
 | GET | `/api/state` | Live status, engines, totals, segments, recent frames |
-| GET | `/api/pids` | Bus discovery: every page-0 PID seen per channel with latest raw bytes |
+| GET | `/api/pids` | Bus discovery: J1587 PIDs and KAD answers (`kad`: index, reply bytes, BE/LE value) per channel |
+| POST | `/api/kad/poll` (`ch`, `on`, `confirm=POLL`) | Start/stop KAD read polling on one connector (never persisted) |
+| POST | `/api/kad/config` | `protocol` (kad/j1587), `endian` (be/le), `fuelDiv` (128/256), `volt` (0/1), `corr0`/`corr1` |
 | GET | `/api/history` | One-hour trend (10 s samples) |
 | POST | `/api/setup`, `/api/settings` | Configuration |
 | POST | `/api/phone-time` | Set clock from browser |

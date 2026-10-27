@@ -1,12 +1,14 @@
 # EngineLink — Passive engine calibration and J1708 capture
 
-Applies to **EngineLink 0.3.0-alpha**. The test is designed to collect *actual* J1708/J1587 data and independent reference observations. It does not send commands or operate an engine.
+Applies to **EngineLink 0.4.0-alpha**. The test collects *actual* J1708 data and independent reference observations. It never commands or operates an engine.
+
+> **Volvo Penta KAD300 / EDC I:** these engines answer only when asked. Follow the step-by-step procedure in [KAD300_EDC1.md](KAD300_EDC1.md#test-procedure-on-the-boat) first: listen, voltage check, RPM check. Then start polling on the Data page *before* you start an engine test recording, so the requests and answers end up in the test CSV.
 
 ## Safety prerequisites
 
 Before connecting a real engine bus, confirm both isolated 5 V supply rails are within their expected range **relative to each rail's own isolated ground**. One earlier diagnostic reading of approximately **0.98 V** on an isolated domain has not been documented as resolved.
 
-Open the **SJ1 and SJ2** J1708 transmit jumpers. EngineLink has no J1708 TX implementation, but physical jumpers should still be opened. Do not connect anything to the NMEA 2000 bus until its isolated transceiver and bus behavior are verified.
+Keep the **SJ1 and SJ2** J1708 transmit jumpers open for pure listening. For KAD polling, close only the jumper of the connector you poll (SJ1 = J7, SJ2 = J6). Firmware attaches a TX pin only while polling runs on that connector, and polling is off after every restart. Do not connect anything to the NMEA 2000 bus until its isolated transceiver and bus behavior are verified.
 
 Run engines only under the manufacturer's operating procedures, with the vessel safely secured or underway in suitable conditions. Do not attempt to alter engine controls from EngineLink.
 

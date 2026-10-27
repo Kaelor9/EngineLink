@@ -20,7 +20,7 @@ The Pages workflow (`.github/workflows/pages.yml`) compiles `firmware/EngineLink
 ```json
 {
   "name": "EngineLink App (alpha)",
-  "version": "0.3.0-alpha",
+  "version": "0.4.0-alpha",
   "new_install_prompt_erase": true,
   "builds": [{"chipFamily":"ESP32-S3","parts":[{"path":"firmware.bin","offset":0}]}]
 }
