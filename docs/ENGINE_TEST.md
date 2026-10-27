@@ -1,24 +1,24 @@
 # EngineLink — Passive engine calibration and J1708 capture
 
-Applies to **EngineLink 0.2.1-alpha**. The test is designed to collect *actual* J1708/J1587 data and independent reference observations. It does not send commands or operate an engine.
+Applies to **EngineLink 0.3.0-alpha**. The test is designed to collect *actual* J1708/J1587 data and independent reference observations. It does not send commands or operate an engine.
 
 ## Safety prerequisites
 
 Before connecting a real engine bus, confirm both isolated 5 V supply rails are within their expected range **relative to each rail's own isolated ground**. One earlier diagnostic reading of approximately **0.98 V** on an isolated domain has not been documented as resolved.
 
-Open the **SJ1 and SJ2** J1708 transmit jumpers. EngineLink 0.2 has no J1708 TX implementation, but physical jumpers should still be opened. Do not connect anything to the NMEA 2000 bus until its isolated transceiver and bus behavior are verified.
+Open the **SJ1 and SJ2** J1708 transmit jumpers. EngineLink has no J1708 TX implementation, but physical jumpers should still be opened. Do not connect anything to the NMEA 2000 bus until its isolated transceiver and bus behavior are verified.
 
 Run engines only under the manufacturer's operating procedures, with the vessel safely secured or underway in suitable conditions. Do not attempt to alter engine controls from EngineLink.
 
 ## Capture workflow
 
-1. Insert a microSD card; confirm **Device → SD status** indicates that it is mounted.
-2. In **Traffic → Engine Test & Calibration**, select **Both channels**, **J7**, or **J6**.
+1. Insert a microSD card; confirm the **SD card** tile on the **Device** page shows it is recording or inserted.
+2. Open **Data → Engine Test & Calibration** (step 1 of the guided flow) and select **Both connectors**, **J7**, or **J6**. Before testing, check the **Bus discovery** table: it lists every PID the ECU sends, which tells you whether PID 183 (fuel rate) is present at all.
 3. Select **Start recording**. The unit pauses its ordinary CSV stream while the test capture uses the SD card, avoiding two simultaneous high-rate writers.
-4. With the engine at idle, let the unit record for 30–60 seconds. The first automatic marker is **unlabelled**, with no reference values. Use **Mark current stage** to label stable idle after you have an actual reference. The test may be started before the engine starts if useful.
-5. For the next reference point, choose **Low / Medium / High RPM / Cruise / Custom**, enter an independent *observed* RPM and optional fuel-flow reference (L/h), then select **Mark current stage**. Hold stable for 30–60 seconds.
+4. With the engine at idle, let the unit record for 30–60 seconds. The first automatic marker is **unlabelled**, with no reference values. Use **Mark stage** to label stable idle after you have an actual reference. The test may be started before the engine starts if useful.
+5. For the next reference point, choose **Low / Medium / High RPM / Cruise / Custom**, enter an independent *observed* RPM and optional fuel-flow reference (L/h), then select **Mark stage**. The stage timer shows how long the current stage has been held. Hold stable for 30–60 seconds.
 6. Repeat for as many reference points as needed. Stage markers never change engine RPM; they simply label incoming data.
-7. Select **Stop & save**, then **Download test CSV**. Safari should offer the CSV through its download/File handling; desktop browsers download it directly.
+7. Select **Stop & save**, then **Download CSV**. Safari should offer the CSV through its download/File handling; desktop browsers download it directly.
 8. Retain the original file, do not overwrite or edit it before analysis. The last test file name persists in preferences, allowing download after a reboot if the SD card remains inserted.
 
 A Wi-Fi outage does **not** stop on-device capture, but a power failure may lose unflushed data. Test rows are flushed periodically; stage markers are flushed immediately. The SD card must not be removed during recording.
@@ -62,7 +62,7 @@ The previous free color picker has been removed; the LED is controlled by actual
 | J1708 UART queue overflow | Red double flash |
 | Motor test recording | Cyan pulse |
 
-The **Test all LED signals** button shows a 16-second diagnostic sequence, then returns to actual system indication. A J1708 overflow indication automatically clears after 30 seconds without a new overflow; historical counters remain visible.
+The **Show all LED signals** button (Device page) shows a 16-second diagnostic sequence, then returns to actual system indication. A J1708 overflow indication automatically clears after 30 seconds without a new overflow; historical counters remain visible.
 
 ## Wi-Fi troubleshooting
 

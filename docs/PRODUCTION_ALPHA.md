@@ -1,6 +1,21 @@
-# EngineLink application v0.2.1-alpha
+# EngineLink application v0.3.0-alpha
 
 This is a **working application foundation**, not a validated production release. The former Lab firmware is retained under \`experiments/\`. The application is in \`firmware/EngineLink/\`.
+
+## Changes in 0.3.0-alpha
+
+- **Safari stability:** the stock ESP32 WebServer waits up to 5 s on a TCP connection that never sends a request, and serves nobody else in the meantime. Safari opens such speculative connections, which is a likely cause of "network connection was lost". EngineLink now drops idle sockets after 600 ms (`EngineLinkWebServer`).
+- **Wi-Fi firmware update** (Settings → Firmware update) using the `enginelink-update.bin` application image published on the download page. The image is checked for the ESP32 app descriptor; the merged USB image is rejected. Files and totals are closed/saved first.
+- **Persistent totals** per physical channel in NVS: trip fuel, lifetime fuel, engine hours and trip engine time. Counted only from valid ECU samples ≤5 s apart. Saved at most every 5 minutes, at the end of each engine run and before deliberate restarts, so up to 5 minutes can be lost on sudden power loss.
+- **Engine-run segments:** fresh RPM ≥300 starts a run; it ends 10 s after RPM stops or goes stale. Runs are listed in History and appended to `SEGMENTS.CSV`. Runs are never merged into trips.
+- **Bus discovery:** every page-0 J1587 PID seen per channel/MID with its latest raw bytes and count (`/api/pids`). The UI shows standard J1587 values labelled *unverified*.
+- **Engine details** on the Fuel page (coolant, oil pressure, battery, load, boost, oil temperature, ECU engine hours and total fuel) when the ECU sends them, with standard J1587 scaling labelled *unverified*.
+- **One-hour trend** of fuel flow and RPM (10 s samples).
+- **mDNS:** `http://enginelink.local`. **Selectable Wi-Fi channel** (1/6/11).
+- **Maintenance:** restart, re-read SD card, factory reset (typed confirmation).
+- **New UI:** bottom tab bar on phones, health overview with plain-language explanations, guided engine test, decoded message details, prioritized alert bar with one-tap actions, confirmation dialogs.
+- `ESP.getSketchSize()` (which verifies the whole image) is cached at boot instead of running on every status poll.
+- Version defined once (`EL_VERSION`); the installer, manifest and artifacts read it automatically.
 
 ## Changes in 0.2.1-alpha
 

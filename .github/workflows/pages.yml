@@ -1,4 +1,4 @@
-name: Build EngineLink 0.2.1 alpha and publish downloads
+name: Build EngineLink and publish downloads
 
 on:
   push:
@@ -49,26 +49,43 @@ jobs:
             --export-binaries \
             firmware/EngineLink
 
-      - name: Stage ESP32-S3 merged binary and manifest
+      - name: Stage USB image, Wi-Fi update image and manifest
+        id: stage
         shell: bash
         run: |
           set -euo pipefail
+          # The firmware source is the single source of truth for the version.
+          VERSION="$(sed -n 's/^#define EL_VERSION "\(.*\)"/\1/p' firmware/EngineLink/EngineLink.ino)"
+          test -n "$VERSION"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           MERGED_FILE="$(find build -maxdepth 1 -name '*.merged.bin' -type f | head -n 1)"
-          test -n "$MERGED_FILE"
+          APP_FILE="build/EngineLink.ino.bin"
           test -s "$MERGED_FILE"
+          test -s "$APP_FILE"
           cp "$MERGED_FILE" site/firmware.bin
-          python3 - <<'PY'
-          import json, pathlib
-          p=pathlib.Path("site/firmware.bin")
-          assert 100_000 < p.stat().st_size <= 8*1024*1024, p.stat().st_size
+          cp "$APP_FILE" site/enginelink-update.bin
+          VERSION="$VERSION" python3 - <<'PY'
+          import json, os, pathlib, hashlib
+          version=os.environ["VERSION"]
+          usb=pathlib.Path("site/firmware.bin"); ota=pathlib.Path("site/enginelink-update.bin")
+          assert 100_000 < usb.stat().st_size <= 8*1024*1024, usb.stat().st_size
+          assert 100_000 < ota.stat().st_size <= 3*1024*1024, ota.stat().st_size
+          data=ota.read_bytes()
+          assert data[0]==0xE9 and data[0x20:0x24]==bytes([0x32,0x54,0xCD,0xAB]), "update image lacks app descriptor"
           manifest={
             "name":"EngineLink App (alpha)",
-            "version":"0.2.1-alpha",
+            "version":version,
             "new_install_prompt_erase":True,
             "builds":[{"chipFamily":"ESP32-S3","parts":[{"path":"firmware.bin","offset":0}]}]
           }
           pathlib.Path("site/manifest.json").write_text(json.dumps(manifest,indent=2)+"\n")
-          print("Staged EngineLink alpha ESP32-S3 image:",p.stat().st_size,"bytes")
+          info={"version":version,"usbBytes":usb.stat().st_size,"updateBytes":ota.stat().st_size,
+                "updateSha256":hashlib.sha256(data).hexdigest()}
+          pathlib.Path("site/release.json").write_text(json.dumps(info,indent=2)+"\n")
+          # Cache-bust page assets so browsers never mix old scripts with a new manifest.
+          idx=pathlib.Path("site/index.html")
+          idx.write_text(idx.read_text().replace("__VERSION__",version))
+          print("Staged EngineLink",version,"USB",usb.stat().st_size,"update",ota.stat().st_size)
           PY
 
       - name: Configure GitHub Pages
@@ -79,13 +96,15 @@ jobs:
         with:
           path: site
 
-      - name: Archive compiled EngineLink alpha binary
+      - name: Archive compiled EngineLink binaries
         uses: actions/upload-artifact@v4
         with:
-          name: EngineLink-App-v0.2.1-alpha-ESP32S3
+          name: EngineLink-App-v${{ steps.stage.outputs.version }}-ESP32S3
           path: |
             site/firmware.bin
+            site/enginelink-update.bin
             site/manifest.json
+            site/release.json
           if-no-files-found: error
 
   deploy:
