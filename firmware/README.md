@@ -3,7 +3,13 @@
 The application firmware is in [`EngineLink/`](EngineLink/):
 
 - `EngineLink.ino`: device logic. J1708 receive tasks, Volvo Penta KAD / EDC I decoding and opt-in polling (see [docs/KAD300_EDC1.md](../docs/KAD300_EDC1.md)), J1587 parsing, fuel integration, totals, engine-run segments, SD logging, NMEA 2000 listen-only, Wi-Fi/HTTP API, OTA update, status LED.
-- `ui.h`: the complete web app (HTML/CSS/JS) served from flash. No CDN, works offline.
+- `ui.h`: the phone app, gzip-compressed and served from flash. **Generated**: edit [`ui/app.html`](ui/app.html) and run `python3 tools/build_ui.py` (CI fails if they differ). No CDN, works offline.
+- `icons.h`: the Engine Link app icon (SVG and PNG for the home screen).
+- `rollback.cpp`: turns on the bootloader rollback check for Wi-Fi updates.
+
+Data on the board: settings and lifetime totals in NVS; trips, the fuel log, engine health, diagnostics results and app preferences in LittleFS on the `spiffs` partition (written to a temporary file and renamed, so a power cut never leaves half a file); raw J1708 logs on the SD card, cleaned up after the number of days set in Settings.
+
+Wi-Fi: the EngineLink access point is always on with power saving off, full transmit power and a 10-minute timeout for sleeping phones. With a boat router, the access point uses the router's channel and reconnects are aimed at that channel and router, with a backoff from 15 s to 5 min; a full channel scan only runs when no phone is connected. A watchdog restarts the access point if it stops.
 
 Build settings: ESP32S3 Dev Module, 8 MB flash, `default_8MB` partitions (two OTA slots), OPI PSRAM, USB CDC on boot. Library: **Adafruit NeoPixel**.
 
@@ -11,7 +17,7 @@ Build settings: ESP32S3 Dev Module, 8 MB flash, `default_8MB` partitions (two OT
 
 | Method | Path | Purpose |
 |---|---|---|
-| GET | `/` | Web app |
+| GET | `/` | Phone app (gzip, ETag) · `/manifest.webmanifest`, `/icon.svg`, `/apple-touch-icon.png`, `/icon-192.png`, `/icon-512.png` |
 | GET | `/api/state` | Live status, engines, totals, segments, recent frames |
 | GET | `/api/pids` | Bus discovery: J1587 PIDs and KAD answers (`kad`: index, reply bytes, BE/LE value) per channel |
 | POST | `/api/kad/poll` (`ch`, `on`, `confirm=POLL`) | Start/stop KAD read polling on one connector (never persisted) |
@@ -24,7 +30,18 @@ Build settings: ESP32S3 Dev Module, 8 MB flash, `default_8MB` partitions (two OT
 | GET | `/api/segments.csv` | Engine-run log |
 | POST | `/api/trip/reset` | Reset trip counter |
 | POST | `/api/update` | Wi-Fi firmware update (multipart, app image only) |
-| POST | `/api/reboot`, `/api/factory-reset` (`confirm=ERASE`) | Maintenance |
+| POST | `/api/reboot`, `/api/factory-reset` (`confirm=ERASE`, `keep=1` keeps trips and the fuel log) | Maintenance |
 | POST | `/api/led/test` | 16 s LED demonstration |
+| GET | `/api/live` | Compact live data for the app (polled every 0.5 s) |
+| GET | `/api/trips` · POST `/api/trip/note`, `/combine`, `/split` | Trip list and editing |
+| GET | `/api/fuel` · POST `/api/fuel/add`, `/delete` | Fuel log, tank estimate, fine-tuning |
+| GET | `/api/economy` · POST `/api/season/reset` | RPM/speed statistics, zones, health |
+| GET/POST | `/api/prefs` | App preferences shared by all phones |
+| POST | `/api/cfg` | Tank, price, trip end, raw log days, NTP, port, scaling. `autoPoll=1` needs `confirm=POLL` |
+| POST | `/api/wifi/ap`, `/connect`, `/forget` · GET `/api/wifi/scan` | EngineLink network and boat router |
+| GET | `/api/diag` · POST `/api/diag/test` | Diagnostics and 30 s connection test |
+| GET | `/api/sd/info` · POST `/api/sd/wipe` (`confirm=WIPE`) | SD card |
+| GET | `/api/export/trips.csv`, `/api/export/raw.csv`, `/api/backup` | Downloads |
+| POST | `/api/fw/check`, `/api/fw/install` · GET `/api/fw/status` | Firmware from GitHub Releases |
 
 There is no authentication yet beyond the Wi-Fi password. The Bench Lab sketches are in [`../experiments`](../experiments) and are not the application.

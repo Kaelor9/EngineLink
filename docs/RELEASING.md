@@ -20,7 +20,7 @@ The Pages workflow (`.github/workflows/pages.yml`) compiles `firmware/EngineLink
 ```json
 {
   "name": "EngineLink App (alpha)",
-  "version": "0.4.0-alpha",
+  "version": "0.5.0",
   "new_install_prompt_erase": true,
   "builds": [{"chipFamily":"ESP32-S3","parts":[{"path":"firmware.bin","offset":0}]}]
 }
@@ -28,11 +28,23 @@ The Pages workflow (`.github/workflows/pages.yml`) compiles `firmware/EngineLink
 
 The version is defined **once**, as `EL_VERSION` in `firmware/EngineLink/EngineLink.ino`. The Pages workflow reads it from there to write `manifest.json` and `release.json`, and to cache-bust `index.html` (`__VERSION__`). `site/app.js` shows whatever version the manifest contains. Only the README badge and the docs mention the version by hand.
 
-The workflow also publishes **`enginelink-update.bin`**, the application-only image for Wi-Fi updates (Settings → Firmware update). It is checked for the ESP32 app descriptor before publishing. Never upload `firmware.bin` (the merged USB image) as a Wi-Fi update; the device rejects it.
+The workflow also publishes **`enginelink-update.bin`**, the application-only image for Wi-Fi updates. It is checked for the ESP32 app descriptor before publishing. Never upload `firmware.bin` (the merged USB image) as a Wi-Fi update; the device rejects it.
+
+### Updates from the app (0.5.0 and later)
+
+When the workflow runs for a version that has no GitHub Release yet, it creates release `v<EL_VERSION>` with `enginelink-update.bin` and `firmware.bin` attached. A version with a hyphen (for example `0.5.1-beta`) is marked as a pre-release and only shows under **Test versions** in the app. Release notes are taken from `docs/releases/v<EL_VERSION>.md` when that file exists. An existing release is never replaced: bump `EL_VERSION` to publish new firmware.
+
+After that, the workflow writes `releases.json` to the Pages site from all releases that have `enginelink-update.bin`, newest first (at most 15):
+
+```json
+{"releases":[{"v":"0.5.0","date":"2026-10-28","pre":false,"notes":"…","url":"https://github.com/Kaelor9/EngineLink/releases/download/v0.5.0/enginelink-update.bin","size":1471387}]}
+```
+
+The board fetches this list over its router connection (Settings → Firmware → Check for updates). It only installs URLs under `https://github.com/Kaelor9/EngineLink/releases/download/`, verifies TLS with the built-in certificate bundle and writes the image to the inactive OTA slot. The new firmware must stay healthy for 60 seconds before it marks itself valid; if it crashes or is reset before then, the bootloader rolls back to the previous version. Uploading a `.bin` file from the phone (Settings → Firmware → Install from a file) still works without a router.
 
 The website checks that its manifest and binary exist before it displays the flashing option, and requires explicit acknowledgment of the safety warning. Successful compilation alone does **not** establish suitability for a real engine network.
 
-Create a GitHub Release with version, compatible hardware revisions, flashing notes, change log, merged binary, checksum and any settings/data migration information.
+Before bumping the version, write `docs/releases/v<version>.md` with compatible hardware revisions, flashing notes, the change log and any settings/data migration information. The workflow attaches both binaries; `release.json` on Pages carries the update image checksum.
 
 ## GitHub Pages
 

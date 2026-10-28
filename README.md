@@ -13,7 +13,7 @@
   <img src="https://img.shields.io/badge/Engines-2%C3%97%20J1708%20isolated-success" alt="2 × isolated J1708">
   <img src="https://img.shields.io/badge/Volvo%20Penta-KAD300%20%2F%20EDC%20I-0b5394" alt="Volvo Penta KAD300 / EDC I">
   <img src="https://img.shields.io/badge/NMEA%202000-listen--only-informational" alt="NMEA 2000 listen-only">
-  <img src="https://img.shields.io/badge/Firmware-0.4.0--alpha-orange" alt="Firmware 0.4.0-alpha">
+  <img src="https://img.shields.io/badge/Firmware-0.5.0-orange" alt="Firmware 0.5.0">
 </p>
 
 <p align="center">
@@ -50,18 +50,20 @@ EngineLink combines both on one board:
 
 ## Key Features
 
+- 📱 **Phone app "Engine Link":** Trip, Economy, Tank, History and Engines, add it to the home screen. Light, dark and night themes, metric or imperial, any currency
 - ⛽ **Live fuel flow:** per engine and combined L/h (KAD index 289 or J1587 PID 183)
+- 🛥 **Automatic trips** with notes (people, sea, wind), combine/split and CSV export
+- 🛢 **Fuel log and tank:** fuel aboard, range at the current speed, and a fuel factor that fine-tunes itself on every full fill-up
+- 📊 **Economy:** best cruising speed, trip planner, season statistics per RPM band, engine health trend
 - 🔧 **Volvo Penta KAD / EDC I:** VODIA scaling, passive decoding of an EDC display, or opt-in read-only polling
 - ⚖️ **Calibration tools:** voltage check against a multimeter, tank-to-tank fuel factor and per-engine correction
 - 🧭 **Fuel economy:** L/nm when NMEA 2000 GPS speed is available
-- 📈 **One-hour trend** of fuel flow and RPM
-- 🧾 **Trip and lifetime totals** with engine hours that survive restarts and recalculate after calibration
-- ⏱ **Automatic engine-run log:** no start/stop buttons, runs are never merged
+- 🧾 **Lifetime totals** with engine hours that survive restarts and recalculate after calibration
 - 🔎 **Bus discovery:** every parameter your ECUs actually answer or send, with raw bytes
 - 🧪 **Guided engine test:** record steady RPM stages with your own reference readings, export CSV
-- 📶 **Offline first:** EngineLink Wi-Fi at `192.168.4.1` / `enginelink.local`, optional router
-- 🔄 **Wi-Fi firmware updates** from the device's own Settings page
-- 🩺 **Health page** that explains in plain words what works and what needs attention
+- 📶 **Steady Wi-Fi, offline first:** EngineLink Wi-Fi at `192.168.4.1` / `enginelink.local`, optional router. Power saving off, one fixed channel, sleeping phones kept, access point watchdog
+- 🔄 **Firmware updates from GitHub** over the boat router, with automatic rollback, or from a file
+- 🩺 **Diagnostics** with a setup check, connection tests and calibration
 
 ---
 
@@ -102,11 +104,14 @@ The firmware is written for the ESP32-S3 with the Arduino framework. The complet
 
 | Page | What it shows |
 |------|---------------|
-| **Fuel** | Total and per-engine L/h, RPM, L/nm, engine details, one-hour trend, trip and lifetime totals, fuel calibration |
-| **Data** | KAD engine connection and polling, live messages with decoding, discovery table, voltage check, guided engine test |
-| **History** | Engine runs, raw data log status and CSV downloads |
-| **Device** | Health overview, status LED, network and time, technical counters |
-| **Settings** | Wi-Fi, engine mapping, time source, engine protocol and scaling, NMEA 2000, firmware update, maintenance |
+| **Trip** | Fuel this trip, burn now against your average, cost, L/nm and range |
+| **Economy** | Best cruising speed, trip planner, season statistics, insights |
+| **Tank** | Fuel aboard, fuel log, how the estimate is made |
+| **History** | All trips with notes, combine/split, CSV export |
+| **Engines** | Every value per engine, engine sync, health trend, service |
+| **Settings** | Units, currency, EngineLink Wi-Fi and boat router, firmware, diagnostics, SD card, backup and reset |
+
+The app source is [`firmware/ui/app.html`](firmware/ui/app.html); `tools/build_ui.py` packs it gzip-compressed into `firmware/EngineLink/ui.h`.
 
 ---
 
@@ -115,16 +120,17 @@ The firmware is written for the ESP32-S3 with the Arduino framework. The complet
 1. Open the **[web installer](https://kaelor9.github.io/EngineLink/)** in Chrome or Edge on a computer.
 2. Connect the board with a USB-C data cable, tick the safety confirmation and click **Install**.
 3. On your phone, join the Wi-Fi **EngineLink** (password `12345678`) and open **http://192.168.4.1**.
-4. Complete the three-step setup: connection, engine type and connectors, time source.
+4. Complete the setup, then add **Engine Link** to the home screen (Settings shows how on iPhone and Android).
 5. For Volvo Penta KAD300, follow the **[test procedure](docs/KAD300_EDC1.md#test-procedure-on-the-boat)**: listen, voltage check, RPM check, then tank to tank.
 
 ### Updating over Wi-Fi
 
 You only need the cable once. For later versions:
 
-1. Download **`enginelink-update.bin`** from the [download page](https://kaelor9.github.io/EngineLink/#downloads).
-2. Join the EngineLink Wi-Fi and open **Settings → Firmware update**.
-3. Select the file. EngineLink installs it and restarts. Settings and fuel totals are kept.
+- **With a boat router:** connect EngineLink to it under Settings → Boat router, then open **Settings → Firmware** and install the version you want. EngineLink downloads it from GitHub Releases. If the new version does not run properly for its first minute, EngineLink goes back to the previous one by itself.
+- **Without a router:** download **`enginelink-update.bin`** from the [download page](https://kaelor9.github.io/EngineLink/#downloads), join the EngineLink Wi-Fi and choose the file under **Settings → Firmware**.
+
+Settings, trips, the fuel log and fuel totals are kept.
 
 ---
 
@@ -136,7 +142,7 @@ You only need the cable once. For later versions:
 >
 > - Disconnect the engine networks and NMEA 2000 during first flashing and bring-up
 > - Measure **both** isolated 5 V supplies against **their own** isolated grounds (4.75–5.25 V) before connecting an engine
-> - EngineLink only listens after every start-up. **KAD polling** is a deliberate step per connector: close that connector's jumper (SJ1/SJ2) and confirm on the Data page. Only the read request `01 43 21` can be sent.
+> - EngineLink only listens by default. **Reading the engines** (KAD polling) is a deliberate step: close the connector's jumper (SJ1/SJ2) and switch it on in Settings → Diagnostics with a confirmation. "Read engines automatically" is off until you turn it on. Only the read request `01 43 21` can be sent.
 > - The KAD request format is reconstructed from Volvo's PC tool, and the reply layout is not yet wire-verified. Do the voltage check first.
 > - Do not poll while a Volvo diagnostic tool (VODIA) is connected
 > - Change the factory Wi-Fi password `12345678` in Settings
@@ -149,7 +155,7 @@ See [KAD300 / EDC I](docs/KAD300_EDC1.md), [alpha status and safety](docs/PRODUC
 
 | Hardware | Firmware | Engine validation |
 |----------|----------|-------------------|
-| ✅ Revision 1 assembled | 🚧 0.4.0-alpha | ⏳ Pending first KAD300 test |
+| ✅ Revision 1 assembled | 🚧 0.5.0 | ⏳ Pending first KAD300 test |
 
 | Area | Status |
 |------|--------|
@@ -174,11 +180,12 @@ See [KAD300 / EDC I](docs/KAD300_EDC1.md), [alpha status and safety](docs/PRODUC
 - [x] Trip / lifetime totals and engine hours
 - [x] Automatic engine-run log
 - [x] Bus discovery
-- [x] Wi-Fi firmware updates
+- [x] Wi-Fi firmware updates, from GitHub with rollback
+- [x] Phone app with trips, fuel log, economy and engine health
+- [x] Steady Wi-Fi: fixed channel, no power saving, access point watchdog
 - [x] Volvo Penta KAD / EDC I decoding and opt-in polling
 - [ ] KAD reply layout confirmed on the wire
 - [ ] Fuel factor and corrections confirmed tank to tank
-- [ ] Journey grouping from GPS evidence (never automatic merging)
 - [ ] NMEA 2000 output of engine and fuel data
 - [ ] Settings authorization and unique device credentials
 

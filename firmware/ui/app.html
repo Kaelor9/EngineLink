@@ -1,0 +1,1195 @@
+<!doctype html>
+<html lang="en" data-theme="dark"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0a1420">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Engine Link">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<title>Engine Link</title>
+<style>
+:root{--bg:#0a1420;--card:#112131;--sheet:#12283a;--nav:#0b1825;--text:#eef5f8;--sub:#9bb6c6;--line:#1c3447;--track:#1e3a4a;--teal:#46cabc;--onteal:#062022;--blue:#7fb4ff;--orange:#f0c06e;--green:#7ddcb0;--gsoft:#173a2f;--gtext:#a5e6d6;--osoft:#352c1d;--red:#ff6b6b;--port:#ff6b6b;--stbd:#3fdc7e;--purple:#b49cff;--off:#3a4a58;--shadow:none;color-scheme:dark}
+[data-theme=light]{--bg:#f2f3f7;--card:#fff;--sheet:#fff;--nav:rgba(249,249,251,.97);--text:#0b1620;--sub:#6b7380;--line:#e8e9ee;--track:#eceef2;--teal:#0b8f8a;--onteal:#fff;--blue:#2f6fe4;--orange:#d9650b;--green:#0f8a5a;--gsoft:#e3f6ee;--gtext:#0d6b47;--osoft:#fdeee2;--red:#d92d2d;--port:#d92d2d;--stbd:#139a4a;--purple:#7a5cd6;--off:#c9ced6;--shadow:0 1px 2px rgba(15,25,35,.05),0 4px 14px rgba(15,25,35,.04);color-scheme:light}
+[data-theme=night]{--bg:#050202;--card:#120807;--sheet:#170a09;--nav:#080303;--text:#ff9a8a;--sub:#a8584c;--line:#2a1210;--track:#2a1311;--teal:#ff6a55;--onteal:#140504;--blue:#e0705e;--orange:#ff8c5a;--green:#e8806a;--gsoft:#2a120e;--gtext:#ffa08e;--osoft:#2c130c;--red:#ff5a4a;--port:#ff5a4a;--stbd:#c9784a;--purple:#d77a6a;--off:#3a1a16}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%;background:var(--bg)}
+body{color:var(--text);font:15px/1.35 -apple-system,BlinkMacSystemFont,"SF Pro Display","Segoe UI",system-ui,sans-serif;font-variant-numeric:tabular-nums;overflow:hidden}
+button,input,select{font:inherit;color:inherit}
+button{cursor:pointer;border:0;background:none;padding:0}
+input{border:0;outline:0}
+#app{position:fixed;inset:0;display:flex;flex-direction:column;max-width:560px;margin:0 auto}
+main{flex:1;overflow-y:auto;padding:calc(10px + env(safe-area-inset-top)) 16px 24px;scrollbar-width:none;-webkit-overflow-scrolling:touch}
+main::-webkit-scrollbar{display:none}
+.top{display:flex;justify-content:space-between;align-items:center;padding:6px 4px 16px;min-height:62px}
+.top h1{margin:0;font-size:34px;font-weight:700;letter-spacing:-.8px;line-height:40px}
+.gear{width:40px;height:40px;border-radius:50%;background:var(--card);box-shadow:var(--shadow);display:flex;align-items:center;justify-content:center}
+.stack{display:flex;flex-direction:column;gap:12px}
+.card{background:var(--card);border-radius:24px;padding:18px 20px;box-shadow:var(--shadow)}
+.card.flush{padding:0 18px}
+.ct{font-size:15px;font-weight:600}
+.cth{display:flex;justify-content:space-between;align-items:baseline;gap:10px}
+.lbl{display:inline-flex;align-items:center;gap:7px;font-size:14px;font-weight:600}
+.sub{color:var(--sub)}.s12{font-size:12px}.s13{font-size:13px}.s14{font-size:14px}
+.big{font-weight:700;letter-spacing:-1px;line-height:1}
+.unit{font-size:15px;font-weight:600;color:var(--sub);letter-spacing:0}
+.grid2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.grid3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.tile{background:var(--card);border-radius:20px;padding:14px;box-shadow:var(--shadow)}
+.tile .k{font-size:12px;color:var(--sub);font-weight:600}.tile .v{font-size:22px;font-weight:650;margin-top:4px}
+.dot{display:inline-block;width:9px;height:9px;border-radius:50%;flex:none}
+.bar{height:10px;border-radius:10px;background:var(--track);overflow:hidden}
+.bar>i{display:block;height:100%;border-radius:10px}
+.chip{display:inline-flex;align-items:center;border-radius:99px;padding:5px 11px;font-size:13px;font-weight:600}
+.btn{min-height:48px;border-radius:16px;background:var(--track);font-size:15px;display:flex;align-items:center;justify-content:center;gap:8px;padding:0 14px}
+.btn.pri{background:var(--teal);color:var(--onteal);font-weight:600}
+.btn.red{background:var(--red);color:#fff;font-weight:600}
+.btn.sm{min-height:36px;border-radius:99px;font-size:13.5px;padding:0 14px}
+.btn[disabled]{opacity:.45}
+.pill{display:inline-flex;align-items:center;gap:6px;min-height:38px;padding:0 16px 0 12px;margin:-6px 0 16px;border-radius:99px;background:var(--card);color:var(--teal);font-size:15px}
+.seg{display:grid;gap:6px}
+.seg button{min-height:38px;border-radius:12px;background:var(--track);font-size:13.5px}
+.seg button.on{background:var(--text);color:var(--card);font-weight:600}
+.seg button.pick{background:var(--teal);color:var(--onteal);font-weight:600}
+.hd{font-size:12px;font-weight:600;letter-spacing:.6px;text-transform:uppercase;color:var(--sub);padding:0 6px 9px}
+.sec{background:var(--card);border-radius:22px;padding:0 18px;box-shadow:var(--shadow);margin-bottom:26px}
+.row{width:100%;display:flex;justify-content:space-between;align-items:center;gap:12px;padding:14px 0 13px;text-align:left}
+.row+.row,.row+.rowx,.rowx+.row,.rowx+.rowx{border-top:1px solid var(--line)}
+.rowx{padding:14px 0 13px}
+.rt{display:block;font-size:15px;line-height:1.25}
+.rh{display:block;font-size:12.5px;color:var(--sub);margin-top:2px;line-height:1.25}
+.rv{font-size:15px;color:var(--sub);white-space:nowrap;flex:none}
+.tog{width:50px;height:30px;border-radius:99px;background:var(--off);position:relative;flex:none;transition:background .15s}
+.tog::after{content:"";position:absolute;top:3px;left:3px;width:24px;height:24px;border-radius:50%;background:#fff;transition:left .15s}
+.tog.on{background:var(--teal)}.tog.on::after{left:23px}
+.field{min-height:46px;border-radius:12px;background:var(--track);padding:0 14px;font-size:15px;width:100%}
+.dim{opacity:.45;pointer-events:none}
+nav{flex:none;display:grid;grid-template-columns:repeat(5,minmax(0,1fr));background:var(--nav);border-top:1px solid var(--line);padding-bottom:max(8px,env(safe-area-inset-bottom));min-height:72px}
+nav button{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;color:var(--sub);font-size:10.5px;font-weight:550;padding-top:8px}
+nav button.on{color:var(--teal)}
+nav svg{width:26px;height:26px}
+.ico{fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
+#banner{display:none;position:fixed;left:50%;transform:translateX(-50%);top:calc(8px + env(safe-area-inset-top));z-index:30;background:var(--osoft);color:var(--orange);border-radius:99px;padding:8px 14px;font-size:13px;font-weight:600;box-shadow:0 6px 20px rgba(0,0,0,.35);max-width:92%;text-align:center}
+#banner.show{display:block}
+.stale .live{opacity:.5}
+#toast{display:none;position:fixed;left:16px;right:16px;bottom:96px;max-width:528px;margin:0 auto;z-index:40;background:var(--sheet);border-radius:16px;padding:13px 16px;font-size:14px;box-shadow:0 10px 30px rgba(0,0,0,.4)}
+#toast.show{display:block}
+#sheetwrap{display:none;position:fixed;inset:0;z-index:50;background:rgba(0,0,0,.5);align-items:flex-end;justify-content:center}
+#sheetwrap.show{display:flex}
+#sheet{width:100%;max-width:560px;max-height:92%;overflow-y:auto;background:var(--sheet);border-radius:28px 28px 0 0;padding:10px 20px calc(24px + env(safe-area-inset-bottom));display:flex;flex-direction:column;gap:14px;scrollbar-width:none}
+#sheet::-webkit-scrollbar{display:none}
+.grab{width:40px;height:5px;border-radius:5px;background:var(--track);align-self:center}
+.q{width:18px;height:18px;border-radius:50%;background:var(--track);color:var(--sub);font-size:11.5px;font-weight:700;display:inline-flex;align-items:center;justify-content:center}
+.q.on{background:var(--teal);color:var(--onteal)}
+.help{background:var(--track);border-radius:14px;padding:4px 14px}
+.help>div{padding:8px 0;border-bottom:1px solid var(--line)}
+.help>p{margin:0;font-size:11.5px;color:var(--sub);padding:8px 0}
+.glow{animation:glow 2.6s ease-in-out infinite}
+@keyframes glow{0%,100%{filter:brightness(1)}50%{filter:brightness(1.12)}}
+.empty{color:var(--sub);font-size:14px;padding:14px 0;text-align:center}
+.list>*+*{border-top:1px solid var(--line)}
+.tbl{display:grid;grid-template-columns:60px 46px 46px 1fr;gap:6px;align-items:center;padding:8px 20px}
+a.dl{display:none}
+#bar{display:none;flex:none;padding:10px 16px 12px;background:var(--sheet)}
+</style>
+</head>
+<body>
+<div id="app"><main id="main"></main><div id="bar"></div><nav id="nav"></nav></div>
+<div id="banner" role="status"></div><div id="toast" role="status"></div>
+<div id="sheetwrap"><section id="sheet" role="dialog" aria-modal="true"></section></div>
+<video id="nosleep" playsinline muted loop style="position:fixed;width:1px;height:1px;opacity:0;pointer-events:none" src="data:video/mp4;base64,AAAAIGZ0eXBpc29tAAACAGlzb21pc28yYXZjMW1wNDEAAAMrbW9vdgAAAGxtdmhkAAAAAAAAAAAAAAAAAAAD6AAAB9AAAQAAAQAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAgAAAlV0cmFrAAAAXHRraGQAAAADAAAAAAAAAAAAAAABAAAAAAAAB9AAAAAAAAAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAABAAAAAABAAAAAQAAAAAAAkZWR0cwAAABxlbHN0AAAAAAAAAAEAAAfQAAAAAAABAAAAAAHNbWRpYQAAACBtZGhkAAAAAAAAAAAAAAAAAABAAAAAgABVxAAAAAAALWhkbHIAAAAAAAAAAHZpZGUAAAAAAAAAAAAAAABWaWRlb0hhbmRsZXIAAAABeG1pbmYAAAAUdm1oZAAAAAEAAAAAAAAAAAAAACRkaW5mAAAAHGRyZWYAAAAAAAAAAQAAAAx1cmwgAAAAAQAAAThzdGJsAAAAuHN0c2QAAAAAAAAAAQAAAKhhdmMxAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAABAAEABIAAAASAAAAAAAAAABFUxhdmM2MC4zMS4xMDIgbGlieDI2NAAAAAAAAAAAAAAAGP//AAAALmF2Y0MBQsAK/+EAFmdCwArZHsBEAAADAAQAAAMACDxImSABAAVoy4PEyAAAABBwYXNwAAAAAQAAAAEAAAAUYnRydAAAAAAAAApQAAAKUAAAABhzdHRzAAAAAAAAAAEAAAACAABAAAAAABRzdHNzAAAAAAAAAAEAAAABAAAAHHN0c2MAAAAAAAAAAQAAAAEAAAACAAAAAQAAABxzdHN6AAAAAAAAAAAAAAACAAACiQAAAAsAAAAUc3RjbwAAAAAAAAABAAADWwAAAGJ1ZHRhAAAAWm1ldGEAAAAAAAAAIWhkbHIAAAAAAAAAAG1kaXJhcHBsAAAAAAAAAAAAAAAALWlsc3QAAAAlqXRvbwAAAB1kYXRhAAAAAQAAAABMYXZmNjAuMTYuMTAwAAAACGZyZWUAAAKcbWRhdAAAAnIGBf//btxF6b3m2Ui3lizYINkj7u94MjY0IC0gY29yZSAxNjQgcjMxMDggMzFlMTlmOSAtIEguMjY0L01QRUctNCBBVkMgY29kZWMgLSBDb3B5bGVmdCAyMDAzLTIwMjMgLSBodHRwOi8vd3d3LnZpZGVvbGFuLm9yZy94MjY0Lmh0bWwgLSBvcHRpb25zOiBjYWJhYz0wIHJlZj0zIGRlYmxvY2s9MTotMzotMyBhbmFseXNlPTB4MToweDExMSBtZT1oZXggc3VibWU9NyBwc3k9MSBwc3lfcmQ9Mi4wMDowLjcwIG1peGVkX3JlZj0xIG1lX3JhbmdlPTE2IGNocm9tYV9tZT0xIHRyZWxsaXM9MSA4eDhkY3Q9MCBjcW09MCBkZWFkem9uZT0yMSwxMSBmYXN0X3Bza2lwPTEgY2hyb21hX3FwX29mZnNldD0tNCB0aHJlYWRzPTEgbG9va2FoZWFkX3RocmVhZHM9MSBzbGljZWRfdGhyZWFkcz0wIG5yPTAgZGVjaW1hdGU9MSBpbnRlcmxhY2VkPTAgYmx1cmF5X2NvbXBhdD0wIGNvbnN0cmFpbmVkX2ludHJhPTAgYmZyYW1lcz0wIHdlaWdodHA9MCBrZXlpbnQ9MjUwIGtleWludF9taW49MSBzY2VuZWN1dD00MCBpbnRyYV9yZWZyZXNoPTAgcmNfbG9va2FoZWFkPTQwIHJjPWNyZiBtYnRyZWU9MSBjcmY9MjMuMCBxY29tcD0wLjYwIHFwbWluPTAgcXBtYXg9NjkgcXBzdGVwPTQgaXBfcmF0aW89MS40MCBhcT0xOjEuMjAAgAAAAA9liIQF85///w9FAAFXn4AAAAAHQZo4C+c6gA=="></video>
+<script>
+'use strict';
+// Engine Link phone app. Talks only to this EngineLink (no internet needed).
+const $=s=>document.querySelector(s);
+const LOC=navigator.language||'en-GB';
+const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const fin=v=>typeof v==='number'&&isFinite(v);
+const NF=(n,d=0)=>fin(n)?n.toLocaleString(LOC,{minimumFractionDigits:d,maximumFractionDigits:d}):'—';
+const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+
+// ---------- Icons ----------
+const IC={
+  trip:'M5 20.5a1.8 1.8 0 1 0 0-.01M6.8 19.5H14a3 3 0 0 0 0-6H9.5a3 3 0 0 1 0-6H13M18 11.5s-3.5-3.2-3.5-6a3.5 3.5 0 0 1 7 0c0 2.8-3.5 6-3.5 6zM18 5.5h.01',
+  economy:'M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.5 19 2c1 2 2 4.2 2 8 0 5.5-4.8 10-10 10zM2 21c0-3 1.9-5.4 5.1-6C9.5 14.5 12 13 13 12',
+  tank:'M5 21V5a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v16M3.5 21h13M8 7.5h4M15 10h2l1.5 1.5V17a1.5 1.5 0 0 0 3 0V8.5L19 6',
+  history:'M12 7.5V12l3 2M3.5 12a8.5 8.5 0 1 0 2.5-6M3 4v4h4',
+  engines:'M5 9h3V6.5h5V9h2l2 2h2V9h2v8h-2v-2h-2v2l-2 2H9l-2-2H5zM6.5 6.5h8M2 10v6M2 13h3',
+  gear:'M9 12a3 3 0 1 0 6 0a3 3 0 1 0-6 0M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3 1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8 1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z',
+  drop:'M12 2.5c3.8 4.8 6.5 8.2 6.5 11.8a6.5 6.5 0 0 1-13 0c0-3.6 2.7-7 6.5-11.8z',
+  flame:'M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.4-.5-2-1-3-1.1-2.1-.2-4.1 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.2.4-2.3 1-3a2.5 2.5 0 0 0 2.5 2.5z',
+  pin:'M12 21s-7-6.2-7-11a7 7 0 0 1 14 0c0 4.8-7 11-7 11zM12 7.5a2.5 2.5 0 1 0 0 5a2.5 2.5 0 1 0 0-5',
+  map:'M9 4L3 6.5v13.5l6-2.5 6 2.5 6-2.5V4l-6 2.5zM9 4v13.5M15 6.5V20',
+  therm:'M14 14.8V4.5a2 2 0 0 0-4 0v10.3a4 4 0 1 0 4 0zM12 9v7',
+  check:'M5 12l5 5 9-10',
+  trash:'M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3',
+  down:'M12 4v11M7 10l5 5 5-5M5 20h14',
+  pen:'M4 20h4L19 9l-4-4L4 16zM13.5 6.5l4 4',
+  back:'M15 5l-7 7 7 7',
+  x:'M6 6l12 12M18 6L6 18',
+  share:'M12 3v12M8 7l4-4 4 4M5 12v8h14v-8',
+  plus:'M4 4h16v16H4zM12 8v8M8 12h8'
+};
+const svg=(d,w=20,color='currentColor',sw=1.9)=>`<svg class="ico" width="${w}" height="${w}" viewBox="0 0 24 24" style="stroke:${color};stroke-width:${sw}" aria-hidden="true"><path d="${d}"/></svg>`;
+
+// ---------- State ----------
+const S={tab:'trip',page:null,back:null,backScroll:0,live:null,liveAt:0,fails:0,conn:true,
+  trips:null,fuel:null,econ:null,diag:null,sd:null,state:null,fw:null,scan:null,hist:[],lastHist:0,
+  open:null,selMode:null,sel:[],raw:false,quick:null,sheet:null,d:{},info:null,
+  warm:{phase:'idle',seen:0,samples:[],startedAt:0},healthOpen:null,svcOpen:null,advOpen:false,editTank:false,tankDraft:'',
+  wifiPick:null,wifiPass:'',newPlace:'',newNm:'',voltMeas:'',timeSentAt:0,fuelOpen:null,firstLive:true};
+// App preferences, shared by all phones through EngineLink (/api/prefs).
+const P={theme:'dark',night:'off',units:'metric',cur:'DKK',start:'trip',keepOn:false,planOn:true,
+  places:[],route:0,round:true,custom:'30',planIdx:null,sea:'Calm',load:'Normal',
+  warmOn:true,warmTarget:60,warmClose:30,
+  vals:{load:1,req:1,cool:1,boost:1,air:1,ftemp:1,batt:1,gear:1,hours:1,rate:0,inlet:0,rack:0,inj:0,start:0,ms:0},
+  service:{}};
+let prefsLoaded=false,prefsTimer=0;
+function savePrefs(){clearTimeout(prefsTimer);prefsTimer=setTimeout(()=>post('/api/prefs',{p:JSON.stringify(P)}),400);}
+
+// ---------- Units and money ----------
+const imp=()=>P.units==='imperial';
+const U={
+  vol:l=>imp()?l*0.264172:l, vu:()=>imp()?'gal':'L', ru:()=>imp()?'gal/h':'L/h',
+  temp:c=>imp()?c*9/5+32:c, tu:()=>imp()?'°F':'°C',
+  press:kpa=>imp()?kpa*0.145038:kpa/100, pu:()=>imp()?'psi':'bar',
+  perNm:()=>imp()?'gal/nm':'L/nm'
+};
+const CUR={DKK:'kr',SEK:'kr',NOK:'kr',EUR:'€',GBP:'£',USD:'$'};
+const cur=()=>CUR[P.cur]||'kr';
+const money=(v,d=0)=>fin(v)?NF(v,d)+' '+cur():'—';
+const L=(l,d=1)=>NF(U.vol(l),d);
+
+// ---------- Time ----------
+const hm=t=>t?new Date(t*1000).toLocaleTimeString(LOC,{hour:'2-digit',minute:'2-digit'}):'—';
+const dayKey=t=>{const d=new Date(t*1000);return d.getFullYear()*10000+(d.getMonth()+1)*100+d.getDate();};
+const dayLabel=t=>{
+  if(!t)return 'Time unknown';
+  const k=dayKey(t),n=Date.now()/1000;
+  if(k===dayKey(n))return 'Today';
+  if(k===dayKey(n-86400))return 'Yesterday';
+  return new Date(t*1000).toLocaleDateString(LOC,{weekday:'short',day:'numeric',month:'short'});
+};
+const dur=s=>{s=Math.max(0,Math.round(s/60));const h=Math.floor(s/60),m=s%60;return h?h+' h '+String(m).padStart(2,'0')+' m':m+' min';};
+const durShort=s=>{s=Math.max(0,Math.round(s/60));const h=Math.floor(s/60),m=s%60;return h?h+' h '+String(m).padStart(2,'0'):m+' min';};
+
+// ---------- Network ----------
+async function get(u,t=3000){
+  const c=new AbortController(),id=setTimeout(()=>c.abort(),t);
+  try{const r=await fetch(u,{cache:'no-store',signal:c.signal});if(!r.ok)throw new Error('HTTP '+r.status);return await r.json();}
+  finally{clearTimeout(id);}
+}
+async function post(u,data={},t=10000){
+  const c=new AbortController(),id=setTimeout(()=>c.abort(),t);
+  try{
+    const r=await fetch(u,{method:'POST',body:new URLSearchParams(data),signal:c.signal,cache:'no-store'});
+    let j={ok:r.ok,message:''};try{j=await r.json();}catch(e){}
+    return j;
+  }catch(e){return {ok:false,message:'No answer from EngineLink. Check the Wi-Fi connection.'};}
+  finally{clearTimeout(id);}
+}
+function download(url){const a=document.createElement('a');a.href=url;a.className='dl';a.setAttribute('download','');document.body.appendChild(a);a.click();setTimeout(()=>a.remove(),1000);}
+function saveFile(name,text,type='application/json'){download(URL.createObjectURL(new Blob([text],{type})));}
+
+// Live data about twice a second. When EngineLink does not answer, the last
+// values stay on screen (dimmed) and the app keeps trying, faster as soon as
+// the phone is back, so a short Wi-Fi drop needs no reload.
+let tickTimer=0,ticking=false;
+function schedule(ms){clearTimeout(tickTimer);tickTimer=setTimeout(tick,ms);}
+async function tick(){
+  if(ticking)return;
+  if(document.hidden){schedule(3000);return;}
+  ticking=true;
+  try{
+    const d=await get('/api/live',2500);
+    S.live=d;S.liveAt=Date.now();S.fails=0;setConn(true);onLive();
+  }catch(e){
+    S.fails++;
+    if(S.fails>=2)setConn(false);
+  }finally{ticking=false;}
+  schedule(S.fails?Math.min(400*S.fails,2000):500);
+}
+function tickNow(){S.fails=Math.min(S.fails,1);schedule(30);}
+document.addEventListener('visibilitychange',()=>{if(!document.hidden){tickNow();wake();}});
+addEventListener('online',tickNow);addEventListener('pageshow',tickNow);addEventListener('focus',tickNow);
+function setConn(ok){
+  if(ok===S.conn&&ok)return;
+  S.conn=ok;
+  const b=$('#banner');
+  document.body.classList.toggle('stale',!ok);
+  if(ok){b.classList.remove('show');if(S.wasDown){S.wasDown=false;reloadData();}return;}
+  S.wasDown=true;
+  b.textContent='Reconnecting to EngineLink…'+(S.liveAt?' Showing values from '+new Date(S.liveAt).toLocaleTimeString(LOC):'');
+  b.classList.add('show');
+}
+let toastTimer=0;
+function toast(msg){const t=$('#toast');t.textContent=msg;t.classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>t.classList.remove('show'),3400);}
+async function act(u,data,okMsg){const r=await post(u,data);toast(r.message||(r.ok?okMsg||'Done':'Something went wrong'));return r;}
+
+// Data that does not change every second.
+async function load(what){
+  try{
+    if(what==='trips')S.trips=await get('/api/trips',5000);
+    if(what==='fuel')S.fuel=await get('/api/fuel',5000);
+    if(what==='econ')S.econ=await get('/api/economy',5000);
+    if(what==='diag')S.diag=await get('/api/diag',5000);
+    if(what==='sd')S.sd=await get('/api/sd/info',8000);
+    if(what==='state')S.state=await get('/api/state',6000);
+    if(what==='fw')S.fw=await get('/api/fw/status',4000);
+  }catch(e){}
+  render();
+}
+function reloadData(){['trips','fuel','econ','state'].forEach(load);}
+
+// ---------- Engines ----------
+// Engines in the order Port, Starboard (by the socket choice in Settings).
+function engines(){
+  const lv=S.live;if(!lv)return [];
+  const pi=lv.port;
+  const order=pi===1?[1,0]:[0,1];
+  return order.map((c,i)=>Object.assign({ch:c,name:pi<0?(c===0?'J7':'J6'):(i===0?'Port':'Starboard'),color:pi<0?(i===0?'var(--blue)':'var(--teal)'):(i===0?'var(--port)':'var(--stbd)'),sock:c===0?'J7':'J6'},lv.e[c]));
+}
+const ev=(e,idx)=>e&&e.x&&fin(e.x[idx])?e.x[idx]:null;
+const totalLph=()=>{const es=engines();let t=0,n=0;for(const e of es){if(fin(e.lph)){t+=e.lph;n++;}}return n?t:null;};
+const gearName=v=>{if(!fin(v))return '—';const g=v&0x18;return g===0?'Neutral':g===8?'Forward':g===16?'Reverse':'—';};
+
+// ---------- Live updates ----------
+function onLive(){
+  const lv=S.live;
+  // The phone's clock sets EngineLink's clock when nothing better is there.
+  if((!lv.utc||Math.abs(lv.utc*1000-Date.now())>90000)&&Date.now()-S.timeSentAt>300000){S.timeSentAt=Date.now();post('/api/phone-time',{ms:String(Date.now())});}
+  const t=totalLph();
+  if(Date.now()-S.lastHist>=10000){S.lastHist=Date.now();S.hist.push(lv.trip.act&&fin(t)?t:null);if(S.hist.length>90)S.hist.shift();}
+  warmStep();
+  if(S.prevAct===true&&!lv.trip.act){load('trips');load('econ');}
+  S.prevAct=lv.trip.act;
+  if(S.prevFw!==lv.fw&&S.page==='fw')load('fw');
+  S.prevFw=lv.fw;
+  if(!S.page&&(S.tab==='trip'||S.tab==='engines'||S.tab==='tank'))render();
+}
+
+// ---------- Warm-up guide ----------
+// Shown after a cold start; closes after the chosen time on screen, or with ✕.
+function warmStep(){
+  const W=S.warm,es=engines().filter(e=>e.run);
+  if(!P.warmOn){W.phase='idle';return;}
+  if(!es.length){if(W.phase==='done'||W.phase==='warming')W.phase='idle';return;}
+  const temps=es.map(e=>ev(e,259)).filter(fin);
+  if(!temps.length)return;
+  const min=Math.min(...temps);
+  if(W.phase==='idle'){W.phase=min<P.warmTarget-2?'warming':'done';W.samples=[];}
+  if(W.phase==='warming'){
+    W.samples.push([Date.now(),min]);
+    W.samples=W.samples.filter(s=>Date.now()-s[0]<180000);
+    if(min>=P.warmTarget){W.phase='ready';W.seen=0;}
+  }
+  if(W.phase==='ready'&&S.tab==='trip'&&!S.page&&!document.hidden){
+    W.seen+=0.5;
+    if(P.warmClose>0&&W.seen>=P.warmClose)W.phase='done';
+  }
+}
+function warmBox(){
+  const W=S.warm;
+  if(!P.warmOn||(W.phase!=='warming'&&W.phase!=='ready'))return '';
+  const es=engines().filter(e=>e.run),ready=W.phase==='ready';
+  const fg=ready?'var(--green)':'var(--orange)',bg=ready?'var(--gsoft)':'var(--osoft)';
+  let big='',small='';
+  if(ready){big='';small=P.warmClose>0?'Closes in '+Math.max(0,Math.ceil(P.warmClose-W.seen))+' s':'';}
+  else{
+    const s=W.samples;let eta=null;
+    if(s.length>4){const a=s[0],b=s[s.length-1],rate=(b[1]-a[1])/((b[0]-a[0])/60000);if(rate>0.2)eta=(P.warmTarget-b[1])/rate;}
+    big=eta!=null?Math.max(1,Math.ceil(eta))+' min':'…';small=eta!=null?'until ready':'working it out';
+  }
+  const rows=es.map(e=>{const c=ev(e,259),p=fin(c)?clamp((c-20)/(P.warmTarget-20)*100,4,100):4;
+    return `<div><div class="cth s13"><span style="display:inline-flex;gap:6px;align-items:center;color:${e.color}"><span class="dot" style="width:7px;height:7px;background:${e.color}"></span>${e.name}</span><span><b style="font-size:15px;font-weight:600">${NF(U.temp(c),0)}</b> <span class="sub">/ ${NF(U.temp(P.warmTarget),0)} ${U.tu()}</span></span></div><div class="bar" style="height:6px;margin-top:7px"><i style="width:${p}%;background:${fg}"></i></div></div>`;}).join('');
+  return `<div class="card glow" style="background:${bg};box-shadow:0 0 0 1px ${ready?'rgba(125,220,176,.55)':'rgba(240,192,110,.55)'},0 0 28px ${ready?'rgba(125,220,176,.3)':'rgba(240,192,110,.32)'};display:flex;flex-direction:column;gap:14px" ${ready&&P.warmClose>0?'data-a="warmClose"':''}>
+    <div style="display:flex;gap:12px;align-items:center">
+      <span style="width:42px;height:42px;border-radius:13px;background:${ready?'rgba(125,220,176,.16)':'rgba(240,192,110,.16)'};display:flex;align-items:center;justify-content:center;flex:none">${svg(ready?IC.check:IC.therm,22,fg,2)}</span>
+      <div style="flex:1;min-width:0"><div style="font-size:16px;font-weight:600">${ready?'Engines are warm':'Warming up'}</div><div class="s13 sub">${ready?'Full power is fine now':'Keep below 1.500 rpm'}</div></div>
+      <div style="text-align:right"><div style="font-size:26px;font-weight:650;color:${fg};line-height:1">${big}</div><div class="s12 sub" style="margin-top:4px">${small}</div></div>
+      ${ready&&!(P.warmClose>0)?`<button data-a="warmClose" aria-label="Close" style="width:36px;height:36px;border-radius:50%;background:rgba(125,220,176,.16);display:flex;align-items:center;justify-content:center">${svg(IC.x,16,'var(--text)',2.4)}</button>`:''}
+    </div>
+    <div class="grid2" style="gap:14px">${rows}</div></div>`;
+}
+
+// ---------- Header, nav ----------
+const TITLES={trip:'Trip',economy:'Economy',tank:'Tank',history:'History',engines:'Engines',more:'Settings'};
+const PAGES={dest:'Saved places',vals:'Engine values',ap:'EngineLink Wi-Fi',router:'Boat router',fw:'Firmware',diag:'Diagnostics'};
+function header(){
+  const title=S.page?PAGES[S.page]:TITLES[S.tab];
+  return `<div class="top"><h1>${title}</h1>${S.tab!=='more'&&!S.page?`<button class="gear" data-a="tab" data-v="more" aria-label="Settings">${svg(IC.gear,20,'var(--sub)',1.8)}</button>`:''}</div>`;
+}
+function backPill(){return `<button class="pill" data-a="back">${svg(IC.back,16,'var(--teal)',2.4)}${S.back?TITLES[S.back]:'Settings'}</button>`;}
+function renderNav(){
+  const tabs=[['trip','Trip'],['economy','Economy'],['tank','Tank'],['history','History'],['engines','Engines']];
+  $('#nav').innerHTML=tabs.map(([k,l])=>`<button class="${S.tab===k?'on':''}" data-a="tab" data-v="${k}">${svg(IC[k],26)}${l}</button>`).join('');
+}
+function render(force){
+  const m=$('#main'),a=document.activeElement;
+  if(!force&&a&&m.contains(a)&&(a.tagName==='INPUT'||a.tagName==='SELECT'))return;
+  const top=m.scrollTop;
+  m.innerHTML=header()+view();
+  m.scrollTop=top;
+  renderNav();renderBar();
+}
+function view(){
+  if(S.page)return PAGE_VIEWS[S.page]();
+  return ({trip:vTrip,economy:vEconomy,tank:vTank,history:vHistory,engines:vEngines,more:vSettings})[S.tab]();
+}
+const waiting=t=>`<div class="card"><div class="empty">${t||'Waiting for EngineLink…'}</div></div>`;
+
+// ---------- Trip ----------
+function vTrip(){
+  const lv=S.live;if(!lv)return waiting();
+  const es=engines(),tr=lv.trip,price=lv.price;
+  let h='<div class="stack live">'+warmBox();
+  if(tr.act){
+    const used=(tr.l[0]||0)+(tr.l[1]||0);
+    h+=`<div class="card"><div class="cth"><span class="lbl" style="color:var(--teal)">${svg(IC.drop,16,'var(--teal)')}Fuel this trip</span><span class="s13 sub" style="display:inline-flex;gap:6px;align-items:center"><span class="dot" style="width:7px;height:7px;background:${S.conn?'var(--green)':'var(--off)'}"></span>${S.conn?'Live':'Paused'}</span></div>
+      <div style="display:flex;align-items:baseline;gap:8px;margin-top:10px"><span class="big" style="font-size:76px;letter-spacing:-3px">${L(used,1)}</span><span style="font-size:20px;font-weight:600" class="sub">${imp()?'gallons':'litres'}</span></div>
+      <div class="s13 sub" style="margin-top:4px">${tr.start?'Since '+hm(tr.start)+' · ':''}${dur(tr.run)} running</div>
+      <div class="grid2" style="margin-top:16px">${es.map(e=>`<div><div style="display:flex;align-items:center;gap:6px;font-size:13px;font-weight:600;color:${e.color}"><span class="dot" style="background:${e.color}"></span>${e.name}</div><div style="font-size:24px;font-weight:600;margin-top:2px">${L(tr.l[e.ch],1)} <span class="s13 sub">${U.vu()}</span></div><div class="s13 sub">${fin(e.lph)?L(e.lph,1)+' '+U.ru()+' now':e.run?'no fuel data':'stopped'}</div></div>`).join('')}</div></div>`;
+    const avg=tr.run>60?used/(tr.run/3600):null,tot=totalLph(),lnm=fin(tot)&&fin(lv.sog)&&lv.sog>2?tot/lv.sog:null;
+    h+=`<div class="grid3"><div class="tile"><div class="k">Average</div><div class="v">${L(avg,1)}</div><div class="s12 sub">${U.ru()}</div></div>
+      <div class="tile"><div class="k">Per mile</div><div class="v">${lnm!=null?L(lnm,2):'—'}</div><div class="s12 sub">${lnm!=null?U.perNm():'needs GPS'}</div></div>
+      <div class="tile"><div class="k">Cost</div><div class="v">${price>0?NF(used*price,0):'—'}</div><div class="s12 sub">${price>0?cur()+' · '+NF(imp()?price/0.264172:price,2)+'/'+U.vu():'set a price'}</div></div></div>`;
+    h+=burnCard(avg);
+  }else{
+    h+=`<div class="card"><div class="lbl" style="color:var(--teal)">${svg(IC.drop,16,'var(--teal)')}No trip running</div><div class="s14 sub" style="margin-top:6px">A trip starts by itself when the first engine starts, and ends when both engines have been off for ${S.state?S.state.config.tripEnd:2} minutes.</div>${lastTripLine()}</div>`;
+    if(es.some(e=>fin(e.rpm)))h+=burnCard(null);
+  }
+  h+=rangeCard();
+  return h+'</div>';
+}
+function lastTripLine(){
+  const t=S.trips&&S.trips.trips&&S.trips.trips[0];
+  if(!t)return '';
+  const l=(t.l[0]||0)+(t.l[1]||0);
+  return `<button class="row" data-a="tab" data-v="history" style="margin-top:8px;border-top:1px solid var(--line)"><span><span class="rt">Last trip · ${dayLabel(t.s)}</span><span class="rh">${hm(t.s)} – ${hm(t.e)} · ${dur(t.run)}</span></span><span class="rv">${L(l,1)} ${U.vu()} ›</span></button>`;
+}
+function burnCard(avg){
+  const tot=totalLph();
+  const pts=S.hist.filter(fin);
+  let chart='';
+  if(pts.length>2){
+    const vals=S.hist.map(v=>fin(v)?v:null);
+    const lo=Math.min(...pts,fin(avg)?avg:Infinity)-2,hi=Math.max(...pts,fin(avg)?avg:-Infinity)+2;
+    const y=v=>(74-(v-lo)/(hi-lo||1)*68).toFixed(1);
+    const n=vals.length,xy=vals.map((v,i)=>v==null?null:[(i/(n-1)*320).toFixed(1),y(v)]).filter(Boolean);
+    const line=xy.map(p=>p.join(',')).join(' ');
+    chart=`<svg viewBox="0 0 320 80" width="100%" height="80" style="display:block;margin-top:10px" role="img" aria-label="Fuel flow over the last 15 minutes"><polygon points="${line} ${xy[xy.length-1][0]},80 ${xy[0][0]},80" fill="var(--osoft)"/><polyline points="${line}" fill="none" stroke="var(--orange)" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>${fin(avg)?`<line x1="0" x2="320" y1="${y(avg)}" y2="${y(avg)}" stroke="var(--sub)" stroke-width="1.5" stroke-dasharray="5 4"/>`:''}</svg>
+      <div class="cth s12 sub" style="margin-top:4px"><span>15 min ago</span>${fin(avg)?`<span>- - trip average ${L(avg,1)}</span>`:''}<span>now</span></div>`;
+  }
+  const diff=fin(tot)&&fin(avg)?tot-avg:null;
+  return `<div class="card"><div class="cth"><span class="lbl" style="color:var(--orange)">${svg(IC.flame,16,'var(--orange)',2)}Burning now</span><span class="s13 sub">both engines</span></div>
+    <div class="cth" style="margin-top:8px;align-items:center"><div><span class="big" style="font-size:42px">${L(tot,1)}</span> <span class="unit">${U.ru()}</span></div>${diff!=null?`<span class="chip" style="background:${diff>=0?'var(--osoft)':'var(--gsoft)'};color:${diff>=0?'var(--orange)':'var(--gtext)'}">${diff>=0?'▲':'▼'} ${L(Math.abs(diff),1)} ${diff>=0?'above':'below'} average</span>`:''}</div>${chart}</div>`;
+}
+function rangeCard(){
+  const lv=S.live,tk=lv.tank;
+  if(!(tk.cap>0)||!fin(tk.aboard))return `<button class="card" data-a="${tk.cap>0?'tab':'tankEditGo'}" data-v="tank" style="text-align:left;width:100%"><span class="lbl" style="color:var(--blue)">${svg(IC.pin,16,'var(--blue)',2.2)}Range</span><div class="s14 sub" style="margin-top:6px">${tk.cap>0?'Log a full tank once, then EngineLink shows how far the fuel aboard goes.':'Set the fuel tank size in Settings to see the range.'}</div></button>`;
+  const tot=totalLph(),usable=Math.max(0,tk.aboard-tk.cap*tk.reserve/100),hours=fin(tot)&&tot>1?usable/tot:null;
+  const nm=hours!=null&&fin(lv.sog)&&lv.sog>2?hours*lv.sog:null;
+  return `<button class="card" data-a="tab" data-v="tank" style="text-align:left;width:100%;display:flex;justify-content:space-between;align-items:center"><div><span class="lbl" style="color:var(--blue)">${svg(IC.pin,16,'var(--blue)',2.2)}Range</span>
+    <div style="font-size:30px;font-weight:700;margin-top:6px">${nm!=null?NF(nm,0)+' <span class="unit">nm</span> <span style="font-size:18px;font-weight:600" class="sub">· '+dur(hours*3600)+'</span>':hours!=null?dur(hours*3600):L(usable,0)+' <span class="unit">'+U.vu()+' usable</span>'}</div>
+    <div class="s13 sub" style="margin-top:2px">${hours!=null?(nm!=null?'at '+NF(lv.sog,1)+' kn, ':'at '+L(tot,1)+' '+U.ru()+', ')+(tk.reserve?'keeping '+tk.reserve+' % reserve':'until the tank is empty'):'Shown in time once an engine runs'}</div></div><span class="sub">›</span></button>`;
+}
+
+// ---------- Economy ----------
+const ZONES=[['Idle & manoeuvring','under 1.000 rpm','var(--sub)'],['Low speed','1.000 – 2.000 rpm','var(--blue)'],['Getting on the plane','2.000 – 2.500 rpm','var(--orange)'],['Cruise','2.500 – 3.000 rpm','var(--green)'],['Fast','over 3.000 rpm','var(--purple)']];
+function econRows(){
+  const e=S.econ;if(!e)return [];
+  return e.b.map(([rpm,sec,l,ss,sl,nm])=>({rpm:rpm+125,sec,lph:sec>0?l/sec*3600:null,kn:nm>0.3&&ss>0?nm/ss*3600:null,l10:nm>0.3?sl/nm*10:null,nm})).filter(r=>r.sec>=120);
+}
+function vEconomy(){
+  if(!S.econ)return waiting();
+  const rows=econRows(),price=S.live?S.live.price:0,gps=rows.filter(r=>r.l10!=null&&r.nm>=2);
+  const best=gps.length?gps.reduce((a,b)=>b.l10<a.l10?b:a):null;
+  let h='<div class="stack">';
+  // Best cruising speed
+  if(best){
+    const tot=totalLph(),sog=S.live&&S.live.sog,now10=fin(tot)&&fin(sog)&&sog>2?tot/sog*10:null;
+    const over=now10!=null?now10/best.l10-1:null;
+    h+=`<div class="card"><span class="lbl" style="color:var(--green)">Your best cruising speed</span>
+      <div style="display:flex;align-items:baseline;gap:8px;margin-top:8px"><span class="big" style="font-size:52px;letter-spacing:-1.5px">${NF(best.rpm,0)}</span><span style="font-size:17px;font-weight:600" class="sub">rpm · ${NF(best.kn,1)} kn</span></div>
+      <div class="s13 sub" style="margin-top:4px">Least fuel per mile, learned from ${S.econ.trips} trips</div>
+      <div class="stack" style="gap:10px;margin-top:18px">
+        <div><div class="cth s13"><span style="font-weight:600;color:var(--green)">At best speed</span><span><b>${L(best.l10,1)} ${U.vu()}</b> <span class="sub">${price>0?'· '+money(best.l10*price):''} per 10 nm</span></span></div><div class="bar" style="margin-top:6px"><i style="width:${now10?clamp(best.l10/(Math.max(now10,best.l10)*1.15)*100,5,100):70}%;background:var(--green)"></i></div></div>
+        ${now10!=null?`<div><div class="cth s13"><span style="font-weight:600">Right now · ${NF(sog,1)} kn</span><span><b>${L(now10,1)} ${U.vu()}</b> <span class="sub">${price>0?'· '+money(now10*price):''} per 10 nm</span></span></div><div class="bar" style="margin-top:6px"><i style="width:${clamp(now10/(Math.max(now10,best.l10)*1.15)*100,5,100)}%;background:${over<=0.05?'var(--green)':over<=0.2?'var(--orange)':'var(--red)'}"></i></div></div>`:''}
+      </div>
+      ${over!=null?`<div style="margin-top:16px;border-radius:16px;padding:13px 14px;background:${over<=0.05?'var(--gsoft)':'var(--osoft)'};color:${over<=0.05?'var(--gtext)':'var(--orange)'};font-size:14px;font-weight:600">${over<=0.05?'You are at your most economical speed.':'Ease off to about '+NF(best.rpm,0)+' rpm: '+L(now10-best.l10,1)+' '+U.vu()+' less every 10 nm.'}</div>`:''}</div>`;
+  }else{
+    h+=`<div class="card"><span class="lbl" style="color:var(--green)">Your best cruising speed</span><div class="s14 sub" style="margin-top:6px">${S.live&&fin(S.live.sog)?'Learning. A few trips at different speeds are needed.':'Needs GPS speed. Connect EngineLink to NMEA 2000 (Settings › Speed source) and it works out fuel per mile at every rpm. Until then the table below shows fuel per hour.'}</div></div>`;
+  }
+  if(P.planOn)h+=planCard(rows,best,price);
+  h+=seasonCard(price);
+  // Speed table
+  if(rows.length){
+    h+=`<div class="card" style="padding:16px 0 6px"><div class="cth" style="padding:0 20px 8px"><span class="ct">Speed table</span><span class="s12 sub">from your own trips</span></div>
+      <div class="tbl s12 sub" style="font-weight:550"><span>rpm</span><span style="text-align:right">kn</span><span style="text-align:right">${U.ru()}</span><span style="text-align:right">per 10 nm</span></div>
+      ${rows.map(r=>{const isB=best&&r.rpm===best.rpm;return `<div class="tbl" style="border-top:1px solid var(--line);${isB?'background:var(--gsoft)':''}"><span style="font-size:15px;font-weight:600;${isB?'color:var(--gtext)':''}">${NF(r.rpm,0)}</span><span class="s14" style="text-align:right">${r.kn!=null?NF(r.kn,1):'—'}</span><span class="s14" style="text-align:right">${L(r.lph,0)}</span><span class="s14" style="text-align:right;font-weight:600">${r.l10!=null?L(r.l10,1)+' '+U.vu()+(price>0?'<br><span class="s12 sub" style="font-weight:400">'+money(r.l10*price)+'</span>':''):'—'}</span></div>`;}).join('')}
+      <div class="s12 sub" style="padding:10px 20px">Each row needs 2 minutes at that rpm. Values in the middle of a 250 rpm step.</div></div>`;
+  }
+  h+=insightsCard();
+  h+=`<button class="btn" data-a="seasonReset" style="background:none;color:var(--sub);font-size:13px">Start a new season</button>`;
+  return h+'</div>';
+}
+function planCard(rows,best,price){
+  const withKn=rows.filter(r=>r.l10!=null&&r.kn!=null);
+  let h=`<div class="card stack" style="gap:16px"><div class="cth" style="align-items:center"><span class="lbl" style="font-size:15px">${svg(IC.map,17,'var(--teal)',2)}Plan a trip</span>
+    <button data-a="planRound" style="display:inline-flex;gap:8px;align-items:center" class="s13 sub">Round trip <span class="tog ${P.round?'on':''}" style="transform:scale(.8);transform-origin:right"></span></button></div>`;
+  if(!withKn.length)return h+`<div class="s14 sub">Plan a trip uses what EngineLink learns about fuel per mile, which needs GPS speed. It fills in by itself once speed data is there.</div></div>`;
+  const places=P.places.concat([['Other',null]]);
+  const ri=clamp(P.route,0,places.length-1),route=places[ri];
+  const one=route[1]==null?Math.max(0,parseFloat(String(P.custom).replace(',','.'))||0):route[1],nm=one*(P.round?2:1);
+  const SEA={Calm:0,Choppy:.06,Rough:.14},LOAD={Light:-.03,Normal:0,Heavy:.08},f=1+SEA[P.sea]+LOAD[P.load],slow=P.sea==='Rough'?0.9:P.sea==='Choppy'?0.96:1;
+  const bi=withKn.indexOf(withKn.find(r=>best&&r.rpm===best.rpm)),usual=withKn.reduce((a,b)=>b.sec>a.sec?b:a),fast=withKn[withKn.length-1];
+  let pi=P.planIdx==null?bi:clamp(P.planIdx,0,withKn.length-1);
+  const leg=r=>({l:nm*r.l10/10*f,min:nm/(r.kn*slow)*60});
+  const p=leg(withKn[pi]),b=leg(withKn[bi>=0?bi:0]);
+  const tk=S.live&&S.live.tank,ab=tk&&fin(tk.aboard)?tk.aboard:null,resL=tk?tk.cap*tk.reserve/100:0,after=ab!=null?ab-p.l:null;
+  const modes=[['Economical',bi],['Usual',withKn.indexOf(usual)],['Fast',withKn.indexOf(fast)]].filter(m=>m[1]>=0);
+  h+=`<div><div class="cth s13" style="margin-bottom:8px"><span class="sub">Where to?</span><button data-a="page" data-v="dest" data-b="economy" style="color:var(--teal)">Edit places</button></div>
+    <div class="seg" style="grid-template-columns:1fr 1fr">${places.map((r,i)=>`<button class="${i===ri?'pick':''}" data-a="planRoute" data-v="${i}" style="min-height:50px;text-align:left;padding:6px 12px"><span style="display:block;font-weight:600">${esc(r[0])}</span><span style="display:block;font-size:12px;opacity:.8">${r[1]!=null?NF(r[1],1).replace(/[.,]0$/,'')+' nm':i===ri?NF(one,0)+' nm':'Enter distance'}</span></button>`).join('')}</div>
+    ${route[1]==null?`<label style="display:flex;gap:10px;align-items:center;margin-top:8px" class="sub"><input class="field" inputmode="decimal" data-i="planCustom" value="${esc(P.custom)}" aria-label="Distance in nautical miles">nm one way</label>`:''}</div>
+    <div><div class="s13 sub" style="margin-bottom:8px">How fast? · ${NF(nm,0)} nm${P.round?' there and back':''}</div>
+    <div class="seg" style="grid-template-columns:repeat(${modes.length},minmax(0,1fr))">${modes.map(([n,i])=>{const m=leg(withKn[i]);return `<button class="${i===pi?(i===bi?'pick':'on'):''}" data-a="planIdx" data-v="${i}" style="text-align:left;padding:10px;min-height:0"><span style="display:block;font-size:12.5px;font-weight:600">${n}</span><span style="display:block;font-size:19px;font-weight:650;margin-top:3px">${L(m.l,0)} ${U.vu()}</span><span style="display:block;font-size:12px;opacity:.85">${durShort(m.min*60)}</span>${price>0?`<span style="display:block;font-size:12px;opacity:.85">${money(m.l*price)}</span>`:''}</button>`;}).join('')}</div>
+    <div class="cth s13" style="margin-top:12px"><span class="sub">Fine-tune</span><b style="font-size:14px">${NF(withKn[pi].rpm,0)} rpm · ${NF(withKn[pi].kn,1)} kn</b></div>
+    <input type="range" min="0" max="${withKn.length-1}" step="1" value="${pi}" data-i="planSlide" style="width:100%;margin-top:6px;accent-color:var(--teal)" aria-label="Engine speed for the trip"></div>
+    ${condRows()}
+    <div style="background:var(--track);border-radius:18px;padding:14px 16px" class="stack">
+      <div class="grid3" style="gap:8px"><div><div class="s12 sub">Fuel</div><div style="font-size:24px;font-weight:650">${L(p.l,0)} <span class="s13 sub">${U.vu()}</span></div></div><div><div class="s12 sub">Cost</div><div style="font-size:24px;font-weight:650">${price>0?NF(p.l*price,0)+' <span class="s13 sub">'+cur()+'</span>':'—'}</div></div><div><div class="s12 sub">Time</div><div style="font-size:24px;font-weight:650">${durShort(p.min*60)}</div></div></div>
+      ${after!=null?`<div><div class="cth s12"><span class="sub">Fuel aboard</span><span><b>${L(ab,0)} ${U.vu()}</b> <span class="sub">→</span> <b style="color:${after>=resL?'var(--text)':'var(--red)'}">${L(Math.max(0,after),0)} ${U.vu()}</b> <span class="sub">at the end</span></span></div>
+        <div class="bar" style="height:12px;margin-top:7px;position:relative;display:flex;background:var(--card)"><i style="width:${clamp(Math.max(0,after)/tk.cap*100,0,100)}%;background:var(--teal);border-radius:0"></i><i style="width:${clamp(Math.min(ab,p.l)/tk.cap*100,0,100)}%;background:var(--orange);opacity:.75;border-radius:0"></i>${tk.reserve?`<span style="position:absolute;left:${tk.reserve}%;top:0;bottom:0;width:2px;background:var(--text);opacity:.7"></span>`:''}</div></div>
+        <div style="border-radius:12px;padding:10px 12px;font-size:13.5px;font-weight:600;background:${after>=resL?'var(--gsoft)':'rgba(229,72,77,.16)'};color:${after>=resL?'var(--gtext)':'var(--red)'}">${after>=resL?'Enough fuel · '+L(after-resL,0)+' '+U.vu()+(tk.reserve?' spare above reserve':' left at the end'):(ab+(resL-after)>tk.cap?'Too far for one tank · plan a fuel stop':'Fill at least '+L(Math.ceil((resL-after)/10)*10,0)+' '+U.vu()+' before leaving')}</div>`:'<div class="s13 sub">Log a full tank to see if the fuel aboard is enough.</div>'}
+    </div>
+    ${pi!==bi&&bi>=0?`<div class="s13 sub">At your best speed: ${p.l>=b.l?L(p.l-b.l,0)+' '+U.vu()+(price>0?' ('+money((p.l-b.l)*price)+')':'')+' less':L(b.l-p.l,0)+' '+U.vu()+' more'}, ${b.min>=p.min?durShort((b.min-p.min)*60)+' longer':durShort((p.min-b.min)*60)+' sooner'}.</div>`:'<div class="s13" style="color:var(--gtext)">This is your most economical speed for the trip.</div>'}
+  </div>`;
+  return h;
+}
+const COND={
+  sea:['Sea','sea',[['Calm','Waves under 0,5 m','±0 %'],['Choppy','Waves 0,5 – 1 m, short and steep','+6 % fuel · 4 % slower'],['Rough','Waves over 1 m or breaking crests','+14 % fuel · 10 % slower']],'Typical values for a planing boat. Use them as a guide.'],
+  load:['Load','load',[['Light','1 – 2 people, water tank low, little gear','−3 % fuel'],['Normal','3 – 4 people, half water tank','±0 %'],['Heavy','5+ people, or full water tank and lots of gear','+8 % fuel']],'About 75 kg per person, 1 kg per litre of water.']
+};
+function condRows(){
+  return '<div class="stack" style="gap:8px">'+['sea','load'].map(k=>{const [label,key,lv,foot]=COND[k],cur=k==='sea'?P.sea:P.load,open=S.info==='plan'+k;
+    return `<div style="display:grid;grid-template-columns:70px 1fr;gap:10px;align-items:center"><button data-a="info" data-v="plan${k}" class="s13 sub" style="display:inline-flex;gap:6px;align-items:center">${label}<span class="q ${open?'on':''}">?</span></button>
+      <div class="seg" style="grid-template-columns:repeat(3,minmax(0,1fr))">${lv.map(([n])=>`<button class="${cur===n?'on':''}" data-a="planCond" data-v="${k}:${n}">${n}</button>`).join('')}</div></div>
+      ${open?`<div class="help">${lv.map(([n,w,e])=>`<div><div class="cth"><b class="s14">${n}</b><span class="s13" style="font-weight:600;color:${e[0]==='+'?'var(--orange)':e[0]==='−'?'var(--green)':'var(--sub)'}">${e}</span></div><div class="s13 sub">${w}</div></div>`).join('')}<p>${foot}</p></div>`:''}`;}).join('')+'</div>';
+}
+function seasonCard(price){
+  const e=S.econ,z=e.z,tl=z.reduce((a,r)=>a+r[0],0),tnm=z.reduce((a,r)=>a+r[2],0);
+  if(tl<1)return `<div class="card"><span class="ct">This season</span><div class="s14 sub" style="margin-top:6px">Fills in as you sail: fuel, cost and where the fuel went.</div></div>`;
+  const since=e.season?new Date(e.season*1000).toLocaleDateString(LOC,{day:'numeric',month:'short'}):'';
+  const big=z.map((r,i)=>[i,r[0]/tl]).sort((a,b)=>b[1]-a[1])[0];
+  let tip='';
+  if(tnm>5&&z[2][0]/tl>0.12&&z[2][2]/tnm<z[2][0]/tl*0.8)tip=`Getting on the plane took ${Math.round(z[2][0]/tl*100)} % of the fuel but gave only ${Math.round(z[2][2]/tnm*100)} % of the miles. Push through 2.000 – 2.500 rpm quickly instead of lingering.`;
+  else if(z[0][0]/tl>0.08)tip=`Idling and manoeuvring used ${Math.round(z[0][0]/tl*100)} % of the fuel this season.`;
+  else tip=`Most fuel went to ${ZONES[big[0]][0].toLowerCase()} (${Math.round(big[1]*100)} %).`;
+  return `<div class="card"><div class="cth"><span class="ct">This season</span><span class="s12 sub">${since?'since '+since+' · ':''}${e.trips} trips</span></div>
+    <div class="grid3" style="margin-top:12px;gap:8px"><div><div class="s12 sub">Fuel</div><div style="font-size:20px;font-weight:650">${L(tl,0)} <span class="s12 sub">${U.vu()}</span></div></div><div><div class="s12 sub">Spent</div><div style="font-size:20px;font-weight:650">${price>0?NF(tl*price,0)+' <span class="s12 sub">'+cur()+'</span>':'—'}</div></div><div><div class="s12 sub">Distance</div><div style="font-size:20px;font-weight:650">${tnm>0.5?NF(tnm,0)+' <span class="s12 sub">nm</span>':'—'}</div></div></div>
+    <div class="s13" style="font-weight:600;margin-top:18px">Where the fuel went</div>
+    <div style="display:flex;gap:2px;height:14px;border-radius:8px;overflow:hidden;margin-top:8px">${z.map((r,i)=>r[0]>0?`<div style="width:${(r[0]/tl*100).toFixed(1)}%;background:${ZONES[i][2]}"></div>`:'').join('')}</div>
+    <div class="list" style="margin-top:6px">${z.map((r,i)=>`<div style="display:flex;gap:10px;align-items:center;padding:9px 0"><span style="width:10px;height:10px;border-radius:3px;background:${ZONES[i][2]};flex:none"></span><div style="flex:1"><div class="s14">${ZONES[i][0]}</div><div class="s12 sub">${ZONES[i][1]}</div></div><div style="text-align:right"><div class="s14" style="font-weight:600">${L(r[0],0)} ${U.vu()}</div><div class="s12 sub">${Math.round(r[0]/tl*100)} % of fuel${tnm>0.5?' · '+NF(r[2],0)+' nm':' · '+dur(r[1])}</div></div></div>`).join('')}</div>
+    <div style="margin-top:12px;border-radius:14px;padding:12px 14px;background:var(--osoft);color:var(--orange);font-size:13.5px;font-weight:600">${tip}</div></div>`;
+}
+function insightsCard(){
+  const items=[];
+  const e=S.econ;
+  if(e&&e.h&&fin(e.h.bal)&&Math.abs(e.h.bal)>0.03&&e.h.upd){
+    const pi=S.live?S.live.port:0,stbdMore=pi===1?e.h.bal<0:e.h.bal>0;
+    items.push(['var(--orange)',`${stbdMore?'Starboard':'Port'} uses ${Math.round(Math.abs(e.h.bal)*100)} % more than ${stbdMore?'port':'starboard'}`,'At the same rpm on the last trip. See the health check on the Engines tab.']);
+  }
+  const t=S.trips&&S.trips.trips||[];
+  const rate=x=>x.run>600?((x.l[0]||0)+(x.l[1]||0))/(x.run/3600):null;
+  const many=t.filter(x=>x.p>=5).map(rate).filter(fin),few=t.filter(x=>x.p>0&&x.p<=2).map(rate).filter(fin);
+  if(many.length>=2&&few.length>=2){
+    const a=many.reduce((s,v)=>s+v,0)/many.length,b=few.reduce((s,v)=>s+v,0)/few.length;
+    if(b>0)items.push(['var(--blue)',`Load matters: ${Math.round((a/b-1)*100)} % more fuel per hour with 5 or more aboard`,'From the trips you added notes to.']);
+  }
+  return `<div class="card" style="padding:6px 20px"><div class="ct" style="padding:14px 0 4px">Worth knowing</div>
+    ${items.length?items.map(([c,t2,x])=>`<div style="display:flex;gap:12px;padding:12px 0;border-top:1px solid var(--line)"><span class="dot" style="width:8px;height:8px;background:${c};margin-top:6px"></span><div><div class="s14" style="font-weight:600">${esc(t2)}</div><div class="s13 sub" style="margin-top:2px">${esc(x)}</div></div></div>`).join(''):`<div class="s13 sub" style="padding:8px 0 14px">EngineLink learns as you sail. Tips appear here after a few trips.</div>`}</div>`;
+}
+
+// ---------- Tank ----------
+function vTank(){
+  const lv=S.live;if(!lv)return waiting();
+  const tk=lv.tank;
+  let h='<div class="stack live">';
+  if(!(tk.cap>0)){
+    h+=`<div class="card"><span class="lbl" style="color:var(--teal)">Fuel aboard</span><div class="s14 sub" style="margin-top:6px">Set the size of the fuel tank once. Then log a full tank, and EngineLink keeps track of what is aboard.</div><button class="btn pri" style="margin-top:14px;width:100%" data-a="tankEditGo">Set tank size</button></div>`;
+  }else if(!fin(tk.aboard)){
+    h+=`<div class="card"><span class="lbl" style="color:var(--teal)">Fuel aboard</span><div class="s14 sub" style="margin-top:6px">Fill up and log it with "Tank is full now". From then on EngineLink counts every litre.</div></div>`;
+  }else{
+    const pct=Math.round(tk.aboard/tk.cap*100),col=pct<=15?'var(--red)':pct<=30?'var(--orange)':'var(--teal)';
+    h+=`<div class="card"><span class="lbl" style="color:var(--teal)">Fuel aboard</span>
+      <div style="display:flex;align-items:baseline;gap:8px;margin-top:6px"><span class="big" style="font-size:62px;letter-spacing:-2.5px">${L(tk.aboard,0)}</span><span style="font-size:17px;font-weight:600" class="sub">of ${L(tk.cap,0)} ${U.vu()}</span><span class="chip" style="margin-left:auto;align-self:center;background:var(--track);color:var(--sub)">± ${L(tk.pm,0)} ${U.vu()}</span></div>
+      <div class="bar" style="height:22px;border-radius:22px;margin-top:14px;position:relative"><i style="width:${pct}%;background:${col};border-radius:22px"></i>${tk.reserve?`<span style="position:absolute;left:${tk.reserve}%;top:4px;bottom:4px;width:2px;border-radius:2px;background:var(--card)"></span>`:''}</div>
+      <div class="cth s12 sub" style="margin-top:8px"><span>${pct} %${tk.reserve?' · reserve at '+tk.reserve+' %':''}</span><span>${S.fuel&&fin(S.fuel.since)?L(S.fuel.since,0)+' '+U.vu()+' used since the last fill-up':''}</span></div></div>`;
+  }
+  h+=`<button class="btn pri" style="min-height:56px;border-radius:18px;font-size:17px" data-a="sheet" data-v="fuel">Log fuel</button>`;
+  const log=S.fuel?S.fuel.log:[];
+  h+=`<div class="card" style="padding:6px 20px"><div class="s14 sub" style="font-weight:600;padding:12px 0 2px">Fuel log</div>${log.length?'<div class="list">'+log.map((r,i)=>{
+    const open=S.fuelOpen===i;
+    return `<div><button class="row" data-a="fuelOpen" data-v="${i}"><span><span class="rt">${r.full?'Filled up':'Added'}</span><span class="rh">${r.utc?new Date(r.utc*1000).toLocaleDateString(LOC,{day:'numeric',month:'short',year:'2-digit'}):'—'} · ${r.full?(r.c!=null?'tank full · counted '+L(r.c,0)+' '+U.vu():'tank full'):'not full'}</span></span><span style="text-align:right"><span class="rt" style="font-weight:600">${r.l>0?L(r.l,0)+' '+U.vu():'Full'}</span><span class="rh">${r.p>0&&r.l>0?money(r.l*r.p):''}</span></span></button>
+      ${open?`<div style="padding:0 0 12px;display:flex;gap:8px;align-items:center"><span class="s12 sub" style="flex:1">${i===0?'Deleting the newest entry also restores the fuel aboard before it.':'Older entries are only removed from the log.'}</span><button class="btn sm red" data-a="fuelDel" data-v="${i}">${svg(IC.trash,15,'#fff',2)}Delete</button></div>`:''}</div>`;}).join('')+'</div>':'<div class="empty">No fill-ups logged yet.</div>'}</div>`;
+  h+=howCard();
+  return h+'</div>';
+}
+function howCard(){
+  const f=S.fuel;if(!f)return '';
+  const tk=S.live.tank;
+  const items=[
+    ['var(--green)','Counting every litre','Both engines report their fuel use about twice a second.'+(f.since!=null?' '+L(f.since,0)+' '+U.vu()+' used since the last fill-up.':'')],
+    [f.tunes?'var(--green)':'var(--orange)',f.tunes?'Fine-tuned from '+f.tunes+' full fill-up'+(f.tunes>1?'s':''):'Not fine-tuned yet',f.tunes?'The last full tank differed '+NF(Math.abs(f.tuneDev*100),1)+' % from what EngineLink counted; the figures were adjusted.':'Fill up, enter the pump litres and switch on "Tank is full now". Each full tank makes the figures more exact.'],
+    [f.missed.n?'var(--orange)':'var(--green)','Engine hour meters',f.missed.n?'The engines ran '+f.missed.n+' time'+(f.missed.n>1?'s':'')+' while EngineLink was off. About '+L(f.missed.l,0)+' '+U.vu()+' was added as an estimate.':'Checked against the engines\' own hour meters each time EngineLink starts. No running was missed.']
+  ];
+  return `<div class="card" style="padding:6px 20px 8px"><div class="cth" style="padding:12px 0 2px"><span class="s14 sub" style="font-weight:600">How EngineLink knows</span>${fin(tk.aboard)?`<span class="s13" style="font-weight:600;color:var(--green)">± ${L(tk.pm,0)} ${U.vu()}</span>`:''}</div>
+    ${items.map(([c,t,x])=>`<div style="display:flex;gap:12px;padding:11px 0;border-top:1px solid var(--line)"><span class="dot" style="width:8px;height:8px;background:${c};margin-top:6px"></span><div><div class="s14">${t}</div><div class="s13 sub" style="margin-top:2px">${x}</div></div></div>`).join('')}</div>`;
+}
+
+// ---------- History ----------
+function units(){
+  const t=S.trips?S.trips.trips:[];
+  const groups=new Map();
+  for(const r of t){const k=r.g||r.id;if(!groups.has(k))groups.set(k,[]);groups.get(k).push(r);}
+  const out=[];
+  for(const [k,parts] of groups){
+    parts.sort((a,b)=>a.s-b.s||a.id-b.id);
+    const s=parts[0].s,e=parts[parts.length-1].e,run=parts.reduce((a,p)=>a+p.run,0);
+    const l=[0,1].map(c=>parts.reduce((a,p)=>a+(p.l[c]||0),0));
+    const note=parts.find(p=>p.p||p.sea||p.w||p.x||p.n)||parts[0];
+    out.push({key:k,ids:parts.map(p=>p.id),parts,s,e,run,l,fuel:l[0]+l[1],combined:parts.length>1,note,group:parts[0].g});
+  }
+  return out.sort((a,b)=>(b.s||0)-(a.s||0)||b.key-a.key);
+}
+const SEA=['','Calm','Choppy','Rough'],WIND=['','Light','Moderate','Strong'],EXTRA=['Full water','Towing','Clean hull'];
+function noteLine(n){if(!n)return '';const a=[];if(n.p)a.push(n.p+' aboard');if(n.sea)a.push(SEA[n.sea]+' sea');if(n.w)a.push(WIND[n.w]+' wind');EXTRA.forEach((x,i)=>{if(n.x&(1<<i))a.push(x);});if(n.n)a.push(n.n);return a.join(' · ');}
+function vHistory(){
+  if(!S.trips)return waiting();
+  const us=units(),price=S.live?S.live.price:0,pi=S.live?S.live.port:0;
+  if(!us.length)return `<div class="card"><div class="empty">No trips yet. A trip is saved here when both engines have stopped.</div></div>`;
+  const sel=S.selMode;
+  let h=`<div style="display:flex;justify-content:flex-end;gap:8px;margin:-4px 0 10px">${!sel?`<button class="btn sm" data-a="selMode" data-v="export">${svg(IC.down,14)}Export</button>`:''}<button class="btn sm" data-a="selMode" data-v="${sel?'':'combine'}">${sel?'Cancel':'Combine'}</button></div>`;
+  if(sel==='export')h+=`<div class="seg" style="grid-template-columns:repeat(3,minmax(0,1fr));margin-bottom:14px">${['Today','Last 7 days','All'].map((q,i)=>`<button class="${S.quick===i?'on':''}" data-a="quick" data-v="${i}">${q}</button>`).join('')}</div>`;
+  const days=[];
+  for(const u of us){const k=u.s?dayKey(u.s):0;let d=days.find(x=>x.k===k);if(!d){d={k,label:dayLabel(u.s),units:[]};days.push(d);}d.units.push(u);}
+  for(const d of days){
+    const sum=d.units.reduce((a,u)=>a+u.fuel,0);
+    h+=`<div style="margin-bottom:18px"><div class="cth" style="padding:0 6px 8px"><span class="ct">${d.label}</span><span class="s13 sub">${d.units.length} trip${d.units.length>1?'s':''} · ${L(sum,1)} ${U.vu()}</span></div><div class="card" style="padding:0;overflow:hidden">`;
+    d.units.forEach((u,ix)=>{
+      const picked=S.sel.includes(u.key),open=!sel&&S.open===u.key,nl=noteLine(u.note);
+      const crosses=u.s&&u.e&&dayKey(u.s)!==dayKey(u.e);
+      const port=pi===1?1:0,stbd=1-port;
+      h+=`<div style="${ix?'border-top:1px solid var(--line)':''}"><button data-a="tripTap" data-v="${u.key}" style="width:100%;text-align:left;padding:14px 18px;display:flex;gap:12px;align-items:center;background:${picked?'var(--gsoft)':'transparent'}">
+        ${sel?`<span style="width:24px;height:24px;flex:none;border-radius:50%;border:2px solid ${picked?'var(--teal)':'var(--sub)'};background:${picked?'var(--teal)':'transparent'};color:var(--onteal);font-size:13px;font-weight:700;display:flex;align-items:center;justify-content:center">${picked?'✓':''}</span>`:''}
+        <span style="flex:1;display:flex;justify-content:space-between;gap:10px;align-items:center"><span style="min-width:0"><span style="display:block;font-size:17px;font-weight:600">${hm(u.s)} – ${hm(u.e)}</span><span class="s13 sub" style="display:block">${dur(u.run)}${u.combined?' running · '+dur(u.e-u.s)+' total':''}</span>${nl?`<span class="s12 sub" style="display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:210px;font-style:italic;margin-top:2px">${esc(nl)}</span>`:''}</span>
+        <span style="text-align:right"><span style="display:block;font-size:20px;font-weight:700">${L(u.fuel,1)} ${U.vu()}</span><span class="s12 sub">${u.run>60?L(u.fuel/(u.run/3600),1)+' '+U.ru():''}</span></span></span></button>
+        ${u.combined&&!sel?`<div class="s12" style="padding:0 18px 12px;font-weight:600;color:var(--teal)">Combined · ${u.parts.length} trips</div>`:''}
+        ${crosses?`<div style="padding:0 18px 12px"><span class="chip" style="background:var(--osoft);color:var(--orange);font-size:12px">Ended ${dayLabel(u.e)}</span></div>`:''}
+        ${open?`<div style="padding:0 18px 14px" class="stack">
+          <div class="grid3" style="gap:8px;font-size:13px"><div><span style="color:var(--port);font-weight:600">${pi<0?'J7':'Port'}</span><br><b style="font-size:16px">${L(u.l[port],1)} ${U.vu()}</b></div><div><span style="color:var(--stbd);font-weight:600">${pi<0?'J6':'Starboard'}</span><br><b style="font-size:16px">${L(u.l[stbd],1)} ${U.vu()}</b></div><div><span class="sub" style="font-weight:600">Cost</span><br><b style="font-size:16px">${price>0?money(u.fuel*price):'—'}</b></div></div>
+          <div class="grid2" style="gap:8px"><button class="btn" data-a="sheet" data-v="notes:${u.note.id}">${svg(IC.pen,15)}${nl?'Edit notes':'Add notes'}</button><button class="btn" data-a="dlTrips" data-v="${u.ids.join(',')}">${svg(IC.down,15)}Download</button></div>
+          ${u.combined?u.parts.map(p=>`<div class="cth s13 sub"><span>${hm(p.s)} – ${hm(p.e)}</span><span>${L((p.l[0]||0)+(p.l[1]||0),1)} ${U.vu()} · ${dur(p.run)}</span></div>`).join('')+`<button class="btn" style="background:var(--osoft);color:var(--orange);font-weight:600" data-a="split" data-v="${u.group}">Split into separate trips</button>`:''}
+        </div>`:''}</div>`;
+    });
+    h+='</div></div>';
+  }
+  return h;
+}
+function renderBar(){
+  const b=$('#bar');
+  if(S.tab!=='history'||S.page||!S.selMode){b.innerHTML='';b.style.display='none';return;}
+  b.style.display='block';
+  const us=units(),n=S.sel.length;
+  if(S.selMode==='combine'){
+    const idx=S.sel.map(k=>us.findIndex(u=>u.key===k)).filter(i=>i>=0).sort((a,b)=>a-b);
+    const contiguous=idx.length>=2&&idx[idx.length-1]-idx[0]+1===idx.length;
+    b.innerHTML=`<button class="btn ${contiguous?'pri':''}" style="width:100%" data-a="combine" ${contiguous?'':'disabled'}>${idx.length>=2?(contiguous?'Combine '+idx.length+' trips':'Pick trips next to each other'):'Select two or more trips'}</button>`;
+  }else{
+    const sec=us.filter(u=>S.sel.includes(u.key)).reduce((a,u)=>a+u.run,0);
+    const mb=S.raw?sec/60*0.42:0.02+sec/60*0.004;
+    b.innerHTML=`<button class="row" data-a="rawToggle" style="padding:0 0 10px"><span><span class="rt s14">Include raw engine data</span><span class="rh">Every message from both engines, for analysis</span></span><span class="tog ${S.raw?'on':''}"></span></button>
+      <button class="btn ${n?'pri':''}" style="width:100%" data-a="export" ${n?'':'disabled'}>${n?'Download '+n+' trip'+(n>1?'s':'')+' · about '+(mb>=1?NF(mb,1)+' MB':NF(mb*1024,0)+' KB'):'Select trips to export'}</button>`;
+  }
+}
+
+// ---------- Engines ----------
+const VALS=[['load',288,'Load','Shown as a bar under the rpm'],['req',291,'Requested rpm','What the throttle asks for'],['cool',259,'Coolant','Engine temperature'],['boost',265,'Boost','Turbo pressure'],['air',261,'Charge air','Air temperature after the intercooler'],['ftemp',260,'Fuel temp.','Diesel temperature at the pump'],['batt',293,'Battery','System voltage at the engine'],['gear',264,'Gear','Neutral, forward or reverse'],['hours',266,'Hours','Engine hours from the engine itself'],['rate',289,'Fuel rate','Also shown on Trip'],['inlet',258,'Inlet pressure','Absolute air pressure in the intake'],['rack',295,'Fuel rack','How far the injection pump is open'],['inj',296,'Injection angle','Injection timing'],['start',263,'Start input','Key and start button from the panel'],['ms',267,'Control unit','Active Volvo MS unit']];
+function valText(key,v){
+  if(!fin(v))return ['—',''];
+  switch(key){
+    case 'cool':case 'air':case 'ftemp':return [NF(U.temp(v),0),U.tu()];
+    case 'boost':return [NF(U.press(v),imp()?1:2),U.pu()];
+    case 'batt':return [NF(v,1),'V'];
+    case 'gear':return [gearName(v),''];
+    case 'hours':return [NF(v,1),'h'];
+    case 'rate':return [L(v,1),U.ru()];
+    case 'req':return [NF(v,0),'rpm'];
+    case 'inlet':return [NF(imp()?v*0.145038:v,imp()?1:0),imp()?'psi':'kPa'];
+    case 'rack':case 'load':return [NF(v,0),'%'];
+    case 'inj':return [NF(v,1),'°'];
+    case 'start':return ['0x'+(v>>>0).toString(16).toUpperCase().padStart(4,'0'),''];
+    default:return [NF(v,0),''];
+  }
+}
+function vEngines(){
+  const lv=S.live;if(!lv)return waiting();
+  const es=engines();
+  let h='<div class="stack live">';
+  for(const e of es){
+    const load=ev(e,288),on=e.run;
+    h+=`<div class="card"><div class="cth" style="align-items:center"><span style="display:inline-flex;gap:7px;align-items:center;font-size:15px;font-weight:600;color:${e.color}"><span class="dot" style="width:10px;height:10px;background:${e.color}"></span>${e.name}</span><span class="s13 sub">${e.sock} · ${on?'Running':fin(e.rpm)?'Idle':e.seen!=null&&e.seen<30?'Stopped':'No data'}${e.poll?'':(lv.proto==='kad'?' · not read':'')}</span></div>
+      <div class="cth" style="align-items:flex-end;margin-top:6px"><div class="big" style="font-size:44px">${fin(e.rpm)?NF(e.rpm,0):'—'} <span class="unit">rpm</span></div>${P.vals.load&&fin(load)?`<div style="text-align:right;padding-bottom:6px"><div class="s12 sub">Load</div><div style="font-size:18px;font-weight:600">${NF(load,0)} %</div></div>`:''}</div>
+      ${P.vals.load&&fin(load)?`<div class="bar" style="height:6px;margin-top:4px"><i style="width:${clamp(load,0,100)}%;background:${e.color}"></i></div>`:''}
+      <div class="grid3" style="gap:12px 8px;margin-top:12px">${VALS.filter(v=>v[0]!=='load'&&P.vals[v[0]]).map(([k,idx,label])=>{const [t,u]=valText(k,ev(e,idx));return `<div style="min-width:0"><div class="s12 sub" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${label}</div><div style="font-size:18px;font-weight:600;white-space:nowrap">${t} <span style="font-size:12.5px;font-weight:500" class="sub">${u}</span></div></div>`;}).join('')}</div>
+      ${!e.poll&&lv.proto==='kad'&&e.why?`<div class="s12 sub" style="margin-top:10px">${esc(e.why)}</div>`:''}</div>`;
+  }
+  if(lv.proto==='kad'&&es.every(e=>!e.poll))h+=`<div class="card s14 sub">EngineLink only listens right now. Switch on "Read engines automatically" in Settings, or start reading under Diagnostics.</div>`;
+  h+=`<button data-a="page" data-v="vals" data-b="engines" style="align-self:center;color:var(--teal);font-size:13.5px">Choose which values to show</button>`;
+  h+=syncCard(es)+healthCard(es)+serviceCard(es);
+  return h+'</div>';
+}
+function syncCard(es){
+  if(es.length<2||!fin(es[0].rpm)||!fin(es[1].rpm)||!es[0].run||!es[1].run)return '';
+  const d=es[0].rpm-es[1].rpm,ad=Math.abs(d),col=ad<=10?'var(--green)':ad<=40?'var(--text)':'var(--orange)';
+  return `<div class="card"><div class="cth"><span class="ct">Engine sync</span><span class="s13" style="font-weight:600;color:${col}">${ad<=10?'In sync':(d>0?es[0].name:es[1].name)+' '+NF(ad,0)+' rpm faster'}</span></div>
+    <div style="position:relative;height:12px;border-radius:12px;background:var(--track);margin-top:14px"><div style="position:absolute;left:50%;top:-3px;bottom:-3px;width:2px;margin-left:-1px;background:var(--sub);opacity:.6"></div><div style="position:absolute;top:-4px;left:${clamp(50-d/100*46,4,96)}%;width:20px;height:20px;margin-left:-10px;border-radius:50%;background:${col};border:3px solid var(--card)"></div></div>
+    <div class="cth s12" style="margin-top:8px"><span style="color:${es[0].color}">${es[0].name} faster</span><span class="sub">in sync</span><span style="color:${es[1].color}">${es[1].name} faster</span></div>
+    <div class="s13 sub" style="margin-top:10px">Matched engines are quieter, vibrate less and wear evenly.</div></div>`;
+}
+const HEALTH={
+  cool:['Coolant temperature','How well the cooling system gets rid of heat. A slow rise over weeks is the earliest sign of a worn impeller or a blocked heat exchanger.','Check the impeller and the raw-water intake. Keep the impeller on its yearly schedule.'],
+  boost:['Boost pressure','Boost is how much air the turbo pushes into the engine. Less air means more fuel for the same power.','Check the air filter first. If boost stays low, have the turbo and the intercooler hoses checked.'],
+  air:['Charge air temperature','The air temperature after the intercooler. If it climbs, the intercooler is dirty or lacks cooling water, and the engine loses power.','Have the intercooler cleaned and check the raw-water flow.'],
+  fuel:['Fuel per rpm','At the same rpm an engine should use what it normally uses. A rise means it works harder (hull, propeller) or burns less cleanly.','Check the propeller and hull, then the air filter and injectors.'],
+  ftemp:['Fuel temperature','Hot diesel is thinner and gives less power. It rises on long runs with a low tank.','Keep more fuel in the tank on long runs.'],
+  batt:['Battery charging','Shows that the alternators charge. Under 13,5 V while running usually means a slipping belt or a failing alternator.','Check the alternator belt and connections.']
+};
+function healthCard(es){
+  const e=S.econ;
+  const rows=[];let look=0;
+  const name=i=>es[i]?es[i].name:'';
+  const devs=es.map(x=>e&&e.h?e.h.dev[x.ch]:null);
+  const learning=devs.every(d=>!d||d.trips<3);
+  const add=(id,status,now,text)=>{if(status==='look')look++;rows.push({id,status,now,text});};
+  if(learning){
+    const n=devs.reduce((m,d)=>Math.max(m,d?d.trips:0),0);
+    add('cool','learn','Learning what is normal for each engine ('+n+' of 3 trips).','');
+  }else{
+    const msg=(i,m,th,fmt)=>{const d=devs[i];if(!d||d.trips<3||!fin(d.d[m]))return null;return Math.abs(d.d[m])>th?name(i)+' '+fmt(d.d[m]):null;};
+    const pct=v=>(v>0?'+':'')+NF(v*100,0)+' % vs normal';
+    const cool=[0,1].map(i=>msg(i,0,4,v=>(v>0?'+':'')+NF(v,1)+' °C vs normal')).filter(Boolean);
+    add('cool',cool.length?'look':'ok',cool.length?cool.join(' · '):'Normal at cruise',cool.length?'Higher than this engine normally runs at the same rpm.':'');
+    const boost=[0,1].map(i=>msg(i,1,0.06,pct)).filter(Boolean);
+    add('boost',boost.length?'look':'ok',boost.length?boost.join(' · '):'Normal',boost.length?'Different from what this engine normally gives at the same rpm.':'');
+    const air=[0,1].map(i=>msg(i,2,0.1,pct)).filter(Boolean);
+    add('air',air.length?'look':'ok',air.length?air.join(' · '):'Normal','');
+    const fuel=[0,1].map(i=>msg(i,3,0.06,pct)).filter(Boolean);
+    add('fuel',fuel.length?'look':'ok',fuel.length?fuel.join(' · '):'Normal','');
+  }
+  const ft=es.map(x=>ev(x,260)).filter(fin);
+  if(ft.length)add('ftemp',Math.max(...ft)>45?'look':'ok',es.map(x=>fin(ev(x,260))?x.name+' '+NF(U.temp(ev(x,260)),0)+' '+U.tu():'').filter(Boolean).join(' · '),Math.max(...ft)>45?'Over 45 °C.':'');
+  const bv=es.filter(x=>x.run).map(x=>ev(x,293)).filter(fin);
+  if(bv.length)add('batt',Math.min(...bv)<13.5?'look':'ok',es.filter(x=>x.run&&fin(ev(x,293))).map(x=>x.name+' '+NF(ev(x,293),1)+' V').join(' · '),Math.min(...bv)<13.5?'Low while running.':'');
+  return `<div class="card" style="padding:6px 20px 8px"><div class="cth" style="padding:14px 0 2px"><span class="ct">Health check</span><span class="s13" style="font-weight:600;color:${look?'var(--orange)':'var(--green)'}">${learning?'Learning':look?look+' thing'+(look>1?'s':'')+' worth a look':'All normal'}</span></div>
+    <div class="s12 sub" style="padding-bottom:6px">Each engine is compared with its own normal at the same rpm. Tap a line to read more.</div>
+    ${rows.map(r=>{const open=S.healthOpen===r.id,[t,why,todo]=HEALTH[r.id],c=r.status==='look'?'var(--orange)':r.status==='learn'?'var(--sub)':'var(--green)';
+      return `<button data-a="healthOpen" data-v="${r.id}" style="width:100%;text-align:left;display:flex;gap:12px;padding:12px 0;border-top:1px solid var(--line)"><span class="dot" style="width:8px;height:8px;background:${c};margin-top:7px"></span><span style="flex:1;display:block"><span class="cth"><span style="font-size:14.5px">${r.status==='learn'?'Normal values':t}</span><span class="s13" style="color:${r.status==='look'?'var(--orange)':'var(--sub)'};white-space:nowrap">${r.status==='look'?'Worth a look':r.status==='learn'?'':'Normal'} ${r.status==='learn'?'':open?'⌃':'⌄'}</span></span><span class="s12 sub" style="display:block;margin-top:3px">${esc(r.now)}</span>${r.text?`<span class="s13" style="display:block;margin-top:6px">${r.text}</span>`:''}
+        ${open&&r.status!=='learn'?`<span style="display:block;background:var(--track);border-radius:12px;padding:10px 12px;margin-top:8px"><span class="s12 sub" style="display:block;font-weight:600">What it tells you</span><span class="s13" style="display:block;margin-top:2px">${why}</span><span class="s12 sub" style="display:block;font-weight:600;margin-top:8px">${r.status==='look'?'What to do':'If it changes'}</span><span class="s13" style="display:block;margin-top:2px">${todo}</span></span>`:''}</span></button>`;}).join('')}</div>`;
+}
+const SERVICE=[['oil','Oil and oil filter','Every 100 h or yearly',100],['air','Air filter','Every 400 h',400],['imp','Impeller','Yearly',0],['ff','Fuel filters','Every 200 h',200]];
+function serviceCard(es){
+  const hrs=es.map(e=>e.hrs).filter(h=>fin(h)&&h>0),cur=hrs.length?Math.max(...hrs):null;
+  return `<div class="card" style="padding:6px 20px 8px"><div class="cth" style="padding:14px 0 6px"><span class="ct">Service</span><span class="s12 sub">${cur!=null?'engine hours '+NF(cur,1):'from engine hours'}</span></div>
+    ${SERVICE.map(([id,t,every,iv])=>{
+      const last=P.service[id],open=S.svcOpen===id;let due='Set',soon=false;
+      if(last){
+        if(iv&&fin(last.h)&&cur!=null){const left=iv-(cur-last.h);due=left<0?NF(-left,0)+' h overdue':'in '+NF(left,0)+' h';soon=left<20;}
+        if(!iv&&last.t){const d=new Date((last.t+365*86400)*1000);due=d.toLocaleDateString(LOC,{month:'short',year:'numeric'});soon=last.t+335*86400<Date.now()/1000;}
+        if(id==='oil'&&last.t&&last.t+365*86400<Date.now()/1000){due='yearly · due';soon=true;}
+      }
+      return `<div style="border-top:1px solid var(--line)"><button class="row" data-a="svcOpen" data-v="${id}"><span><span class="rt">${t}</span><span class="rh">${every}</span></span><span style="font-size:14px;font-weight:600;white-space:nowrap;color:${soon?'var(--orange)':'var(--sub)'}">${due}</span></button>
+        ${open?`<div class="cth" style="align-items:center;padding:0 0 12px"><span class="s12 sub">${last?'Last done '+(last.t?new Date(last.t*1000).toLocaleDateString(LOC):'')+(fin(last.h)?' at '+NF(last.h,1)+' h':''):'Not set yet. Tap when it is done, or after the next service.'}</span><button class="btn sm pri" data-a="svcDone" data-v="${id}">Done today</button></div>`:''}</div>`;}).join('')}</div>`;
+}
+
+// ---------- Settings ----------
+const row=(a,v,title,hint,right,extra='')=>`<button class="row" data-a="${a}" data-v="${v||''}" ${extra}><span><span class="rt">${title}</span>${hint?`<span class="rh">${hint}</span>`:''}</span>${right}</button>`;
+const rv=t=>`<span class="rv">${t} ›</span>`;
+const tg=on=>`<span class="tog ${on?'on':''}"></span>`;
+function cfgv(){return S.state?S.state.config:null;}
+function vSettings(){
+  const c=cfgv(),lv=S.live;
+  if(!c)return waiting();
+  const router=lv&&lv.net.sta;
+  let h='';
+  // Boat
+  h+=`<div class="hd">Boat</div><div class="sec">
+    ${row('tankEdit','','Fuel tank size','Both tanks together · set once',rv(c.tankL>0?L(c.tankL,0)+' '+U.vu():'Not set'))}
+    ${S.editTank?`<div class="rowx"><div style="background:var(--track);border-radius:16px;padding:14px" class="stack"><div class="s13 sub">Only needs setting once. Changing it later resets the estimate of fuel aboard until the next full tank.</div><label style="display:flex;gap:10px;align-items:center"><input class="field" style="background:var(--card);font-size:20px" inputmode="numeric" data-i="tankDraft" value="${esc(S.tankDraft)}" aria-label="Fuel tank size in litres">${U.vu()}</label><div class="grid2" style="gap:8px"><button class="btn" style="background:var(--card)" data-a="tankEdit">Cancel</button><button class="btn pri" data-a="tankSave">Save</button></div></div></div>`:''}
+    ${row('cycle','reserve','Reserve to keep',c.reserve?'Range and planning stop here':'Off · range and planning run to empty',rv(c.reserve?c.reserve+' %':'Off'))}
+    <div class="row"><span><span class="rt">Fuel price</span><span class="rh">When no price is logged</span></span><span style="display:flex;gap:8px;align-items:center"><input class="field" style="width:88px;text-align:right" inputmode="decimal" data-i="price" value="${c.price>0?NF(c.price,2):''}" placeholder="0" aria-label="Default fuel price per litre"><span class="sub">${cur()}/L</span></span></div></div>`;
+  // Economy
+  h+=`<div class="hd">Economy</div><div class="sec">${row('pref','planOn','Plan a trip','Fuel, time and cost before you leave',tg(P.planOn))}
+    ${P.planOn?row('page','dest','Saved places',P.places.length?esc(P.places.map(p=>p[0]).join(', ')):'None yet',rv('Edit')):''}</div>`;
+  // Engines
+  const vcount=VALS.filter(v=>P.vals[v[0]]).length;
+  h+=`<div class="hd">Engines</div><div class="sec">${row('page','vals','Values on Engines tab','What each engine card shows',rv(vcount+' of '+VALS.length))}
+    ${row('autoPoll','','Read engines automatically',c.autoPoll?'Sends read requests only, from start-up':'Off · EngineLink only listens',tg(c.autoPoll))}
+    ${row('cycle','port','Which socket is which','The sockets on the board',rv(c.portChannel===2?'Port J6 · Stbd J7':c.portChannel===1?'Port J7 · Stbd J6':'Not set'))}
+    ${row('cycle','can','Speed source','GPS speed for knots and miles',rv(c.canListen?'NMEA 2000 GPS':'Off'))}
+    ${row('cycle','tripEnd','Trip ends after','Both engines off for this long',rv(c.tripEnd+' min'))}</div>`;
+  // Warm-up
+  h+=`<div class="hd">Warm-up guide</div><div class="sec">${row('pref','warmOn','Show the warm-up guide','Shown on Trip after a cold start',tg(P.warmOn))}
+    ${P.warmOn?row('cycle','warmTarget','Engines are warm at','Coolant temperature for the guide',rv(NF(U.temp(P.warmTarget),0)+' '+U.tu()))+row('cycle','warmClose','Close the ready message','Counts only while it is on screen',rv(P.warmClose>0?'After '+(P.warmClose>=60?P.warmClose/60+' min':P.warmClose+' s'):'Manually')):''}</div>`;
+  // Connection
+  h+=`<div class="hd">Connection</div><div class="sec">${row('page','ap','EngineLink Wi-Fi','Your phone connects here',rv(esc(c.apName||'EngineLink')))}
+    ${row('page','router','Boat router','Gives internet time and updates',rv(router?'Connected · '+esc(lv.net.ssid):c.router?'Not reachable':'Not connected'))}
+    <div class="row"><span><span class="rt">Connected right now</span><span class="rh">Up to 6 phones at once</span></span><span class="rv">${lv?lv.net.cl+' phone'+(lv.net.cl===1?'':'s'):'—'}</span></div></div>`;
+  // Time
+  const ts={gps:'GPS',ntp:'internet time',phone:'from phone',none:'not set'}[lv?lv.ts:'none']||'—';
+  h+=`<div class="hd">Time</div><div class="sec"><div class="row"><span><span class="rt">Clock</span><span class="rh">Set from your phone, GPS or the internet</span></span><span class="rv">${lv&&lv.utc?hm(lv.utc)+' · '+ts:ts}</span></div>
+    <div class="row"><span><span class="rt">Time zone</span><span class="rh">Times are shown in your phone's time zone</span></span><span class="rv">From phone</span></div>
+    <div class="${router?'':'dim'}">${row('cycle','ntp','Internet time (NTP)',router?(c.ntp?'On':'Off'):'Needs a router connection',tg(router&&c.ntp))}
+    <div class="row"><span class="rt">Server</span><input class="field" style="width:170px;text-align:right" data-i="ntpServer" value="${esc(c.ntpServer)}" aria-label="NTP server"></div></div></div>`;
+  // SD card
+  const sd=S.sd;
+  h+=`<div class="hd">SD card</div><div class="sec"><div class="rowx"><div class="cth"><span class="rt">Storage</span><span class="sub">${sd&&sd.ok?NF(sd.usedMB/1024,1)+' of '+NF(sd.totalMB/1024,1)+' GB used':sd&&sd.inserted?'Card not readable':'No card'}</span></div>${sd&&sd.ok?`<div class="bar" style="height:6px;margin-top:8px"><i style="width:${clamp(sd.usedMB/Math.max(1,sd.totalMB)*100,1,100)}%;background:var(--teal)"></i></div>`:''}</div>
+    ${row('exportGo','','Export data','Trips as CSV files',rv('Choose trips'))}
+    ${row('cycle','rawKeep','Keep raw engine data','Trip summaries are always kept',rv(c.rawKeep?c.rawKeep>=365?NF(c.rawKeep/365,0)+' year'+(c.rawKeep>=730?'s':''):c.rawKeep+' days':'Forever'))}
+    <button class="row" data-a="sheet" data-v="wipe"><span><span class="rt" style="color:var(--red)">Wipe SD card</span><span class="rh">Deletes all trips and logs on the card</span></span></button></div>`;
+  // Display
+  h+=`<div class="hd">Display</div><div class="sec">${row('cycle','theme','Theme','Dark or light',rv(P.theme==='light'?'Light':'Dark'))}
+    ${row('cycle','night','Night mode','Dim red, keeps night vision',rv({off:'Off',sunset:'At sunset',on:'On'}[P.night]))}
+    ${row('pref','keepOn','Keep the screen on','While Engine Link is open',tg(P.keepOn))}
+    ${row('cycle','start','Open on','The tab you see first',rv(TITLES[P.start]))}
+    ${row('cycle','units','Units',imp()?'US gallons, knots, °F, psi':'Litres, knots, °C, bar',rv(imp()?'Imperial':'Metric'))}
+    ${row('cycle','cur','Currency','For all prices and costs',rv(P.cur))}
+    <div class="row"><span><span class="rt">Language</span><span class="rh">More languages later</span></span><span class="rv">English</span></div></div>`;
+  // Test and data
+  const todo=setupItems().filter(i=>!i.ok&&!i.opt).length;
+  h+=`<div class="hd">Test and data</div><div class="sec">${row('page','diag','Diagnostics','Tests, calibration and logs',rv(todo?todo+' to do':'All set'))}</div>`;
+  // Device
+  h+=`<div class="hd">Device</div><div class="sec">${row('page','fw','Firmware','Updates and earlier versions',rv(lv?lv.v:''))}
+    ${row('backup','','Back up settings','Settings, places and service',rv('Download'))}
+    ${row('restore','','Restore settings','From a backup file',rv('Choose file'))}
+    ${row('sheet','install','Install as app','Add Engine Link to your home screen',rv('Add'))}
+    <button class="row" data-a="restart"><span class="rt" style="color:var(--blue)">Restart EngineLink</span></button>
+    <button class="row" data-a="sheet" data-v="reset"><span class="rt" style="color:var(--red)">Factory reset</span></button></div>`;
+  h+=`<div class="s12 sub" style="text-align:center;padding:0 0 10px">Engine Link ${lv?lv.v:''}</div>`;
+  return h;
+}
+
+// ---------- Sub-pages ----------
+const PAGE_VIEWS={
+  dest(){
+    let h=backPill()+`<div class="sec">${P.places.length?P.places.map((p,i)=>`<div class="row"><span><span class="rt">${esc(p[0])}</span><span class="rh">${NF(p[1],1).replace(/[.,]0$/,'')} nm one way</span></span><button class="btn sm" style="width:40px;padding:0" data-a="placeDel" data-v="${i}" aria-label="Delete ${esc(p[0])}">${svg(IC.trash,18,'var(--red)',2)}</button></div>`).join(''):'<div class="empty">No places yet. Add the ones you sail to most.</div>'}</div>`;
+    const ok=S.newPlace.trim()&&parseFloat(S.newNm.replace(',','.'))>0;
+    h+=`<div class="hd">Add a place</div><div class="sec" style="padding:14px 18px"><div class="stack" style="gap:10px"><input class="field" data-i="newPlace" value="${esc(S.newPlace)}" placeholder="Name, e.g. Hven harbour" aria-label="Place name">
+      <div style="display:flex;gap:10px;align-items:center"><input class="field" inputmode="decimal" data-i="newNm" value="${esc(S.newNm)}" placeholder="Distance one way" aria-label="Distance in nautical miles"><span class="sub">nm</span></div>
+      <div class="s12 sub">Use the distance from your chart plotter.</div><button class="btn ${ok?'pri':''}" data-a="placeAdd">Add place</button></div></div>`;
+    return h;
+  },
+  vals(){
+    return backPill()+`<div class="s13 sub" style="padding:0 8px 10px">Rpm is always shown. Pick the rest. The same choice applies to both engines.</div><div class="sec">${VALS.map(([k,,label,hint])=>row('valTog',k,label,hint,tg(P.vals[k]))).join('')}</div>
+      <div class="grid2" style="gap:8px"><button class="btn" data-a="valsAll">Show all</button><button class="btn" data-a="valsDef">Default</button></div>`;
+  },
+  ap(){
+    const c=cfgv();if(!c)return backPill()+waiting();
+    const d=S.d;
+    if(d.apName==null){d.apName=c.apName||'EngineLink';d.apPass='';}
+    return backPill()+`<div class="s13 sub" style="padding:0 8px 10px">The network EngineLink makes itself. Your phone connects to it on the boat.</div>
+      <div class="sec" style="padding:14px 18px"><div class="stack" style="gap:10px">
+      <label class="s12 sub">Network name<input class="field" style="margin-top:6px" data-i="apName" value="${esc(d.apName)}"></label>
+      <label class="s12 sub">New password<span style="display:grid;grid-template-columns:1fr auto;gap:8px;margin-top:6px"><input class="field" type="${d.apShow?'text':'password'}" data-i="apPass" value="${esc(d.apPass)}" placeholder="${c.defaultPassword?'Now: 12345678 (factory)':'Unchanged'}" autocomplete="new-password"><button class="btn" data-a="apShow">${d.apShow?'Hide':'Show'}</button></span></label>
+      <div class="s12 sub">${d.apPass&&d.apPass.length<8?'At least 8 characters.':'Phones that are connected now need the new name and password afterwards.'}</div>
+      <button class="btn pri" data-a="apSave">Save</button></div></div>
+      ${c.defaultPassword?'<div class="card s13" style="background:var(--osoft);color:var(--orange)">EngineLink still uses the factory password 12345678. Choose your own.</div>':''}`;
+  },
+  router(){
+    const lv=S.live,c=cfgv();if(!lv||!c)return backPill()+waiting();
+    let h=backPill();
+    if(lv.net.sta){
+      h+=`<div class="sec"><div class="row"><span><span class="rt">${esc(lv.net.ssid)}</span><span class="rh" style="color:var(--green)">Connected · ${lv.net.rssi>-60?'strong':lv.net.rssi>-72?'good':'weak'} signal (${lv.net.rssi} dBm)</span></span><button class="btn sm" data-a="wifiForget">Disconnect</button></div></div>`;
+    }else{
+      if(c.router)h+=`<div class="card s13" style="margin-bottom:14px">Saved: <b>${esc(c.ssid)}</b> · not reachable right now. EngineLink tries again by itself, aimed at the router so your phone is not disturbed. <button data-a="wifiForget" style="color:var(--teal)">Forget</button></div>`;
+      const sc=S.scan;
+      h+=`<div class="sec">${sc&&sc.nets&&sc.nets.length?sc.nets.map(n=>{const pick=S.wifiPick===n.s;return `<div><button class="row" data-a="wifiPick" data-v="${esc(n.s)}"><span><span class="rt">${esc(n.s)}</span><span class="rh">${n.lock?'Password':'Open'} · channel ${n.ch}</span></span><span style="color:var(--teal);letter-spacing:1px">${n.r>-60?'▂▄▆':n.r>-72?'▂▄':'▂'}</span></button>
+        ${pick?`<div style="display:grid;grid-template-columns:1fr auto;gap:8px;padding:0 0 12px">${n.lock?`<input class="field" type="password" data-i="wifiPass" value="${esc(S.wifiPass)}" placeholder="Router password" aria-label="Router password">`:'<span class="s13 sub" style="align-self:center">Open network</span>'}<button class="btn pri" data-a="wifiConnect" data-v="${esc(n.s)}">Connect</button></div>`:''}</div>`;}).join(''):`<div class="empty">${sc&&sc.busy?'Scanning…':'Scan to find the boat router.'}</div>`}
+        <button class="row" data-a="wifiScan" style="color:var(--teal)"><span class="rt">${sc&&sc.busy?'Scanning…':'Scan for networks'}</span></button></div>
+        <div class="s12 sub" style="padding:0 8px 16px">Scanning makes the EngineLink radio look at other channels, so your phone may pause for a few seconds.</div>`;
+    }
+    h+=`<div class="card s13 sub">With a router EngineLink gets internet time and can update itself from GitHub. Your phone stays on the EngineLink network.<br><br><b style="color:var(--text)">Tips for a steady connection</b><br>Android: when the phone says the Wi-Fi has no internet, choose "Stay connected" or "Keep", and switch off "Switch to mobile data". iPhone: keep "Auto-Join" on for the EngineLink network.</div>`;
+    return h;
+  },
+  fw(){
+    const f=S.fw,lv=S.live;
+    let h=backPill();
+    const st=f?f.state:0;
+    h+=`<div class="card" style="margin-bottom:20px"><div class="s12 sub">Installed</div><div style="font-size:30px;font-weight:700;margin-top:2px">${lv?lv.v:''}</div>
+      <div class="s12 sub" style="margin-top:4px">${f&&f.pending?'New version · confirms itself after a minute without problems':!(f&&f.online)?'Connect EngineLink to a router to check GitHub for updates.':st===1?'Checking GitHub…':st===9?'Problem: '+esc(f.error):st===2?'Checked GitHub just now · Kaelor9/EngineLink':'Ready to check for updates'}</div>
+      ${st===3&&f?`<div style="margin-top:12px"><div class="cth s13"><span>Downloading ${f.total?Math.round(f.bytes/f.total*100):0} %</span><span class="sub">don't switch off</span></div><div class="bar" style="height:8px;margin-top:8px"><i style="width:${f.total?f.bytes/f.total*100:0}%;background:var(--teal)"></i></div></div>`:''}
+      ${st===4?'<div class="s13" style="margin-top:10px;color:var(--green)">Installed. EngineLink restarts now; the app reconnects by itself.</div>':''}</div>`;
+    const list=f&&f.list&&f.list.releases?f.list.releases:null;
+    h+=`<div class="hd">From GitHub</div><div class="sec ${f&&f.online?'':'dim'}">
+      ${row('fwBeta','','Show test versions','Newest features, less tested',tg(S.fwBeta))}
+      ${list?list.filter(r=>S.fwBeta||!r.pre).map(r=>{const inst=lv&&r.v===lv.v,older=lv&&cmpVer(r.v,lv.v)<0;
+        return `<div class="row"><span><span class="rt">${esc(r.v)} ${r.pre?'<span class="s12" style="color:var(--orange);font-weight:600">Test</span>':''}</span><span class="rh">${esc(r.date||'')}${r.notes?' · '+esc(r.notes):''}</span></span><button class="btn sm ${inst?'':older?'':'pri'}" ${inst||st===3?'disabled':''} data-a="fwInstall" data-v="${esc(r.v)}">${inst?'Installed':older?'Go back':'Install'}</button></div>`;}).join(''):''}
+      <button class="row" data-a="fwCheck" style="color:var(--teal)"><span class="rt">${st===1?'Checking…':'Check for updates'}</span></button>
+      <div class="rowx s12 sub">EngineLink keeps the version it runs until the new one has started and worked for a minute. If the new one does not start properly, EngineLink goes back to the previous version by itself.</div></div>
+      <div class="hd">From a file</div><div class="sec">${row('fwFile','','Upload firmware file','enginelink-update.bin, if there is no router',rv('Choose'))}${S.upload!=null?`<div class="rowx"><div class="bar" style="height:8px"><i style="width:${S.upload}%;background:var(--teal)"></i></div><div class="s12 sub" style="margin-top:6px">Uploading ${S.upload} %</div></div>`:''}</div>`;
+    return h;
+  },
+  diag(){
+    const d=S.diag,lv=S.live,c=cfgv();
+    if(!d||!lv||!c)return backPill()+waiting();
+    let h=backPill();
+    const items=setupItems(),done=items.filter(i=>i.ok).length,total=items.filter(i=>!i.opt).length;
+    h+=`<div class="card" style="margin-bottom:20px;padding:16px 18px 6px"><div class="cth"><span style="font-size:16px;font-weight:600">Setup check</span><span class="s13" style="font-weight:600;color:${done>=total?'var(--green)':'var(--orange)'}">${Math.min(done,total)} of ${total} done</span></div>
+      <div class="bar" style="height:6px;margin-top:10px"><i style="width:${Math.min(done,total)/total*100}%;background:${done>=total?'var(--green)':'var(--orange)'}"></i></div>
+      <div class="s12 sub" style="margin-top:8px">Things to confirm once, so every number in Engine Link can be trusted.</div>
+      ${items.map(i=>`<div style="display:flex;gap:12px;align-items:flex-start;padding:11px 0;border-top:1px solid var(--line)"><span style="width:22px;height:22px;border-radius:50%;flex:none;margin-top:1px;display:flex;align-items:center;justify-content:center;background:${i.ok?'var(--green)':'transparent'};border:2px solid ${i.ok?'var(--green)':i.opt?'var(--line)':'var(--orange)'}">${i.ok?svg(IC.check,12,'var(--card)',3.5):''}</span><div style="flex:1"><div style="font-size:14.5px">${i.t}</div><div class="s12 sub" style="margin-top:2px">${i.x}</div></div><span class="s12" style="font-weight:600;color:${i.opt?'var(--sub)':'var(--orange)'}">${i.ok?'':i.opt?'Optional':'To do'}</span></div>`).join('')}</div>`;
+    // Connection
+    const es=engines();
+    h+=`<div class="hd">Connection</div><div class="sec">${es.map(e=>{const t=d.t[e.ch],run=t.running;
+      return `<div class="rowx"><div class="cth" style="align-items:center"><span style="display:flex;gap:10px;align-items:center"><span class="dot" style="background:${t.utc?(t.rep/Math.max(1,t.req)>0.8?'var(--green)':'var(--orange)'):'var(--orange)'}"></span><span class="rt">${e.name} engine · ${e.sock}</span></span>${lv.proto==='kad'?`<button class="btn sm ${run?'':'pri'}" data-a="diagTest" data-v="${e.ch}">${run?'Stop':'Test'}</button>`:''}</div>
+        ${run?`<div class="bar" style="height:6px;margin-top:12px"><i style="width:${t.prog}%;background:var(--teal)"></i></div>`:''}
+        <div class="grid3" style="gap:8px;margin-top:10px">${[['Answered',t.utc?Math.round(t.rep/Math.max(1,t.req)*100)+' %':'—'],['Checksum errors',t.utc?t.err:'—'],['Reply time',t.utc&&t.ms?t.ms+' ms':'—']].map(([k,v])=>`<div style="background:var(--track);border-radius:12px;padding:8px 10px"><div class="s12 sub">${k}</div><div style="font-size:16px;font-weight:600">${v}</div></div>`).join('')}</div>
+        <div class="s12 sub" style="margin-top:8px">${run?'Testing… '+Math.round(t.prog*0.3)+' of 30 seconds':t.utc?'Last tested '+new Date(t.utc*1000).toLocaleString(LOC):'Not tested yet. Start the engine (or switch on the ignition) and press Test.'}</div></div>`;}).join('')}
+      <div class="rowx"><div class="cth"><span class="rt">GPS · NMEA 2000</span><span class="rv">${d.can?(fin(d.sog)?NF(d.sog,1)+' kn':d.nmea+' messages'):'Off'}</span></div><div class="s12 sub" style="margin-top:4px">${d.can?(d.nmea?'Receiving the NMEA 2000 network.':'Switched on, but no messages yet. Check the NMEA 2000 cable.'):'Optional. Switch on under Settings › Speed source for knots and miles.'}</div></div>
+      <div class="rowx s12 sub">A test asks the engine for its values for 30 seconds. Only read requests are sent, never commands.</div></div>`;
+    // Calibration
+    const lastFull=S.fuel&&S.fuel.log.find(r=>r.full&&r.c!=null&&r.l>0);
+    h+=`<div class="hd">Calibration</div><div class="sec"><div class="rowx"><div class="cth"><span class="rt">Fuel rate scale</span><span class="s12" style="font-weight:600;color:${c.scaleOk?'var(--green)':'var(--orange)'}">${c.scaleOk?'Confirmed':'Not confirmed yet'}</span></div>
+      ${lastFull?`<div class="s12 sub" style="margin-top:3px">Last full fill-up: the pump said <b style="color:var(--text)">${L(lastFull.l,0)} ${U.vu()}</b>. What EngineLink counted with each scale:</div>`:'<div class="s12 sub" style="margin-top:3px">Fill up twice with "Tank is full now" and the pump litres; then this shows which scale fits.</div>'}
+      <div class="stack" style="gap:6px;margin-top:10px">${[[128,lastFull?lastFull.r128:null],[256,lastFull?lastFull.r256:null]].map(([dv,l])=>{const dev=l!=null?l/lastFull.l-1:null,good=dev!=null&&Math.abs(dev)<0.15,inUse=c.kadFuelDiv===dv;
+        return `<button data-a="fuelDiv" data-v="${dv}" style="display:flex;justify-content:space-between;align-items:center;gap:10px;min-height:48px;padding:0 14px;border-radius:13px;border:2px solid ${inUse&&c.scaleOk?'var(--green)':good?'var(--teal)':'transparent'};background:var(--track);text-align:left"><span><span class="rt s14" style="font-weight:600">1/${dv}${dv===128?' (default)':''}</span><span class="rh">${l!=null?'Would have counted '+L(l,0)+' '+U.vu()+' · '+(dev>=0?'+':'')+NF(dev*100,0)+' %':'—'}</span></span><span class="s13" style="font-weight:600;color:${inUse&&c.scaleOk?'var(--green)':'var(--teal)'}">${inUse&&c.scaleOk?'In use':good?'Matches':inUse?'Selected':''}</span></button>`;}).join('')}</div></div>
+      ${voltBlock(c,es)}</div>`;
+    // Advanced
+    h+=`<button class="btn" style="width:100%;justify-content:space-between;background:var(--card);padding:0 18px;min-height:56px;margin-bottom:${S.advOpen?14:20}px" data-a="adv"><span style="text-align:left"><span class="rt">Advanced</span><span class="rh">Reading, motor test, bus monitor, raw values</span></span><span class="sub">${S.advOpen?'⌃':'⌄'}</span></button>`;
+    if(S.advOpen)h+=advanced(d,c,es);
+    h+=`<button class="btn" style="width:100%" data-a="report">Download diagnostics report</button><div class="s12 sub" style="text-align:center;padding:8px 20px 0">One file with settings, test results and recent raw data. Handy if you ask for help.</div>`;
+    return h;
+  }
+};
+function voltBlock(c,es){
+  const raw=es.map(e=>S.diag.t[e.ch].raw[293]).find(Boolean);
+  const vA=raw?raw[0]*0.01308:null,vB=raw?raw[0]*0.0125:null,m=parseFloat(String(S.voltMeas).replace(',','.'));
+  const best=fin(m)&&vA?(Math.abs(m-vA)<=Math.abs(m-vB)?0:1):null;
+  return `<div class="rowx"><div class="cth"><span class="rt">Battery voltage</span><span class="s12" style="font-weight:600;color:${c.voltOk?'var(--green)':'var(--orange)'}">${c.voltOk?'Confirmed':'Not confirmed yet'}</span></div>
+    <div class="s12 sub" style="margin-top:3px">Measure at the engine with a multimeter while it runs, and type the value.</div>
+    <input class="field" style="margin-top:10px" inputmode="decimal" data-i="voltMeas" value="${esc(S.voltMeas)}" placeholder="Multimeter, e.g. 13,5" aria-label="Measured voltage">
+    <div class="stack" style="gap:6px;margin-top:8px">${[[0,'0,01308 · Volvo',vA],[1,'0,0125 · Yacht Devices',vB]].map(([i,t,v])=>{const inUse=c.kadVolt===i&&c.voltOk;
+      return `<button data-a="volt" data-v="${i}" style="display:flex;justify-content:space-between;align-items:center;gap:10px;min-height:48px;padding:0 14px;border-radius:13px;border:2px solid ${inUse?'var(--green)':best===i?'var(--teal)':'transparent'};background:var(--track);text-align:left"><span><span class="rt s14" style="font-weight:600">${t}</span><span class="rh">${fin(v)?'Shows '+NF(v,2)+' V right now':'Needs a reading from the engine'}</span></span><span class="s13" style="font-weight:600;color:${inUse?'var(--green)':'var(--teal)'}">${inUse?'In use':best===i?'Closest':''}</span></button>`;}).join('')}</div></div>`;
+}
+const PNAMES={256:'Engine speed',258:'Air inlet pressure (abs.)',259:'Coolant temperature',260:'Fuel temperature',261:'Charge air temperature',263:'Panel buttons, start input',264:'Gear, relays, lamps',265:'Boost pressure',266:'Engine hours',267:'Active MS unit',288:'Relative load',289:'Fuel rate',291:'Engine speed request',293:'System voltage',295:'Fuel rack position',296:'Injection angle'};
+function advanced(d,c,es){
+  const st=S.state;
+  let h=`<div class="sec">${es.map(e=>row('pollTog',e.ch,'Read '+e.name.toLowerCase()+' engine now',e.poll?'Sending read requests about 4 times a second':(e.why?esc(e.why):'Off'),tg(e.poll))).join('')}
+    ${row('cycle','proto','Engine protocol','Volvo Penta KAD / EDC I, or SAE J1587',rv(d.proto==='kad'?'Volvo KAD':'J1587'))}</div>`;
+  const t=st&&st.test;
+  h+=`<div class="hd">Motor test</div><div class="sec">${t&&t.running?`<div class="rowx"><div class="cth"><span class="rt">Recording · step ${t.step}</span><span class="rv">${t.rows} rows · ${dur(t.seconds)}</span></div><div class="seg" style="grid-template-columns:repeat(3,minmax(0,1fr));margin-top:10px">${['idle','low','medium','high','cruise','custom'].map(p=>`<button data-a="testMark" data-v="${p}" class="${t.phase===p?'on':''}">${p}</button>`).join('')}</div><button class="btn red" style="width:100%;margin-top:10px" data-a="testStop">Stop and save</button></div>`:
+      row('testStart','','Start a motor test','Hold idle, 1.500, 2.000 rpm … and mark each step',rv('Start'))}
+    ${t&&t.available?row('dl','/api/test/download','Download the last motor test','CSV',rv('CSV')):''}
+    ${row('dl','/api/log','Download raw log','Every request and answer of this session',rv('CSV'))}
+    ${row('dl','/api/segments.csv','Download engine runs','Each start to stop of each engine',rv('CSV'))}</div>`;
+  const rec=st&&st.recent?st.recent.slice(0,12):[];
+  h+=`<div class="hd">Bus monitor</div><div class="sec">${rec.length?rec.map(r=>`<div class="rowx" style="padding:8px 0"><div class="cth s12"><span class="sub">J${r.ch===0?7:6} · ${r.dir==='T'?'sent':r.dir==='Q'?'request':'answer'}${r.kad>=0?' · '+r.kad:''}</span><span style="color:${r.ok?'var(--green)':'var(--red)'}">${r.ok?'OK':'checksum'}</span></div><div style="font-family:ui-monospace,Menlo,monospace;font-size:12px;word-break:break-all">${esc(r.hex)}</div></div>`).join(''):'<div class="empty">No messages yet.</div>'}
+    ${row('busRefresh','','Refresh','',rv(''))}</div>`;
+  for(const e of es){
+    const raw=d.t[e.ch].raw,keys=Object.keys(raw).map(Number).sort((a,b)=>a-b);
+    h+=`<div class="hd">Raw values · ${e.name.toLowerCase()}</div><div class="sec">${keys.length?keys.map(k=>`<div style="display:grid;grid-template-columns:40px 1fr auto;gap:10px;align-items:baseline;padding:9px 0;border-top:1px solid var(--line)"><span class="s12 sub" style="font-family:ui-monospace,Menlo,monospace">${k}</span><span class="s14">${PNAMES[k]||'Index '+k}${k===264?'<span class="rh">'+gearName(raw[k][0])+' (forward and reverse not confirmed yet)</span>':''}</span><span class="s14" style="font-weight:600">${k===263||k===264?'0x'+(raw[k][0]>>>0).toString(16).toUpperCase().padStart(4,'0'):NF(raw[k][1],2)}</span></div>`).join(''):'<div class="empty">No values yet.</div>'}</div>`;
+  }
+  return h;
+}
+function setupItems(){
+  const d=S.diag,c=cfgv(),lv=S.live;
+  if(!d||!c||!lv)return [];
+  const es=engines();
+  const it=es.map(e=>{const t=d.t[e.ch];const ok=t.utc&&t.rep/Math.max(1,t.req)>0.8;return {t:e.name+' engine answers',x:ok?'Tested on '+e.sock+', '+Math.round(t.rep/Math.max(1,t.req)*100)+' % answered':'Run a test with the engine on',ok};});
+  it.push({t:'Fuel tank size',x:c.tankL>0?L(c.tankL,0)+' '+U.vu():'Set it in Settings › Boat',ok:c.tankL>0});
+  it.push({t:'Fuel rate scale',x:c.scaleOk?'1/'+c.kadFuelDiv+' confirmed':'Pick the scale that matches a full fill-up',ok:c.scaleOk});
+  it.push({t:'Battery voltage',x:c.voltOk?'Factor checked against a multimeter':'Compare with a multimeter once',ok:c.voltOk});
+  it.push({t:'Engine hours match',x:d.missed?'The engines ran '+d.missed+' time(s) while EngineLink was off':'The engines\' hour meters match what EngineLink logged',ok:true});
+  it.push({t:'GPS speed',x:fin(d.sog)?'Receiving speed':'Not connected',ok:fin(d.sog),opt:true});
+  return it;
+}
+function cmpVer(a,b){const p=v=>String(v).split(/[.-]/).map(x=>isNaN(+x)?x:+x);const x=p(a),y=p(b);for(let i=0;i<Math.max(x.length,y.length);i++){const m=x[i]??0,n=y[i]??0;if(m===n)continue;if(typeof m==='number'&&typeof n==='number')return m-n;return String(m)<String(n)?-1:1;}return 0;}
+
+// ---------- Sheets ----------
+function openSheet(kind){S.sheet=kind;S.info=null;renderSheet();$('#sheetwrap').classList.add('show');history.pushState({sheet:1},'');}
+function closeSheet(){S.sheet=null;$('#sheetwrap').classList.remove('show');}
+function renderSheet(){
+  const k=S.sheet;if(!k)return;
+  const sh=$('#sheet'),grab='<div class="grab"></div>';
+  let h='';
+  if(k==='fuel'){
+    const d=S.d,price=S.live?S.live.price:0;
+    if(d.fPrice==null){d.fPrice=price>0?NF(price,2):'';d.fLitres='';d.fFull=true;d.fWhen=null;}
+    const l=parseFloat(String(d.fLitres).replace(',','.')),p=parseFloat(String(d.fPrice).replace(',','.'));
+    const can=l>0||d.fFull;
+    h=`${grab}<div class="cth" style="align-items:center"><span style="font-size:22px;font-weight:600">Log fuel</span><button class="btn sm" data-a="fWhen">${svg('M12 3a9 9 0 1 0 0 18a9 9 0 1 0 0-18M12 7v5l3 2',15,'var(--sub)',2)}${d.fWhen?new Date(d.fWhen).toLocaleString(LOC,{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}):'Now'}</button></div>
+      ${d.fPick?`<div style="background:var(--track);border-radius:16px;padding:12px" class="stack"><div class="seg" style="grid-template-columns:1fr 1fr"><button class="${d.fWhen?'':'on'}" data-a="fNow">Now</button><button class="${d.fWhen?'on':''}" data-a="fOther">Other time</button></div>${d.fWhen?`<input type="datetime-local" class="field" style="background:var(--card)" data-i="fWhenV" value="${new Date(d.fWhen-new Date().getTimezoneOffset()*60000).toISOString().slice(0,16)}">`:''}</div>`:''}
+      <label class="s13 sub" style="display:flex;flex-direction:column;gap:6px">${imp()?'Gallons':'Litres'} added<input class="field" style="min-height:58px;font-size:28px;font-weight:600;border-radius:16px" inputmode="decimal" placeholder="0" data-i="fLitres" value="${esc(d.fLitres)}"></label>
+      <div class="grid2"><label class="s13 sub" style="display:flex;flex-direction:column;gap:6px">Price per ${imp()?'gallon':'litre'}<input class="field" inputmode="decimal" placeholder="${cur()}" data-i="fPrice" value="${esc(d.fPrice)}"></label><div class="s13 sub" style="display:flex;flex-direction:column;gap:6px">Total<div id="fTotal" style="min-height:46px;display:flex;align-items:center;font-size:18px;color:var(--text)">${l>0&&p>0?money(l*p):'—'}</div></div></div>
+      <button class="row" style="background:var(--track);border-radius:16px;padding:12px 14px" data-a="fFull"><span><span class="rt">Tank is full now</span><span class="rh">${d.fFull?'Fuel aboard is set to the tank size':'The litres are added to what is aboard'}</span></span>${tg(d.fFull)}</button>
+      <div class="s13 sub">${!can?'Enter the litres you added.':d.fFull?'EngineLink compares the pump litres with what it counted and fine-tunes the fuel figures.':''}</div>
+      <div style="display:grid;grid-template-columns:1fr 2fr;gap:10px"><button class="btn" data-a="close">Cancel</button><button class="btn ${can?'pri':''}" ${can?'':'disabled'} data-a="fuelSave">Save</button></div>`;
+  }else if(k.startsWith('notes:')){
+    const id=+k.slice(6),t=S.trips.trips.find(x=>x.id===id);
+    const d=S.d;if(d.nId!==id){d.nId=id;d.n={p:t.p||2,sea:t.sea,w:t.w,x:t.x,n:t.n};}
+    const n=d.n;
+    const grp=(label,key,opts,help,foot)=>`<div style="display:grid;grid-template-columns:70px 1fr;gap:10px;align-items:center"><button data-a="info" data-v="n${key}" class="s14 sub" style="display:inline-flex;gap:6px;align-items:center">${label}<span class="q ${S.info==='n'+key?'on':''}">?</span></button><div class="seg" style="grid-template-columns:repeat(3,minmax(0,1fr))">${opts}</div></div>${S.info==='n'+key?`<div class="help" style="margin-top:-6px">${help.map(([a,b])=>`<div><div class="s14" style="font-weight:600">${a}</div><div class="s13 sub">${b}</div></div>`).join('')}<p>${foot}</p></div>`:''}`;
+    h=`${grab}<div class="cth"><span style="font-size:22px;font-weight:600">Trip notes</span><span class="s13 sub">${dayLabel(t.s)} · ${hm(t.s)} – ${hm(t.e)}</span></div><div class="s13 sub" style="margin-top:-10px">All optional · helps explain the fuel use</div>
+      ${grp('People','p',`<button data-a="nPeople" data-v="-1" style="font-size:20px">−</button><span style="display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:600">${n.p}</span><button data-a="nPeople" data-v="1" style="font-size:20px">+</button>`,[['Everyone aboard','Count yourself too. Children count as one each.']],'About 75 kg per person.')}
+      ${grp('Sea','sea',[1,2,3].map(i=>`<button class="${n.sea===i?'pick':''}" data-a="nSet" data-v="sea:${i}">${SEA[i]}</button>`).join(''),[['Calm','Waves under 0,5 m, flat or a light ripple'],['Choppy','Waves 0,5 – 1 m, short and steep, some slamming'],['Rough','Waves over 1 m or breaking crests, you slow down']],'Pick what most of the trip was like.')}
+      ${grp('Wind','w',[1,2,3].map(i=>`<button class="${n.w===i?'pick':''}" data-a="nSet" data-v="w:${i}">${WIND[i]}</button>`).join(''),[['Light','Under 4 m/s · flags hang, small ripples'],['Moderate','4 – 8 m/s · flags stand out, first whitecaps'],['Strong','Over 8 m/s · many whitecaps, spray']],'Wind strength only. Head or following wind changes during a trip.')}
+      ${grp('Extra','x',EXTRA.map((e,i)=>`<button class="${n.x&(1<<i)?'pick':''}" data-a="nExtra" data-v="${i}">${e}</button>`).join(''),[['Full water','The fresh-water tank was full'],['Towing','Towing a dinghy or another boat'],['Clean hull','Hull and propellers cleaned in the last 2 weeks']],'Choose any that apply, or none.')}
+      <input class="field" maxlength="39" data-i="nText" value="${esc(n.n)}" placeholder="Anything else">
+      ${S.trips.trips.some(x=>x.id!==id&&(x.p||x.sea||x.w||x.x))?`<button data-a="nCopy" style="align-self:flex-start;color:var(--teal);font-size:14px">Same as last trip</button>`:''}
+      <div style="display:grid;grid-template-columns:1fr 2fr;gap:10px"><button class="btn" data-a="close">Cancel</button><button class="btn pri" data-a="notesSave">Save</button></div>`;
+  }else if(k==='wipe'||k==='reset'){
+    const sd=S.sd,wipe=k==='wipe',keep=S.d.keep!==false,ok=String(S.d.wipe||'').trim().toUpperCase()==='WIPE';
+    const gone=wipe?[['All trips and trip notes on the card',S.trips?S.trips.trips.length+' trips':''],['Raw engine data and test recordings',sd?NF(sd.rawMB,0)+' MB':''],['Exported files on the card',sd?sd.exports+' files':'']]:[['All settings and the Wi-Fi password',''],['Saved places and service dates',P.places.length+' places'],['Calibration and fuel fine-tuning','']].concat(keep?[]:[['All trips, notes, the fuel log and the SD card','']]);
+    const kept=wipe?['Trips, notes and the fuel log inside EngineLink','All settings, places and calibration']:(keep?['Trips, notes and the fuel log']:['Nothing']).concat(['The installed firmware version']);
+    h=`${grab}<div style="display:flex;gap:12px;align-items:center"><span style="width:44px;height:44px;border-radius:14px;background:rgba(255,107,107,.14);display:flex;align-items:center;justify-content:center">${svg(IC.trash,22,'var(--red)',2)}</span><span style="font-size:22px;font-weight:600">${wipe?'Wipe the SD card?':'Factory reset?'}</span></div>
+      <div class="s14 sub" style="margin-top:-4px">${wipe?'Everything on the card is deleted in one go. It cannot be undone.':'EngineLink goes back to how it came from the factory. It cannot be undone.'}</div>
+      <div style="background:var(--track);border-radius:14px;padding:12px 14px" class="stack"><div><div class="s12" style="font-weight:700;letter-spacing:.6px;color:var(--red)">DELETED</div>${gone.map(([a,b])=>`<div class="cth s14" style="padding-top:5px"><span><span style="color:var(--red)">– </span>${a}</span><span class="sub">${b}</span></div>`).join('')}</div>
+        <div style="border-top:1px solid var(--line);padding-top:12px"><div class="s12" style="font-weight:700;letter-spacing:.6px;color:var(--green)">KEPT</div>${kept.map(a=>`<div class="s14" style="padding-top:5px"><span style="color:var(--green)">✓ </span>${a}</div>`).join('')}</div></div>
+      ${wipe?`<button class="btn" data-a="dl" data-v="/api/log">Download the raw log first</button><label class="s13 sub" style="display:flex;flex-direction:column;gap:6px">Type WIPE to confirm<input class="field" style="font-size:18px;letter-spacing:2px;border:2px solid ${ok?'var(--red)':'transparent'}" data-i="wipe" value="${esc(S.d.wipe||'')}" placeholder="WIPE" autocomplete="off" autocapitalize="characters" spellcheck="false"></label>`:
+        `<button class="row" style="padding:0" data-a="resetKeep"><span class="rt">Keep trips and fuel log</span>${tg(keep)}</button><button class="btn" data-a="backup">Back up settings first</button>`}
+      <div class="grid2" style="gap:10px"><button class="btn" data-a="close">Cancel</button><button class="btn ${wipe?(ok?'red':''):'red'}" ${wipe&&!ok?'disabled':''} data-a="${wipe?'wipeDo':'resetDo'}">${wipe?'Wipe card':'Reset'}</button></div>`;
+  }else if(k==='install'){
+    const ios=S.d.os?S.d.os==='ios':/iPhone|iPad|iPod/.test(navigator.userAgent);
+    h=`${grab}<div style="display:flex;gap:14px;align-items:center"><img src="/apple-touch-icon.png" width="60" height="60" alt="" style="border-radius:14px"><div><div style="font-size:20px;font-weight:600">Engine Link</div><div class="s13 sub">Opens full screen, like an app</div></div></div>
+      <div class="seg" style="grid-template-columns:1fr 1fr"><button class="${ios?'on':''}" data-a="os" data-v="ios">iPhone</button><button class="${ios?'':'on'}" data-a="os" data-v="android">Android</button></div>
+      ${ios?`<div class="help">${[['1','Tap Share in Safari',IC.share],['2','Choose "Add to Home Screen"',IC.plus],['3','Tap "Add". The name is already filled in.','']].map(([n,t,i])=>`<div style="display:flex;gap:12px;align-items:center"><span style="width:26px;height:26px;border-radius:50%;background:var(--teal);color:var(--onteal);font-weight:700;font-size:13px;display:flex;align-items:center;justify-content:center;flex:none">${n}</span><span class="s14" style="flex:1">${t}</span>${i?svg(i,20,'var(--blue)',2):''}</div>`).join('')}</div><div class="s12 sub">Apple does not let web pages add themselves, so iPhone needs these three taps once.</div>`:
+        `<button class="btn pri" data-a="androidAdd">Add to home screen</button><div class="s12 sub">If Chrome shows nothing, open the ⋮ menu and choose "Add to Home screen".</div>`}
+      <button class="btn" data-a="close">Close</button>`;
+  }else if(k==='autoPoll'){
+    h=`${grab}<span style="font-size:22px;font-weight:600">Read engines automatically?</span><div class="s14 sub">EngineLink then asks both engines for their values about 4 times a second whenever it is powered. It only sends the read request, never a command, and it stops by itself if another device (such as an EDC display) is already asking.</div>
+      <div class="s14 sub">If an engine does not answer, for example with the ignition off, EngineLink tries again every 30 seconds.</div>
+      <div class="grid2" style="gap:10px"><button class="btn" data-a="close">Cancel</button><button class="btn pri" data-a="autoPollOn">Switch on</button></div>`;
+  }else if(k.startsWith('fw:')){
+    const v=k.slice(3),r=S.fw.list.releases.find(x=>x.v===v),older=cmpVer(v,S.live.v)<0;
+    h=`${grab}<span style="font-size:22px;font-weight:600">${older?'Go back to':'Install'} ${esc(v)}?</span><div class="s14 sub">${esc(r.notes||'')}</div><div class="s14 sub">EngineLink downloads the update from GitHub (about ${NF((r.size||1500000)/1048576,1)} MB), checks it and restarts. Engine reading pauses during the update. Your trips and settings are kept.</div>
+      <div class="grid2" style="gap:10px"><button class="btn" data-a="close">Cancel</button><button class="btn pri" data-a="fwGo" data-v="${esc(v)}">${older?'Go back':'Install'}</button></div>`;
+  }
+  sh.innerHTML=h;
+}
+
+// ---------- Actions ----------
+const CYCLE={
+  reserve:[[0,10,15,20,25],'reserve'],tripEnd:[[1,2,5,10],'tripEnd'],rawKeep:[[30,90,365,0],'rawKeep'],port:[[1,2],'port']
+};
+function nextOf(list,v){const i=list.indexOf(v);return list[(i+1)%list.length];}
+function goPage(p,back){S.backScroll=$('#main').scrollTop;S.back=back||null;S.page=p;S.d={};
+  if(back)S.tab='more';
+  if(p==='diag'){load('diag');load('fuel');load('state');}
+  if(p==='fw')load('fw');
+  if(p==='ap'||p==='router')load('state');
+  history.pushState({page:1},'');
+  render(true);$('#main').scrollTop=0;}
+function goBack(){const b=S.back;S.page=null;S.back=null;if(b)S.tab=b;render(true);$('#main').scrollTop=S.backScroll||0;}
+function goTab(t){
+  if(S.tab===t&&!S.page){$('#main').scrollTop=0;return;}
+  S.tab=t;S.page=null;S.back=null;S.selMode=null;S.sel=[];S.open=null;
+  if(t==='economy'){load('econ');if(!S.trips)load('trips');}
+  if(t==='history')load('trips');
+  if(t==='tank')load('fuel');
+  if(t==='engines')load('econ');
+  if(t==='more'){load('state');load('sd');load('diag');}
+  render(true);$('#main').scrollTop=0;
+}
+async function cfgSet(data){const r=await post('/api/cfg',data);if(!r.ok)toast(r.message||'Not saved');await load('state');return r;}
+const A={
+  tab:v=>goTab(v),
+  page:(v,b)=>goPage(v,b.dataset.b),
+  back:()=>history.back(),
+  close:()=>history.back(),
+  warmClose:()=>{S.warm.phase='done';render();},
+  sheet:v=>{S.d={};if(v==='wipe'||v==='reset')load('sd');openSheet(v);},
+  info:v=>{S.info=S.info===v?null:v;S.sheet?renderSheet():render(true);},
+  // Settings
+  tankEdit:()=>{S.editTank=!S.editTank;const c=cfgv();S.tankDraft=c&&c.tankL>0?String(Math.round(U.vol(c.tankL))):'';render(true);},
+  tankEditGo:()=>{goTab('more');S.editTank=true;S.tankDraft='';render(true);},
+  tankSave:async()=>{const v=parseFloat(S.tankDraft.replace(',','.'));if(!(v>0)){toast('Enter the tank size');return;}const r=await cfgSet({tank:imp()?v/0.264172:v});if(r.ok){S.editTank=false;toast('Tank size saved: '+NF(v,0)+' '+U.vu());render(true);}},
+  cycle:async v=>{
+    const c=cfgv();
+    if(CYCLE[v]){const [list,key]=CYCLE[v];await cfgSet({[key]:nextOf(list,v==='port'?c.portChannel:c[key])});render(true);return;}
+    if(v==='can'){await cfgSet({can:c.canListen?0:1});render(true);return;}
+    if(v==='ntp'){await cfgSet({ntp:c.ntp?0:1});render(true);return;}
+    if(v==='proto'){await cfgSet({protocol:c.protocol==='kad'?'j1587':'kad'});load('diag');return;}
+    const pc={warmTarget:[50,60,70],warmClose:[10,30,60,300,0],theme:['dark','light'],night:['off','sunset','on'],start:['trip','economy','tank','history','engines'],units:['metric','imperial'],cur:['DKK','EUR','SEK','NOK','GBP','USD']}[v];
+    if(pc){P[v]=nextOf(pc,P[v]);savePrefs();applyTheme();render(true);}
+  },
+  pref:v=>{P[v]=!P[v];savePrefs();if(v==='keepOn')wake();render(true);},
+  autoPoll:()=>{const c=cfgv();if(c.autoPoll){cfgSet({autoPoll:0}).then(()=>render(true));}else openSheet('autoPoll');},
+  autoPollOn:async()=>{const r=await cfgSet({autoPoll:1,confirm:'POLL'});if(!r.ok)return;history.back();toast('EngineLink now reads both engines');render(true);},
+  exportGo:()=>{goTab('history');S.selMode='export';render(true);},
+  backup:()=>download('/api/backup'),
+  restore:()=>{const i=document.createElement('input');i.type='file';i.accept='.json,application/json';i.onchange=async()=>{
+    try{const j=JSON.parse(await i.files[0].text());if(j.app!=='EngineLink')throw 0;
+      const s=j.settings||{},data={};['tank','reserve','price','tripEnd','rawKeep','ntp','ntpServer','port','protocol','fuelDiv','volt'].forEach(k=>{if(s[k]!=null)data[k]=s[k];});
+      await post('/api/cfg',data);if(s.corr0)await post('/api/kad/config',{corr0:s.corr0,corr1:s.corr1});
+      if(j.prefs){Object.assign(P,j.prefs);await post('/api/prefs',{p:JSON.stringify(P)});applyTheme();}
+      toast('Settings restored');load('state');}catch(e){toast('That is not an EngineLink backup file');}};i.click();},
+  restart:async()=>{if(!confirm('Restart EngineLink now? The app reconnects by itself.'))return;act('/api/reboot',{});},
+  resetKeep:()=>{S.d.keep=S.d.keep===false;renderSheet();},
+  resetDo:async()=>{const r=await act('/api/factory-reset',{confirm:'ERASE',keep:S.d.keep===false?0:1});if(r.ok)history.back();},
+  wipeDo:async()=>{const r=await act('/api/sd/wipe',{confirm:'WIPE'});if(r.ok){history.back();load('sd');}},
+  os:v=>{S.d.os=v;renderSheet();},
+  androidAdd:async()=>{if(window._bip){window._bip.prompt();window._bip=null;history.back();}else toast('Open the ⋮ menu in Chrome and choose "Add to Home screen"');},
+  // Places, values
+  placeDel:v=>{const p=P.places.splice(+v,1);savePrefs();toast(p[0][0]+' deleted');render(true);},
+  placeAdd:()=>{const n=S.newPlace.trim(),d=parseFloat(S.newNm.replace(',','.'));if(!n||!(d>0))return;P.places=P.places.filter(p=>p[0]!==n).concat([[n,d]]);P.route=P.places.length-1;S.newPlace='';S.newNm='';savePrefs();toast(n+' added');render(true);},
+  valTog:v=>{P.vals[v]=P.vals[v]?0:1;savePrefs();render(true);},
+  valsAll:()=>{VALS.forEach(v=>P.vals[v[0]]=1);savePrefs();render(true);},
+  valsDef:()=>{VALS.forEach((v,i)=>P.vals[v[0]]=i<9?1:0);savePrefs();render(true);},
+  // Wi-Fi
+  apShow:()=>{S.d.apShow=!S.d.apShow;render(true);},
+  apSave:async()=>{const c=cfgv(),d=S.d;const pass=d.apPass||'';
+    if(pass&&pass.length<8){toast('The password needs at least 8 characters');return;}
+    if(!pass&&d.apName===c.apName){toast('Nothing changed');return;}
+    if(!pass&&c.defaultPassword){toast('Choose a password of at least 8 characters');return;}
+    if(!confirm('EngineLink restarts its Wi-Fi with the new name and password. Connect your phone to it again afterwards.'))return;
+    act('/api/wifi/ap',{name:d.apName,pass:pass||'__keep__'});},
+  wifiScan:async()=>{S.scan={busy:true,nets:[]};render(true);try{await get('/api/wifi/scan?start=1',4000);}catch(e){}
+    const poll=async n=>{try{S.scan=await get('/api/wifi/scan',4000);}catch(e){}render(true);if(S.scan&&S.scan.busy&&n<20)setTimeout(()=>poll(n+1),1000);};setTimeout(()=>poll(0),1500);},
+  wifiPick:v=>{S.wifiPick=S.wifiPick===v?null:v;S.wifiPass='';render(true);},
+  wifiConnect:async v=>{const r=await act('/api/wifi/connect',{ssid:v,pass:S.wifiPass});if(r.ok){S.wifiPick=null;setTimeout(()=>load('state'),8000);}},
+  wifiForget:async()=>{if(!confirm('Disconnect EngineLink from the router?'))return;await act('/api/wifi/forget',{});load('state');},
+  // Firmware
+  fwBeta:()=>{S.fwBeta=!S.fwBeta;render(true);},
+  fwCheck:async()=>{const r=await post('/api/fw/check',{});if(!r.ok){toast(r.message);return;}S.fw=Object.assign(S.fw||{},{state:1});render(true);fwPoll();},
+  fwInstall:v=>openSheet('fw:'+v),
+  fwGo:async v=>{const r=S.fw.list.releases.find(x=>x.v===v);const x=await act('/api/fw/install',{url:r.url,v});if(x.ok){history.back();fwPoll();}},
+  fwFile:()=>{const i=document.createElement('input');i.type='file';i.accept='.bin';i.onchange=()=>uploadFw(i.files[0]);i.click();},
+  // Diagnostics
+  diagTest:async v=>{const t=S.diag.t[+v];const r=await post('/api/diag/test',t.running?{ch:v,stop:1}:{ch:v});if(!r.ok)toast(r.message);diagPoll();},
+  fuelDiv:async v=>{await cfgSet({fuelDiv:v});toast('Fuel scale 1/'+v+' saved');render(true);},
+  volt:async v=>{await cfgSet({volt:v});toast('Voltage factor saved');render(true);},
+  adv:()=>{S.advOpen=!S.advOpen;if(S.advOpen)load('state');render(true);},
+  pollTog:async v=>{const e=S.live.e[+v];const r=await post('/api/kad/poll',e.poll?{ch:v,on:0}:{ch:v,on:1,confirm:'POLL'});toast(r.message);},
+  testStart:async()=>{const r=await act('/api/test/start',{channel:0});if(r.ok)load('state');},
+  testMark:async v=>{await act('/api/test/mark',{phase:v,rpm:'',fuel:''});load('state');},
+  testStop:async()=>{await act('/api/test/stop',{});load('state');},
+  busRefresh:()=>load('state'),
+  dl:v=>download(v),
+  report:async()=>{const out={app:'EngineLink',made:new Date().toISOString()};
+    for(const [k,u] of [['live','/api/live'],['state','/api/state'],['diag','/api/diag'],['fuel','/api/fuel'],['economy','/api/economy'],['trips','/api/trips'],['pids','/api/pids']]){try{out[k]=await get(u,8000);}catch(e){out[k]='unavailable';}}
+    saveFile('EngineLink-diagnostics-'+Date.now()+'.json',JSON.stringify(out,null,1));},
+  seasonReset:async()=>{if(!confirm('Start a new season? The learned speed table and "This season" start from zero. Trips are kept.'))return;await act('/api/season/reset',{});load('econ');},
+  // Economy plan
+  planRound:()=>{P.round=!P.round;savePrefs();render(true);},
+  planRoute:v=>{P.route=+v;savePrefs();render(true);},
+  planIdx:v=>{P.planIdx=+v;savePrefs();render(true);},
+  planCond:v=>{const [k,n]=v.split(':');if(k==='sea')P.sea=n;else P.load=n;savePrefs();render(true);},
+  // Tank
+  fuelOpen:v=>{S.fuelOpen=S.fuelOpen===+v?null:+v;render(true);},
+  fuelDel:async v=>{if(!confirm('Delete this entry?'))return;await act('/api/fuel/delete',{i:v});S.fuelOpen=null;load('fuel');},
+  fWhen:()=>{S.d.fPick=!S.d.fPick;renderSheet();},
+  fNow:()=>{S.d.fWhen=null;S.d.fPick=false;renderSheet();},
+  fOther:()=>{S.d.fWhen=S.d.fWhen||Date.now();renderSheet();},
+  fFull:()=>{S.d.fFull=!S.d.fFull;renderSheet();},
+  fuelSave:async()=>{const d=S.d,l=parseFloat(String(d.fLitres).replace(',','.'))||0,p=parseFloat(String(d.fPrice).replace(',','.'))||0;
+    const r=await act('/api/fuel/add',{litres:imp()?l/0.264172:l,price:imp()?p*0.264172:p,full:d.fFull?1:0,utc:d.fWhen?Math.round(d.fWhen/1000):0});
+    if(r.ok){history.back();load('fuel');}},
+  // History
+  selMode:v=>{S.selMode=v||null;S.sel=[];S.quick=null;S.open=null;render(true);},
+  quick:v=>{const us=units(),now=Date.now()/1000;S.quick=+v;S.sel=us.filter(u=>+v===0?u.s&&dayKey(u.s)===dayKey(now):+v===1?u.s>now-7*86400:true).map(u=>u.key);render(true);},
+  tripTap:v=>{const k=+v;if(S.selMode){S.sel=S.sel.includes(k)?S.sel.filter(x=>x!==k):S.sel.concat([k]);}else S.open=S.open===k?null:k;render(true);},
+  rawToggle:()=>{S.raw=!S.raw;renderBar();},
+  export:()=>{const us=units().filter(u=>S.sel.includes(u.key)),ids=us.flatMap(u=>u.ids).join(',');if(!ids)return;
+    download('/api/export/trips.csv?ids='+ids);if(S.raw)setTimeout(()=>download('/api/export/raw.csv?ids='+ids),1500);
+    toast('Downloading '+us.length+' trip'+(us.length>1?'s':''));S.selMode=null;S.sel=[];render(true);},
+  dlTrips:v=>download('/api/export/trips.csv?ids='+v),
+  combine:async()=>{const us=units().filter(u=>S.sel.includes(u.key)),ids=us.flatMap(u=>u.ids).join(',');const r=await act('/api/trip/combine',{ids});if(r.ok){S.selMode=null;S.sel=[];load('trips');}},
+  split:async v=>{await act('/api/trip/split',{group:v});S.open=null;load('trips');},
+  nPeople:v=>{S.d.n.p=clamp(S.d.n.p+(+v),1,30);renderSheet();},
+  nSet:v=>{const [k,i]=v.split(':');S.d.n[k]=S.d.n[k]===+i?0:+i;renderSheet();},
+  nExtra:v=>{S.d.n.x^=(1<<+v);renderSheet();},
+  nCopy:()=>{const t=S.trips.trips.find(x=>x.id!==S.d.nId&&(x.p||x.sea||x.w||x.x));if(t)S.d.n={p:t.p||2,sea:t.sea,w:t.w,x:t.x,n:t.n};renderSheet();},
+  notesSave:async()=>{const n=S.d.n;const r=await act('/api/trip/note',{id:S.d.nId,people:n.p,sea:n.sea||0,wind:n.w||0,extras:n.x||0,note:n.n||''});if(r.ok){history.back();load('trips');}},
+  // Engines
+  healthOpen:v=>{S.healthOpen=S.healthOpen===v?null:v;render(true);},
+  svcOpen:v=>{S.svcOpen=S.svcOpen===v?null:v;render(true);},
+  svcDone:v=>{const hrs=engines().map(e=>e.hrs).filter(h=>fin(h)&&h>0);P.service[v]={h:hrs.length?Math.max(...hrs):null,t:Math.round(Date.now()/1000)};savePrefs();S.svcOpen=null;toast(SERVICE.find(s=>s[0]===v)[1]+' logged as done');render(true);}
+};
+const I={
+  tankDraft:v=>S.tankDraft=v,
+  price:v=>{clearTimeout(I._p);I._p=setTimeout(()=>{const p=parseFloat(v.replace(',','.'));if(p>=0)post('/api/cfg',{price:p});},700);},
+  ntpServer:v=>{clearTimeout(I._n);I._n=setTimeout(()=>{if(v.trim().length>=3)post('/api/cfg',{ntpServer:v.trim()});},900);},
+  newPlace:v=>S.newPlace=v,newNm:v=>S.newNm=v,
+  apName:v=>S.d.apName=v,apPass:v=>S.d.apPass=v,wifiPass:v=>S.wifiPass=v,
+  voltMeas:v=>{S.voltMeas=v;},
+  planCustom:v=>{P.custom=v;savePrefs();},
+  planSlide:v=>{P.planIdx=+v;savePrefs();render(true);},
+  fLitres:v=>{S.d.fLitres=v;updTotal();},fPrice:v=>{S.d.fPrice=v;updTotal();},
+  fWhenV:v=>{const t=new Date(v).getTime();if(t)S.d.fWhen=t;},
+  nText:v=>{S.d.n.n=v;},
+  wipe:v=>{S.d.wipe=v;const ok=v.trim().toUpperCase()==='WIPE',b=document.querySelector('[data-a="wipeDo"]');if(b){b.disabled=!ok;b.className='btn '+(ok?'red':'');}const i=document.querySelector('[data-i="wipe"]');if(i)i.style.borderColor=ok?'var(--red)':'transparent';}
+};
+function updTotal(){const d=S.d,l=parseFloat(String(d.fLitres).replace(',','.')),p=parseFloat(String(d.fPrice).replace(',','.'));const t=$('#fTotal');if(t)t.textContent=l>0&&p>0?money(l*p):'—';
+  const can=l>0||d.fFull,b=document.querySelector('[data-a="fuelSave"]');if(b){b.disabled=!can;b.className='btn '+(can?'pri':'');}}
+async function fwPoll(){for(let i=0;i<400;i++){await load('fw');const s=S.fw?S.fw.state:0;if(s===2||s===9||s===0||s===4)break;await new Promise(r=>setTimeout(r,1000));}}
+async function diagPoll(){for(let i=0;i<40;i++){await load('diag');if(!S.diag||!S.diag.t.some(t=>t.running))break;await new Promise(r=>setTimeout(r,1000));}load('diag');}
+function uploadFw(file){
+  if(!file)return;
+  if(/merged/i.test(file.name)){toast('That is the USB image. Use enginelink-update.bin');return;}
+  const x=new XMLHttpRequest(),f=new FormData();f.append('update',file,file.name);
+  x.upload.onprogress=e=>{if(e.lengthComputable){S.upload=Math.round(e.loaded/e.total*100);render(true);}};
+  x.onload=()=>{S.upload=null;let m='Update finished';try{m=JSON.parse(x.responseText).message;}catch(e){}toast(m);render(true);};
+  x.onerror=()=>{S.upload=null;toast('Upload interrupted');render(true);};
+  x.open('POST','/api/update');x.send(f);S.upload=0;render(true);
+}
+
+// ---------- Theme, night mode, screen ----------
+// Sunset/sunrise for Danish waters (55.7 N, 12.6 E); good enough to switch to red.
+function isNight(){
+  const now=new Date(),day=Math.floor((now-new Date(now.getFullYear(),0,0))/86400000);
+  const decl=23.44*Math.sin((2*Math.PI/365)*(day-81))*Math.PI/180,lat=55.7*Math.PI/180;
+  const ha=Math.acos(clamp(-Math.tan(lat)*Math.tan(decl),-1,1))*180/Math.PI/15;
+  const noonUtc=12-12.6/15,h=now.getUTCHours()+now.getUTCMinutes()/60;
+  return h<noonUtc-ha-0.3||h>noonUtc+ha+0.3;
+}
+function applyTheme(){
+  const night=P.night==='on'||(P.night==='sunset'&&isNight());
+  document.documentElement.dataset.theme=night?'night':P.theme==='light'?'light':'dark';
+  document.querySelector('meta[name=theme-color]').content=getComputedStyle(document.documentElement).getPropertyValue('--bg').trim();
+}
+setInterval(applyTheme,60000);
+let lock=null;
+async function wake(){
+  if(!P.keepOn){if(lock){try{lock.release();}catch(e){}lock=null;}$('#nosleep').pause();return;}
+  try{if('wakeLock' in navigator){lock=await navigator.wakeLock.request('screen');return;}}catch(e){}
+  // Without a secure connection browsers refuse the wake lock; a silent,
+  // invisible looping video keeps most phones awake instead.
+  try{await $('#nosleep').play();}catch(e){}
+}
+
+// ---------- Start ----------
+document.addEventListener('click',e=>{
+  const b=e.target.closest('[data-a]');
+  if(P.keepOn&&$('#nosleep').paused)wake();
+  if(!b||b.disabled)return;
+  const f=A[b.dataset.a];
+  if(f){e.preventDefault();f(b.dataset.v,b,e);}
+});
+document.addEventListener('input',e=>{const i=e.target.closest('[data-i]');if(i&&I[i.dataset.i])I[i.dataset.i](i.value,i);});
+$('#sheetwrap').addEventListener('click',e=>{if(e.target.id==='sheetwrap')history.back();});
+addEventListener('popstate',()=>{if(S.sheet){closeSheet();return;}if(S.page)goBack();});
+addEventListener('beforeinstallprompt',e=>{e.preventDefault();window._bip=e;});
+(async function init(){
+  renderNav();render(true);
+  try{const p=await get('/api/prefs',4000);if(p&&typeof p==='object'){for(const k of Object.keys(P))if(p[k]!==undefined)P[k]=typeof P[k]==='object'&&!Array.isArray(P[k])?Object.assign({},P[k],p[k]):p[k];}prefsLoaded=true;}catch(e){}
+  applyTheme();
+  const first=P.start||'trip';S.tab='';
+  goTab(first);
+  load('state');load('trips');load('fuel');
+  tick();
+})();
+</script>
+</body></html>

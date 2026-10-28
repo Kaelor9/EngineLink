@@ -1,13 +1,18 @@
 /*
- * EngineLink 0.4.0-alpha — actual application firmware
+ * EngineLink 0.5.0 — application firmware
  * ESP32-S3-WROOM-1-N8R8, 8 MB flash / 8 MB PSRAM.
  *
  * Captures actual J1708 RX bytes on J7 and J6. Engines are decoded either as
  * Volvo Penta KAD/EDC1 (request/response, VODIA scaling) or SAE J1587.
- * J1708 TX pins are attached ONLY while the user has switched on KAD polling
- * for a channel in this session, and only the read-parameter request can be
- * sent. CAN is listen-only if user enables it.
+ * J1708 TX pins are attached ONLY while KAD polling is on for a channel
+ * (switched on by the user, by "Read engines automatically", which is off by
+ * default, or for a 30 s connection test), and only the read-parameter
+ * request can be sent. CAN is listen-only if user enables it.
  * Never claim a simulated or missing value is measured.
+ *
+ * On top of the capture core this firmware keeps trips, a fuel log with
+ * tank estimate, learned economy and engine-health figures, and serves the
+ * phone app in ui.h.
  *
  * Read docs/PRODUCTION_ALPHA.md before attaching to any engine or CAN bus.
  */
@@ -19,6 +24,7 @@
 #include <Preferences.h>
 #include <SPI.h>
 #include <SD.h>
+#include <LittleFS.h>
 #include <Adafruit_NeoPixel.h>
 #include <driver/uart.h>
 #include <driver/twai.h>
@@ -30,9 +36,18 @@
 #include <esp_system.h>
 #include <esp_heap_caps.h>
 #include <math.h>
+#include <esp_wifi.h>
+#include <esp_ota_ops.h>
+#include <HTTPClient.h>
+#include <NetworkClientSecure.h>
 #include "ui.h"
+#include "icons.h"
 
-#define EL_VERSION "0.4.0-alpha"
+#define EL_VERSION "0.5.0"
+// Releases list published by the Pages workflow; firmware files come from
+// GitHub Releases of the same repository. Nothing else is downloaded.
+#define EL_RELEASES_URL "https://kaelor9.github.io/EngineLink/releases.json"
+#define EL_RELEASE_PREFIX "https://github.com/Kaelor9/EngineLink/releases/download/"
 
 constexpr uint8_t RX_J7=21, RX_J6=17;
 constexpr uint8_t TX_J7=47, TX_J6=18; // attached only while KAD polling is on
@@ -123,8 +138,25 @@ struct TotalsV3 {
   int64_t tripStartUtc=0;
   uint32_t tripResets=0;
 };
-struct Totals {
+struct TotalsV4 {
   uint32_t magic=0xE1170004;
+  double lifetimeL[2]={0,0};
+  double tripL[2]={0,0};
+  uint32_t runSeconds[2]={0,0};
+  uint32_t tripRunSeconds[2]={0,0};
+  int64_t tripStartUtc=0;
+  uint32_t tripResets=0;
+  double lifeRawH[2]={0,0};
+  double tripRawH[2]={0,0};
+};
+// Fuel counters at one moment. Fuel used between two snapshots is computed
+// with today's scale and correction, so calibration also fixes the past.
+struct FuelSnap { double raw[2]={0,0}, lit[2]={0,0}, missed=0; };
+// Learned figures per 250 rpm step from 1000 rpm (index 0) to 3750+ (11).
+constexpr uint8_t RPM_BUCKETS=12;
+constexpr uint8_t ZONES=5; // idle <1000, low <2000, rising <2500, cruise <3000, fast
+struct Totals {
+  uint32_t magic=0xE1170005;
   double lifetimeL[2]={0,0};   // J1587 path: liters as decoded
   double tripL[2]={0,0};
   uint32_t runSeconds[2]={0,0};
@@ -136,6 +168,66 @@ struct Totals {
   // everything already recorded.
   double lifeRawH[2]={0,0};
   double tripRawH[2]={0,0};
+  // ---- 0.5.0 ----
+  // The trip that is running now (first engine on -> both engines off).
+  bool tripActive=false;
+  uint32_t tripBoot=0;          // boot the trip started in (for raw export)
+  uint32_t tripStartSec=0;      // uptime seconds at trip start
+  uint32_t tripAnySec=0;        // seconds with at least one engine running
+  int64_t tripLastUtc=0;        // last time an engine ran, wall clock
+  uint16_t tripMaxRpm=0;
+  uint32_t nextTripId=1;
+  // Tank: fuel aboard = tankRefL - fuel used since tankRef.
+  double tankRefL=-1;           // -1 = never set
+  FuelSnap tankRef;
+  double estMissedL=0;          // estimated from engine hour meters
+  uint32_t missedEvents=0;
+  float lastEcuHours[2]={0,0};
+  // Economy, all trips since the season started.
+  int64_t seasonStartUtc=0;
+  float bucketSec[RPM_BUCKETS]={}, bucketL[RPM_BUCKETS]={};
+  float bucketSogSec[RPM_BUCKETS]={}, bucketSogL[RPM_BUCKETS]={}, bucketNm[RPM_BUCKETS]={};
+  float zoneL[ZONES]={}, zoneSec[ZONES]={}, zoneNm[ZONES]={};
+};
+// One finished trip. Liters are kept as the raw KAD integral (or J1587
+// liters) so later calibration also corrects old trips.
+struct TripRec {
+  uint32_t id=0;
+  uint32_t group=0;             // id of the first trip of a combined group, 0 = alone
+  int64_t startUtc=0,endUtc=0;
+  uint32_t anySec=0;            // running time (at least one engine)
+  uint32_t bootId=0,startSec=0,endSec=0;
+  float rawH[2]={0,0};
+  float litJ[2]={0,0};
+  uint16_t maxRpm=0;
+  uint8_t people=0,sea=0,wind=0,extras=0; // notes, 0 = not set; extras bits
+  char note[40]={};
+};
+constexpr uint8_t MAX_TRIPS=60;
+struct FuelRec {
+  int64_t utc=0;
+  float litres=0;               // 0 allowed for "tank full" without pump litres
+  float price=0;                // per litre, 0 = not given
+  uint8_t full=0;
+  float counted=-1;             // fuel EngineLink counted since the previous full tank, -1 = unknown
+  float rawDelta=0;             // uncorrected raw integral since that full tank (scale decision)
+  FuelSnap at;                  // counters when this was logged
+  double prevRefL=-1;           // tank reference before this entry (undo of the newest entry)
+  FuelSnap prevRef;
+};
+constexpr uint8_t MAX_FUEL=30;
+// Engine-health baselines: per engine and rpm step, a slow average of what is
+// normal; compared with the latest trip at the same rpm.
+constexpr uint8_t HEALTH_METRICS=4; // coolant, boost, charge air, fuel L/h
+struct Health {
+  uint32_t magic=0xE11A0001;
+  float base[2][RPM_BUCKETS][HEALTH_METRICS]={};
+  uint16_t baseTrips[2][RPM_BUCKETS]={};
+  float dev[2][HEALTH_METRICS]={};     // latest trip vs normal (fraction; coolant in °C)
+  uint16_t devSamples[2]={0,0};
+  uint16_t devRpm[2]={0,0};
+  float balance=0;                      // starboard vs port fuel at same rpm (fraction)
+  int64_t updatedUtc=0;
 };
 struct Segment {
   uint32_t boot=0;
@@ -165,6 +257,21 @@ struct Settings {
   uint16_t kadFuelDiv=128;   // PID289 scale 1/128 (M_902) or 1/256
   uint8_t kadVolt=0;         // PID293: 0 = VODIA 0.01308 V, 1 = Yacht Devices 0.0125 V
   float fuelCorr[2]={1.0f,1.0f}; // per physical channel, from tank-to-tank
+  // ---- 0.5.0 ----
+  String apName="EngineLink";
+  float tankL=0;             // 0 = not set yet
+  uint8_t reserve=10;        // percent, 0 = off
+  float defaultPrice=0;      // per litre, in the currency chosen in the app
+  uint8_t tripEndMin=2;      // trip ends when both engines are off this long
+  bool autoPoll=false;       // "Read engines automatically" (sends read requests)
+  uint16_t rawKeepDays=90;   // 0 = keep forever
+  bool ntpOn=true;
+  String ntpServer="pool.ntp.org";
+  bool fuelScaleOk=false;    // user confirmed 1/128 or 1/256
+  bool voltOk=false;         // user checked the voltage factor
+  uint8_t fineTunes=0;       // full fill-ups used to fine-tune the fuel figures
+  float lastTuneDev=0;       // pump vs counted at the last fine-tune
+  String prefs="{}";         // app-only preferences (JSON written by the app)
 };
 constexpr uint8_t PROTO_J1587=0, PROTO_KAD=1;
 struct Counters {
@@ -226,6 +333,18 @@ struct KadLink {
   uint32_t lastPollMs=0,startedMs=0;
   uint8_t seq=0,slowPos=0;
   String stopReason="";
+  // 0.5.0: reply time and why polling runs (user, automatic or a test).
+  uint64_t replyMsSum=0;
+  uint32_t replyCount=0;
+  bool byAuto=false,byTest=false;
+  uint32_t lastAutoTry=0;
+};
+struct SdCounts { uint32_t files=0; uint64_t rawBytes=0; uint32_t rawFiles=0; uint32_t exports=0; };
+// Result of the 30 s connection test per connector, kept in NVS.
+struct DiagTest {
+  int64_t utc=0;
+  uint16_t requests=0,replies=0,checksumErrors=0;
+  uint16_t replyMs=0;
 };
 // Result of decoding one frame, used for logging.
 struct Decoded {
@@ -253,6 +372,10 @@ uint8_t pidCount=0;
 KadSeen kadSeen[MAX_KAD_SEEN];
 uint8_t kadSeenCount=0;
 KadLink kad[2];
+// Latest decoded value per KAD parameter (position in KAD_PARAMS), signed raw.
+constexpr uint8_t KAD_N=sizeof(KAD_PARAMS)/sizeof(KAD_PARAMS[0]);
+int32_t kadRawV[2][KAD_N];
+uint64_t kadRawAt[2][KAD_N];
 volatile uint32_t lastRxActivityMs[2]={0,0};
 int16_t histFuel[2][HISTORY_LEN];   // centi-L/h, -1 = unknown
 uint16_t histRpm[2][HISTORY_LEN];   // RPM, 0xFFFF = unknown
@@ -299,14 +422,47 @@ String otaError="";
 size_t otaBytes=0;
 uint32_t restartAt=0;
 uint32_t sketchKB=0; // cached: getSketchSize() verifies the whole image
+// ---- 0.5.0 state ----
+TripRec trips[MAX_TRIPS];
+uint8_t tripCount=0;            // trips[0] is the newest
+FuelRec fuelLog[MAX_FUEL];
+uint8_t fuelCount=0;            // fuelLog[0] is the newest
+Health health;
+bool healthDirty=false;
+// Per-trip sums for the health comparison: [engine][bucket][metric] and samples.
+float tripHealthSum[2][RPM_BUCKETS][HEALTH_METRICS];
+uint16_t tripHealthN[2][RPM_BUCKETS];
+DiagTest diagTests[2];
+struct DiagRun { bool on=false; uint32_t startMs=0; uint32_t req0=0,rep0=0,inv0=0; uint64_t ms0=0; uint32_t cnt0=0; } diagRun[2];
+bool ecuHoursChecked[2]={false,false};
+int64_t lastMissedUtc=0; float lastMissedL=0;
+// Wi-Fi robustness
+uint8_t apChannelNow=6;          // channel the AP actually uses
+uint8_t staChannel=0;            // router channel found by the last scan
+uint8_t staBssid[6]={};
+bool staBssidKnown=false;
+uint32_t staNextTry=0,staBackoff=15000,staFails=0,staConnects=0,apRestarts=0,lastApCheck=0;
+uint32_t staConnectedAt=0;
+volatile bool apStoppedFlag=false;
+bool scanBusy=false; int16_t scanCount=-1; uint32_t scanStartedMs=0;
+// Firmware from GitHub, done by a worker task so the app keeps working.
+enum FwJob : uint8_t { FW_IDLE, FW_LIST, FW_INSTALL };
+volatile uint8_t fwJob=FW_IDLE;
+volatile uint8_t fwState=0;      // 0 idle, 1 checking, 2 list ready, 3 downloading, 4 installed, 9 error
+volatile size_t fwBytes=0,fwTotal=0;
+String fwList="",fwError="",fwUrl="",fwTarget="";
+bool rollbackPending=false;      // running a new image that is not confirmed yet
+uint32_t lastRawCleanup=0;
 
 uint64_t elapsedMs(){return (uint64_t)esp_timer_get_time()/1000ULL;}
 bool validWall(){return time(nullptr)>1700000000;}
+void backfillTripTime();
 void setClockFromUtc(time_t sec, const String &source){
   if(sec<1700000000 || sec>4102444800LL)return;
   struct timeval tv={sec,0};
   settimeofday(&tv,nullptr);
   hasTime=true;timeSource=source;
+  backfillTripTime();
 }
 bool allowTime(const String &source){
   if(cfg.timePreference=="auto") {
@@ -320,10 +476,11 @@ bool allowTime(const String &source){
 void ntpCallback(struct timeval *tv){(void)tv;ntpNotification=true;}
 void onWiFi(WiFiEvent_t e,WiFiEventInfo_t info){
   if(e==ARDUINO_EVENT_WIFI_AP_START)++apStarts;
-  if(e==ARDUINO_EVENT_WIFI_AP_STOP)++apStops;
+  if(e==ARDUINO_EVENT_WIFI_AP_STOP){++apStops;apStoppedFlag=true;}
   if(e==ARDUINO_EVENT_WIFI_AP_STACONNECTED)++apJoins;
   if(e==ARDUINO_EVENT_WIFI_AP_STADISCONNECTED){++apLeaves;apReason=info.wifi_ap_stadisconnected.reason;}
   if(e==ARDUINO_EVENT_WIFI_STA_DISCONNECTED)++staDisconnects;
+  if(e==ARDUINO_EVENT_WIFI_STA_GOT_IP){++staConnects;staConnectedAt=millis();}
 }
 bool cardInserted(){return digitalRead(SD_DETECT)==LOW;}
 
@@ -334,6 +491,15 @@ void loadTotals(){
   if(stored==sizeof(Totals)){
     Totals t;
     if(pref.getBytes("t",&t,sizeof(t))==sizeof(t)&&t.magic==totals.magic)totals=t;
+  }else if(stored==sizeof(TotalsV4)){
+    // 0.4.x: keep every counter; the new fields start empty.
+    TotalsV4 o;
+    if(pref.getBytes("t",&o,sizeof(o))==sizeof(o)&&o.magic==0xE1170004){
+      for(int c=0;c<2;c++){totals.lifetimeL[c]=o.lifetimeL[c];totals.tripL[c]=o.tripL[c];
+        totals.runSeconds[c]=o.runSeconds[c];totals.tripRunSeconds[c]=o.tripRunSeconds[c];
+        totals.lifeRawH[c]=o.lifeRawH[c];totals.tripRawH[c]=o.tripRawH[c];}
+      totals.tripStartUtc=o.tripStartUtc;totals.tripResets=o.tripResets;
+    }
   }else if(stored==sizeof(TotalsV3)){
     TotalsV3 o;
     if(pref.getBytes("t",&o,sizeof(o))==sizeof(o)&&o.magic==0xE1170003){
@@ -746,6 +912,7 @@ int32_t kadSigned(uint32_t v,const KadParam *p){
   return (v&sign)?(int32_t)v-(int32_t)(1u<<bits):(int32_t)v;
 }
 void stopPolling(uint8_t ch,const String &why);
+void checkEcuHours(uint8_t ch,float hours);
 // Pairs requests (ours or another device's, e.g. an EDC display) with the
 // next checksum-valid frame. The value is taken as the parameter's width in
 // bytes just before the checksum; both byte orders are kept.
@@ -768,7 +935,10 @@ void decodeKad(const Frame &f,Decoded &d){
   if(!k.pending||f.bootMs<k.pendingAt||f.bootMs-k.pendingAt>KAD_REPLY_MS){++k.orphanReplies;return;}
   const uint16_t index=k.pendingIndex;
   k.pending=false;
-  if(k.ownPending){k.ownPending=false;++k.replies;k.unanswered=0;}
+  if(k.ownPending){
+    k.ownPending=false;++k.replies;k.unanswered=0;
+    if(f.bootMs>=k.pendingAt){k.replyMsSum+=f.bootMs-k.pendingAt;++k.replyCount;}
+  }
   k.lastReplyAt=f.bootMs;
   const KadParam *p=kadParam(index);
   // Confirmed on a KAD300 (2026-10): answers are 83 C1 <n>1 <value...> <cs>,
@@ -788,6 +958,7 @@ void decodeKad(const Frame &f,Decoded &d){
   const uint32_t invalid=w>=4?0xFFFFFFFFUL:((1UL<<(8*w))-1UL);
   d.kadIndex=index;d.kadValue=kadSigned(raw,p);d.kadValueOk=true;
   if(raw==invalid)return; // all-ones = not available
+  for(uint8_t i=0;i<KAD_N;i++)if(KAD_PARAMS[i].index==index){kadRawV[f.channel][i]=d.kadValue;kadRawAt[f.channel][i]=f.bootMs;break;}
   Motor &m=motor[f.channel];
   if(index==256){
     d.rpm=(float)raw*0.25f;d.gotRPM=true;
@@ -795,6 +966,8 @@ void decodeKad(const Frame &f,Decoded &d){
   }else if(index==289){
     d.lph=(float)((double)raw*kadFuelScale(f.channel));d.gotFuel=true;
     updateFuel(m,f.channel,d.lph,f.bootMs,(double)raw);
+  }else if(index==266){
+    checkEcuHours(f.channel,(float)raw*0.0027778f);
   }
 }
 void processFrame(const Frame &f){
@@ -964,6 +1137,7 @@ void serviceEngines(){
       if(now-m.lastRunMs>=ENGINE_STOP_DEBOUNCE_MS)closeSegment(c);
     }
   }
+  serviceTripSecond();
   if(totalsDirty&&(uint32_t)(millis()-lastTotalsSave)>=TOTALS_SAVE_MS)saveTotals();
 }
 
@@ -980,6 +1154,338 @@ void serviceHistory(){
   histSog[histIndex]=sog?(int16_t)lroundf(min(sogKnots,320.0f)*100.0f):-1;
   histIndex=(histIndex+1)%HISTORY_LEN;
   if(histCount<HISTORY_LEN)histCount++;
+}
+
+// ---------- Scaled engine values ----------
+// Factor for a KAD parameter now; fuel and voltage follow the chosen scale.
+float kadFactor(uint8_t ch,uint8_t slot){
+  const KadParam &p=KAD_PARAMS[slot];
+  if(p.index==289)return (float)kadFuelScale(ch);
+  if(p.index==293)return cfg.kadVolt?0.0125f:0.01308f;
+  return p.factor;
+}
+// Latest scaled value of a KAD parameter if it is younger than maxAge ms.
+bool engineValueAge(uint8_t ch,uint16_t index,float &out,uint32_t maxAge){
+  if(ch>1)return false;
+  const uint64_t now=elapsedMs();
+  if(cfg.protocol!=PROTO_KAD){
+    if(index==256&&rpmFresh(ch,now)){out=motor[ch].rpm;return true;}
+    if(index==289&&fuelFresh(ch,now)){out=motor[ch].fuelLph;return true;}
+    return false;
+  }
+  for(uint8_t i=0;i<KAD_N;i++){
+    if(KAD_PARAMS[i].index!=index)continue;
+    if(!kadRawAt[ch][i]||now<kadRawAt[ch][i]||now-kadRawAt[ch][i]>maxAge)return false;
+    const float f=kadFactor(ch,i);
+    out=f>0?(float)kadRawV[ch][i]*f:(float)kadRawV[ch][i];
+    return true;
+  }
+  return false;
+}
+bool engineValue(uint8_t ch,uint16_t index,float &out){return engineValueAge(ch,index,out,10000);}
+
+// ---------- Fuel counters, tank ----------
+FuelSnap fuelSnapNow(){
+  FuelSnap s;
+  for(uint8_t c=0;c<2;c++){s.raw[c]=totals.lifeRawH[c];s.lit[c]=totals.lifetimeL[c];}
+  s.missed=totals.estMissedL;
+  return s;
+}
+// Liters used since a snapshot, with today's scale and correction.
+double usedSince(const FuelSnap &a){
+  double l=0;
+  for(uint8_t c=0;c<2;c++){
+    if(cfg.protocol==PROTO_KAD)l+=(totals.lifeRawH[c]-a.raw[c])*kadFuelScale(c);
+    else l+=totals.lifetimeL[c]-a.lit[c];
+  }
+  return max(0.0,l+(totals.estMissedL-a.missed));
+}
+bool tankKnown(){return cfg.tankL>0&&totals.tankRefL>=0;}
+double tankAboard(){
+  if(!tankKnown())return -1;
+  return constrain(totals.tankRefL-usedSince(totals.tankRef),0.0,(double)cfg.tankL);
+}
+int lastFullIndex(){for(uint8_t i=0;i<fuelCount;i++)if(fuelLog[i].full)return i;return -1;}
+// Uncertainty of the fuel aboard: grows with litres counted since the last full
+// tank, smaller once full fill-ups have fine-tuned the figures.
+double tankPlusMinus(){
+  if(!tankKnown())return 0;
+  const double since=usedSince(totals.tankRef);
+  return 3.0+since*(cfg.fineTunes?0.025:0.07);
+}
+double latestPrice(){
+  for(uint8_t i=0;i<fuelCount;i++)if(fuelLog[i].price>0)return fuelLog[i].price;
+  return cfg.defaultPrice;
+}
+
+// ---------- Internal storage for trips, fuel log, health, tests, app prefs ----------
+// LittleFS on the 1.5 MB data partition: NVS is only 20 KB and would fill up.
+// Every file is written to a temporary name first and then renamed, so a
+// power cut never leaves a half-written file.
+bool fsReady=false;
+bool fsWrite(const char *path,const void *data,size_t len){
+  if(!fsReady)return false;
+  String tmp=String(path)+".tmp";
+  File f=LittleFS.open(tmp,"w");
+  if(!f)return false;
+  const bool ok=f.write((const uint8_t*)data,len)==len;
+  f.close();
+  if(!ok){LittleFS.remove(tmp);return false;}
+  LittleFS.remove(path);
+  return LittleFS.rename(tmp,path);
+}
+// Reads a file of exactly len bytes, or of a whole number of items of size item.
+size_t fsRead(const char *path,void *data,size_t maxLen,size_t item){
+  if(!fsReady||!LittleFS.exists(path))return 0;
+  File f=LittleFS.open(path,"r");
+  if(!f)return 0;
+  const size_t n=f.size();
+  if(n>maxLen||n%item){f.close();return 0;}
+  const size_t got=f.read((uint8_t*)data,n);
+  f.close();
+  return got==n?n:0;
+}
+void saveTrips(){fsWrite("/trips.bin",trips,sizeof(TripRec)*tripCount);}
+void loadTrips(){tripCount=fsRead("/trips.bin",trips,sizeof(trips),sizeof(TripRec))/sizeof(TripRec);}
+void saveFuel(){fsWrite("/fuel.bin",fuelLog,sizeof(FuelRec)*fuelCount);}
+void loadFuel(){fuelCount=fsRead("/fuel.bin",fuelLog,sizeof(fuelLog),sizeof(FuelRec))/sizeof(FuelRec);}
+void saveHealth(){fsWrite("/health.bin",&health,sizeof(health));healthDirty=false;}
+void loadHealth(){
+  Health h;
+  if(fsRead("/health.bin",&h,sizeof(h),sizeof(h))==sizeof(h)&&h.magic==health.magic)health=h;
+}
+void saveDiag(){fsWrite("/diag.bin",diagTests,sizeof(diagTests));}
+void loadDiag(){fsRead("/diag.bin",diagTests,sizeof(diagTests),sizeof(diagTests));}
+
+// ---------- Fuel log ----------
+// A full tank sets the estimate to the tank size; litres from the pump are
+// compared with what EngineLink counted and fine-tune both engines (damped).
+bool addFuel(float litres,float price,bool full,int64_t utc,String &msg){
+  if(!(litres>=0&&litres<=5000)){msg="Litres out of range";return false;}
+  if(!(price>=0&&price<1000)){msg="Price out of range";return false;}
+  if(!full&&litres<=0){msg="Enter the litres you added";return false;}
+  FuelRec r;
+  r.utc=utc>1700000000?utc:(validWall()?(int64_t)time(nullptr):0);
+  r.litres=litres;r.price=price;r.full=full?1:0;
+  r.prevRefL=totals.tankRefL;r.prevRef=totals.tankRef;
+  const int pf=lastFullIndex();
+  msg="Saved";
+  if(full){
+    if(pf>=0){
+      r.counted=(float)usedSince(fuelLog[pf].at);
+      double rd=0;for(uint8_t c=0;c<2;c++)rd+=totals.lifeRawH[c]-fuelLog[pf].at.raw[c];
+      r.rawDelta=(float)rd;
+      if(litres>30&&r.counted>30){
+        const float ratio=litres/r.counted;
+        if(ratio>0.6f&&ratio<1.6f){
+          const float adj=1.0f+(ratio-1.0f)*0.5f;
+          for(uint8_t c=0;c<2;c++)cfg.fuelCorr[c]=constrain(cfg.fuelCorr[c]*adj,0.5f,2.0f);
+          if(cfg.fineTunes<250)++cfg.fineTunes;
+          cfg.lastTuneDev=ratio-1.0f;
+          saveSettings();
+          msg=String("Fuel figures fine-tuned by ")+String((adj-1.0f)*100.0f,1)+" %";
+        }else msg="Pump litres differ a lot from what EngineLink counted, so nothing was fine-tuned";
+      }
+    }
+    totals.tankRefL=cfg.tankL>0?cfg.tankL:-1;
+  }else{
+    const double a=tankAboard();
+    if(a>=0)totals.tankRefL=min((double)cfg.tankL,a+litres);
+  }
+  r.at=fuelSnapNow();
+  totals.tankRef=r.at;
+  if(fuelCount==MAX_FUEL)--fuelCount;
+  memmove(&fuelLog[1],&fuelLog[0],sizeof(FuelRec)*fuelCount);
+  fuelLog[0]=r;++fuelCount;
+  saveFuel();saveTotals();
+  return true;
+}
+// Deleting the newest entry also restores the tank estimate before it.
+bool deleteFuel(uint8_t i){
+  if(i>=fuelCount)return false;
+  if(i==0){totals.tankRefL=fuelLog[0].prevRefL;totals.tankRef=fuelLog[0].prevRef;saveTotals();}
+  memmove(&fuelLog[i],&fuelLog[i+1],sizeof(FuelRec)*(fuelCount-i-1));
+  --fuelCount;saveFuel();
+  return true;
+}
+
+// ---------- Trips ----------
+// A trip starts when the first engine starts and ends when both engines have
+// been off for cfg.tripEndMin minutes. If EngineLink restarts during a trip,
+// the open trip is closed at boot; two parts can be combined in History.
+uint32_t lastEngineOnMs=0,lastEngineOnSec=0;
+double tripLitres(const TripRec &r,uint8_t ch){
+  return cfg.protocol==PROTO_KAD?(double)r.rawH[ch]*kadFuelScale(ch):(double)r.litJ[ch];
+}
+void writeTripCSV(const TripRec &r){
+  if(!sdReady||!cardInserted()||otaActive)return;
+  File f=SD.open("/TRIPS.CSV",FILE_APPEND);
+  if(!f)return;
+  if(f.size()==0)f.println("trip_id,start_utc,end_utc,running_s,j7_l,j6_l,total_l,max_rpm,boot_id,start_uptime_s,end_uptime_s");
+  const double a=tripLitres(r,0),b=tripLitres(r,1);
+  f.printf("%lu,%lld,%lld,%lu,%.2f,%.2f,%.2f,%u,%08lX,%lu,%lu\n",(unsigned long)r.id,(long long)r.startUtc,(long long)r.endUtc,
+    (unsigned long)r.anySec,a,b,a+b,(unsigned)r.maxRpm,(unsigned long)r.bootId,(unsigned long)r.startSec,(unsigned long)r.endSec);
+  f.close();
+}
+void resetTripHealth(){memset(tripHealthSum,0,sizeof(tripHealthSum));memset(tripHealthN,0,sizeof(tripHealthN));}
+void startTrip(){
+  for(uint8_t c=0;c<2;c++){totals.tripL[c]=0;totals.tripRawH[c]=0;totals.tripRunSeconds[c]=0;}
+  totals.tripActive=true;totals.tripBoot=bootId;
+  totals.tripStartSec=(uint32_t)(elapsedMs()/1000ULL);
+  totals.tripStartUtc=validWall()?(int64_t)time(nullptr):0;
+  totals.tripLastUtc=totals.tripStartUtc;
+  totals.tripAnySec=0;totals.tripMaxRpm=0;++totals.tripResets;
+  if(!totals.seasonStartUtc&&validWall())totals.seasonStartUtc=time(nullptr);
+  resetTripHealth();
+  saveTotals();
+}
+void backfillTripTime(){
+  if(!validWall())return;
+  const int64_t nowUtc=time(nullptr),nowSec=(int64_t)(elapsedMs()/1000ULL);
+  if(totals.tripActive&&totals.tripBoot==bootId){
+    if(!totals.tripStartUtc)totals.tripStartUtc=nowUtc-(nowSec-(int64_t)totals.tripStartSec);
+    if(!totals.tripLastUtc&&lastEngineOnSec)totals.tripLastUtc=nowUtc-(nowSec-(int64_t)lastEngineOnSec);
+  }
+  if(!totals.seasonStartUtc&&totals.tripActive)totals.seasonStartUtc=totals.tripStartUtc;
+  // Trips that ended earlier in this boot before the clock was known.
+  bool changed=false;
+  for(uint8_t i=0;i<tripCount;i++){
+    TripRec &r=trips[i];
+    if(r.bootId!=bootId)continue;
+    if(!r.startUtc){r.startUtc=nowUtc-(nowSec-(int64_t)r.startSec);changed=true;}
+    if(!r.endUtc){r.endUtc=nowUtc-(nowSec-(int64_t)r.endSec);changed=true;}
+  }
+  if(changed)saveTrips();
+}
+void finishTripHealth();
+void endTrip(){
+  totals.tripActive=false;
+  // Very short runs (an engine started for a few seconds) are not trips.
+  if(totals.tripAnySec>=20){
+    TripRec r;
+    r.id=totals.nextTripId++;
+    r.startUtc=totals.tripStartUtc;
+    r.endUtc=totals.tripLastUtc;
+    r.anySec=totals.tripAnySec;
+    r.bootId=totals.tripBoot;r.startSec=totals.tripStartSec;
+    r.endSec=totals.tripBoot==bootId&&lastEngineOnSec?lastEngineOnSec:totals.tripStartSec+totals.tripAnySec;
+    for(uint8_t c=0;c<2;c++){r.rawH[c]=(float)totals.tripRawH[c];r.litJ[c]=(float)totals.tripL[c];}
+    r.maxRpm=totals.tripMaxRpm;
+    if(tripCount==MAX_TRIPS)--tripCount;
+    memmove(&trips[1],&trips[0],sizeof(TripRec)*tripCount);
+    trips[0]=r;++tripCount;
+    saveTrips();
+    writeTripCSV(r);
+    if(totals.tripBoot==bootId)finishTripHealth();
+  }
+  saveTotals();
+}
+TripRec *tripById(uint32_t id){for(uint8_t i=0;i<tripCount;i++)if(trips[i].id==id)return &trips[i];return nullptr;}
+
+// ---------- Learning: economy and engine health ----------
+uint8_t zoneFor(float rpm){return rpm<1000?0:rpm<2000?1:rpm<2500?2:rpm<3000?3:4;}
+int bucketFor(float rpm){if(rpm<1000)return -1;int b=(int)((rpm-1000.0f)/250.0f);return b>=RPM_BUCKETS?RPM_BUCKETS-1:b;}
+bool sogFresh(){return isfinite(sogKnots)&&sogAt&&elapsedMs()-sogAt<7000;}
+void learnSecond(){
+  const uint64_t now=elapsedMs();
+  float rpmSum=0,lph=0;uint8_t n=0;bool lphOk=true;
+  for(uint8_t c=0;c<2;c++){
+    if(!motor[c].running)continue;
+    if(rpmFresh(c,now)){rpmSum+=motor[c].rpm;++n;}
+    if(fuelFresh(c,now))lph+=motor[c].fuelLph;else lphOk=false;
+  }
+  if(!n||!lphOk)return;
+  const float rpm=rpmSum/n,L=lph/3600.0f;
+  const bool sog=sogFresh();
+  const uint8_t z=zoneFor(rpm);
+  totals.zoneL[z]+=L;totals.zoneSec[z]+=1;
+  if(sog)totals.zoneNm[z]+=sogKnots/3600.0f;
+  const int b=bucketFor(rpm);
+  if(b>=0){
+    totals.bucketSec[b]+=1;totals.bucketL[b]+=L;
+    if(sog){totals.bucketSogSec[b]+=1;totals.bucketSogL[b]+=L;totals.bucketNm[b]+=sogKnots/3600.0f;}
+  }
+  // Health: only a warm engine at a steady rpm step says something.
+  for(uint8_t c=0;c<2;c++){
+    if(!motor[c].running||!rpmFresh(c,now)||!fuelFresh(c,now))continue;
+    const int eb=bucketFor(motor[c].rpm);
+    if(eb<0)continue;
+    float cool,boost,air;
+    if(!engineValue(c,259,cool)||!engineValue(c,265,boost)||!engineValue(c,261,air))continue;
+    if(cool<70)continue;
+    float *sum=tripHealthSum[c][eb];
+    sum[0]+=cool;sum[1]+=boost;sum[2]+=air;sum[3]+=motor[c].fuelLph;
+    if(tripHealthN[c][eb]<65000)++tripHealthN[c][eb];
+  }
+}
+void finishTripHealth(){
+  constexpr uint16_t MIN_N=120; // two minutes at one rpm step
+  int bestB[2]={-1,-1};
+  for(uint8_t c=0;c<2;c++){
+    uint16_t best=0;
+    for(uint8_t b=0;b<RPM_BUCKETS;b++)if(tripHealthN[c][b]>=MIN_N&&tripHealthN[c][b]>best){best=tripHealthN[c][b];bestB[c]=b;}
+    for(uint8_t b=0;b<RPM_BUCKETS;b++){
+      const uint16_t n=tripHealthN[c][b];
+      if(n<MIN_N)continue;
+      float avg[HEALTH_METRICS];
+      for(uint8_t m=0;m<HEALTH_METRICS;m++)avg[m]=tripHealthSum[c][b][m]/n;
+      uint16_t &bt=health.baseTrips[c][b];
+      float *base=health.base[c][b];
+      if((int)b==bestB[c]&&bt>=3){
+        health.dev[c][0]=avg[0]-base[0];
+        for(uint8_t m=1;m<HEALTH_METRICS;m++)health.dev[c][m]=fabsf(base[m])>0.01f?(avg[m]-base[m])/base[m]:0;
+        health.devSamples[c]=n;health.devRpm[c]=1000+b*250+125;
+      }
+      // Running mean for the first trips, then a slow average.
+      const float k=bt<4?1.0f/(bt+1):0.2f;
+      for(uint8_t m=0;m<HEALTH_METRICS;m++)base[m]+=(avg[m]-base[m])*k;
+      if(bt<60000)++bt;
+    }
+  }
+  // Fuel balance: both engines at the same rpm step.
+  for(uint8_t b=0;b<RPM_BUCKETS;b++){
+    if(tripHealthN[0][b]>=MIN_N&&tripHealthN[1][b]>=MIN_N){
+      const float a=tripHealthSum[0][b][3]/tripHealthN[0][b],d=tripHealthSum[1][b][3]/tripHealthN[1][b];
+      if(a>0.5f)health.balance=(d-a)/a;
+      break;
+    }
+  }
+  health.updatedUtc=validWall()?(int64_t)time(nullptr):0;
+  saveHealth();
+}
+// The engine's own hour meter shows running that EngineLink did not see (it
+// was off or restarting). The missing fuel is estimated from the average use.
+void checkEcuHours(uint8_t ch,float hours){
+  if(ch>1||!(hours>0&&hours<200000))return;
+  if(!ecuHoursChecked[ch]){
+    ecuHoursChecked[ch]=true;
+    const float last=totals.lastEcuHours[ch],gap=hours-last;
+    if(last>0&&gap>0.1f&&gap<500){
+      const double runH=totals.runSeconds[ch]/3600.0;
+      const double avg=runH>0.5?lifetimeLitersFor(ch)/runH:10.0;
+      const double est=gap*constrain(avg,1.0,80.0);
+      totals.estMissedL+=est;++totals.missedEvents;
+      lastMissedUtc=validWall()?(int64_t)time(nullptr):0;lastMissedL=(float)est;
+      totalsDirty=true;
+    }
+  }
+  if(hours>=totals.lastEcuHours[ch]){totals.lastEcuHours[ch]=hours;}
+}
+// Called once a second from serviceEngines().
+void serviceTripSecond(){
+  const bool anyOn=motor[0].running||motor[1].running;
+  if(anyOn){
+    if(!totals.tripActive)startTrip();
+    ++totals.tripAnySec;
+    lastEngineOnMs=millis();lastEngineOnSec=(uint32_t)(elapsedMs()/1000ULL);
+    if(validWall())totals.tripLastUtc=time(nullptr);
+    const uint64_t now=elapsedMs();
+    for(uint8_t c=0;c<2;c++)if(rpmFresh(c,now)&&motor[c].rpm>totals.tripMaxRpm)totals.tripMaxRpm=(uint16_t)motor[c].rpm;
+    learnSecond();
+    totalsDirty=true;
+  }else if(totals.tripActive&&(uint32_t)(millis()-lastEngineOnMs)>=(uint32_t)cfg.tripEndMin*60000UL){
+    endTrip();
+  }
 }
 
 uint32_t nmeaPGN(uint32_t canid){
@@ -1019,21 +1525,66 @@ void serviceCAN(){
     }
   }
 }
-void applyNetwork(){
-  // Only a saved network configuration change may rebuild Wi-Fi interfaces.
-  // Never periodically restart the AP just because STA lost its router.
-  const bool withRouter=cfg.router&&cfg.ssid.length();
-  WiFi.mode(withRouter?WIFI_AP_STA:WIFI_AP);
+// ---------- Wi-Fi: built to keep the phone connected ----------
+// Rules that keep the EngineLink network steady:
+//  * The access point is always on and never restarted for router problems.
+//  * Power saving is off, transmit power is at maximum, phones that sleep
+//    are kept for 10 minutes instead of being dropped.
+//  * The radio has one channel. With a router, the AP starts on the router's
+//    channel (found once at setup), and reconnects are aimed at the router's
+//    own channel and address, so the radio never hops away from the phone.
+//  * A full router scan (which hops channels) only runs when no phone is
+//    connected, or when the user asks for one on the Boat router page.
+//  * A watchdog restarts only the AP if it ever stops.
+bool routerConfigured(){return cfg.router&&cfg.ssid.length();}
+void radioTuning(){
   WiFi.setSleep(false);
+  esp_wifi_set_ps(WIFI_PS_NONE);
+  WiFi.setTxPower(WIFI_POWER_19_5dBm);
+  wifi_country_t cc={{'E','U',' '},1,13,20,WIFI_COUNTRY_POLICY_MANUAL};
+  esp_wifi_set_country(&cc);
+}
+void startAP(){
   WiFi.softAPConfig(IPAddress(192,168,4,1),IPAddress(192,168,4,1),IPAddress(255,255,255,0));
-  apStarted=WiFi.softAP("EngineLink",cfg.apPassword.c_str(),cfg.apChannel,false,4);
+  apStarted=WiFi.softAP(cfg.apName.c_str(),cfg.apPassword.c_str(),apChannelNow,false,6);
+  esp_wifi_set_inactive_time(WIFI_IF_AP,600);
+  apStoppedFlag=false;
+}
+// Blocking scan for the saved router. Only used when the network is set up.
+bool findRouter(){
+  const int16_t n=WiFi.scanNetworks(false,true,false,150);
+  int best=-1;int32_t bestRssi=-200;
+  for(int16_t i=0;i<n;i++){
+    if(WiFi.SSID(i)==cfg.ssid&&WiFi.RSSI(i)>bestRssi){best=i;bestRssi=WiFi.RSSI(i);}
+  }
+  if(best>=0){
+    staChannel=(uint8_t)WiFi.channel(best);
+    memcpy(staBssid,WiFi.BSSID(best),6);
+  }
+  WiFi.scanDelete();
+  return best>=0;
+}
+void connectRouter(){
+  if(staBssidKnown)WiFi.begin(cfg.ssid.c_str(),cfg.wifiPassword.c_str(),staChannel,staBssid,true);
+  else WiFi.begin(cfg.ssid.c_str(),cfg.wifiPassword.c_str(),apChannelNow,nullptr,true);
+}
+void applyNetwork(){
+  // Only a saved network change rebuilds the interfaces.
+  const bool withRouter=routerConfigured();
+  WiFi.persistent(false);
+  WiFi.mode(withRouter?WIFI_AP_STA:WIFI_AP);
+  radioTuning();
+  apChannelNow=cfg.apChannel;
+  staBssidKnown=false;
   if(withRouter){
     WiFi.setAutoReconnect(false);
-    WiFi.begin(cfg.ssid.c_str(),cfg.wifiPassword.c_str());
-    lastWifiRetry=millis();
-  }else{
-    ntpStarted=false;
-    // In AP-only mode do not call WiFi.disconnect(): it can disturb AP state.
+    staBssidKnown=findRouter();
+    if(staBssidKnown)apChannelNow=staChannel;
+  }else ntpStarted=false;
+  startAP();
+  if(withRouter){
+    connectRouter();
+    staBackoff=15000;staFails=0;staNextTry=millis()+staBackoff;
   }
   if(!mdnsReady&&MDNS.begin("enginelink")){
     MDNS.addService("http","tcp",80);
@@ -1042,20 +1593,47 @@ void applyNetwork(){
 }
 void serviceNetwork(){
   if(pendingNetwork){pendingNetwork=false;applyNetwork();}
-  // STA scans can force the AP radio onto another channel. Defer retries while
-  // an AP client is using the control page; no router must not break direct Wi-Fi.
-  if(cfg.router&&cfg.ssid.length()&&WiFi.status()!=WL_CONNECTED &&
-      (uint32_t)(millis()-lastWifiRetry)>120000UL &&
-      WiFi.softAPgetStationNum()==0){
-    WiFi.reconnect();lastWifiRetry=millis();
+  // Watchdog for the access point.
+  if((uint32_t)(millis()-lastApCheck)>=3000){
+    lastApCheck=millis();
+    const bool apUp=(WiFi.getMode()&WIFI_MODE_AP)&&WiFi.softAPIP()==IPAddress(192,168,4,1);
+    if(!apUp||apStoppedFlag){
+      ++apRestarts;
+      if(!(WiFi.getMode()&WIFI_MODE_AP))WiFi.mode(routerConfigured()?WIFI_AP_STA:WIFI_AP);
+      radioTuning();startAP();
+    }
   }
-  if(cfg.router&&WiFi.status()==WL_CONNECTED&&!ntpStarted&&allowTime("ntp")){
-    configTime(0,0,"pool.ntp.org","time.google.com");
+  if(routerConfigured()){
+    if(WiFi.status()==WL_CONNECTED){
+      staFails=0;staBackoff=15000;
+      const uint8_t ch=(uint8_t)WiFi.channel();
+      if(ch&&ch!=apChannelNow){apChannelNow=ch;staChannel=ch;}
+    }else if((int32_t)(millis()-staNextTry)>=0){
+      ++staFails;
+      // The router may have moved to another channel: look again, but only
+      // while no phone depends on the EngineLink network.
+      if(staFails%6==0&&WiFi.softAPgetStationNum()==0&&!scanBusy){
+        staBssidKnown=findRouter();
+        if(staBssidKnown&&staChannel!=apChannelNow){apChannelNow=staChannel;startAP();}
+      }
+      esp_wifi_disconnect();
+      connectRouter();
+      staBackoff=min<uint32_t>(staBackoff*2,300000UL);
+      staNextTry=millis()+staBackoff;
+    }
+  }
+  if(routerConfigured()&&WiFi.status()==WL_CONNECTED&&!ntpStarted&&cfg.ntpOn&&allowTime("ntp")){
+    configTime(0,0,cfg.ntpServer.c_str(),"pool.ntp.org");
     ntpStarted=true;
   }
   if(ntpNotification){
     ntpNotification=false;
-    if(allowTime("ntp")&&validWall()){hasTime=true;timeSource="ntp";}
+    if(allowTime("ntp")&&validWall()){hasTime=true;timeSource="ntp";backfillTripTime();}
+  }
+  // A scan the user asked for on the Boat router page.
+  if(scanBusy){
+    const int16_t r=WiFi.scanComplete();
+    if(r>=0||r==WIFI_SCAN_FAILED||(uint32_t)(millis()-scanStartedMs)>15000){scanBusy=false;scanCount=r;}
   }
 }
 const char *ledStateName(LedState st){
@@ -1134,7 +1712,27 @@ void saveSettings(){
   pref.putUChar("kvolt",cfg.kadVolt);
   pref.putFloat("corr0",cfg.fuelCorr[0]);
   pref.putFloat("corr1",cfg.fuelCorr[1]);
+  pref.putString("apname",cfg.apName);
+  pref.putFloat("tank",cfg.tankL);
+  pref.putUChar("reserve",cfg.reserve);
+  pref.putFloat("price",cfg.defaultPrice);
+  pref.putUChar("tripend",cfg.tripEndMin);
+  pref.putBool("autopoll",cfg.autoPoll);
+  pref.putUShort("rawkeep",cfg.rawKeepDays);
+  pref.putBool("ntp",cfg.ntpOn);
+  pref.putString("ntpsrv",cfg.ntpServer);
+  pref.putBool("scaleok",cfg.fuelScaleOk);
+  pref.putBool("voltok",cfg.voltOk);
+  pref.putUChar("tunes",cfg.fineTunes);
+  pref.putFloat("tunedev",cfg.lastTuneDev);
   pref.end();
+}
+void savePrefs(){fsWrite("/prefs.json",cfg.prefs.c_str(),cfg.prefs.length());}
+void loadPrefs(){
+  if(!fsReady||!LittleFS.exists("/prefs.json"))return;
+  File f=LittleFS.open("/prefs.json","r");
+  if(f&&f.size()<=4000){String p=f.readString();if(p.length()>=2&&p[0]=='{')cfg.prefs=p;}
+  if(f)f.close();
 }
 void loadSettings(){
   pref.begin("enginelink",true);
@@ -1153,7 +1751,26 @@ void loadSettings(){
   cfg.kadVolt=pref.getUChar("kvolt",0);
   cfg.fuelCorr[0]=pref.getFloat("corr0",1.0f);
   cfg.fuelCorr[1]=pref.getFloat("corr1",1.0f);
+  cfg.apName=pref.getString("apname","EngineLink");
+  cfg.tankL=pref.getFloat("tank",0);
+  cfg.reserve=pref.getUChar("reserve",10);
+  cfg.defaultPrice=pref.getFloat("price",0);
+  cfg.tripEndMin=pref.getUChar("tripend",2);
+  cfg.autoPoll=pref.getBool("autopoll",false);
+  cfg.rawKeepDays=pref.getUShort("rawkeep",90);
+  cfg.ntpOn=pref.getBool("ntp",true);
+  cfg.ntpServer=pref.getString("ntpsrv","pool.ntp.org");
+  cfg.fuelScaleOk=pref.getBool("scaleok",false);
+  cfg.voltOk=pref.getBool("voltok",false);
+  cfg.fineTunes=pref.getUChar("tunes",0);
+  cfg.lastTuneDev=pref.getFloat("tunedev",0);
   pref.end();
+  if(!cfg.apName.length()||cfg.apName.length()>31)cfg.apName="EngineLink";
+  if(!(cfg.tankL>=0&&cfg.tankL<=10000))cfg.tankL=0;
+  if(cfg.reserve>50)cfg.reserve=10;
+  if(!(cfg.defaultPrice>=0&&cfg.defaultPrice<1000))cfg.defaultPrice=0;
+  if(cfg.tripEndMin<1||cfg.tripEndMin>60)cfg.tripEndMin=2;
+  if(!cfg.ntpServer.length())cfg.ntpServer="pool.ntp.org";
   if(cfg.protocol>1)cfg.protocol=PROTO_KAD;
   if(cfg.kadFuelDiv!=128&&cfg.kadFuelDiv!=256)cfg.kadFuelDiv=128;
   for(int c=0;c<2;c++)if(!(cfg.fuelCorr[c]>=0.5f&&cfg.fuelCorr[c]<=2.0f))cfg.fuelCorr[c]=1.0f;
@@ -1271,6 +1888,19 @@ void handleState(){
   s+=",\"kadFuelDiv\":";s+=cfg.kadFuelDiv;
   s+=",\"kadVolt\":";s+=cfg.kadVolt;
   s+=",\"fuelCorr\":[";s+=String(cfg.fuelCorr[0],4);s+=',';s+=String(cfg.fuelCorr[1],4);s+=']';
+  s+=",\"apName\":";jsonString(s,cfg.apName);
+  s+=",\"ssid\":";jsonString(s,cfg.ssid);
+  s+=",\"tankL\":";s+=String(cfg.tankL,0);
+  s+=",\"reserve\":";s+=cfg.reserve;
+  s+=",\"price\":";s+=String(cfg.defaultPrice,2);
+  s+=",\"tripEnd\":";s+=cfg.tripEndMin;
+  s+=",\"autoPoll\":";s+=cfg.autoPoll?"true":"false";
+  s+=",\"rawKeep\":";s+=cfg.rawKeepDays;
+  s+=",\"ntp\":";s+=cfg.ntpOn?"true":"false";
+  s+=",\"ntpServer\":";jsonString(s,cfg.ntpServer);
+  s+=",\"scaleOk\":";s+=cfg.fuelScaleOk?"true":"false";
+  s+=",\"voltOk\":";s+=cfg.voltOk?"true":"false";
+  s+=",\"fineTunes\":";s+=cfg.fineTunes;
   s+="},\"sd\":{\"ready\":";
   s+=sdReady?"true":"false";
   s+=",\"inserted\":";s+=cardInserted()?"true":"false";
@@ -1530,7 +2160,8 @@ void handleKadPoll(){
   }
   if(web.arg("confirm")!="POLL"){reply(false,"Confirmation missing",400);return;}
   String why;
-  if(!startPolling(ch,why)){reply(false,why,409);return;}
+  if(!kad[ch].polling&&!startPolling(ch,why)){reply(false,why,409);return;}
+  kad[ch].byAuto=false;kad[ch].byTest=false;
   reply(true,String("Polling ")+(ch==0?"J7":"J6")+": reading parameters about 4 times per second. It stops after a restart.");
 }
 void applyProtocol(){
@@ -1567,6 +2198,682 @@ void handleKadConfig(){
   }
   saveSettings();
   reply(true,"Engine data settings saved. Totals are recalculated from the raw record.");
+}
+
+// ---------- 0.5.0 app API ----------
+bool parseIds(const String &ids,uint32_t *out,uint8_t &n){
+  n=0;int from=0;
+  while(from<(int)ids.length()&&n<MAX_TRIPS){
+    int comma=ids.indexOf(',',from);if(comma<0)comma=ids.length();
+    const uint32_t id=ids.substring(from,comma).toInt();
+    if(id)out[n++]=id;
+    from=comma+1;
+  }
+  return n>0;
+}
+
+void jnum(String &s,double v,uint8_t dec){if(isfinite(v))s+=String(v,(unsigned int)dec);else s+="null";}
+void jkey(String &s,const char *k){s+='"';s+=k;s+="\":";}
+int portIndex(){return cfg.portChannel==1?0:cfg.portChannel==2?1:-1;}
+// Small, fast summary for the live screens. Polled about twice a second.
+void handleLive(){
+  const uint64_t now=elapsedMs();
+  String s;s.reserve(2600);
+  s+="{\"v\":\"" EL_VERSION "\",\"up\":";s+=(unsigned long)(now/1000ULL);
+  s+=",\"utc\":";s+=validWall()?(long long)time(nullptr):0;
+  s+=",\"ts\":";jsonString(s,timeSource);
+  s+=",\"proto\":";s+=cfg.protocol==PROTO_KAD?"\"kad\"":"\"j1587\"";
+  s+=",\"port\":";s+=portIndex();
+  s+=",\"e\":[";
+  for(uint8_t c=0;c<2;c++){
+    if(c)s+=',';
+    const KadLink &k=kad[c];
+    s+="{\"run\":";s+=motor[c].running?"true":"false";
+    s+=",\"rpm\":";if(rpmFresh(c,now))jnum(s,motor[c].rpm,0);else s+="null";
+    s+=",\"lph\":";if(fuelFresh(c,now))jnum(s,motor[c].fuelLph,2);else s+="null";
+    s+=",\"seen\":";
+    const uint64_t last=max(motor[c].rpmAt,motor[c].fuelAt);
+    if(last&&now>=last)s+=(unsigned long)((now-last)/1000ULL);else s+="null";
+    s+=",\"poll\":";s+=k.polling?"true":"false";
+    s+=",\"why\":";jsonString(s,k.stopReason);
+    s+=",\"hrs\":";jnum(s,totals.lastEcuHours[c],1);
+    s+=",\"x\":{";
+    bool first=true;
+    for(uint8_t i=0;i<KAD_N;i++){
+      float v;
+      if(!engineValueAge(c,KAD_PARAMS[i].index,v,15000))continue;
+      if(!first)s+=',';
+      first=false;
+      s+='"';s+=KAD_PARAMS[i].index;s+="\":";jnum(s,v,2);
+    }
+    s+="}}";
+  }
+  s+="],\"trip\":{\"act\":";s+=totals.tripActive?"true":"false";
+  s+=",\"start\":";s+=(long long)totals.tripStartUtc;
+  s+=",\"run\":";s+=totals.tripAnySec;
+  s+=",\"l\":[";jnum(s,tripLitersFor(0),2);s+=',';jnum(s,tripLitersFor(1),2);s+=']';
+  s+=",\"max\":";s+=totals.tripMaxRpm;
+  s+="},\"tank\":{\"cap\":";jnum(s,cfg.tankL,0);
+  const double ab=tankAboard();
+  s+=",\"aboard\":";if(ab>=0)jnum(s,ab,1);else s+="null";
+  s+=",\"pm\":";jnum(s,tankPlusMinus(),0);
+  s+=",\"reserve\":";s+=cfg.reserve;
+  s+="},\"price\":";jnum(s,latestPrice(),2);
+  s+=",\"sog\":";if(sogFresh())jnum(s,sogKnots,1);else s+="null";
+  s+=",\"net\":{\"ap\":";jsonString(s,cfg.apName);
+  s+=",\"cl\":";s+=WiFi.softAPgetStationNum();
+  s+=",\"ch\":";s+=apChannelNow;
+  s+=",\"rt\":";s+=routerConfigured()?"true":"false";
+  s+=",\"sta\":";s+=WiFi.status()==WL_CONNECTED?"true":"false";
+  s+=",\"ssid\":";jsonString(s,cfg.ssid);
+  s+=",\"rssi\":";if(WiFi.status()==WL_CONNECTED)s+=WiFi.RSSI();else s+="null";
+  s+="},\"sd\":{\"ok\":";s+=sdReady?"true":"false";
+  s+=",\"log\":";s+=sdLogging?"true":"false";
+  s+="},\"test\":";s+=calActive?"true":"false";
+  s+=",\"rb\":";s+=rollbackPending?"true":"false";
+  s+=",\"fw\":";s+=(unsigned)fwState;
+  s+='}';
+  sendJSON(200,s);
+}
+void appendTrip(String &s,const TripRec &r){
+  s+="{\"id\":";s+=r.id;s+=",\"g\":";s+=r.group;
+  s+=",\"s\":";s+=(long long)r.startUtc;s+=",\"e\":";s+=(long long)r.endUtc;
+  s+=",\"run\":";s+=r.anySec;
+  s+=",\"l\":[";jnum(s,tripLitres(r,0),2);s+=',';jnum(s,tripLitres(r,1),2);s+=']';
+  s+=",\"max\":";s+=r.maxRpm;
+  s+=",\"p\":";s+=r.people;s+=",\"sea\":";s+=r.sea;s+=",\"w\":";s+=r.wind;s+=",\"x\":";s+=r.extras;
+  s+=",\"n\":";jsonString(s,String(r.note));
+  s+=",\"b\":";s+=r.bootId;
+  s+='}';
+}
+void handleTrips(){
+  String s;s.reserve(220*tripCount+200);
+  s+="{\"trips\":[";
+  for(uint8_t i=0;i<tripCount;i++){if(i)s+=',';appendTrip(s,trips[i]);}
+  s+="],\"port\":";s+=portIndex();
+  s+='}';
+  sendJSON(200,s);
+}
+void handleTripNote(){
+  TripRec *r=tripById(web.arg("id").toInt());
+  if(!r){reply(false,"Trip not found",404);return;}
+  const int p=web.arg("people").toInt(),sea=web.arg("sea").toInt(),w=web.arg("wind").toInt(),x=web.arg("extras").toInt();
+  if(p<0||p>30||sea<0||sea>3||w<0||w>3||x<0||x>7){reply(false,"Invalid note",400);return;}
+  r->people=p;r->sea=sea;r->wind=w;r->extras=x;
+  String n=web.arg("note");n.trim();
+  memset(r->note,0,sizeof(r->note));
+  strncpy(r->note,n.c_str(),sizeof(r->note)-1);
+  saveTrips();
+  reply(true,"Trip notes saved");
+}
+// Combines the chosen trips (and the groups they already belong to) into
+// one group, named after the oldest trip.
+void handleTripCombine(){
+  uint32_t sel[MAX_TRIPS];uint8_t n=0;
+  parseIds(web.arg("ids"),sel,n);
+  if(n<2){reply(false,"Select two or more trips",400);return;}
+  bool hit[MAX_TRIPS]={};
+  for(uint8_t j=0;j<n;j++){
+    const TripRec *r=tripById(sel[j]);
+    if(!r){reply(false,"Trip not found",404);return;}
+    for(uint8_t i=0;i<tripCount;i++)if(trips[i].id==r->id||(r->group&&trips[i].group==r->group))hit[i]=true;
+  }
+  uint32_t groupId=0xFFFFFFFF;
+  for(uint8_t i=0;i<tripCount;i++)if(hit[i]&&trips[i].id<groupId)groupId=trips[i].id;
+  for(uint8_t i=0;i<tripCount;i++)if(hit[i])trips[i].group=groupId;
+  saveTrips();
+  reply(true,"Trips combined");
+}
+void handleTripSplit(){
+  const uint32_t g=web.arg("group").toInt();
+  if(!g){reply(false,"Invalid group",400);return;}
+  bool any=false;
+  for(uint8_t i=0;i<tripCount;i++)if(trips[i].group==g){trips[i].group=0;any=true;}
+  if(!any){reply(false,"Group not found",404);return;}
+  saveTrips();
+  reply(true,"Split into separate trips");
+}
+void handleFuelList(){
+  String s;s.reserve(120*fuelCount+400);
+  s+="{\"log\":[";
+  for(uint8_t i=0;i<fuelCount;i++){
+    const FuelRec &r=fuelLog[i];
+    if(i)s+=',';
+    s+="{\"utc\":";s+=(long long)r.utc;
+    s+=",\"l\":";jnum(s,r.litres,1);
+    s+=",\"p\":";jnum(s,r.price,2);
+    s+=",\"full\":";s+=r.full?"true":"false";
+    s+=",\"c\":";if(r.counted>=0)jnum(s,r.counted,1);else s+="null";
+    s+=",\"r128\":";jnum(s,r.rawDelta/128.0,1);
+    s+=",\"r256\":";jnum(s,r.rawDelta/256.0,1);
+    s+='}';
+  }
+  s+="],\"tunes\":";s+=cfg.fineTunes;
+  s+=",\"tuneDev\":";jnum(s,cfg.lastTuneDev,4);
+  s+=",\"since\":";if(tankKnown())jnum(s,usedSince(totals.tankRef),1);else s+="null";
+  s+=",\"missed\":{\"n\":";s+=totals.missedEvents;s+=",\"l\":";jnum(s,totals.estMissedL,1);
+  s+=",\"last\":";s+=(long long)lastMissedUtc;s+=",\"lastL\":";jnum(s,lastMissedL,1);
+  s+="}}";
+  sendJSON(200,s);
+}
+void handleFuelAdd(){
+  String msg;
+  const float litres=web.arg("litres").toFloat(),price=web.arg("price").toFloat();
+  const bool full=web.arg("full")=="1";
+  const int64_t utc=strtoll(web.arg("utc").c_str(),nullptr,10);
+  if(full&&cfg.tankL<=0){reply(false,"Set the fuel tank size in Settings first",409);return;}
+  const bool ok=addFuel(litres,price,full,utc,msg);
+  reply(ok,msg,ok?200:400);
+}
+void handleFuelDelete(){
+  const int i=web.arg("i").toInt();
+  if(i<0||!deleteFuel((uint8_t)i)){reply(false,"Entry not found",404);return;}
+  reply(true,"Entry deleted");
+}
+void handleEconomy(){
+  String s;s.reserve(3200);
+  s+="{\"season\":";s+=(long long)totals.seasonStartUtc;
+  s+=",\"b\":[";
+  for(uint8_t b=0;b<RPM_BUCKETS;b++){
+    if(b)s+=',';
+    s+="[";s+=1000+b*250;s+=',';jnum(s,totals.bucketSec[b],0);s+=',';jnum(s,totals.bucketL[b],2);
+    s+=',';jnum(s,totals.bucketSogSec[b],0);s+=',';jnum(s,totals.bucketSogL[b],2);s+=',';jnum(s,totals.bucketNm[b],2);s+=']';
+  }
+  s+="],\"z\":[";
+  for(uint8_t z=0;z<ZONES;z++){
+    if(z)s+=',';
+    s+='[';jnum(s,totals.zoneL[z],2);s+=',';jnum(s,totals.zoneSec[z],0);s+=',';jnum(s,totals.zoneNm[z],2);s+=']';
+  }
+  s+="],\"trips\":";s+=tripCount;
+  s+=",\"h\":{\"dev\":[";
+  for(uint8_t c=0;c<2;c++){
+    if(c)s+=',';
+    uint16_t maxTrips=0;
+    for(uint8_t b=0;b<RPM_BUCKETS;b++)if(health.baseTrips[c][b]>maxTrips)maxTrips=health.baseTrips[c][b];
+    s+="{\"trips\":";s+=maxTrips;s+=",\"n\":";s+=health.devSamples[c];s+=",\"rpm\":";s+=health.devRpm[c];
+    s+=",\"d\":[";for(uint8_t m=0;m<HEALTH_METRICS;m++){if(m)s+=',';jnum(s,health.dev[c][m],4);}s+="]";
+    // Normal values at the rpm step of the latest comparison.
+    s+=",\"base\":[";
+    const int bb=health.devRpm[c]>=1000?bucketFor(health.devRpm[c]):-1;
+    for(uint8_t m=0;m<HEALTH_METRICS;m++){if(m)s+=',';if(bb>=0)jnum(s,health.base[c][bb][m],2);else s+="null";}
+    s+="]}";
+  }
+  s+="],\"bal\":";jnum(s,health.balance,4);
+  s+=",\"upd\":";s+=(long long)health.updatedUtc;
+  s+="}}";
+  sendJSON(200,s);
+}
+void handlePrefsGet(){
+  web.sendHeader("Cache-Control","no-store");
+  web.send(200,"application/json; charset=utf-8",cfg.prefs);
+}
+void handlePrefsSet(){
+  String p=web.arg("p");
+  if(p.length()<2||p.length()>4000||p[0]!='{'){reply(false,"Invalid preferences",400);return;}
+  cfg.prefs=p;savePrefs();
+  reply(true,"Saved");
+}
+// Device settings the firmware itself uses. Every field is optional.
+void handleCfg(){
+  if(web.hasArg("tank")){
+    const float t=web.arg("tank").toFloat();
+    if(!(t>=50&&t<=10000)){reply(false,"Tank size must be 50 to 10000 litres",400);return;}
+    // A new size invalidates the estimate until the next full tank.
+    if(fabsf(t-cfg.tankL)>0.5f){cfg.tankL=t;totals.tankRefL=-1;saveTotals();}
+  }
+  if(web.hasArg("reserve")){const int r=web.arg("reserve").toInt();if(r<0||r>50){reply(false,"Invalid reserve",400);return;}cfg.reserve=r;}
+  if(web.hasArg("price")){const float p=web.arg("price").toFloat();if(!(p>=0&&p<1000)){reply(false,"Invalid price",400);return;}cfg.defaultPrice=p;}
+  if(web.hasArg("tripEnd")){const int m=web.arg("tripEnd").toInt();if(m<1||m>60){reply(false,"Invalid trip end time",400);return;}cfg.tripEndMin=m;}
+  if(web.hasArg("autoPoll")){
+    const bool on=web.arg("autoPoll")=="1";
+    // Switching on sends read requests to the engines: it needs the typed confirmation.
+    if(on&&!cfg.autoPoll&&web.arg("confirm")!="POLL"){reply(false,"Confirmation missing",400);return;}
+    cfg.autoPoll=on;
+    if(!cfg.autoPoll)for(uint8_t c=0;c<2;c++)if(kad[c].polling&&kad[c].byAuto)stopPolling(c,"Automatic reading switched off");
+  }
+  if(web.hasArg("rawKeep")){const int d=web.arg("rawKeep").toInt();if(d<0||d>3650){reply(false,"Invalid value",400);return;}cfg.rawKeepDays=d;}
+  if(web.hasArg("ntp")){cfg.ntpOn=web.arg("ntp")=="1";ntpStarted=false;}
+  if(web.hasArg("ntpServer")){String v=web.arg("ntpServer");v.trim();if(v.length()<3||v.length()>63){reply(false,"Invalid server",400);return;}cfg.ntpServer=v;ntpStarted=false;}
+  if(web.hasArg("port")){const int p=web.arg("port").toInt();if(p<0||p>2){reply(false,"Invalid socket choice",400);return;}cfg.portChannel=p;}
+  if(web.hasArg("can")){
+    const bool on=web.arg("can")=="1";
+    if(on!=cfg.canListen){if(!on)stopCAN();else if(!startCAN()){reply(false,"NMEA 2000 listen-only interface could not start",409);return;}cfg.canListen=on;}
+  }
+  if(web.hasArg("fuelDiv")){
+    const int d=web.arg("fuelDiv").toInt();
+    if(d!=128&&d!=256){reply(false,"Fuel scale must be 1/128 or 1/256",400);return;}
+    cfg.kadFuelDiv=d;cfg.fuelScaleOk=true;
+  }
+  if(web.hasArg("volt")){const int v=web.arg("volt").toInt();if(v!=0&&v!=1){reply(false,"Invalid voltage factor",400);return;}cfg.kadVolt=v;cfg.voltOk=true;}
+  if(web.hasArg("protocol")){
+    const String v=web.arg("protocol");
+    if(v!="kad"&&v!="j1587"){reply(false,"Invalid protocol",400);return;}
+    const uint8_t np=v=="kad"?PROTO_KAD:PROTO_J1587;
+    if(np!=cfg.protocol){cfg.protocol=np;applyProtocol();}
+  }
+  cfg.completed=true;
+  saveSettings();
+  reply(true,"Saved");
+}
+// EngineLink's own network: name and password.
+void handleApSave(){
+  String name=web.arg("name");name.trim();
+  String pass=web.arg("pass");
+  if(pass=="__keep__")pass=cfg.apPassword; // rename only
+  if(name.length()<1||name.length()>31){reply(false,"Network name must be 1 to 31 characters",400);return;}
+  if(pass.length()<8||pass.length()>63){reply(false,"Password must be 8 to 63 characters",400);return;}
+  const bool change=name!=cfg.apName||pass!=cfg.apPassword;
+  cfg.apName=name;cfg.apPassword=pass;cfg.completed=true;saveSettings();
+  reply(true,change?"Saved. The EngineLink network restarts with the new name and password; connect your phone to it again.":"Nothing changed");
+  if(change)pendingNetwork=true;
+}
+void handleWifiScan(){
+  if(web.arg("start")=="1"&&!scanBusy){
+    WiFi.scanDelete();
+    if(WiFi.scanNetworks(true,false,false,200)==WIFI_SCAN_FAILED){reply(false,"Scan could not start",409);return;}
+    scanBusy=true;scanCount=-1;scanStartedMs=millis();
+  }
+  String s="{\"busy\":";s+=scanBusy?"true":"false";
+  s+=",\"nets\":[";
+  if(!scanBusy&&scanCount>0){
+    bool first=true;
+    for(int16_t i=0;i<scanCount&&i<30;i++){
+      const String id=WiFi.SSID(i);
+      if(!id.length())continue;
+      // One row per network name, the strongest one.
+      bool dup=false;for(int16_t j=0;j<i;j++)if(WiFi.SSID(j)==id&&WiFi.RSSI(j)>=WiFi.RSSI(i)){dup=true;break;}
+      if(dup)continue;
+      if(!first)s+=',';
+      first=false;
+      s+="{\"s\":";jsonString(s,id);
+      s+=",\"r\":";s+=WiFi.RSSI(i);
+      s+=",\"lock\":";s+=WiFi.encryptionType(i)==WIFI_AUTH_OPEN?"false":"true";
+      s+=",\"ch\":";s+=WiFi.channel(i);
+      s+='}';
+    }
+  }
+  s+="]}";
+  sendJSON(200,s);
+}
+void handleWifiConnect(){
+  String ssid=web.arg("ssid");ssid.trim();
+  if(!ssid.length()||ssid.length()>32){reply(false,"Choose a network",400);return;}
+  const String pass=web.arg("pass");
+  if(pass.length()>63){reply(false,"Password too long",400);return;}
+  cfg.router=true;cfg.ssid=ssid;cfg.wifiPassword=pass;cfg.completed=true;
+  saveSettings();
+  reply(true,"Connecting to "+ssid+". If the router uses another channel, your phone may drop for a few seconds.");
+  pendingNetwork=true;
+}
+void handleWifiForget(){
+  cfg.router=false;cfg.ssid="";cfg.wifiPassword="";saveSettings();
+  reply(true,"Disconnected from the router");
+  pendingNetwork=true;
+}
+void handleSeasonReset(){
+  totals.seasonStartUtc=validWall()?(int64_t)time(nullptr):0;
+  memset(totals.bucketSec,0,sizeof(totals.bucketSec));memset(totals.bucketL,0,sizeof(totals.bucketL));
+  memset(totals.bucketSogSec,0,sizeof(totals.bucketSogSec));memset(totals.bucketSogL,0,sizeof(totals.bucketSogL));
+  memset(totals.bucketNm,0,sizeof(totals.bucketNm));
+  memset(totals.zoneL,0,sizeof(totals.zoneL));memset(totals.zoneSec,0,sizeof(totals.zoneSec));memset(totals.zoneNm,0,sizeof(totals.zoneNm));
+  saveTotals();
+  reply(true,"A new season has started");
+}
+
+// ---------- Diagnostics ----------
+void handleDiag(){
+  const uint64_t now=elapsedMs();
+  String s;s.reserve(3000);
+  s+="{\"t\":[";
+  for(uint8_t c=0;c<2;c++){
+    if(c)s+=',';
+    const DiagTest &t=diagTests[c];
+    const KadLink &k=kad[c];
+    s+="{\"utc\":";s+=(long long)t.utc;s+=",\"req\":";s+=t.requests;s+=",\"rep\":";s+=t.replies;
+    s+=",\"err\":";s+=t.checksumErrors;s+=",\"ms\":";s+=t.replyMs;
+    s+=",\"running\":";s+=diagRun[c].on?"true":"false";
+    s+=",\"prog\":";s+=diagRun[c].on?min(100UL,(unsigned long)((millis()-diagRun[c].startMs)/300UL)):0UL;
+    s+=",\"poll\":";s+=k.polling?"true":"false";
+    s+=",\"frames\":";s+=ctr.frames[c];s+=",\"invalid\":";s+=ctr.invalid[c];
+    s+=",\"replyAge\":";if(k.lastReplyAt)s+=(unsigned long)(now-k.lastReplyAt);else s+="null";
+    s+=",\"raw\":{";
+    bool first=true;
+    for(uint8_t i=0;i<KAD_N;i++){
+      if(!kadRawAt[c][i]||now-kadRawAt[c][i]>PARAM_FRESH_MS)continue;
+      if(!first)s+=',';first=false;
+      s+='"';s+=KAD_PARAMS[i].index;s+="\":[";s+=kadRawV[c][i];s+=',';
+      const float f=kadFactor(c,i);
+      jnum(s,f>0?kadRawV[c][i]*f:(float)kadRawV[c][i],3);s+=',';s+=(unsigned long)(now-kadRawAt[c][i]);s+=']';
+    }
+    s+="}}";
+  }
+  s+="],\"nmea\":";s+=ctr.nmeaFrames;
+  s+=",\"can\":";s+=cfg.canListen?"true":"false";
+  s+=",\"sog\":";if(sogFresh())jnum(s,sogKnots,1);else s+="null";
+  s+=",\"fuelDiv\":";s+=cfg.kadFuelDiv;s+=",\"scaleOk\":";s+=cfg.fuelScaleOk?"true":"false";
+  s+=",\"volt\":";s+=cfg.kadVolt;s+=",\"voltOk\":";s+=cfg.voltOk?"true":"false";
+  s+=",\"hrs\":[";jnum(s,totals.lastEcuHours[0],1);s+=',';jnum(s,totals.lastEcuHours[1],1);s+=']';
+  s+=",\"missed\":";s+=totals.missedEvents;
+  s+=",\"autoPoll\":";s+=cfg.autoPoll?"true":"false";
+  s+=",\"proto\":";s+=cfg.protocol==PROTO_KAD?"\"kad\"":"\"j1587\"";
+  s+=",\"wifi\":{\"apRestarts\":";s+=apRestarts;s+=",\"joins\":";s+=(unsigned long)apJoins;s+=",\"leaves\":";s+=(unsigned long)apLeaves;
+  s+=",\"reason\":";s+=(unsigned)apReason;s+=",\"staFails\":";s+=staFails;s+=",\"staDrops\":";s+=(unsigned long)staDisconnects;
+  s+=",\"staConnects\":";s+=staConnects;s+=",\"ch\":";s+=apChannelNow;
+  s+="},\"heap\":";s+=ESP.getFreeHeap();s+=",\"minHeap\":";s+=ESP.getMinFreeHeap();
+  s+=",\"reset\":";s+=(unsigned)esp_reset_reason();
+  s+=",\"up\":";s+=(unsigned long)(now/1000ULL);
+  s+='}';
+  sendJSON(200,s);
+}
+// 30 s read test on one connector. Polls (read requests only) unless the
+// connector is already being polled, then counts the answers.
+void handleDiagTest(){
+  const int ch=web.arg("ch").toInt();
+  if(ch<0||ch>1){reply(false,"Invalid connector",400);return;}
+  if(web.arg("stop")=="1"){
+    diagRun[ch].on=false;
+    if(kad[ch].polling&&kad[ch].byTest)stopPolling(ch,"Test stopped");
+    reply(true,"Test stopped");return;
+  }
+  if(cfg.protocol!=PROTO_KAD){reply(false,"The connection test needs the Volvo Penta KAD protocol",409);return;}
+  KadLink &k=kad[ch];
+  if(!k.polling){
+    String why;
+    if(!startPolling(ch,why)){reply(false,why,409);return;}
+    k.byTest=true;k.byAuto=false;
+  }
+  DiagRun &d=diagRun[ch];
+  d.on=true;d.startMs=millis();d.req0=k.requests;d.rep0=k.replies;d.inv0=ctr.invalid[ch];d.ms0=k.replyMsSum;d.cnt0=k.replyCount;
+  reply(true,"Testing for 30 seconds");
+}
+void serviceDiag(){
+  for(uint8_t c=0;c<2;c++){
+    DiagRun &d=diagRun[c];
+    if(!d.on||(uint32_t)(millis()-d.startMs)<30000)continue;
+    d.on=false;
+    KadLink &k=kad[c];
+    DiagTest &t=diagTests[c];
+    t.utc=validWall()?(int64_t)time(nullptr):0;
+    t.requests=(uint16_t)min<uint32_t>(65535,k.requests-d.req0);
+    t.replies=(uint16_t)min<uint32_t>(65535,k.replies-d.rep0);
+    t.checksumErrors=(uint16_t)min<uint32_t>(65535,ctr.invalid[c]-d.inv0);
+    const uint32_t n=k.replyCount-d.cnt0;
+    t.replyMs=n?(uint16_t)min<uint64_t>(65535,(k.replyMsSum-d.ms0)/n):0;
+    saveDiag();
+    if(k.polling&&k.byTest)stopPolling(c,"Connection test finished");
+  }
+}
+// "Read engines automatically": polls whenever possible and tries again
+// every 30 s (for example after the ignition was off).
+void serviceAutoPoll(){
+  if(!cfg.autoPoll||cfg.protocol!=PROTO_KAD||millis()<5000)return;
+  for(uint8_t c=0;c<2;c++){
+    KadLink &k=kad[c];
+    if(k.polling||!uartReady[c])continue;
+    if(k.lastAutoTry&&(uint32_t)(millis()-k.lastAutoTry)<30000)continue;
+    k.lastAutoTry=millis();
+    String why;
+    if(startPolling(c,why)){k.byAuto=true;k.byTest=false;}
+  }
+}
+
+// ---------- SD card: info, wipe, clean-up, export ----------
+bool isRawName(const String &n){return n.startsWith("EL")||n.startsWith("TEST")||(n.startsWith("T")&&n.endsWith(".CSV")&&n!="TRIPS.CSV");}
+SdCounts sdCounts(){
+  SdCounts k;
+  if(!sdReady)return k;
+  File root=SD.open("/");
+  if(!root)return k;
+  for(File f=root.openNextFile();f;f=root.openNextFile()){
+    String n=f.name();
+    if(n.startsWith("/"))n=n.substring(1);
+    ++k.files;
+    if(!f.isDirectory()&&isRawName(n)){k.rawBytes+=f.size();++k.rawFiles;}
+    else if(!f.isDirectory()&&n.startsWith("EXPORT"))++k.exports;
+    f.close();
+  }
+  root.close();
+  return k;
+}
+void handleSdInfo(){
+  const SdCounts k=sdCounts();
+  String s="{\"ok\":";s+=sdReady?"true":"false";
+  s+=",\"inserted\":";s+=cardInserted()?"true":"false";
+  s+=",\"logging\":";s+=sdLogging?"true":"false";
+  s+=",\"usedMB\":";s+=(unsigned long)sdUsedMB();s+=",\"totalMB\":";s+=(unsigned long)sdTotalMB();
+  s+=",\"files\":";s+=k.files;s+=",\"rawMB\":";jnum(s,k.rawBytes/1048576.0,1);s+=",\"rawFiles\":";s+=k.rawFiles;
+  s+=",\"exports\":";s+=k.exports;
+  s+=",\"trips\":";s+=tripCount;s+=",\"fuel\":";s+=fuelCount;
+  s+=",\"status\":";jsonString(s,sdMessage);
+  s+='}';
+  sendJSON(200,s);
+}
+uint32_t removeTree(const String &path){
+  uint32_t n=0;
+  File dir=SD.open(path);
+  if(!dir)return 0;
+  if(!dir.isDirectory()){dir.close();return SD.remove(path)?1:0;}
+  for(File f=dir.openNextFile();f;f=dir.openNextFile()){
+    String child=String(f.path());
+    const bool sub=f.isDirectory();
+    f.close();
+    if(sub){n+=removeTree(child);SD.rmdir(child);}else if(SD.remove(child))++n;
+  }
+  dir.close();
+  return n;
+}
+void handleSdWipe(){
+  if(web.arg("confirm")!="WIPE"){reply(false,"Type WIPE to confirm",400);return;}
+  if(!sdReady||!cardInserted()){reply(false,"No SD card",409);return;}
+  if(calActive)finishCalibration(false);
+  const bool wasLogging=sdLogging;
+  if(sdLogging)stopLog();
+  const uint32_t n=removeTree("/");
+  refreshTestAvailable();
+  if(wasLogging)initSD();
+  reply(true,String("SD card wiped: ")+n+" files deleted");
+}
+// Deletes raw logs older than the chosen number of days (needs the clock).
+void serviceRawCleanup(){
+  if(!cfg.rawKeepDays||!sdReady||!validWall()||calActive||otaActive)return;
+  if(lastRawCleanup&&(uint32_t)(millis()-lastRawCleanup)<86400000UL)return;
+  if(!lastRawCleanup&&millis()<120000)return;
+  lastRawCleanup=millis();
+  const time_t limit=time(nullptr)-(time_t)cfg.rawKeepDays*86400;
+  File root=SD.open("/");
+  if(!root)return;
+  String doomed[16];uint8_t n=0;
+  for(File f=root.openNextFile();f&&n<16;f=root.openNextFile()){
+    String name=f.name();if(name.startsWith("/"))name=name.substring(1);
+    const time_t w=f.getLastWrite();
+    if(!f.isDirectory()&&isRawName(name)&&w>1700000000&&w<limit&&("/"+name)!=sessionName&&("/"+name)!=calName)doomed[n++]="/"+name;
+    f.close();
+  }
+  root.close();
+  for(uint8_t i=0;i<n;i++)SD.remove(doomed[i]);
+}
+void handleExportTrips(){
+  uint32_t ids[MAX_TRIPS];uint8_t n;
+  if(!parseIds(web.arg("ids"),ids,n)){web.send(400,"text/plain","No trips selected");return;}
+  const int pi=portIndex();
+  String s="trip_id,group,start_utc,end_utc,running_s,port_l,starboard_l,total_l,max_rpm,people,sea,wind,extras,note\n";
+  for(uint8_t j=0;j<n;j++){
+    const TripRec *r=tripById(ids[j]);
+    if(!r)continue;
+    const double a=tripLitres(*r,pi==1?1:0),b=tripLitres(*r,pi==1?0:1);
+    char line[200];
+    snprintf(line,sizeof(line),"%lu,%lu,%lld,%lld,%lu,%.2f,%.2f,%.2f,%u,%u,%u,%u,%u,",(unsigned long)r->id,(unsigned long)r->group,
+      (long long)r->startUtc,(long long)r->endUtc,(unsigned long)r->anySec,a,b,a+b,(unsigned)r->maxRpm,
+      (unsigned)r->people,(unsigned)r->sea,(unsigned)r->wind,(unsigned)r->extras);
+    s+=line;
+    String note=String(r->note);note.replace("\"","'");
+    s+='"';s+=note;s+="\"\n";
+  }
+  web.sendHeader("Content-Disposition","attachment; filename=EngineLink-trips.csv");
+  web.send(200,"text/csv",s);
+}
+// Uptime (ms) of the raw row that starts at or after pos; false at the end.
+bool rowAt(File &f,uint32_t pos,uint64_t &ms,uint32_t &lineStart){
+  f.seek(pos);
+  if(pos){int c;do{c=f.read();}while(c>=0&&c!='\n');}
+  lineStart=f.position();
+  char buf[64];uint8_t i=0;int c;uint8_t field=0;
+  while((c=f.read())>=0&&c!='\n'){
+    if(c==','){if(++field==2)break;i=0;continue;}
+    if(field==1&&i<sizeof(buf)-1)buf[i++]=(char)c;
+  }
+  if(c<0&&field<2)return false;
+  buf[i]=0;ms=strtoull(buf,nullptr,10);
+  return true;
+}
+// Raw engine rows of the chosen trips, streamed from the session files.
+void handleExportRaw(){
+  uint32_t ids[MAX_TRIPS];uint8_t n;
+  if(!parseIds(web.arg("ids"),ids,n)){web.send(400,"text/plain","No trips selected");return;}
+  if(!sdReady){web.send(409,"text/plain","No SD card");return;}
+  if(sdLogging)logFile.flush();
+  web.sendHeader("Content-Disposition","attachment; filename=EngineLink-raw-trips.csv");
+  web.setContentLength(CONTENT_LENGTH_UNKNOWN);
+  web.send(200,"text/csv","");
+  web.sendContent("trip_id,boot_id,uptime_ms,utc_epoch,channel,mid,checksum,raw_hex,engine,fuel_lph,rpm,direction,kad_index,kad_value\n");
+  char line[400];
+  for(uint8_t j=0;j<n;j++){
+    const TripRec *r=tripById(ids[j]);
+    if(!r)continue;
+    char name[25];snprintf(name,sizeof(name),"/EL%08lX.CSV",(unsigned long)r->bootId);
+    File f=SD.open(name,FILE_READ);
+    if(!f)continue;
+    const uint64_t from=(uint64_t)r->startSec*1000ULL,to=(uint64_t)r->endSec*1000ULL+15000ULL;
+    // Rows are in time order: binary search for the first row of the trip.
+    uint32_t lo=0,hi=f.size();
+    while(hi-lo>8192){
+      const uint32_t mid=lo+(hi-lo)/2;uint64_t ms;uint32_t ls;
+      if(!rowAt(f,mid,ms,ls)||ms>=from)hi=mid;else lo=mid;
+    }
+    f.seek(lo);
+    {int c;if(lo==0){do{c=f.read();}while(c>=0&&c!='\n');}else{do{c=f.read();}while(c>=0&&c!='\n');}}
+    char prefix[16];const int pl=snprintf(prefix,sizeof(prefix),"%lu,",(unsigned long)r->id);
+    while(f.available()){
+      const size_t len=f.readBytesUntil('\n',line,sizeof(line)-1);
+      if(!len)continue;
+      line[len]=0;
+      const char *c1=strchr(line,',');if(!c1)continue;
+      const uint64_t ms=strtoull(c1+1,nullptr,10);
+      if(ms<from)continue;
+      if(ms>to)break;
+      web.sendContent(prefix,pl);
+      web.sendContent(line,len);
+      web.sendContent("\n",1);
+    }
+    f.close();
+  }
+  web.sendContent("");
+}
+
+// ---------- Backup ----------
+void handleBackup(){
+  String s="{\"app\":\"EngineLink\",\"version\":\"" EL_VERSION "\",\"settings\":{";
+  s+="\"tank\":";jnum(s,cfg.tankL,0);s+=",\"reserve\":";s+=cfg.reserve;s+=",\"price\":";jnum(s,cfg.defaultPrice,2);
+  s+=",\"tripEnd\":";s+=cfg.tripEndMin;s+=",\"autoPoll\":";s+=cfg.autoPoll?1:0;s+=",\"rawKeep\":";s+=cfg.rawKeepDays;
+  s+=",\"ntp\":";s+=cfg.ntpOn?1:0;s+=",\"ntpServer\":";jsonString(s,cfg.ntpServer);
+  s+=",\"port\":";s+=cfg.portChannel;s+=",\"protocol\":";s+=cfg.protocol==PROTO_KAD?"\"kad\"":"\"j1587\"";
+  s+=",\"fuelDiv\":";s+=cfg.kadFuelDiv;s+=",\"volt\":";s+=cfg.kadVolt;
+  s+=",\"corr0\":";jnum(s,cfg.fuelCorr[0],4);s+=",\"corr1\":";jnum(s,cfg.fuelCorr[1],4);
+  s+="},\"prefs\":";s+=cfg.prefs;s+='}';
+  web.sendHeader("Content-Disposition","attachment; filename=EngineLink-settings.json");
+  sendJSON(200,s);
+}
+
+// ---------- Firmware from GitHub ----------
+// The worker task fetches the release list or downloads and installs one
+// update file. The new image must confirm itself after a healthy minute,
+// otherwise the bootloader goes back to the previous version.
+void fwWorker(void *){
+  for(;;){
+    if(fwJob==FW_IDLE){vTaskDelay(pdMS_TO_TICKS(200));continue;}
+    const uint8_t job=fwJob;
+    NetworkClientSecure client;
+    client.useBuiltinCACertBundle();
+    HTTPClient http;
+    http.setTimeout(15000);
+    http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
+    http.setUserAgent("EngineLink/" EL_VERSION);
+    if(job==FW_LIST){
+      fwState=1;
+      if(!http.begin(client,EL_RELEASES_URL)){fwError="Could not start the request";fwState=9;}
+      else{
+        const int code=http.GET();
+        if(code==200&&http.getSize()<16000){String body=http.getString();fwList=body;fwState=2;}
+        else{fwError=String("GitHub answered ")+code;fwState=9;}
+        http.end();
+      }
+    }else if(job==FW_INSTALL){
+      fwState=3;fwBytes=0;fwTotal=0;
+      if(!http.begin(client,fwUrl)){fwError="Could not start the download";fwState=9;}
+      else{
+        const int code=http.GET();
+        const int len=http.getSize();
+        if(code!=200||len<100000||len>3200000){fwError=String("Download failed (")+code+")";fwState=9;}
+        else{
+          fwTotal=len;
+          NetworkClient *stream=http.getStreamPtr();
+          bool ok=Update.begin(len,U_FLASH);
+          uint8_t buf[2048];bool checked=false;uint32_t idle=millis();
+          while(ok&&fwBytes<(size_t)len){
+            const size_t avail=stream->available();
+            if(!avail){if(millis()-idle>20000){fwError="Download stalled";ok=false;break;}vTaskDelay(pdMS_TO_TICKS(5));continue;}
+            const int got=stream->readBytes(buf,min(avail,sizeof(buf)));
+            if(got<=0)continue;
+            idle=millis();
+            if(!checked){
+              checked=true;
+              if(got<0x30||buf[0]!=0xE9||buf[0x20]!=0x32||buf[0x21]!=0x54||buf[0x22]!=0xCD||buf[0x23]!=0xAB){fwError="Not an EngineLink update file";ok=false;break;}
+            }
+            if(Update.write(buf,got)!=(size_t)got){fwError=Update.errorString();ok=false;break;}
+            fwBytes+=got;
+          }
+          if(ok&&!Update.end(true)){fwError=Update.errorString();ok=false;}
+          if(!ok){Update.abort();fwState=9;}else fwState=4;
+        }
+        http.end();
+      }
+    }
+    fwJob=FW_IDLE;
+  }
+}
+void handleFwCheck(){
+  if(!routerConfigured()||WiFi.status()!=WL_CONNECTED){reply(false,"Connect EngineLink to a router with internet first",409);return;}
+  if(fwJob!=FW_IDLE||fwState==3){reply(false,"Busy",409);return;}
+  fwError="";fwJob=FW_LIST;
+  reply(true,"Checking GitHub");
+}
+void handleFwInstall(){
+  const String url=web.arg("url"),v=web.arg("v");
+  if(!url.startsWith(EL_RELEASE_PREFIX)||!url.endsWith(".bin")){reply(false,"Only EngineLink releases from GitHub can be installed",400);return;}
+  if(!routerConfigured()||WiFi.status()!=WL_CONNECTED){reply(false,"Connect EngineLink to a router with internet first",409);return;}
+  if(calActive){reply(false,"Stop the motor test first",409);return;}
+  if(fwJob!=FW_IDLE||fwState==3){reply(false,"Busy",409);return;}
+  for(uint8_t c=0;c<2;c++)if(kad[c].polling)stopPolling(c,"Firmware update");
+  fwUrl=url;fwTarget=v;fwError="";fwJob=FW_INSTALL;
+  reply(true,"Downloading "+v);
+}
+void handleFwStatus(){
+  String s="{\"state\":";s+=(unsigned)fwState;
+  s+=",\"bytes\":";s+=(unsigned long)fwBytes;s+=",\"total\":";s+=(unsigned long)fwTotal;
+  s+=",\"error\":";jsonString(s,fwError);
+  s+=",\"target\":";jsonString(s,fwTarget);
+  s+=",\"running\":\"" EL_VERSION "\"";
+  s+=",\"pending\":";s+=rollbackPending?"true":"false";
+  s+=",\"online\":";s+=(routerConfigured()&&WiFi.status()==WL_CONNECTED)?"true":"false";
+  s+=",\"list\":";
+  if(fwState==2&&fwList.length()&&fwList[0]=='{')s+=fwList;else s+="null";
+  s+='}';
+  sendJSON(200,s);
+}
+// Sends a file from flash with a long cache time (icons, manifest).
+void sendStatic(const char *type,const uint8_t *data,size_t len){
+  web.sendHeader("Cache-Control","public, max-age=604800");
+  web.send_P(200,type,(const char*)data,len);
 }
 
 // Closes files and stores totals before any deliberate restart.
@@ -1624,9 +2931,13 @@ void handleUpdateDone(){
 }
 void initializeWeb(){
   web.on("/",HTTP_GET,[](){
-    // no-cache: after a firmware update Safari must not keep an old UI.
+    // no-cache + ETag: the phone checks for a newer app every time, but a
+    // reload after a dropped connection is answered with a tiny 304.
     web.sendHeader("Cache-Control","no-cache");
-    web.send_P(200,"text/html; charset=utf-8",ENGINE_UI);
+    web.sendHeader("ETag","\"" EL_VERSION "-" __DATE__ " " __TIME__ "\"");
+    if(web.header("If-None-Match")=="\"" EL_VERSION "-" __DATE__ " " __TIME__ "\""){web.send(304,"text/plain","");return;}
+    web.sendHeader("Content-Encoding","gzip");
+    web.send_P(200,"text/html; charset=utf-8",(const char*)ENGINE_UI_GZ,ENGINE_UI_GZ_LEN);
   });
   web.on("/favicon.ico",HTTP_GET,[](){web.send(204,"text/plain","");});
   web.on("/api/state",HTTP_GET,handleState);
@@ -1652,17 +2963,60 @@ void initializeWeb(){
   web.on("/api/reboot",HTTP_POST,[](){prepareRestart();reply(true,"EngineLink restarts now.");restartAt=millis()+1000;});
   web.on("/api/factory-reset",HTTP_POST,[](){
     if(web.arg("confirm")!="ERASE"){reply(false,"Confirmation missing",400);return;}
+    const bool keep=web.arg("keep")=="1";
     prepareRestart();
     pref.begin("enginelink",false);pref.clear();pref.end();
-    pref.begin("totals",false);pref.clear();pref.end();
-    reply(true,"Settings and totals erased. EngineLink restarts with factory Wi-Fi (password 12345678).");
+    for(const char *f:{"/prefs.json","/health.bin","/diag.bin"})LittleFS.remove(f);
+    if(!keep){
+      pref.begin("totals",false);pref.clear();pref.end();
+      for(const char *f:{"/trips.bin","/fuel.bin"})LittleFS.remove(f);
+      if(sdReady&&cardInserted()){if(sdLogging)stopLog();removeTree("/");}
+    }
+    reply(true,keep?"Factory settings restored. Trips and the fuel log were kept. EngineLink restarts with Wi-Fi EngineLink, password 12345678.":"Everything erased. EngineLink restarts with Wi-Fi EngineLink, password 12345678.");
     restartAt=millis()+1200;
   });
   web.on("/api/update",HTTP_POST,handleUpdateDone,handleUpdateUpload);
   web.on("/api/kad/poll",HTTP_POST,handleKadPoll);
   web.on("/api/kad/config",HTTP_POST,handleKadConfig);
   web.on("/api/health",HTTP_GET,[](){web.send(200,"text/plain","OK");});
+  web.on("/api/live",HTTP_GET,handleLive);
+  web.on("/api/trips",HTTP_GET,handleTrips);
+  web.on("/api/trip/note",HTTP_POST,handleTripNote);
+  web.on("/api/trip/combine",HTTP_POST,handleTripCombine);
+  web.on("/api/trip/split",HTTP_POST,handleTripSplit);
+  web.on("/api/fuel",HTTP_GET,handleFuelList);
+  web.on("/api/fuel/add",HTTP_POST,handleFuelAdd);
+  web.on("/api/fuel/delete",HTTP_POST,handleFuelDelete);
+  web.on("/api/economy",HTTP_GET,handleEconomy);
+  web.on("/api/season/reset",HTTP_POST,handleSeasonReset);
+  web.on("/api/prefs",HTTP_GET,handlePrefsGet);
+  web.on("/api/prefs",HTTP_POST,handlePrefsSet);
+  web.on("/api/cfg",HTTP_POST,handleCfg);
+  web.on("/api/wifi/ap",HTTP_POST,handleApSave);
+  web.on("/api/wifi/scan",HTTP_GET,handleWifiScan);
+  web.on("/api/wifi/connect",HTTP_POST,handleWifiConnect);
+  web.on("/api/wifi/forget",HTTP_POST,handleWifiForget);
+  web.on("/api/diag",HTTP_GET,handleDiag);
+  web.on("/api/diag/test",HTTP_POST,handleDiagTest);
+  web.on("/api/sd/info",HTTP_GET,handleSdInfo);
+  web.on("/api/sd/wipe",HTTP_POST,handleSdWipe);
+  web.on("/api/export/trips.csv",HTTP_GET,handleExportTrips);
+  web.on("/api/export/raw.csv",HTTP_GET,handleExportRaw);
+  web.on("/api/backup",HTTP_GET,handleBackup);
+  web.on("/api/fw/check",HTTP_POST,handleFwCheck);
+  web.on("/api/fw/install",HTTP_POST,handleFwInstall);
+  web.on("/api/fw/status",HTTP_GET,handleFwStatus);
+  web.on("/icon.svg",HTTP_GET,[](){sendStatic("image/svg+xml",(const uint8_t*)ICON_SVG,strlen_P(ICON_SVG));});
+  web.on("/apple-touch-icon.png",HTTP_GET,[](){sendStatic("image/png",ICON_PNG_180,ICON_PNG_180_LEN);});
+  web.on("/icon-192.png",HTTP_GET,[](){sendStatic("image/png",ICON_PNG_192,ICON_PNG_192_LEN);});
+  web.on("/icon-512.png",HTTP_GET,[](){sendStatic("image/png",ICON_PNG_512,ICON_PNG_512_LEN);});
+  web.on("/manifest.webmanifest",HTTP_GET,[](){
+    web.sendHeader("Cache-Control","no-cache");
+    web.send(200,"application/manifest+json","{\"name\":\"Engine Link\",\"short_name\":\"Engine Link\",\"start_url\":\"/\",\"scope\":\"/\",\"display\":\"standalone\",\"background_color\":\"#0a1420\",\"theme_color\":\"#0a1420\",\"icons\":[{\"src\":\"/icon-192.png\",\"sizes\":\"192x192\",\"type\":\"image/png\"},{\"src\":\"/icon-512.png\",\"sizes\":\"512x512\",\"type\":\"image/png\",\"purpose\":\"any maskable\"}]}");
+  });
   web.onNotFound([](){web.send(404,"text/plain","Not found");});
+  const char *keep[]={"If-None-Match"};
+  web.collectHeaders(keep,1);
   web.begin();
 }
 void serialStatus(){
@@ -1679,13 +3033,28 @@ void setup(){
   led.begin();led.setBrightness(ledBrightness);led.clear();led.show();
   Serial.begin(115200);
   delay(1200); // do not block boot for USB Serial Monitor
-  Serial.println("\nEngineLink " EL_VERSION " - engine monitoring, listen-only at boot");
+  Serial.println("\nEngineLink " EL_VERSION " - engine monitoring, listen-only at boot unless automatic reading is on");
+  {
+    esp_ota_img_states_t st;
+    const esp_partition_t *run=esp_ota_get_running_partition();
+    rollbackPending=run&&esp_ota_get_state_partition(run,&st)==ESP_OK&&st==ESP_OTA_IMG_PENDING_VERIFY;
+  }
   bootId=esp_random();
   sketchKB=ESP.getSketchSize()/1024;
   pinMode(SD_DETECT,INPUT);
   pinMode(OPTO_PIN,INPUT);
   loadSettings();
   loadTotals();
+  fsReady=LittleFS.begin(true,"/littlefs",8,"spiffs");
+  if(!fsReady)Serial.println("Internal storage (LittleFS) could not start; trips are kept on the SD card only");
+  loadPrefs();
+  loadTrips();
+  loadFuel();
+  loadHealth();
+  loadDiag();
+  lastEngineOnMs=millis();
+  // A trip that was still open when power went is closed with its last values.
+  if(totals.tripActive&&totals.tripBoot!=bootId)endTrip();
   pref.begin("enginelink",true);calName=pref.getString("testfile","");pref.end();
   uint8_t *queueStorage=(uint8_t*)heap_caps_malloc(FRAME_QUEUE_PSRAM*sizeof(Frame),MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);
   if(queueStorage){
@@ -1712,6 +3081,7 @@ void setup(){
   if(cfg.canListen && !startCAN())Serial.println("CAN listen-only init failed");
   // NTP time sync callback is non-blocking.
   sntp_set_time_sync_notification_cb(ntpCallback);
+  xTaskCreatePinnedToCore(fwWorker,"fw",12288,nullptr,1,nullptr,0);
   Serial.printf("SoftAP EngineLink at http://%s (http://enginelink.local) ; passive J1708 only\n",WiFi.softAPIP().toString().c_str());
 }
 void loop(){
@@ -1723,11 +3093,16 @@ void loop(){
   web.handleClient();
   serviceSD();
   serviceKad();
+  serviceAutoPoll();
+  serviceDiag();
   serviceEngines();
+  serviceRawCleanup();
   serviceHistory();
   serviceNetwork();
   updateLED();
   serialStatus();
+  if(rollbackPending&&millis()>60000&&apStarted){esp_ota_mark_app_valid_cancel_rollback();rollbackPending=false;}
+  if(fwState==4&&!restartAt){prepareRestart();restartAt=millis()+2000;}
   if(restartAt&&(int32_t)(millis()-restartAt)>=0){delay(100);ESP.restart();}
   delay(1);
 }

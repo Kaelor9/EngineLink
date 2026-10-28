@@ -5,10 +5,14 @@ on:
     branches: [main]
     paths:
       - 'firmware/EngineLink/**'
+      - 'firmware/ui/**'
+      - 'tools/build_ui.py'
       - '.github/workflows/build-engine.yml'
   pull_request:
     paths:
       - 'firmware/EngineLink/**'
+      - 'firmware/ui/**'
+      - 'tools/build_ui.py'
       - '.github/workflows/build-engine.yml'
   workflow_dispatch:
 
@@ -30,14 +34,16 @@ jobs:
           arduino-cli lib install "Adafruit NeoPixel"
       - name: Validate embedded browser JavaScript
         run: |
-          python3 - <<'PY'
+          python3 tools/build_ui.py --check
+          python3 - <<'PY2'
           from pathlib import Path
-          header=Path('firmware/EngineLink/ui.h').read_text(encoding='utf-8')
-          start=header.index('<script>')+len('<script>')
-          end=header.index('</script>',start)
-          Path('/tmp/enginelink-app.js').write_text(header[start:end], encoding='utf-8')
-          PY
-          node --check /tmp/enginelink-app.js
+          html=Path('firmware/ui/app.html').read_text(encoding='utf-8')
+          start=html.index('<script>')+len('<script>')
+          end=html.index('</script>',start)
+          Path('/tmp/enginelink-ui.js').write_text(html[start:end],encoding='utf-8')
+          print("UI JS size:",end-start)
+          PY2
+          node --check /tmp/enginelink-ui.js
       - name: Compile application
         run: |
           mkdir -p build-app
