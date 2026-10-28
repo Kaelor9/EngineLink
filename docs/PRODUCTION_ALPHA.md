@@ -1,6 +1,13 @@
-# EngineLink application v0.5.2
+# EngineLink application v0.5.3
 
 This is a **working application foundation**, not a validated production release. The former Lab firmware is retained under \`experiments/\`. The application is in \`firmware/EngineLink/\`.
+
+## Changes in 0.5.3: iPhone home-screen layout
+
+- **iPhone home-screen app:** the status bar is no longer see-through. New iOS versions put the page below a see-through status bar anyway but sized it as if it were behind it, which left an empty band under the menu. Content now fades out under the top edge instead of being cut off.
+- The "Reconnecting" notice is one short line above the menu instead of a large bubble over the title.
+- "Which socket is which" asks before swapping port and starboard (one tap used to swap them).
+- Firmware page says "Downloading…" while it downloads; "0.0 below average" now reads "On your average".
 
 ## Changes in 0.5.2: steady Wi-Fi
 
