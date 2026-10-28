@@ -43,7 +43,7 @@
 #include "ui.h"
 #include "icons.h"
 
-#define EL_VERSION "0.5.1"
+#define EL_VERSION "0.5.2"
 // Releases list published by the Pages workflow; firmware files come from
 // GitHub Releases of the same repository. Nothing else is downloaded.
 #define EL_RELEASES_URL "https://kaelor9.github.io/EngineLink/releases.json"
@@ -71,22 +71,87 @@ constexpr uint16_t HISTORY_LEN=360;            // 1 hour at 10 s
 constexpr uint32_t HISTORY_STEP_MS=10000;
 constexpr uint8_t MAX_SEGMENTS=12;
 constexpr uint8_t MAX_PIDS=96;
-// Safari opens speculative TCP connections that never send a request. The
-// stock WebServer then waits 5 s on that socket and serves nobody else, which
-// shows up as "network connection was lost". Idle sockets are dropped sooner.
-constexpr uint32_t HTTP_IDLE_DROP_MS=600;
+// The stock WebServer serves one socket at a time. A socket that Safari opens
+// ahead of time and leaves silent, or one that stalls during a Wi-Fi blip,
+// blocks every other request for up to 5 s: the app then shows "Reconnecting".
+// This server accepts every connection at once, serves whichever socket has a
+// request waiting, and keeps sockets open between requests (HTTP keep-alive),
+// so the app's twice-a-second poll reuses one connection instead of setting up
+// a new one each time, which is where a weak link loses most requests.
+constexpr uint8_t HTTP_POOL=8;
+constexpr uint32_t HTTP_IDLE_MS=5000;      // silent sockets are closed after this
+constexpr uint32_t HTTP_IO_TIMEOUT_MS=2000;
 
 class EngineLinkWebServer : public WebServer {
 public:
   explicit EngineLinkWebServer(int port):WebServer(port){}
+  uint32_t served=0,reused=0,evicted=0,slowestMs=0;
+  uint8_t openSockets()const{uint8_t n=0;for(const Slot &s:pool)if(s.used)n++;return n;}
   void handleClient() override {
-    if(_currentStatus==HC_WAIT_READ && !_currentClient.available() &&
-       (millis()-_statusChange)>HTTP_IDLE_DROP_MS){
-      _currentClient.stop();
-      _currentStatus=HC_NONE;
+    const uint32_t now=millis();
+    for(;;){
+      NetworkClient c=_server.accept();
+      if(!c)break;
+      c.setNoDelay(true);
+      int slot=-1,oldest=0;
+      for(int i=0;i<HTTP_POOL;i++){
+        if(!pool[i].used){slot=i;break;}
+        if((int32_t)(pool[oldest].since-pool[i].since)>0)oldest=i;
+      }
+      if(slot<0){slot=oldest;pool[slot].c.stop();++evicted;}
+      pool[slot].c=c;pool[slot].since=now;pool[slot].used=true;pool[slot].requests=0;
     }
-    WebServer::handleClient();
+    for(Slot &s:pool){
+      if(!s.used||s.c.available())continue;
+      if(!s.c.connected()||now-s.since>HTTP_IDLE_MS){s.c.stop();s.used=false;}
+    }
+    for(int k=0;k<HTTP_POOL;k++){
+      const int i=(nextSlot+k)%HTTP_POOL;
+      if(pool[i].used&&pool[i].c.available()){nextSlot=(i+1)%HTTP_POOL;serve(pool[i]);break;}
+    }
   }
+private:
+  struct Slot{NetworkClient c;uint32_t since=0;uint16_t requests=0;bool used=false;};
+  Slot pool[HTTP_POOL];
+  int nextSlot=0;
+  bool wrote=false,keepAlive=false,rewriteHeader=false;
+  void serve(Slot &s){
+    const uint32_t t0=millis();
+    _currentClient=s.c;
+    _currentClient.setTimeout(HTTP_IO_TIMEOUT_MS);
+    _currentStatus=HC_WAIT_READ;_statusChange=t0;
+    wrote=false;keepAlive=false;
+    if(_parseRequest(_currentClient)){
+      _contentLength=CONTENT_LENGTH_NOT_SET;_responseCode=0;_clearResponseHeaders();
+      // Only HTTP/1.1 frames every response (length or chunks) for reuse.
+      keepAlive=_currentVersion==1&&!header("Connection").equalsIgnoreCase("close");
+      rewriteHeader=keepAlive;
+      _handleRequest();
+      ++served;if(s.requests)++reused;
+      if(s.requests<65535)s.requests++;
+    }
+    rewriteHeader=false;
+    const bool keep=keepAlive&&wrote&&_currentClient.connected();
+    _currentClient=NetworkClient();
+    _currentStatus=HC_NONE;_currentUpload.reset();_currentRaw.reset();
+    if(keep)s.since=millis();else{s.c.stop();s.used=false;}
+    const uint32_t ms=millis()-t0;if(ms>slowestMs)slowestMs=ms;
+  }
+protected:
+  // The response header is written in one piece. WebServer always says
+  // "Connection: close"; for a keep-alive request that line is swapped.
+  size_t _currentClientWrite(const char *b,size_t l) override {
+    wrote=true;
+    if(rewriteHeader&&l>8&&memcmp(b,"HTTP/1.",7)==0){
+      rewriteHeader=false;
+      String h(b,(unsigned int)l);
+      if(h.indexOf("\r\nConnection: close\r\n")<0){keepAlive=false;return _currentClient.write(b,l);}
+      h.replace("\r\nConnection: close\r\n","\r\nConnection: keep-alive\r\nKeep-Alive: timeout=4\r\n");
+      return _currentClient.write(h.c_str(),h.length())==h.length()?l:0;
+    }
+    return _currentClient.write(b,l);
+  }
+  size_t _currentClientWrite_P(PGM_P b,size_t l) override {wrote=true;return _currentClient.write_P(b,l);}
 };
 
 struct Frame {
@@ -416,6 +481,7 @@ volatile uint8_t apReason=0;
 float sogKnots=NAN;
 uint64_t sogAt=0;
 volatile bool ntpNotification=false;
+uint32_t loopMaxMs=0;
 // Wi-Fi firmware update
 bool otaActive=false,otaResumeLogging=false,otaChecked=false;
 String otaError="";
@@ -441,6 +507,8 @@ uint8_t apChannelNow=6;          // channel the AP actually uses
 uint8_t staChannel=0;            // router channel found by the last scan
 uint8_t staBssid[6]={};
 bool staBssidKnown=false;
+volatile bool staGotConflict=false; // the router handed out an address in 192.168.4.x
+bool staConflict=false;
 uint32_t staNextTry=0,staBackoff=15000,staFails=0,staConnects=0,apRestarts=0,lastApCheck=0;
 uint32_t staConnectedAt=0;
 volatile bool apStoppedFlag=false;
@@ -480,7 +548,11 @@ void onWiFi(WiFiEvent_t e,WiFiEventInfo_t info){
   if(e==ARDUINO_EVENT_WIFI_AP_STACONNECTED)++apJoins;
   if(e==ARDUINO_EVENT_WIFI_AP_STADISCONNECTED){++apLeaves;apReason=info.wifi_ap_stadisconnected.reason;}
   if(e==ARDUINO_EVENT_WIFI_STA_DISCONNECTED)++staDisconnects;
-  if(e==ARDUINO_EVENT_WIFI_STA_GOT_IP){++staConnects;staConnectedAt=millis();}
+  if(e==ARDUINO_EVENT_WIFI_STA_GOT_IP){
+    ++staConnects;staConnectedAt=millis();
+    const uint32_t ip=info.got_ip.ip_info.ip.addr; // first octet in the low byte
+    if((ip&0xFFFFFF)==((4u<<16)|(168u<<8)|192u))staGotConflict=true;
+  }
 }
 bool cardInserted(){return digitalRead(SD_DETECT)==LOW;}
 
@@ -1545,7 +1617,9 @@ void radioTuning(){
   esp_wifi_set_country(&cc);
 }
 void startAP(){
-  WiFi.softAPConfig(IPAddress(192,168,4,1),IPAddress(192,168,4,1),IPAddress(255,255,255,0));
+  // softAP() leaves a running network alone when nothing changed, so calling
+  // this never drops a phone unless the name, password or channel differ.
+  if(WiFi.softAPIP()!=IPAddress(192,168,4,1))WiFi.softAPConfig(IPAddress(192,168,4,1),IPAddress(192,168,4,1),IPAddress(255,255,255,0));
   apStarted=WiFi.softAP(cfg.apName.c_str(),cfg.apPassword.c_str(),apChannelNow,false,6);
   esp_wifi_set_inactive_time(WIFI_IF_AP,600);
   apStoppedFlag=false;
@@ -1572,17 +1646,25 @@ void applyNetwork(){
   // Only a saved network change rebuilds the interfaces.
   const bool withRouter=routerConfigured();
   WiFi.persistent(false);
-  WiFi.mode(withRouter?WIFI_AP_STA:WIFI_AP);
+  const wifi_mode_t want=withRouter?WIFI_AP_STA:WIFI_AP;
+  if(WiFi.getMode()!=want)WiFi.mode(want);
   radioTuning();
-  apChannelNow=cfg.apChannel;
-  staBssidKnown=false;
+  staConflict=false;staGotConflict=false;
+  uint8_t ch=cfg.apChannel;
   if(withRouter){
     WiFi.setAutoReconnect(false);
-    staBssidKnown=findRouter();
-    if(staBssidKnown)apChannelNow=staChannel;
-  }else ntpStarted=false;
+    // The scan the user picked the router from already gave its channel. A new
+    // scan hops across channels, so it only runs while no phone is connected.
+    if(!staBssidKnown&&WiFi.softAPgetStationNum()==0)staBssidKnown=findRouter();
+    if(staBssidKnown)ch=staChannel;
+    else if(WiFi.status()==WL_CONNECTED&&WiFi.channel())ch=(uint8_t)WiFi.channel();
+  }else{
+    ntpStarted=false;staBssidKnown=false;
+  }
+  apChannelNow=ch;
   startAP();
   if(withRouter){
+    esp_wifi_disconnect();
     connectRouter();
     staBackoff=15000;staFails=0;staNextTry=millis()+staBackoff;
   }
@@ -1603,7 +1685,13 @@ void serviceNetwork(){
       radioTuning();startAP();
     }
   }
-  if(routerConfigured()){
+  // A router that uses EngineLink's own addresses would swallow the replies to
+  // every phone on the EngineLink network. Leave it and say why in the app.
+  if(staGotConflict){
+    staGotConflict=false;staConflict=true;
+    esp_wifi_disconnect();
+  }
+  if(routerConfigured()&&!staConflict){
     if(WiFi.status()==WL_CONNECTED){
       staFails=0;staBackoff=15000;
       const uint8_t ch=(uint8_t)WiFi.channel();
@@ -2267,6 +2355,8 @@ void handleLive(){
   s+=",\"sta\":";s+=WiFi.status()==WL_CONNECTED?"true":"false";
   s+=",\"ssid\":";jsonString(s,cfg.ssid);
   s+=",\"rssi\":";if(WiFi.status()==WL_CONNECTED)s+=WiFi.RSSI();else s+="null";
+  s+=",\"ip\":";if(WiFi.status()==WL_CONNECTED)jsonString(s,WiFi.localIP().toString());else s+="null";
+  s+=",\"conflict\":";s+=staConflict?"true":"false";
   s+="},\"sd\":{\"ok\":";s+=sdReady?"true":"false";
   s+=",\"log\":";s+=sdLogging?"true":"false";
   s+="},\"test\":";s+=calActive?"true":"false";
@@ -2470,7 +2560,7 @@ void handleApSave(){
 void handleWifiScan(){
   if(web.arg("start")=="1"&&!scanBusy){
     WiFi.scanDelete();
-    if(WiFi.scanNetworks(true,false,false,200)==WIFI_SCAN_FAILED){reply(false,"Scan could not start",409);return;}
+    if(WiFi.scanNetworks(true,false,false,120)==WIFI_SCAN_FAILED){reply(false,"Scan could not start",409);return;}
     scanBusy=true;scanCount=-1;scanStartedMs=millis();
   }
   String s="{\"busy\":";s+=scanBusy?"true":"false";
@@ -2502,11 +2592,21 @@ void handleWifiConnect(){
   if(pass.length()>63){reply(false,"Password too long",400);return;}
   cfg.router=true;cfg.ssid=ssid;cfg.wifiPassword=pass;cfg.completed=true;
   saveSettings();
-  reply(true,"Connecting to "+ssid+". If the router uses another channel, your phone may drop for a few seconds.");
+  staBssidKnown=false;
+  if(!scanBusy&&scanCount>0){
+    int best=-1;
+    for(int16_t i=0;i<scanCount;i++)if(WiFi.SSID(i)==ssid&&(best<0||WiFi.RSSI(i)>WiFi.RSSI(best)))best=i;
+    if(best>=0){staChannel=(uint8_t)WiFi.channel(best);memcpy(staBssid,WiFi.BSSID(best),6);staBssidKnown=true;}
+  }
+  const bool move=staBssidKnown&&staChannel!=apChannelNow;
+  String m="Connecting to "+ssid+".";
+  if(move)m+=" EngineLink Wi-Fi moves to channel "+String(staChannel)+" to match the router, so your phone drops for a few seconds and joins again.";
+  reply(true,m);
   pendingNetwork=true;
 }
 void handleWifiForget(){
   cfg.router=false;cfg.ssid="";cfg.wifiPassword="";saveSettings();
+  esp_wifi_disconnect();
   reply(true,"Disconnected from the router");
   pendingNetwork=true;
 }
@@ -2559,6 +2659,10 @@ void handleDiag(){
   s+=",\"wifi\":{\"apRestarts\":";s+=apRestarts;s+=",\"joins\":";s+=(unsigned long)apJoins;s+=",\"leaves\":";s+=(unsigned long)apLeaves;
   s+=",\"reason\":";s+=(unsigned)apReason;s+=",\"staFails\":";s+=staFails;s+=",\"staDrops\":";s+=(unsigned long)staDisconnects;
   s+=",\"staConnects\":";s+=staConnects;s+=",\"ch\":";s+=apChannelNow;
+  s+=",\"conflict\":";s+=staConflict?"true":"false";
+  s+=",\"httpServed\":";s+=web.served;s+=",\"httpReused\":";s+=web.reused;
+  s+=",\"httpEvicted\":";s+=web.evicted;s+=",\"httpSlowMs\":";s+=web.slowestMs;
+  s+=",\"httpOpen\":";s+=web.openSockets();s+=",\"loopMaxMs\":";s+=loopMaxMs;
   s+="},\"heap\":";s+=ESP.getFreeHeap();s+=",\"minHeap\":";s+=ESP.getMinFreeHeap();
   s+=",\"reset\":";s+=(unsigned)esp_reset_reason();
   s+=",\"up\":";s+=(unsigned long)(now/1000ULL);
@@ -3015,8 +3119,9 @@ void initializeWeb(){
     web.send(200,"application/manifest+json","{\"name\":\"Engine Link\",\"short_name\":\"Engine Link\",\"start_url\":\"/\",\"scope\":\"/\",\"display\":\"standalone\",\"background_color\":\"#0a1420\",\"theme_color\":\"#0a1420\",\"icons\":[{\"src\":\"/icon-192.png\",\"sizes\":\"192x192\",\"type\":\"image/png\"},{\"src\":\"/icon-512.png\",\"sizes\":\"512x512\",\"type\":\"image/png\",\"purpose\":\"any maskable\"}]}");
   });
   web.onNotFound([](){web.send(404,"text/plain","Not found");});
-  const char *keep[]={"If-None-Match"};
-  web.collectHeaders(keep,1);
+  const char *keep[]={"If-None-Match","Connection"};
+  web.collectHeaders(keep,2);
+  web.enableCORS(true); // the app can also reach EngineLink through the boat router
   web.begin();
 }
 void serialStatus(){
@@ -3085,6 +3190,7 @@ void setup(){
   Serial.printf("SoftAP EngineLink at http://%s (http://enginelink.local) ; passive J1708 only\n",WiFi.softAPIP().toString().c_str());
 }
 void loop(){
+  const uint32_t loopStart=millis();
   // Give the UART data priority over serving the user interface.
   Frame f;
   int handled=0;
@@ -3104,5 +3210,6 @@ void loop(){
   if(rollbackPending&&millis()>60000&&apStarted){esp_ota_mark_app_valid_cancel_rollback();rollbackPending=false;}
   if(fwState==4&&!restartAt){prepareRestart();restartAt=millis()+2000;}
   if(restartAt&&(int32_t)(millis()-restartAt)>=0){delay(100);ESP.restart();}
+  const uint32_t took=millis()-loopStart;if(took>loopMaxMs)loopMaxMs=took;
   delay(1);
 }
