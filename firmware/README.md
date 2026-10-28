@@ -39,7 +39,7 @@ Build settings: ESP32S3 Dev Module, 8 MB flash, `default_8MB` partitions (two OT
 | GET | `/api/fuel` · POST `/api/fuel/add`, `/delete` | Fuel log, tank estimate, fine-tuning |
 | GET | `/api/economy` · POST `/api/season/reset` | RPM/speed statistics, zones, health |
 | GET/POST | `/api/prefs` | App preferences shared by all phones |
-| POST | `/api/cfg` | Tank, price, trip end, raw log days, NTP, port, scaling. `autoPoll=1` needs `confirm=POLL` |
+| POST | `/api/cfg` | Tank, price, trip end, raw log days, NTP, port, scaling, `host` (mDNS name for `<host>.local`, also the DHCP hostname). `autoPoll=1` needs `confirm=POLL` |
 | POST | `/api/wifi/ap`, `/connect`, `/forget` · GET `/api/wifi/scan` | EngineLink network and boat router |
 | GET | `/api/diag` · POST `/api/diag/test` | Diagnostics and 30 s connection test |
 | GET | `/api/sd/info` · POST `/api/sd/wipe` (`confirm=WIPE`) | SD card |

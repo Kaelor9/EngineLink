@@ -43,7 +43,7 @@
 #include "ui.h"
 #include "icons.h"
 
-#define EL_VERSION "0.5.4"
+#define EL_VERSION "0.5.5"
 // Releases list published by the Pages workflow; firmware files come from
 // GitHub Releases of the same repository. Nothing else is downloaded.
 #define EL_RELEASES_URL "https://kaelor9.github.io/EngineLink/releases.json"
@@ -324,6 +324,7 @@ struct Settings {
   float fuelCorr[2]={1.0f,1.0f}; // per physical channel, from tank-to-tank
   // ---- 0.5.0 ----
   String apName="EngineLink";
+  String hostName="enginelink"; // http://<hostName>.local and the name the router sees
   float tankL=0;             // 0 = not set yet
   uint8_t reserve=10;        // percent, 0 = off
   float defaultPrice=0;      // per litre, in the currency chosen in the app
@@ -511,7 +512,12 @@ volatile bool staGotConflict=false; // the router handed out an address in 192.1
 bool staConflict=false;
 uint32_t staNextTry=0,staBackoff=15000,staFails=0,staConnects=0,apRestarts=0,lastApCheck=0;
 uint32_t staConnectedAt=0;
-volatile bool apStoppedFlag=false;
+// Last access point event. AP_STOP also arrives (late) when the network only
+// changed its settings, so the watchdog acts on "stopped and not started again".
+volatile uint8_t apLastEvent=0;      // 1 started, 2 stopped
+volatile uint32_t apLastEventMs=0;
+uint32_t apChannelChanges=0;
+uint8_t apStartedChannel=0;
 bool scanBusy=false; int16_t scanCount=-1; uint32_t scanStartedMs=0;
 // Firmware from GitHub, done by a worker task so the app keeps working.
 enum FwJob : uint8_t { FW_IDLE, FW_LIST, FW_INSTALL };
@@ -543,8 +549,8 @@ bool allowTime(const String &source){
 }
 void ntpCallback(struct timeval *tv){(void)tv;ntpNotification=true;}
 void onWiFi(WiFiEvent_t e,WiFiEventInfo_t info){
-  if(e==ARDUINO_EVENT_WIFI_AP_START)++apStarts;
-  if(e==ARDUINO_EVENT_WIFI_AP_STOP){++apStops;apStoppedFlag=true;}
+  if(e==ARDUINO_EVENT_WIFI_AP_START){++apStarts;apLastEvent=1;apLastEventMs=millis();}
+  if(e==ARDUINO_EVENT_WIFI_AP_STOP){++apStops;apLastEvent=2;apLastEventMs=millis();}
   if(e==ARDUINO_EVENT_WIFI_AP_STACONNECTED)++apJoins;
   if(e==ARDUINO_EVENT_WIFI_AP_STADISCONNECTED){++apLeaves;apReason=info.wifi_ap_stadisconnected.reason;}
   if(e==ARDUINO_EVENT_WIFI_STA_DISCONNECTED)++staDisconnects;
@@ -1613,8 +1619,13 @@ void radioTuning(){
   WiFi.setSleep(false);
   esp_wifi_set_ps(WIFI_PS_NONE);
   WiFi.setTxPower(WIFI_POWER_19_5dBm);
-  wifi_country_t cc={{'E','U',' '},1,13,20,WIFI_COUNTRY_POLICY_MANUAL};
-  esp_wifi_set_country(&cc);
+  // Setting the country again on a running network makes it start over and
+  // drops every phone, so it is only set when it is not already right.
+  wifi_country_t cur={};
+  if(esp_wifi_get_country(&cur)!=ESP_OK||cur.cc[0]!='E'||cur.cc[1]!='U'||cur.schan!=1||cur.nchan!=13||cur.policy!=WIFI_COUNTRY_POLICY_MANUAL){
+    wifi_country_t cc={{'E','U',' '},1,13,20,WIFI_COUNTRY_POLICY_MANUAL};
+    esp_wifi_set_country(&cc);
+  }
 }
 void startAP(){
   // softAP() leaves a running network alone when nothing changed, so calling
@@ -1622,7 +1633,10 @@ void startAP(){
   if(WiFi.softAPIP()!=IPAddress(192,168,4,1))WiFi.softAPConfig(IPAddress(192,168,4,1),IPAddress(192,168,4,1),IPAddress(255,255,255,0));
   apStarted=WiFi.softAP(cfg.apName.c_str(),cfg.apPassword.c_str(),apChannelNow,false,6);
   esp_wifi_set_inactive_time(WIFI_IF_AP,600);
-  apStoppedFlag=false;
+  if(apStarted){
+    if(apStartedChannel&&apStartedChannel!=apChannelNow)++apChannelChanges;
+    apStartedChannel=apChannelNow;
+  }
 }
 // Blocking scan for the saved router. Only used when the network is set up.
 bool findRouter(){
@@ -1642,11 +1656,28 @@ void connectRouter(){
   if(staBssidKnown)WiFi.begin(cfg.ssid.c_str(),cfg.wifiPassword.c_str(),staChannel,staBssid,true);
   else WiFi.begin(cfg.ssid.c_str(),cfg.wifiPassword.c_str(),apChannelNow,nullptr,true);
 }
+// A name for http://<name>.local: letters, digits and hyphens, as DNS allows.
+bool validHostName(const String &n){
+  if(n.length()<1||n.length()>32||n[0]=='-'||n[n.length()-1]=='-')return false;
+  for(size_t i=0;i<n.length();i++){const char c=n[i];if(!((c>='a'&&c<='z')||(c>='0'&&c<='9')||c=='-'))return false;}
+  return true;
+}
+// mDNS answers <name>.local on the EngineLink network and on the router; the
+// router also learns the name from DHCP.
+void startNameService(){
+  if(mdnsReady){MDNS.end();mdnsReady=false;}
+  if(MDNS.begin(cfg.hostName.c_str())){
+    MDNS.addService("http","tcp",80);
+    MDNS.setInstanceName(cfg.apName.c_str());
+    mdnsReady=true;
+  }
+}
 void applyNetwork(){
   // Only a saved network change rebuilds the interfaces.
   const bool withRouter=routerConfigured();
   WiFi.persistent(false);
   const wifi_mode_t want=withRouter?WIFI_AP_STA:WIFI_AP;
+  WiFi.setHostname(cfg.hostName.c_str());
   if(WiFi.getMode()!=want)WiFi.mode(want);
   radioTuning();
   staConflict=false;staGotConflict=false;
@@ -1668,20 +1699,22 @@ void applyNetwork(){
     connectRouter();
     staBackoff=15000;staFails=0;staNextTry=millis()+staBackoff;
   }
-  if(!mdnsReady&&MDNS.begin("enginelink")){
-    MDNS.addService("http","tcp",80);
-    mdnsReady=true;
-  }
+  if(!mdnsReady)startNameService();
 }
 void serviceNetwork(){
   if(pendingNetwork){pendingNetwork=false;applyNetwork();}
   // Watchdog for the access point.
   if((uint32_t)(millis()-lastApCheck)>=3000){
     lastApCheck=millis();
-    const bool apUp=(WiFi.getMode()&WIFI_MODE_AP)&&WiFi.softAPIP()==IPAddress(192,168,4,1);
-    if(!apUp||apStoppedFlag){
+    // Only a network that is really gone is restarted: a restart itself drops
+    // every phone, so a false alarm here is worse than none.
+    const bool modeOk=WiFi.getMode()&WIFI_MODE_AP;
+    const bool stopped=apLastEvent==2&&(uint32_t)(millis()-apLastEventMs)>=3000;
+    const bool noIp=modeOk&&!stopped&&WiFi.softAPIP()!=IPAddress(192,168,4,1);
+    if(!modeOk||stopped||noIp){
       ++apRestarts;
-      if(!(WiFi.getMode()&WIFI_MODE_AP))WiFi.mode(routerConfigured()?WIFI_AP_STA:WIFI_AP);
+      if(!modeOk)WiFi.mode(routerConfigured()?WIFI_AP_STA:WIFI_AP);
+      if(stopped){esp_wifi_start();apLastEvent=0;}
       radioTuning();startAP();
     }
   }
@@ -1801,6 +1834,7 @@ void saveSettings(){
   pref.putFloat("corr0",cfg.fuelCorr[0]);
   pref.putFloat("corr1",cfg.fuelCorr[1]);
   pref.putString("apname",cfg.apName);
+  pref.putString("host",cfg.hostName);
   pref.putFloat("tank",cfg.tankL);
   pref.putUChar("reserve",cfg.reserve);
   pref.putFloat("price",cfg.defaultPrice);
@@ -1840,6 +1874,8 @@ void loadSettings(){
   cfg.fuelCorr[0]=pref.getFloat("corr0",1.0f);
   cfg.fuelCorr[1]=pref.getFloat("corr1",1.0f);
   cfg.apName=pref.getString("apname","EngineLink");
+  cfg.hostName=pref.getString("host","enginelink");
+  if(!validHostName(cfg.hostName))cfg.hostName="enginelink";
   cfg.tankL=pref.getFloat("tank",0);
   cfg.reserve=pref.getUChar("reserve",10);
   cfg.defaultPrice=pref.getFloat("price",0);
@@ -1977,6 +2013,7 @@ void handleState(){
   s+=",\"kadVolt\":";s+=cfg.kadVolt;
   s+=",\"fuelCorr\":[";s+=String(cfg.fuelCorr[0],4);s+=',';s+=String(cfg.fuelCorr[1],4);s+=']';
   s+=",\"apName\":";jsonString(s,cfg.apName);
+  s+=",\"host\":";jsonString(s,cfg.hostName);
   s+=",\"ssid\":";jsonString(s,cfg.ssid);
   s+=",\"tankL\":";s+=String(cfg.tankL,0);
   s+=",\"reserve\":";s+=cfg.reserve;
@@ -2349,6 +2386,7 @@ void handleLive(){
   s+="},\"price\":";jnum(s,latestPrice(),2);
   s+=",\"sog\":";if(sogFresh())jnum(s,sogKnots,1);else s+="null";
   s+=",\"net\":{\"ap\":";jsonString(s,cfg.apName);
+  s+=",\"host\":";jsonString(s,cfg.hostName);
   s+=",\"cl\":";s+=WiFi.softAPgetStationNum();
   s+=",\"ch\":";s+=apChannelNow;
   s+=",\"rt\":";s+=routerConfigured()?"true":"false";
@@ -2523,6 +2561,12 @@ void handleCfg(){
   }
   if(web.hasArg("rawKeep")){const int d=web.arg("rawKeep").toInt();if(d<0||d>3650){reply(false,"Invalid value",400);return;}cfg.rawKeepDays=d;}
   if(web.hasArg("ntp")){cfg.ntpOn=web.arg("ntp")=="1";ntpStarted=false;}
+  if(web.hasArg("host")){
+    String v=web.arg("host");v.trim();v.toLowerCase();v.replace(' ','-');
+    if(v.endsWith(".local"))v.remove(v.length()-6);
+    if(!validHostName(v)){reply(false,"Use 1 to 32 letters, digits or hyphens, for example enginelink",400);return;}
+    if(v!=cfg.hostName){cfg.hostName=v;WiFi.setHostname(v.c_str());startNameService();}
+  }
   if(web.hasArg("ntpServer")){String v=web.arg("ntpServer");v.trim();if(v.length()<3||v.length()>63){reply(false,"Invalid server",400);return;}cfg.ntpServer=v;ntpStarted=false;}
   if(web.hasArg("port")){const int p=web.arg("port").toInt();if(p<0||p>2){reply(false,"Invalid socket choice",400);return;}cfg.portChannel=p;}
   if(web.hasArg("can")){
@@ -2660,6 +2704,7 @@ void handleDiag(){
   s+=",\"reason\":";s+=(unsigned)apReason;s+=",\"staFails\":";s+=staFails;s+=",\"staDrops\":";s+=(unsigned long)staDisconnects;
   s+=",\"staConnects\":";s+=staConnects;s+=",\"ch\":";s+=apChannelNow;
   s+=",\"conflict\":";s+=staConflict?"true":"false";
+  s+=",\"apStops\":";s+=(unsigned long)apStops;s+=",\"chMoves\":";s+=apChannelChanges;
   s+=",\"httpServed\":";s+=web.served;s+=",\"httpReused\":";s+=web.reused;
   s+=",\"httpEvicted\":";s+=web.evicted;s+=",\"httpSlowMs\":";s+=web.slowestMs;
   s+=",\"httpOpen\":";s+=web.openSockets();s+=",\"loopMaxMs\":";s+=loopMaxMs;
@@ -2880,6 +2925,7 @@ void handleBackup(){
   s+="\"tank\":";jnum(s,cfg.tankL,0);s+=",\"reserve\":";s+=cfg.reserve;s+=",\"price\":";jnum(s,cfg.defaultPrice,2);
   s+=",\"tripEnd\":";s+=cfg.tripEndMin;s+=",\"autoPoll\":";s+=cfg.autoPoll?1:0;s+=",\"rawKeep\":";s+=cfg.rawKeepDays;
   s+=",\"ntp\":";s+=cfg.ntpOn?1:0;s+=",\"ntpServer\":";jsonString(s,cfg.ntpServer);
+  s+=",\"host\":";jsonString(s,cfg.hostName);
   s+=",\"port\":";s+=cfg.portChannel;s+=",\"protocol\":";s+=cfg.protocol==PROTO_KAD?"\"kad\"":"\"j1587\"";
   s+=",\"fuelDiv\":";s+=cfg.kadFuelDiv;s+=",\"volt\":";s+=cfg.kadVolt;
   s+=",\"corr0\":";jnum(s,cfg.fuelCorr[0],4);s+=",\"corr1\":";jnum(s,cfg.fuelCorr[1],4);

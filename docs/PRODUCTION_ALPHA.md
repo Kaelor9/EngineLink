@@ -1,6 +1,12 @@
-# EngineLink application v0.5.4
+# EngineLink application v0.5.5
 
 This is a **working application foundation**, not a validated production release. The former Lab firmware is retained under \`experiments/\`. The application is in \`firmware/EngineLink/\`.
+
+## Changes in 0.5.5: network watchdog
+
+- **The network watchdog no longer drops phones.** The ESP32 also reports "network stopped" (late) when the network only changed a setting such as its channel. The watchdog took that as a failure and restarted the network, and every restart also set the country again, which on its own makes the network start over and drops every phone. Now the watchdog only acts when the network is really gone (stopped and not started again for 3 seconds, or switched off), and the country is only set when it is not already right.
+- **Address name in Settings.** EngineLink answers at http://enginelink.local (mDNS) on its own network and on the boat router, and the router also sees it under that name. The name can be changed under Settings → EngineLink Wi-Fi → Address in the browser (letters, digits and hyphens). http://192.168.4.1 always works on the EngineLink network. EngineLink deliberately does not act as the phone's DNS server: it would answer "not found" for every other name and could cut the phone off the internet over mobile data.
+- Diagnostics → Wi-Fi also shows phone drops with the reason for the last one (for example "the phone left by itself (it may have switched to another Wi-Fi)"), channel changes and the slowest pass of the main loop. Restart code 11 now reads "USB (flashing or serial monitor)".
 
 ## Changes in 0.5.4: iPhone bottom band
 
