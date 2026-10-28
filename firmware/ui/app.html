@@ -5,7 +5,7 @@
 <meta name="theme-color" content="#0a1420">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="Engine Link">
 <link rel="manifest" href="/manifest.webmanifest">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
@@ -23,12 +23,11 @@ button,input,select{font:inherit;color:inherit}
 button{cursor:pointer;border:0;background:none;padding:0}
 input{border:0;outline:0}
 #app{position:fixed;inset:0;display:flex;flex-direction:column;max-width:560px;margin:0 auto;overflow:hidden}
-/* iPhone home-screen app: with the see-through status bar, iOS measures 100% too
-   short and leaves a gap at the bottom. There is no browser bar, so the full
-   screen height (100vh) is exactly right. */
-@media (display-mode:standalone){html,body{height:100vh}#app{bottom:auto;height:100vh}}
-html.ios-app,html.ios-app body{height:100vh}
-html.ios-app #app{bottom:auto;height:100vh}
+/* The status bar is not see-through ("default" above). With a see-through one,
+   new iOS versions place the page below the status bar anyway but size it as if
+   it were behind it, which leaves an empty band under the menu. */
+/* Content fades out under the top edge instead of being cut off. */
+#app::before{content:"";position:absolute;left:0;right:0;top:0;height:calc(14px + env(safe-area-inset-top));background:linear-gradient(var(--bg) 35%,transparent);z-index:5;pointer-events:none}
 main{flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;overscroll-behavior-y:contain;padding:calc(10px + env(safe-area-inset-top)) max(16px,env(safe-area-inset-right)) 24px max(16px,env(safe-area-inset-left));scrollbar-width:none;-webkit-overflow-scrolling:touch}
 main::-webkit-scrollbar{display:none}
 .top{display:flex;justify-content:space-between;align-items:center;padding:6px 4px 16px;min-height:62px}
@@ -79,8 +78,10 @@ nav button{display:flex;flex-direction:column;align-items:center;justify-content
 nav button.on{color:var(--teal)}
 nav svg{width:26px;height:26px}
 .ico{fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
-#banner{display:none;position:fixed;left:50%;transform:translateX(-50%);top:calc(8px + env(safe-area-inset-top));z-index:30;background:var(--osoft);color:var(--orange);border-radius:99px;padding:8px 14px;font-size:13px;font-weight:600;box-shadow:0 6px 20px rgba(0,0,0,.35);max-width:92%;text-align:center}
-#banner.show{display:block}
+#banner{display:none;position:fixed;left:50%;transform:translateX(-50%);bottom:calc(84px + env(safe-area-inset-bottom));z-index:30;background:var(--osoft);color:var(--orange);border:1px solid rgba(240,192,110,.25);border-radius:99px;padding:7px 14px;font-size:13px;font-weight:600;box-shadow:0 6px 20px rgba(0,0,0,.35);white-space:nowrap;align-items:center;gap:8px}
+#banner.show{display:inline-flex}
+#banner i{width:7px;height:7px;border-radius:50%;background:currentColor;animation:blink 1.2s ease-in-out infinite}
+@keyframes blink{50%{opacity:.25}}
 .stale .live{opacity:.5}
 #toast{display:none;position:fixed;left:16px;right:16px;bottom:96px;max-width:528px;margin:0 auto;z-index:40;background:var(--sheet);border-radius:16px;padding:13px 16px;font-size:14px;box-shadow:0 10px 30px rgba(0,0,0,.4)}
 #toast.show{display:block}
@@ -109,8 +110,6 @@ a.dl{display:none}
 <div id="sheetwrap"><section id="sheet" role="dialog" aria-modal="true"></section></div>
 <video id="nosleep" playsinline muted loop style="position:fixed;width:1px;height:1px;opacity:0;pointer-events:none" src="data:video/mp4;base64,AAAAIGZ0eXBpc29tAAACAGlzb21pc28yYXZjMW1wNDEAAAMrbW9vdgAAAGxtdmhkAAAAAAAAAAAAAAAAAAAD6AAAB9AAAQAAAQAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAgAAAlV0cmFrAAAAXHRraGQAAAADAAAAAAAAAAAAAAABAAAAAAAAB9AAAAAAAAAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAABAAAAAABAAAAAQAAAAAAAkZWR0cwAAABxlbHN0AAAAAAAAAAEAAAfQAAAAAAABAAAAAAHNbWRpYQAAACBtZGhkAAAAAAAAAAAAAAAAAABAAAAAgABVxAAAAAAALWhkbHIAAAAAAAAAAHZpZGUAAAAAAAAAAAAAAABWaWRlb0hhbmRsZXIAAAABeG1pbmYAAAAUdm1oZAAAAAEAAAAAAAAAAAAAACRkaW5mAAAAHGRyZWYAAAAAAAAAAQAAAAx1cmwgAAAAAQAAAThzdGJsAAAAuHN0c2QAAAAAAAAAAQAAAKhhdmMxAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAABAAEABIAAAASAAAAAAAAAABFUxhdmM2MC4zMS4xMDIgbGlieDI2NAAAAAAAAAAAAAAAGP//AAAALmF2Y0MBQsAK/+EAFmdCwArZHsBEAAADAAQAAAMACDxImSABAAVoy4PEyAAAABBwYXNwAAAAAQAAAAEAAAAUYnRydAAAAAAAAApQAAAKUAAAABhzdHRzAAAAAAAAAAEAAAACAABAAAAAABRzdHNzAAAAAAAAAAEAAAABAAAAHHN0c2MAAAAAAAAAAQAAAAEAAAACAAAAAQAAABxzdHN6AAAAAAAAAAAAAAACAAACiQAAAAsAAAAUc3RjbwAAAAAAAAABAAADWwAAAGJ1ZHRhAAAAWm1ldGEAAAAAAAAAIWhkbHIAAAAAAAAAAG1kaXJhcHBsAAAAAAAAAAAAAAAALWlsc3QAAAAlqXRvbwAAAB1kYXRhAAAAAQAAAABMYXZmNjAuMTYuMTAwAAAACGZyZWUAAAKcbWRhdAAAAnIGBf//btxF6b3m2Ui3lizYINkj7u94MjY0IC0gY29yZSAxNjQgcjMxMDggMzFlMTlmOSAtIEguMjY0L01QRUctNCBBVkMgY29kZWMgLSBDb3B5bGVmdCAyMDAzLTIwMjMgLSBodHRwOi8vd3d3LnZpZGVvbGFuLm9yZy94MjY0Lmh0bWwgLSBvcHRpb25zOiBjYWJhYz0wIHJlZj0zIGRlYmxvY2s9MTotMzotMyBhbmFseXNlPTB4MToweDExMSBtZT1oZXggc3VibWU9NyBwc3k9MSBwc3lfcmQ9Mi4wMDowLjcwIG1peGVkX3JlZj0xIG1lX3JhbmdlPTE2IGNocm9tYV9tZT0xIHRyZWxsaXM9MSA4eDhkY3Q9MCBjcW09MCBkZWFkem9uZT0yMSwxMSBmYXN0X3Bza2lwPTEgY2hyb21hX3FwX29mZnNldD0tNCB0aHJlYWRzPTEgbG9va2FoZWFkX3RocmVhZHM9MSBzbGljZWRfdGhyZWFkcz0wIG5yPTAgZGVjaW1hdGU9MSBpbnRlcmxhY2VkPTAgYmx1cmF5X2NvbXBhdD0wIGNvbnN0cmFpbmVkX2ludHJhPTAgYmZyYW1lcz0wIHdlaWdodHA9MCBrZXlpbnQ9MjUwIGtleWludF9taW49MSBzY2VuZWN1dD00MCBpbnRyYV9yZWZyZXNoPTAgcmNfbG9va2FoZWFkPTQwIHJjPWNyZiBtYnRyZWU9MSBjcmY9MjMuMCBxY29tcD0wLjYwIHFwbWluPTAgcXBtYXg9NjkgcXBzdGVwPTQgaXBfcmF0aW89MS40MCBhcT0xOjEuMjAAgAAAAA9liIQF85///w9FAAFXn4AAAAAHQZo4C+c6gA=="></video>
 <script>
-// Older iOS versions report the home-screen app only through navigator.standalone.
-if(navigator.standalone)document.documentElement.classList.add('ios-app');
 'use strict';
 // Engine Link phone app. Talks only to this EngineLink (no internet needed).
 const $=s=>document.querySelector(s);
@@ -255,7 +254,7 @@ function setConn(ok){
   document.body.classList.toggle('stale',!ok);
   if(ok){b.classList.remove('show');if(S.wasDown){S.wasDown=false;reloadData();}return;}
   S.wasDown=true;
-  b.textContent='Reconnecting to EngineLink…'+(S.liveAt?' Showing values from '+new Date(S.liveAt).toLocaleTimeString(LOC):'');
+  b.innerHTML='<i></i>Reconnecting'+(S.liveAt?' · values from '+new Date(S.liveAt).toLocaleTimeString(LOC,{hour:'2-digit',minute:'2-digit'}):'');
   b.classList.add('show');
 }
 let toastTimer=0;
@@ -419,7 +418,7 @@ function burnCard(avg){
   }
   const diff=fin(tot)&&fin(avg)?tot-avg:null;
   return `<div class="card"><div class="cth"><span class="lbl" style="color:var(--orange)">${svg(IC.flame,16,'var(--orange)',2)}Burning now</span><span class="s13 sub">both engines</span></div>
-    <div class="cth" style="margin-top:8px;align-items:center"><div><span class="big" style="font-size:42px">${L(tot,1)}</span> <span class="unit">${U.ru()}</span></div>${diff!=null?`<span class="chip" style="background:${diff>=0?'var(--osoft)':'var(--gsoft)'};color:${diff>=0?'var(--orange)':'var(--gtext)'}">${diff>=0?'▲':'▼'} ${L(Math.abs(diff),1)} ${diff>=0?'above':'below'} average</span>`:''}</div>${chart}</div>`;
+    <div class="cth" style="margin-top:8px;align-items:center"><div><span class="big" style="font-size:42px">${L(tot,1)}</span> <span class="unit">${U.ru()}</span></div>${diff!=null?(Math.abs(diff)<0.05?`<span class="chip" style="background:var(--track);color:var(--sub)">On your average</span>`:`<span class="chip" style="background:${diff>0?'var(--osoft)':'var(--gsoft)'};color:${diff>0?'var(--orange)':'var(--gtext)'}">${diff>0?'▲':'▼'} ${L(Math.abs(diff),1)} ${diff>0?'above':'below'} average</span>`):''}</div>${chart}</div>`;
 }
 function rangeCard(){
   const lv=S.live,tk=lv.tank;
@@ -867,7 +866,7 @@ const PAGE_VIEWS={
     let h=backPill();
     const st=f?f.state:0;
     h+=`<div class="card" style="margin-bottom:20px"><div class="s12 sub">Installed</div><div style="font-size:30px;font-weight:700;margin-top:2px">${lv?lv.v:''}</div>
-      <div class="s12 sub" style="margin-top:4px">${f&&f.pending?'New version · confirms itself after a minute without problems':!(f&&f.online)?'Connect EngineLink to a router to check GitHub for updates.':st===1?'Checking GitHub…':st===9?'Problem: '+esc(f.error):st===2?'Checked GitHub just now · Kaelor9/EngineLink':'Ready to check for updates'}</div>
+      <div class="s12 sub" style="margin-top:4px">${f&&f.pending?'New version · confirms itself after a minute without problems':!(f&&f.online)?'Connect EngineLink to a router to check GitHub for updates.':st===1?'Checking GitHub…':st===9?'Problem: '+esc(f.error):st===2?'Checked GitHub just now · Kaelor9/EngineLink':st===3?'Downloading the new version from GitHub…':st===4?'New version installed':'Ready to check for updates'}</div>
       ${st===3&&f?`<div style="margin-top:12px"><div class="cth s13"><span>Downloading ${f.total?Math.round(f.bytes/f.total*100):0} %</span><span class="sub">don't switch off</span></div><div class="bar" style="height:8px;margin-top:8px"><i style="width:${f.total?f.bytes/f.total*100:0}%;background:var(--teal)"></i></div></div>`:''}
       ${st===4?'<div class="s13" style="margin-top:10px;color:var(--green)">Installed. EngineLink restarts now; the app reconnects by itself.</div>':''}</div>`;
     const list=f&&f.list&&f.list.releases?f.list.releases:null;
@@ -1060,6 +1059,7 @@ const A={
   tankSave:async()=>{const v=parseFloat(S.tankDraft.replace(',','.'));if(!(v>0)){toast('Enter the tank size');return;}const r=await cfgSet({tank:imp()?v/0.264172:v});if(r.ok){S.editTank=false;toast('Tank size saved: '+NF(v,0)+' '+U.vu());render(true);}},
   cycle:async v=>{
     const c=cfgv();
+    if(v==='port'&&!confirm('Swap port and starboard? Use this only if the engines are shown on the wrong side. Values, trips and fuel figures follow the new sides from now on.'))return;
     if(CYCLE[v]){const [list,key]=CYCLE[v];await cfgSet({[key]:nextOf(list,v==='port'?c.portChannel:c[key])});render(true);return;}
     if(v==='can'){await cfgSet({can:c.canListen?0:1});render(true);return;}
     if(v==='ntp'){await cfgSet({ntp:c.ntp?0:1});render(true);return;}
