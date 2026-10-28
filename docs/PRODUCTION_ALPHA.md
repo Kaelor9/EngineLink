@@ -1,6 +1,14 @@
-# EngineLink application v0.5.1
+# EngineLink application v0.5.2
 
 This is a **working application foundation**, not a validated production release. The former Lab firmware is retained under \`experiments/\`. The application is in \`firmware/EngineLink/\`.
+
+## Changes in 0.5.2: steady Wi-Fi
+
+- **Web server rebuilt for a steady connection.** The stock ESP32 web server serves one connection at a time, so a connection the iPhone opened ahead of time, or one that stalled during a Wi-Fi blip, held up every other request for up to 5 seconds and the app showed "Reconnecting". EngineLink now accepts all connections at once, answers whichever has a request, and keeps connections open between requests (keep-alive), so the live updates reuse one connection instead of opening a new one twice a second.
+- **Connecting to the boat router no longer restarts the EngineLink network.** The router's channel is taken from the scan you picked it from (no second scan that hops channels), and the network only moves channel when the router is on another one; the app says so.
+- **The app keeps working when the phone joins the boat router.** EngineLink answers through the router too, and the app finds it there (its router address or enginelink.local) by itself.
+- A router that hands out 192.168.4.x addresses (the same as EngineLink) is detected; EngineLink leaves it and the app explains what to change.
+- Diagnostics shows a new Wi-Fi section: phones, channel, network restarts, requests, slowest answer, updates missed on this phone, and the reason for the last restart (for example low voltage).
 
 ## Changes in 0.5.1: iPhone home-screen app fit
 

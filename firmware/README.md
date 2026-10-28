@@ -11,6 +11,8 @@ Data on the board: settings and lifetime totals in NVS; trips, the fuel log, eng
 
 Wi-Fi: the EngineLink access point is always on with power saving off, full transmit power and a 10-minute timeout for sleeping phones. With a boat router, the access point uses the router's channel and reconnects are aimed at that channel and router, with a backoff from 15 s to 5 min; a full channel scan only runs when no phone is connected. A watchdog restarts the access point if it stops.
 
+HTTP: `EngineLinkWebServer` replaces the stock one-socket-at-a-time loop. It accepts up to 8 sockets at once, serves whichever has a request, and keeps HTTP/1.1 connections alive between requests (idle sockets close after 5 s). Responses carry `Access-Control-Allow-Origin: *`, so the app loaded from 192.168.4.1 can also reach EngineLink at its router address. `/api/live` reports that address as `net.ip`, and `net.conflict` when the router uses 192.168.4.x.
+
 Build settings: ESP32S3 Dev Module, 8 MB flash, `default_8MB` partitions (two OTA slots), OPI PSRAM, USB CDC on boot. Library: **Adafruit NeoPixel**.
 
 ## HTTP API
