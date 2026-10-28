@@ -6,11 +6,12 @@ on:
     paths:
       - 'site/**'
       - 'firmware/EngineLink/**'
+      - 'firmware/ui/**'
       - '.github/workflows/pages.yml'
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write   # creates the GitHub Release the board updates from
   pages: write
   id-token: write
 
@@ -87,6 +88,49 @@ jobs:
           idx.write_text(idx.read_text().replace("__VERSION__",version))
           print("Staged EngineLink",version,"USB",usb.stat().st_size,"update",ota.stat().st_size)
           PY
+
+      - name: Publish GitHub Release and the firmware list
+        # EngineLink reads releases.json over Wi-Fi and downloads the chosen
+        # update image from the GitHub Release. A version that already has a
+        # release is left alone, so a docs-only push never replaces firmware.
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.stage.outputs.version }}
+        run: |
+          set -euo pipefail
+          TAG="v$VERSION"
+          if ! gh release view "$TAG" >/dev/null 2>&1; then
+            NOTES_FILE="docs/releases/$TAG.md"
+            if [ -s "$NOTES_FILE" ]; then NOTES="$(cat "$NOTES_FILE")"; else NOTES="EngineLink $VERSION"; fi
+            PRE=""
+            case "$VERSION" in *-*) PRE="--prerelease";; esac
+            gh release create "$TAG" site/enginelink-update.bin site/firmware.bin \
+              --target "$GITHUB_SHA" --title "EngineLink $VERSION" --notes "$NOTES" $PRE
+          fi
+          gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" --jq '.[]' > /tmp/releases.jsonl
+          python3 - <<'PY2'
+          import json, os
+          rels = [json.loads(l) for l in open("/tmp/releases.jsonl") if l.strip()]
+          repo = os.environ["GITHUB_REPOSITORY"]
+          out = []
+          for r in rels:
+              if r.get("draft"): continue
+              asset = next((a for a in r.get("assets", []) if a["name"] == "enginelink-update.bin"), None)
+              if not asset: continue
+              tag = r["tag_name"]
+              out.append({
+                  "v": tag[1:] if tag.startswith("v") else tag,
+                  "date": (r.get("published_at") or r.get("created_at") or "")[:10],
+                  "pre": bool(r.get("prerelease")),
+                  "notes": (r.get("body") or "").strip()[:300],
+                  "url": f"https://github.com/{repo}/releases/download/{tag}/enginelink-update.bin",
+                  "size": asset["size"],
+              })
+          out.sort(key=lambda x: x["date"], reverse=True)
+          json.dump({"releases": out[:15]}, open("site/releases.json", "w"), indent=2)
+          print("releases.json:", [x["v"] for x in out[:15]])
+          PY2
 
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5

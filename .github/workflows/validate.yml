@@ -21,14 +21,15 @@ jobs:
           test -s docs/images/board-3d.png
       - name: Validate onboard UI JavaScript
         run: |
-          python3 - <<'PY'
+          python3 tools/build_ui.py --check
+          python3 - <<'PY2'
           from pathlib import Path
-          header=Path('firmware/EngineLink/ui.h').read_text(encoding='utf-8')
-          start=header.index('<script>')+len('<script>')
-          end=header.index('</script>',start)
-          Path('/tmp/enginelink-ui.js').write_text(header[start:end],encoding='utf-8')
+          html=Path('firmware/ui/app.html').read_text(encoding='utf-8')
+          start=html.index('<script>')+len('<script>')
+          end=html.index('</script>',start)
+          Path('/tmp/enginelink-ui.js').write_text(html[start:end],encoding='utf-8')
           print("UI JS size:",end-start)
-          PY
+          PY2
           node --check /tmp/enginelink-ui.js
       - name: Check version is defined once in firmware
         run: grep -E '^#define EL_VERSION "[0-9]+\.[0-9]+\.[0-9]+(-[a-z]+)?"' firmware/EngineLink/EngineLink.ino

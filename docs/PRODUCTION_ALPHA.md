@@ -1,6 +1,21 @@
-# EngineLink application v0.4.0-alpha
+# EngineLink application v0.5.0
 
 This is a **working application foundation**, not a validated production release. The former Lab firmware is retained under \`experiments/\`. The application is in \`firmware/EngineLink/\`.
+
+## Changes in 0.5.0: the new phone app
+
+- New app with Trip, Economy, Tank, History and Engines pages, light/dark/night themes, metric or imperial units and your own currency. Add it to the home screen as "Engine Link".
+- Trips are recorded automatically and survive restarts. Add notes (people, sea, wind), combine or split trips, export CSV.
+- Fuel log: log fill-ups, see fuel aboard and range. A full fill-up fine-tunes the fuel factor by itself.
+- Economy: best cruising speed, a trip planner, season statistics per RPM band and an engine health trend.
+- Much steadier Wi-Fi: power saving off, full transmit power, the EngineLink network stays on one channel and never restarts because of a router, sleeping phones are kept for 10 minutes, and a watchdog restarts the access point if it ever stops.
+- Firmware updates straight from GitHub when EngineLink is on a router with internet. A new version that does not run properly for its first minute is rolled back automatically.
+- Diagnostics: setup check, 30-second connection test per engine, calibration and raw values.
+- "Read engines automatically" is off by default and must be switched on with a confirmation.
+- `/api/cfg` refuses to switch on automatic reading without `confirm=POLL`; a restored backup never switches it on.
+- Data that grows (trips, fuel log, health) moved from NVS to LittleFS. 0.4.x totals are migrated.
+
+Not yet verified on the boat: Wi-Fi behaviour over a whole trip, the GitHub update path, gear Forward/Reverse bits, the starboard engine, the fuel scale and the voltage factor.
 
 ## Changes in 0.4.0-alpha: Volvo Penta KAD300 / EDC I
 
