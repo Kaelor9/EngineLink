@@ -1,6 +1,12 @@
-# EngineLink application v0.5.0
+# EngineLink application v0.5.1
 
 This is a **working application foundation**, not a validated production release. The former Lab firmware is retained under \`experiments/\`. The application is in \`firmware/EngineLink/\`.
+
+## Changes in 0.5.1: iPhone home-screen app fit
+
+- The app now fills the whole screen when opened from the iPhone home screen. With the see-through status bar iOS measured the page too short and left a gap at the bottom.
+- Input fields use 16 px text, so iPhone no longer zooms in when you tap one and stays zoomed.
+- Content keeps clear of the notch in landscape, and the page no longer bounces as a whole.
 
 ## Changes in 0.5.0: the new phone app
 
