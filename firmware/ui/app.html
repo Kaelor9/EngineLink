@@ -211,7 +211,9 @@ const dayLabel=t=>{
 const dur=s=>{s=Math.max(0,Math.round(s/60));const h=Math.floor(s/60),m=s%60;return h?h+' h '+String(m).padStart(2,'0')+' m':m+' min';};
 const durShort=s=>{s=Math.max(0,Math.round(s/60));const h=Math.floor(s/60),m=s%60;return h?h+' h '+String(m).padStart(2,'0'):m+' min';};
 
-const RESET={1:'power on',2:'reset button',3:'software',4:'crash',5:'watchdog',6:'watchdog',7:'watchdog',8:'deep sleep',9:'brownout (low voltage)',10:'SDIO'};
+const RESET={1:'power on',2:'reset button',3:'software or update',4:'crash',5:'watchdog',6:'watchdog',7:'watchdog',8:'deep sleep',9:'brownout (low voltage)',10:'SDIO',11:'USB (flashing or serial monitor)',12:'JTAG',14:'power glitch',15:'CPU lockup'};
+// Why a phone left the EngineLink network (Wi-Fi reason codes).
+const LEAVE={1:'unknown',2:'its login expired',3:'it left',4:'it was silent for 10 minutes',5:'too many phones',6:'not logged in',7:'not connected',8:'the phone left by itself (it may have switched to another Wi-Fi)',15:'password handshake timed out',16:'password handshake timed out',23:'login failed',200:'signal lost',201:'network not found',202:'wrong password',204:'password handshake timed out',205:'connection timed out'};
 // ---------- Network ----------
 // EngineLink answers on its own network (192.168.4.1) and, when it is on the
 // boat router, at its router address too. If the phone moves to the router's
@@ -926,7 +928,8 @@ const PAGE_VIEWS={
       <div class="rowx s12 sub">A test asks the engine for its values for 30 seconds. Only read requests are sent, never commands.</div></div>`;
     // Wi-Fi
     const w=d.wifi||{};
-    h+=`<div class="hd">Wi-Fi</div><div class="sec"><div class="rowx"><div class="grid3" style="gap:8px">${[['Phones',lv.net.cl],['Channel',w.ch||lv.net.ch],['Network restarts',w.apRestarts??'—'],['Requests',w.httpServed??'—'],['Reused',w.httpServed?Math.round(w.httpReused/w.httpServed*100)+' %':'—'],['Slowest',w.httpSlowMs!=null?w.httpSlowMs+' ms':'—'],['Phone joins',w.joins??'—'],['Missed here',S.failTotal||0],['Router drops',lv.net.rt?(w.staDrops??'—'):'—']].map(([k,v])=>`<div style="background:var(--track);border-radius:12px;padding:8px 10px"><div class="s12 sub">${k}</div><div style="font-weight:600;margin-top:2px">${v}</div></div>`).join('')}</div>
+    h+=`<div class="hd">Wi-Fi</div><div class="sec"><div class="rowx"><div class="grid3" style="gap:8px">${[['Phones',lv.net.cl],['Channel',w.ch||lv.net.ch],['Network restarts',w.apRestarts??'—'],['Requests',w.httpServed??'—'],['Reused',w.httpServed?Math.round(w.httpReused/w.httpServed*100)+' %':'—'],['Slowest',w.httpSlowMs!=null?w.httpSlowMs+' ms':'—'],['Phone joins',w.joins??'—'],['Phone drops',w.leaves??'—'],['Missed here',S.failTotal||0],['Channel changes',w.chMoves??'—'],['Router drops',lv.net.rt?(w.staDrops??'—'):'—'],['Slow loop',w.loopMaxMs!=null?w.loopMaxMs+' ms':'—']].map(([k,v])=>`<div style="background:var(--track);border-radius:12px;padding:8px 10px"><div class="s12 sub">${k}</div><div style="font-weight:600;margin-top:2px">${v}</div></div>`).join('')}</div>
+      ${w.leaves?`<div class="s12" style="margin-top:8px">Last phone drop: <b>${LEAVE[w.reason]||'code '+w.reason}</b></div>`:''}
       <div class="s12 sub" style="margin-top:8px">"Missed here" counts the live updates this phone did not get since the app was opened. Up for ${dur(d.up||0)}${d.reset!=null?' · last restart: '+(RESET[d.reset]||'code '+d.reset):''}.</div></div></div>`;
     // Calibration
     const lastFull=S.fuel&&S.fuel.log.find(r=>r.full&&r.c!=null&&r.l>0);

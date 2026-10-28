@@ -43,7 +43,7 @@
 #include "ui.h"
 #include "icons.h"
 
-#define EL_VERSION "0.5.4"
+#define EL_VERSION "0.5.5"
 // Releases list published by the Pages workflow; firmware files come from
 // GitHub Releases of the same repository. Nothing else is downloaded.
 #define EL_RELEASES_URL "https://kaelor9.github.io/EngineLink/releases.json"
@@ -511,7 +511,12 @@ volatile bool staGotConflict=false; // the router handed out an address in 192.1
 bool staConflict=false;
 uint32_t staNextTry=0,staBackoff=15000,staFails=0,staConnects=0,apRestarts=0,lastApCheck=0;
 uint32_t staConnectedAt=0;
-volatile bool apStoppedFlag=false;
+// Last access point event. AP_STOP also arrives (late) when the network only
+// changed its settings, so the watchdog acts on "stopped and not started again".
+volatile uint8_t apLastEvent=0;      // 1 started, 2 stopped
+volatile uint32_t apLastEventMs=0;
+uint32_t apChannelChanges=0;
+uint8_t apStartedChannel=0;
 bool scanBusy=false; int16_t scanCount=-1; uint32_t scanStartedMs=0;
 // Firmware from GitHub, done by a worker task so the app keeps working.
 enum FwJob : uint8_t { FW_IDLE, FW_LIST, FW_INSTALL };
@@ -543,8 +548,8 @@ bool allowTime(const String &source){
 }
 void ntpCallback(struct timeval *tv){(void)tv;ntpNotification=true;}
 void onWiFi(WiFiEvent_t e,WiFiEventInfo_t info){
-  if(e==ARDUINO_EVENT_WIFI_AP_START)++apStarts;
-  if(e==ARDUINO_EVENT_WIFI_AP_STOP){++apStops;apStoppedFlag=true;}
+  if(e==ARDUINO_EVENT_WIFI_AP_START){++apStarts;apLastEvent=1;apLastEventMs=millis();}
+  if(e==ARDUINO_EVENT_WIFI_AP_STOP){++apStops;apLastEvent=2;apLastEventMs=millis();}
   if(e==ARDUINO_EVENT_WIFI_AP_STACONNECTED)++apJoins;
   if(e==ARDUINO_EVENT_WIFI_AP_STADISCONNECTED){++apLeaves;apReason=info.wifi_ap_stadisconnected.reason;}
   if(e==ARDUINO_EVENT_WIFI_STA_DISCONNECTED)++staDisconnects;
@@ -1613,8 +1618,13 @@ void radioTuning(){
   WiFi.setSleep(false);
   esp_wifi_set_ps(WIFI_PS_NONE);
   WiFi.setTxPower(WIFI_POWER_19_5dBm);
-  wifi_country_t cc={{'E','U',' '},1,13,20,WIFI_COUNTRY_POLICY_MANUAL};
-  esp_wifi_set_country(&cc);
+  // Setting the country again on a running network makes it start over and
+  // drops every phone, so it is only set when it is not already right.
+  wifi_country_t cur={};
+  if(esp_wifi_get_country(&cur)!=ESP_OK||cur.cc[0]!='E'||cur.cc[1]!='U'||cur.schan!=1||cur.nchan!=13||cur.policy!=WIFI_COUNTRY_POLICY_MANUAL){
+    wifi_country_t cc={{'E','U',' '},1,13,20,WIFI_COUNTRY_POLICY_MANUAL};
+    esp_wifi_set_country(&cc);
+  }
 }
 void startAP(){
   // softAP() leaves a running network alone when nothing changed, so calling
@@ -1622,7 +1632,10 @@ void startAP(){
   if(WiFi.softAPIP()!=IPAddress(192,168,4,1))WiFi.softAPConfig(IPAddress(192,168,4,1),IPAddress(192,168,4,1),IPAddress(255,255,255,0));
   apStarted=WiFi.softAP(cfg.apName.c_str(),cfg.apPassword.c_str(),apChannelNow,false,6);
   esp_wifi_set_inactive_time(WIFI_IF_AP,600);
-  apStoppedFlag=false;
+  if(apStarted){
+    if(apStartedChannel&&apStartedChannel!=apChannelNow)++apChannelChanges;
+    apStartedChannel=apChannelNow;
+  }
 }
 // Blocking scan for the saved router. Only used when the network is set up.
 bool findRouter(){
@@ -1678,10 +1691,15 @@ void serviceNetwork(){
   // Watchdog for the access point.
   if((uint32_t)(millis()-lastApCheck)>=3000){
     lastApCheck=millis();
-    const bool apUp=(WiFi.getMode()&WIFI_MODE_AP)&&WiFi.softAPIP()==IPAddress(192,168,4,1);
-    if(!apUp||apStoppedFlag){
+    // Only a network that is really gone is restarted: a restart itself drops
+    // every phone, so a false alarm here is worse than none.
+    const bool modeOk=WiFi.getMode()&WIFI_MODE_AP;
+    const bool stopped=apLastEvent==2&&(uint32_t)(millis()-apLastEventMs)>=3000;
+    const bool noIp=modeOk&&!stopped&&WiFi.softAPIP()!=IPAddress(192,168,4,1);
+    if(!modeOk||stopped||noIp){
       ++apRestarts;
-      if(!(WiFi.getMode()&WIFI_MODE_AP))WiFi.mode(routerConfigured()?WIFI_AP_STA:WIFI_AP);
+      if(!modeOk)WiFi.mode(routerConfigured()?WIFI_AP_STA:WIFI_AP);
+      if(stopped){esp_wifi_start();apLastEvent=0;}
       radioTuning();startAP();
     }
   }
@@ -2660,6 +2678,7 @@ void handleDiag(){
   s+=",\"reason\":";s+=(unsigned)apReason;s+=",\"staFails\":";s+=staFails;s+=",\"staDrops\":";s+=(unsigned long)staDisconnects;
   s+=",\"staConnects\":";s+=staConnects;s+=",\"ch\":";s+=apChannelNow;
   s+=",\"conflict\":";s+=staConflict?"true":"false";
+  s+=",\"apStops\":";s+=(unsigned long)apStops;s+=",\"chMoves\":";s+=apChannelChanges;
   s+=",\"httpServed\":";s+=web.served;s+=",\"httpReused\":";s+=web.reused;
   s+=",\"httpEvicted\":";s+=web.evicted;s+=",\"httpSlowMs\":";s+=web.slowestMs;
   s+=",\"httpOpen\":";s+=web.openSockets();s+=",\"loopMaxMs\":";s+=loopMaxMs;
