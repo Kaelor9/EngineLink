@@ -324,6 +324,7 @@ struct Settings {
   float fuelCorr[2]={1.0f,1.0f}; // per physical channel, from tank-to-tank
   // ---- 0.5.0 ----
   String apName="EngineLink";
+  String hostName="enginelink"; // http://<hostName>.local and the name the router sees
   float tankL=0;             // 0 = not set yet
   uint8_t reserve=10;        // percent, 0 = off
   float defaultPrice=0;      // per litre, in the currency chosen in the app
@@ -1655,11 +1656,28 @@ void connectRouter(){
   if(staBssidKnown)WiFi.begin(cfg.ssid.c_str(),cfg.wifiPassword.c_str(),staChannel,staBssid,true);
   else WiFi.begin(cfg.ssid.c_str(),cfg.wifiPassword.c_str(),apChannelNow,nullptr,true);
 }
+// A name for http://<name>.local: letters, digits and hyphens, as DNS allows.
+bool validHostName(const String &n){
+  if(n.length()<1||n.length()>32||n[0]=='-'||n[n.length()-1]=='-')return false;
+  for(size_t i=0;i<n.length();i++){const char c=n[i];if(!((c>='a'&&c<='z')||(c>='0'&&c<='9')||c=='-'))return false;}
+  return true;
+}
+// mDNS answers <name>.local on the EngineLink network and on the router; the
+// router also learns the name from DHCP.
+void startNameService(){
+  if(mdnsReady){MDNS.end();mdnsReady=false;}
+  if(MDNS.begin(cfg.hostName.c_str())){
+    MDNS.addService("http","tcp",80);
+    MDNS.setInstanceName(cfg.apName.c_str());
+    mdnsReady=true;
+  }
+}
 void applyNetwork(){
   // Only a saved network change rebuilds the interfaces.
   const bool withRouter=routerConfigured();
   WiFi.persistent(false);
   const wifi_mode_t want=withRouter?WIFI_AP_STA:WIFI_AP;
+  WiFi.setHostname(cfg.hostName.c_str());
   if(WiFi.getMode()!=want)WiFi.mode(want);
   radioTuning();
   staConflict=false;staGotConflict=false;
@@ -1681,10 +1699,7 @@ void applyNetwork(){
     connectRouter();
     staBackoff=15000;staFails=0;staNextTry=millis()+staBackoff;
   }
-  if(!mdnsReady&&MDNS.begin("enginelink")){
-    MDNS.addService("http","tcp",80);
-    mdnsReady=true;
-  }
+  if(!mdnsReady)startNameService();
 }
 void serviceNetwork(){
   if(pendingNetwork){pendingNetwork=false;applyNetwork();}
@@ -1819,6 +1834,7 @@ void saveSettings(){
   pref.putFloat("corr0",cfg.fuelCorr[0]);
   pref.putFloat("corr1",cfg.fuelCorr[1]);
   pref.putString("apname",cfg.apName);
+  pref.putString("host",cfg.hostName);
   pref.putFloat("tank",cfg.tankL);
   pref.putUChar("reserve",cfg.reserve);
   pref.putFloat("price",cfg.defaultPrice);
@@ -1858,6 +1874,8 @@ void loadSettings(){
   cfg.fuelCorr[0]=pref.getFloat("corr0",1.0f);
   cfg.fuelCorr[1]=pref.getFloat("corr1",1.0f);
   cfg.apName=pref.getString("apname","EngineLink");
+  cfg.hostName=pref.getString("host","enginelink");
+  if(!validHostName(cfg.hostName))cfg.hostName="enginelink";
   cfg.tankL=pref.getFloat("tank",0);
   cfg.reserve=pref.getUChar("reserve",10);
   cfg.defaultPrice=pref.getFloat("price",0);
@@ -1995,6 +2013,7 @@ void handleState(){
   s+=",\"kadVolt\":";s+=cfg.kadVolt;
   s+=",\"fuelCorr\":[";s+=String(cfg.fuelCorr[0],4);s+=',';s+=String(cfg.fuelCorr[1],4);s+=']';
   s+=",\"apName\":";jsonString(s,cfg.apName);
+  s+=",\"host\":";jsonString(s,cfg.hostName);
   s+=",\"ssid\":";jsonString(s,cfg.ssid);
   s+=",\"tankL\":";s+=String(cfg.tankL,0);
   s+=",\"reserve\":";s+=cfg.reserve;
@@ -2367,6 +2386,7 @@ void handleLive(){
   s+="},\"price\":";jnum(s,latestPrice(),2);
   s+=",\"sog\":";if(sogFresh())jnum(s,sogKnots,1);else s+="null";
   s+=",\"net\":{\"ap\":";jsonString(s,cfg.apName);
+  s+=",\"host\":";jsonString(s,cfg.hostName);
   s+=",\"cl\":";s+=WiFi.softAPgetStationNum();
   s+=",\"ch\":";s+=apChannelNow;
   s+=",\"rt\":";s+=routerConfigured()?"true":"false";
@@ -2541,6 +2561,12 @@ void handleCfg(){
   }
   if(web.hasArg("rawKeep")){const int d=web.arg("rawKeep").toInt();if(d<0||d>3650){reply(false,"Invalid value",400);return;}cfg.rawKeepDays=d;}
   if(web.hasArg("ntp")){cfg.ntpOn=web.arg("ntp")=="1";ntpStarted=false;}
+  if(web.hasArg("host")){
+    String v=web.arg("host");v.trim();v.toLowerCase();v.replace(' ','-');
+    if(v.endsWith(".local"))v.remove(v.length()-6);
+    if(!validHostName(v)){reply(false,"Use 1 to 32 letters, digits or hyphens, for example enginelink",400);return;}
+    if(v!=cfg.hostName){cfg.hostName=v;WiFi.setHostname(v.c_str());startNameService();}
+  }
   if(web.hasArg("ntpServer")){String v=web.arg("ntpServer");v.trim();if(v.length()<3||v.length()>63){reply(false,"Invalid server",400);return;}cfg.ntpServer=v;ntpStarted=false;}
   if(web.hasArg("port")){const int p=web.arg("port").toInt();if(p<0||p>2){reply(false,"Invalid socket choice",400);return;}cfg.portChannel=p;}
   if(web.hasArg("can")){
@@ -2899,6 +2925,7 @@ void handleBackup(){
   s+="\"tank\":";jnum(s,cfg.tankL,0);s+=",\"reserve\":";s+=cfg.reserve;s+=",\"price\":";jnum(s,cfg.defaultPrice,2);
   s+=",\"tripEnd\":";s+=cfg.tripEndMin;s+=",\"autoPoll\":";s+=cfg.autoPoll?1:0;s+=",\"rawKeep\":";s+=cfg.rawKeepDays;
   s+=",\"ntp\":";s+=cfg.ntpOn?1:0;s+=",\"ntpServer\":";jsonString(s,cfg.ntpServer);
+  s+=",\"host\":";jsonString(s,cfg.hostName);
   s+=",\"port\":";s+=cfg.portChannel;s+=",\"protocol\":";s+=cfg.protocol==PROTO_KAD?"\"kad\"":"\"j1587\"";
   s+=",\"fuelDiv\":";s+=cfg.kadFuelDiv;s+=",\"volt\":";s+=cfg.kadVolt;
   s+=",\"corr0\":";jnum(s,cfg.fuelCorr[0],4);s+=",\"corr1\":";jnum(s,cfg.fuelCorr[1],4);

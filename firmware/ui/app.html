@@ -224,7 +224,8 @@ function hostCandidates(){
   const h=[''],add=x=>{if(x&&x!==location.origin&&!h.includes(x))h.push(x);};
   add('http://192.168.4.1');
   try{const ip=localStorage.getItem('el.ip');if(ip)add('http://'+ip);}catch(e){}
-  add('http://enginelink.local');
+  let host='enginelink';try{host=localStorage.getItem('el.host')||host;}catch(e){}
+  add('http://'+host+'.local');if(host!=='enginelink')add('http://enginelink.local');
   return h;
 }
 async function findHost(){
@@ -321,6 +322,7 @@ const gearName=v=>{if(!fin(v))return '—';const g=v&0x18;return g===0?'Neutral'
 function onLive(){
   const lv=S.live;
   if(lv.net&&lv.net.ip)rememberIp(lv.net.ip);
+  if(lv.net&&lv.net.host&&lv.net.host!==S.hostSeen){S.hostSeen=lv.net.host;try{localStorage.setItem('el.host',lv.net.host);}catch(e){}}
   // The phone's clock sets EngineLink's clock when nothing better is there.
   if((!lv.utc||Math.abs(lv.utc*1000-Date.now())>90000)&&Date.now()-S.timeSentAt>300000){S.timeSentAt=Date.now();post('/api/phone-time',{ms:String(Date.now())});}
   const t=totalLph();
@@ -845,6 +847,7 @@ function vSettings(){
 }
 
 // ---------- Sub-pages ----------
+const hostDraft=(d,c)=>String(d.hostName??(c.host||'enginelink')).trim().toLowerCase().replace(/\s+/g,'-').replace(/\.local$/,'')||'enginelink';
 const PAGE_VIEWS={
   dest(){
     let h=backPill()+`<div class="sec">${P.places.length?P.places.map((p,i)=>`<div class="row"><span><span class="rt">${esc(p[0])}</span><span class="rh">${NF(p[1],1).replace(/[.,]0$/,'')} nm one way</span></span><button class="btn sm" style="width:40px;padding:0" data-a="placeDel" data-v="${i}" aria-label="Delete ${esc(p[0])}">${svg(IC.trash,18,'var(--red)',2)}</button></div>`).join(''):'<div class="empty">No places yet. Add the ones you sail to most.</div>'}</div>`;
@@ -868,7 +871,12 @@ const PAGE_VIEWS={
       <label class="s12 sub">New password<span style="display:grid;grid-template-columns:1fr auto;gap:8px;margin-top:6px"><input class="field" type="${d.apShow?'text':'password'}" data-i="apPass" value="${esc(d.apPass)}" placeholder="${c.defaultPassword?'Now: 12345678 (factory)':'Unchanged'}" autocomplete="new-password"><button class="btn" data-a="apShow">${d.apShow?'Hide':'Show'}</button></span></label>
       <div class="s12 sub">${d.apPass&&d.apPass.length<8?'At least 8 characters.':'Phones that are connected now need the new name and password afterwards.'}</div>
       <button class="btn pri" data-a="apSave">Save</button></div></div>
-      ${c.defaultPassword?'<div class="card s13" style="background:var(--osoft);color:var(--orange)">EngineLink still uses the factory password 12345678. Choose your own.</div>':''}`;
+      ${c.defaultPassword?'<div class="card s13" style="background:var(--osoft);color:var(--orange);margin-bottom:26px">EngineLink still uses the factory password 12345678. Choose your own.</div>':''}
+      <div class="hd">Address in the browser</div>
+      <div class="sec" style="padding:14px 18px"><div class="stack" style="gap:10px">
+      <label class="s12 sub">Name<span style="display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center;margin-top:6px"><input class="field" data-i="hostName" value="${esc(d.hostName??(c.host||'enginelink'))}" autocapitalize="none" autocorrect="off" spellcheck="false" aria-label="Address name"><span class="s14 sub">.local</span></span></label>
+      <div class="s12 sub">Open <b style="color:var(--text)">http://${esc(hostDraft(d,c))}.local</b> on the EngineLink network or on the boat router. <b style="color:var(--text)">http://192.168.4.1</b> always works on the EngineLink network. Letters, digits and hyphens only.</div>
+      <button class="btn pri" data-a="hostSave">Save name</button></div></div>`;
   },
   router(){
     const lv=S.live,c=cfgv();if(!lv||!c)return backPill()+waiting();
@@ -878,7 +886,7 @@ const PAGE_VIEWS={
     }
     if(lv.net.sta){
       h+=`<div class="sec"><div class="row"><span><span class="rt">${esc(lv.net.ssid)}</span><span class="rh" style="color:var(--green)">Connected · ${lv.net.rssi>-60?'strong':lv.net.rssi>-72?'good':'weak'} signal (${lv.net.rssi} dBm)</span></span><button class="btn sm" data-a="wifiForget">Disconnect</button></div>
-        <div class="rowx s13 sub">On the router's Wi-Fi, EngineLink is at <b style="color:var(--text)">http://${esc(lv.net.ip||'')}</b> or <b style="color:var(--text)">http://enginelink.local</b>. The app finds it there by itself.</div></div>`;
+        <div class="rowx s13 sub">On the router's Wi-Fi, EngineLink is at <b style="color:var(--text)">http://${esc(lv.net.ip||'')}</b> or <b style="color:var(--text)">http://${esc(lv.net.host||'enginelink')}.local</b>. The app finds it there by itself.</div></div>`;
     }else if(!lv.net.conflict){
       if(c.router)h+=`<div class="card s13" style="margin-bottom:14px">Saved: <b>${esc(c.ssid)}</b> · not reachable right now. EngineLink tries again by itself, aimed at the router so your phone is not disturbed. <button data-a="wifiForget" style="color:var(--teal)">Forget</button></div>`;
       const sc=S.scan;
@@ -1104,7 +1112,7 @@ const A={
   backup:()=>download('/api/backup'),
   restore:()=>{const i=document.createElement('input');i.type='file';i.accept='.json,application/json';i.onchange=async()=>{
     try{const j=JSON.parse(await i.files[0].text());if(j.app!=='EngineLink')throw 0;
-      const s=j.settings||{},data={};['tank','reserve','price','tripEnd','rawKeep','ntp','ntpServer','port','protocol','fuelDiv','volt'].forEach(k=>{if(s[k]!=null)data[k]=s[k];});
+      const s=j.settings||{},data={};['tank','reserve','price','tripEnd','rawKeep','ntp','ntpServer','host','port','protocol','fuelDiv','volt'].forEach(k=>{if(s[k]!=null)data[k]=s[k];});
       await post('/api/cfg',data);if(s.corr0)await post('/api/kad/config',{corr0:s.corr0,corr1:s.corr1});
       if(j.prefs){Object.assign(P,j.prefs);await post('/api/prefs',{p:JSON.stringify(P)});applyTheme();}
       toast('Settings restored');load('state');}catch(e){toast('That is not an EngineLink backup file');}};i.click();},
@@ -1122,6 +1130,8 @@ const A={
   valsDef:()=>{VALS.forEach((v,i)=>P.vals[v[0]]=i<9?1:0);savePrefs();render(true);},
   // Wi-Fi
   apShow:()=>{S.d.apShow=!S.d.apShow;render(true);},
+  hostSave:async()=>{const c=cfgv(),v=hostDraft(S.d,c);if(!/^[a-z0-9]([a-z0-9-]{0,30}[a-z0-9])?$/.test(v)){toast('Use letters, digits or hyphens, for example enginelink');return;}
+    const r=await cfgSet({host:v});if(r.ok){S.d.hostName=null;try{localStorage.setItem('el.host',v);}catch(e){}toast('EngineLink is now at http://'+v+'.local');render(true);}},
   apSave:async()=>{const c=cfgv(),d=S.d;const pass=d.apPass||'';
     if(pass&&pass.length<8){toast('The password needs at least 8 characters');return;}
     if(!pass&&d.apName===c.apName){toast('Nothing changed');return;}
@@ -1195,7 +1205,7 @@ const I={
   price:v=>{clearTimeout(I._p);I._p=setTimeout(()=>{const p=parseFloat(v.replace(',','.'));if(p>=0)post('/api/cfg',{price:p});},700);},
   ntpServer:v=>{clearTimeout(I._n);I._n=setTimeout(()=>{if(v.trim().length>=3)post('/api/cfg',{ntpServer:v.trim()});},900);},
   newPlace:v=>S.newPlace=v,newNm:v=>S.newNm=v,
-  apName:v=>S.d.apName=v,apPass:v=>S.d.apPass=v,wifiPass:v=>S.wifiPass=v,
+  apName:v=>S.d.apName=v,hostName:v=>S.d.hostName=v,apPass:v=>S.d.apPass=v,wifiPass:v=>S.wifiPass=v,
   voltMeas:v=>{S.voltMeas=v;},
   planCustom:v=>{P.custom=v;savePrefs();},
   planSlide:v=>{P.planIdx=+v;savePrefs();render(true);},
