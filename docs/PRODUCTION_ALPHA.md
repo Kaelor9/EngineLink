@@ -1,6 +1,10 @@
-# EngineLink application v0.5.3
+# EngineLink application v0.5.4
 
 This is a **working application foundation**, not a validated production release. The former Lab firmware is retained under \`experiments/\`. The application is in \`firmware/EngineLink/\`.
+
+## Changes in 0.5.4: iPhone bottom band
+
+- **iPhone home-screen app fills the screen to the bottom.** iOS can move the page below the status bar but still size it as if it began at the top of the screen, which left an unused band the height of the status bar under the menu. The app now detects this (the page is then exactly two status bars shorter than the screen) and reaches down itself; anything iOS shows below the page takes the menu colour. This only applies to iPhone and iPad: Android phones are never changed, because there the same gap is just the status bar plus the Android navigation bar.
 
 ## Changes in 0.5.3: iPhone home-screen layout
 
