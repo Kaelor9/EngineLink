@@ -11,7 +11,7 @@ const cfg={router:true,portChannel:1,apChannel:6,timePref:'auto',canListen:false
   kadFuelDiv:128,kadVolt:0,fuelCorr:[1,1],apName:'EngineLink',host:'enginelink',ssid:'Boat router',tankL:575,reserve:10,price:20.03,
   tripEnd:5,autoPoll:true,rawKeep:90,ntp:true,ntpServer:'pool.ntp.org',scaleOk:false,voltOk:false,fineTunes:1,gear:[0,0,0,0]};
 let prefs='{}',gearStep=-1,odd=false;
-let lastSp=null,lastDl={what:'raw engine data',bytes:287000,ms:362000,findMs:2100,sdMs:3400,netMs:356000,ap:false,rssi:-81,active:false};
+let lastSp=null,lastDl={what:'raw engine data',raw:1690000,z:true,bytes:287000,ms:362000,findMs:2100,sdMs:3400,netMs:356000,ap:false,rssi:-81,active:false};
 // "Discover more values": position per engine, -1 not started; found values.
 const disc=[-1,-1],DISC_FOUND=[256,258,259,260,261,263,264,265,266,267,288,289,291,293,295];
 // Example fill-ups: 45 L (full) then 12.1 L (full), logged as "nozzle clicked
