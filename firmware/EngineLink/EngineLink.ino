@@ -47,7 +47,7 @@
 #include "diagrules.h"
 #include "miniz.h"  // the deflate compressor in the chip's ROM
 
-#define EL_VERSION "0.7.6"
+#define EL_VERSION "0.7.7"
 // Releases list published by the Pages workflow; firmware files come from
 // GitHub Releases of the same repository. Nothing else is downloaded.
 #define EL_RELEASES_URL "https://kaelor9.github.io/EngineLink/releases.json"
@@ -517,6 +517,13 @@ struct KadLink {
   float answered=NAN;  // share of requests answered in the last full window
   uint8_t miss[16]={};          // unanswered in a row, per slow value, while others answer
   uint16_t skip=0;              // slow values this engine does not answer (bits)
+  // 0.7.7: our own recent requests, so their echo is always recognised even
+  // when it is handled late; the echo of the current request must be seen
+  // before a reply counts (a late reply to the previous request would
+  // otherwise be filed under the wrong value).
+  uint16_t sentIdx[4]={};uint64_t sentAt[4]={};uint8_t sentPos=0;
+  bool echoSeen=false;uint32_t echoes=0;
+  uint8_t foreignBurst=0;uint64_t foreignFirstAt=0;
   bool discActive=false;        // "Discover more values" running
   uint16_t discPos=0;
   uint64_t discFound=0;         // answered indices KAD_DISC_FIRST.. (bits)
@@ -1314,17 +1321,32 @@ void decodeKad(const Frame &f,Decoded &d){
     const uint16_t index=((uint16_t)f.data[3]<<8)|f.data[4];
     d.kadRequest=true;d.kadIndex=index;
     // Timestamps come from two tasks, so compare without unsigned wrap-around.
-    const int64_t since=(int64_t)f.bootMs-(int64_t)k.pendingAt;
-    const bool own=k.ownPending&&k.pendingIndex==index&&since>-50&&since<(int64_t)KAD_REPLY_MS;
-    d.kadOwn=own;d.kadEcho=own;
-    if(!own){
-      ++k.foreignRequests;k.lastForeignAt=f.bootMs;
-      if(k.polling)stopPolling(f.channel,"Another device already polls this engine, so EngineLink only listens");
-      k.pending=true;k.pendingIndex=index;k.pendingAt=f.bootMs;
+    // Our own echo: any of our last requests with this value, sent just
+    // before. Judged by the frame's own time, so a late-handled echo still
+    // counts as ours.
+    bool own=false;
+    for(uint8_t i=0;i<4;i++){
+      const int64_t since=(int64_t)f.bootMs-(int64_t)k.sentAt[i];
+      if(k.sentAt[i]&&k.sentIdx[i]==index&&since>-50&&since<(int64_t)KAD_REPLY_MS){own=true;break;}
     }
+    d.kadOwn=own;d.kadEcho=own;
+    if(own){
+      ++k.echoes;
+      if(k.ownPending&&k.pendingIndex==index)k.echoSeen=true;
+      return;
+    }
+    ++k.foreignRequests;k.lastForeignAt=f.bootMs;
+    // Only a device that keeps asking is another device: three requests that
+    // are not ours within 10 s. A single odd frame no longer stops reading.
+    if(!k.foreignBurst||f.bootMs-k.foreignFirstAt>10000){k.foreignBurst=0;k.foreignFirstAt=f.bootMs;}
+    if(++k.foreignBurst>=3&&k.polling)stopPolling(f.channel,"Another device already polls this engine, so EngineLink only listens");
+    if(!k.ownPending){k.pending=true;k.pendingIndex=index;k.pendingAt=f.bootMs;}
     return;
   }
   if(!k.pending||f.bootMs<k.pendingAt||f.bootMs-k.pendingAt>KAD_REPLY_MS){++k.orphanReplies;return;}
+  // A reply to our request comes after its echo. Without the echo it belongs
+  // to an earlier request: drop it rather than store it under this value.
+  if(k.ownPending&&k.echoes>4&&!k.echoSeen){++k.orphanReplies;return;}
   const uint16_t index=k.pendingIndex;
   k.pending=false;
   if(k.ownPending){
@@ -1435,10 +1457,11 @@ bool startPolling(uint8_t ch,String &why){
   KadLink &k=kad[ch];
   if(cfg.protocol!=PROTO_KAD){why="Select the Volvo Penta KAD / EDC1 protocol first";return false;}
   if(!uartReady[ch]){why="Receiver for this connector did not start";return false;}
-  if(k.foreignRequests&&elapsedMs()-k.lastForeignAt<60000){why="Another device is polling this engine. Listening is enough";return false;}
+  if(k.foreignBurst>=3&&elapsedMs()-k.lastForeignAt<60000){why="Another device is polling this engine. Listening is enough";return false;}
   if(uart_set_pin(portFor(ch),txPinFor(ch),UART_PIN_NO_CHANGE,UART_PIN_NO_CHANGE,UART_PIN_NO_CHANGE)!=ESP_OK){why="Could not attach the TX pin";return false;}
   k.txAttached=true;k.polling=true;k.stopReason="";k.unanswered=0;k.ownPending=false;
   memset(k.miss,0,sizeof(k.miss));k.skip=0;k.winReq=k.winRep=0;k.answered=NAN;
+  k.echoSeen=false;k.foreignBurst=0;
   k.startedMs=millis();k.lastPollMs=0;
   return true;
 }
@@ -1452,6 +1475,10 @@ void writeTxRecord(uint8_t ch,const uint8_t *req,uint16_t index){
 }
 void serviceKad(){
   if(cfg.protocol!=PROTO_KAD)return;
+  // Handle what has already arrived first: after a busy moment (a download,
+  // a report) the reply is often waiting in the queue, and judging the
+  // request unanswered before reading it mixed up requests and replies.
+  {Frame f;int k=0;while(framesQueue&&k<128&&xQueueReceive(framesQueue,&f,0)==pdTRUE){processFrame(f);k++;}}
   const uint64_t now=elapsedMs();
   for(uint8_t ch=0;ch<2;ch++){
     KadLink &k=kad[ch];
@@ -1510,7 +1537,8 @@ void serviceKad(){
       continue;
     }
     ++k.requests;++k.winReq;
-    k.ownPending=true;k.pending=true;k.pendingIndex=index;k.pendingAt=elapsedMs();
+    k.ownPending=true;k.pending=true;k.pendingIndex=index;k.pendingAt=elapsedMs();k.echoSeen=false;
+    k.sentIdx[k.sentPos]=index;k.sentAt[k.sentPos]=k.pendingAt;k.sentPos=(k.sentPos+1)%4;
     writeTxRecord(ch,req,index);
   }
 }
