@@ -34,7 +34,7 @@ Build settings: ESP32S3 Dev Module, 8 MB flash, `default_8MB` partitions (two OT
 | POST | `/api/trip/reset` | Reset trip counter |
 | POST | `/api/update` | Wi-Fi firmware update (multipart, app image only) |
 | POST | `/api/reboot`, `/api/factory-reset` (`confirm=ERASE`, `keep=1` keeps trips and the fuel log) | Maintenance |
-| POST | `/api/led/test` | 16 s LED demonstration |
+| POST | `/api/led/test` · GET `/api/led` | Show every status light pattern for 3 s each · the LED language (patterns, colours, the one on now) |
 | GET | `/api/live` | Compact live data for the app (polled every 0.5 s) |
 | GET | `/api/trips` · POST `/api/trip/note`, `/combine`, `/split` | Trip list and editing |
 | GET | `/api/fuel` · POST `/api/fuel/add` (`q` 0 not full, 1 clicked off, 2 topped up), `/edit` (`i`, `q`, `use` 0 auto/1 use/2 never), `/delete` | Fuel log with calibration state per entry, calibration result (`cal`), tank ± |
@@ -44,6 +44,11 @@ Build settings: ESP32S3 Dev Module, 8 MB flash, `default_8MB` partitions (two OT
 | POST | `/api/wifi/ap`, `/connect`, `/forget` · GET `/api/wifi/scan` | EngineLink network and boat router |
 | GET | `/api/diag` · POST `/api/diag/test`, `/api/diag/focus` (`idx`, `secs` ≤ 90) | Diagnostics, 30 s connection test, data quality counters, one value read in every slow slot (gear learning) |
 | GET | `/api/sd/info` · POST `/api/sd/wipe` (`confirm=WIPE`) | SD card |
+| GET | `/api/events` · POST `/api/events/ack` (`id` or `all`), `/api/mark` | Diagnosis events, marking them seen, "Something's odd" |
+| GET | `/api/event/series` (`id`), `/api/trip/series` (`id`), `/api/series/recent` (`secs` 60–3600) | Second-by-second curves (columns `t`, `rpm`, `req`, `lph`, `cool`, `air`, `boost`, `volt`, each `[port..., starboard...]` by channel), at most 600 points |
+| GET | `/api/export/series.csv` (`id`) | A trip's 1 Hz log as CSV |
+| GET | `/api/life` | Each engine's life story and its learned normal values per rpm band |
+| POST | `/api/kad/discover` (`ch`) | Ask once for each KAD value 256–319 (read requests only; reading must be on). Progress in `/api/diag` → `reading` |
 | GET | `/api/export/trips.csv`, `/api/export/raw.csv`, `/api/backup` | Downloads |
 | POST | `/api/fw/check`, `/api/fw/install` · GET `/api/fw/status` | Firmware from GitHub Releases |
 

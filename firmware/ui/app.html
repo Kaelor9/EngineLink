@@ -161,6 +161,10 @@ const IC={
   therm:'M14 14.8V4.5a2 2 0 0 0-4 0v10.3a4 4 0 1 0 4 0zM12 9v7',
   check:'M5 12l5 5 9-10',
   trash:'M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3',
+  alert:'M12 4l9 16H3L12 4zM12 10v4M12 17.5v.01',
+  flag:'M5 21V4M5 4h11l-2 4 2 4H5',
+  bulb:'M9 18h6M10 21h4M12 3a6 6 0 0 0-4 10.5c.8.8 1 1.5 1 2.5h6c0-1 .2-1.7 1-2.5A6 6 0 0 0 12 3z',
+  chart:'M4 19V5M4 19h16M8 15l3-4 3 2 4-6',
   down:'M12 4v11M7 10l5 5 5-5M5 20h14',
   pen:'M4 20h4L19 9l-4-4L4 16zM13.5 6.5l4 4',
   back:'M15 5l-7 7 7 7',
@@ -173,6 +177,7 @@ const svg=(d,w=20,color='currentColor',sw=1.9)=>`<svg class="ico" width="${w}" h
 // ---------- State ----------
 const S={tab:'trip',page:null,back:null,backScroll:0,live:null,liveAt:0,fails:0,conn:true,
   trips:null,fuel:null,econ:null,diag:null,sd:null,state:null,fw:null,scan:null,hist:[],lastHist:0,
+  chartM:{},evSeries:{},tripSeries:{},evOpen:null,tripView:null,
   open:null,selMode:null,sel:[],raw:false,quick:null,sheet:null,d:{},info:null,
   warm:{phase:'idle',seen:0,samples:[],startedAt:0},healthOpen:null,svcOpen:null,advOpen:false,editTank:false,tankDraft:'',
   wifiPick:null,wifiPass:'',newPlace:'',newNm:'',voltMeas:'',timeSentAt:0,fuelOpen:null,firstLive:true};
@@ -190,7 +195,7 @@ function savePrefs(){clearTimeout(prefsTimer);prefsTimer=setTimeout(()=>post('/a
 const imp=()=>P.units==='imperial';
 const U={
   vol:l=>imp()?l*0.264172:l, vu:()=>imp()?'gal':'L', ru:()=>imp()?'gal/h':'L/h',
-  temp:c=>imp()?c*9/5+32:c, tu:()=>imp()?'°F':'°C',
+  temp:c=>imp()?c*9/5+32:c, tempD:d=>imp()?d*9/5:d, tu:()=>imp()?'°F':'°C',
   press:kpa=>imp()?kpa*0.145038:kpa/100, pu:()=>imp()?'psi':'bar',
   perNm:()=>imp()?'gal/nm':'L/nm'
 };
@@ -200,6 +205,7 @@ const money=(v,d=0)=>fin(v)?NF(v,d)+' '+cur():'—';
 const L=(l,d=1)=>NF(U.vol(l),d);
 
 // ---------- Time ----------
+async function loadTripSeries(id){if(S.tripSeries[id]!==undefined)return;try{S.tripSeries[id]=await get('/api/trip/series?id='+id,15000);}catch(e){S.tripSeries[id]=null;}render(true);}
 const hm=t=>t?new Date(t*1000).toLocaleTimeString(LOC,{hour:'2-digit',minute:'2-digit'}):'—';
 const dayKey=t=>{const d=new Date(t*1000);return d.getFullYear()*10000+(d.getMonth()+1)*100+d.getDate();};
 const dayLabel=t=>{
@@ -302,6 +308,10 @@ async function load(what){
     if(what==='sd')S.sd=await get('/api/sd/info',8000);
     if(what==='state')S.state=await get('/api/state',6000);
     if(what==='fw')S.fw=await get('/api/fw/status',4000);
+    if(what==='events')S.events=await get('/api/events',5000);
+    if(what==='life')S.life=await get('/api/life',5000);
+    if(what==='led')S.led=await get('/api/led',4000);
+    if(what==='recent'){S.recentAt=Date.now();S.recent=await get('/api/series/recent?secs=600',8000);}
   }catch(e){}
   render();
 }
@@ -342,6 +352,13 @@ function onLive(){
   S.prevAct=lv.trip.act;
   if(S.prevFw!==lv.fw&&S.page==='fw')load('fw');
   S.prevFw=lv.fw;
+  // A new event: tell the phone, refresh the list.
+  const le=lv.ev&&lv.ev.last;
+  if(le&&S.lastEvId!==undefined&&le.id!==S.lastEvId&&le.sev>=1){try{navigator.vibrate&&navigator.vibrate(le.sev>1?[300,120,300,120,300]:[200,100,200]);}catch(e){}toast(evTitle(le));}
+  if(le&&le.id!==S.lastEvId&&(S.page==='events'||S.events))load('events');
+  S.lastEvId=le?le.id:0;
+  if(S.tab==='engines'&&!S.page&&(!S.recentAt||Date.now()-S.recentAt>10000))load('recent');
+  if(S.page==='led'&&(!S.ledAt||Date.now()-S.ledAt>1000)){S.ledAt=Date.now();load('led');}
   if(!S.page&&(S.tab==='trip'||S.tab==='engines'||S.tab==='tank'))render();
 }
 
@@ -391,7 +408,7 @@ function warmBox(){
 
 // ---------- Header, nav ----------
 const TITLES={trip:'Trip',economy:'Economy',tank:'Tank',history:'History',engines:'Engines',more:'Settings'};
-const PAGES={dest:'Saved places',vals:'Engine values',ap:'EngineLink Wi-Fi',router:'Boat router',fw:'Firmware',diag:'Diagnostics'};
+const PAGES={dest:'Saved places',vals:'Engine values',ap:'EngineLink Wi-Fi',router:'Boat router',fw:'Firmware',diag:'Diagnostics',events:'Events',trip:'Trip timeline',led:'Status light'};
 function header(){
   const title=S.page?PAGES[S.page]:TITLES[S.tab];
   return `<div class="top"><h1>${title}</h1>${S.tab!=='more'&&!S.page?`<button class="gear" data-a="tab" data-v="more" aria-label="Settings">${svg(IC.gear,20,'var(--sub)',1.8)}</button>`:''}</div>`;
@@ -411,6 +428,9 @@ function render(force){
 }
 function view(){
   if(S.page)return PAGE_VIEWS[S.page]();
+  return alertCard()+mainView();
+}
+function mainView(){
   return ({trip:vTrip,economy:vEconomy,tank:vTank,history:vHistory,engines:vEngines,more:vSettings})[S.tab]();
 }
 const waiting=t=>`<div class="card"><div class="empty">${t||'Waiting for EngineLink…'}</div></div>`;
@@ -468,7 +488,7 @@ function rangeCard(){
   const nm=hours!=null&&fin(lv.sog)&&lv.sog>2?hours*lv.sog:null;
   return `<button class="card" data-a="tab" data-v="tank" style="text-align:left;width:100%;display:flex;justify-content:space-between;align-items:center"><div><span class="lbl" style="color:var(--blue)">${svg(IC.pin,16,'var(--blue)',2.2)}Range</span>
     <div style="font-size:30px;font-weight:700;margin-top:6px">${nm!=null?NF(nm,0)+' <span class="unit">nm</span> <span style="font-size:18px;font-weight:600" class="sub">· '+dur(hours*3600)+'</span>':hours!=null?dur(hours*3600):L(usable,0)+' <span class="unit">'+U.vu()+' usable</span>'}</div>
-    <div class="s13 sub" style="margin-top:2px">${hours!=null?(nm!=null?'at '+NF(lv.sog,1)+' kn, ':'at '+L(tot,1)+' '+U.ru()+', ')+(tk.reserve?'keeping '+tk.reserve+' % reserve':'until the tank is empty'):'Shown in time once an engine runs'}</div></div><span class="sub">›</span></button>`;
+    <div class="s13 sub" style="margin-top:2px">${hours!=null?(nm!=null?'at '+NF(lv.sog,1)+' kn, ':'at '+L(tot,1)+' '+U.ru()+', ')+(tk.reserve?'keeping '+tk.reserve+' % reserve':'until the tank is empty')+(fin(tk.pm)&&tk.pm>0?' · ± '+dur(tk.pm/tot*3600):''):'Shown in time once an engine runs'}</div></div><span class="sub">›</span></button>`;
 }
 
 // ---------- Economy ----------
@@ -736,7 +756,7 @@ function vHistory(){
         ${crosses?`<div style="padding:0 18px 12px"><span class="chip" style="background:var(--osoft);color:var(--orange);font-size:12px">Ended ${dayLabel(u.e)}</span></div>`:''}
         ${open?`<div style="padding:0 18px 14px" class="stack">
           <div class="grid3" style="gap:8px;font-size:13px"><div><span style="color:var(--port);font-weight:600">${pi<0?'J7':'Port'}</span><br><b style="font-size:16px">${L(u.l[port],1)} ${U.vu()}</b></div><div><span style="color:var(--stbd);font-weight:600">${pi<0?'J6':'Starboard'}</span><br><b style="font-size:16px">${L(u.l[stbd],1)} ${U.vu()}</b></div><div><span class="sub" style="font-weight:600">Cost</span><br><b style="font-size:16px">${price>0?money(u.fuel*price):'—'}</b></div></div>
-          <div class="grid2" style="gap:8px"><button class="btn" data-a="sheet" data-v="notes:${u.note.id}">${svg(IC.pen,15)}${nl?'Edit notes':'Add notes'}</button><button class="btn" data-a="dlTrips" data-v="${u.ids.join(',')}">${svg(IC.down,15)}Download</button></div>
+          <div class="grid2" style="gap:8px"><button class="btn" data-a="sheet" data-v="notes:${u.note.id}">${svg(IC.pen,15)}${nl?'Edit notes':'Add notes'}</button><button class="btn" data-a="tripView" data-v="${u.ids.join(',')}">${svg(IC.chart,15)}Timeline</button><button class="btn" data-a="dlTrips" data-v="${u.ids.join(',')}">${svg(IC.down,15)}Download</button></div>
           ${u.combined?u.parts.map(p=>`<div class="cth s13 sub"><span>${hm(p.s)} – ${hm(p.e)}</span><span>${L((p.l[0]||0)+(p.l[1]||0),1)} ${U.vu()} · ${dur(p.run)}</span></div>`).join('')+`<button class="btn" style="background:var(--osoft);color:var(--orange);font-weight:600" data-a="split" data-v="${u.group}">Split into separate trips</button>`:''}
         </div>`:''}</div>`;
     });
@@ -793,8 +813,8 @@ function vEngines(){
       ${!e.poll&&lv.proto==='kad'&&e.why?`<div class="s12 sub" style="margin-top:10px">${esc(e.why)}</div>`:''}</div>`;
   }
   if(lv.proto==='kad'&&es.every(e=>!e.poll))h+=`<div class="card s14 sub">EngineLink only listens right now. Switch on "Read engines automatically" in Settings, or start reading under Diagnostics.</div>`;
-  h+=`<button data-a="page" data-v="vals" data-b="engines" style="align-self:center;color:var(--teal);font-size:13.5px">Choose which values to show</button>`;
-  h+=syncCard(es)+healthCard(es)+serviceCard(es);
+  h+=`<div style="display:flex;justify-content:center;gap:18px;flex-wrap:wrap"><button data-a="page" data-v="vals" data-b="engines" style="color:var(--teal);font-size:13.5px">Choose which values to show</button><button data-a="mark" style="color:var(--teal);font-size:13.5px;display:inline-flex;gap:6px;align-items:center">${svg(IC.flag,15,'var(--teal)',2)}Something's odd</button></div>`;
+  h+=recentCard()+syncCard(es)+balanceCard(es)+healthCard(es)+lifeCard(es)+serviceCard(es);
   return h+'</div>';
 }
 function syncCard(es){
@@ -915,15 +935,157 @@ function vSettings(){
     <div class="row"><span><span class="rt">Language</span><span class="rh">More languages later</span></span><span class="rv">English</span></div></div>`;
   // Test and data
   const todo=setupItems().filter(i=>!i.ok&&!i.opt).length;
-  h+=`<div class="hd">Test and data</div><div class="sec">${row('page','diag','Diagnostics','Tests, calibration and logs',rv(todo?todo+' to do':'All set'))}</div>`;
+  const evn=lv&&lv.ev?lv.ev.n:0;
+  h+=`<div class="hd">Test and data</div><div class="sec">${row('page','events','Events','What EngineLink noticed, with the data around it',rv(evn?evn+' new':'None new'))}${row('page','diag','Diagnostics','Tests, calibration and logs',rv(todo?todo+' to do':'All set'))}</div>`;
   // Device
   h+=`<div class="hd">Device</div><div class="sec">${row('page','fw','Firmware','Updates and earlier versions',rv(lv?lv.v:''))}
     ${row('backup','','Back up settings','Settings, places and service',rv('Download'))}
     ${row('restore','','Restore settings','From a backup file',rv('Choose file'))}
     ${row('sheet','install','Install as app','Add Engine Link to your home screen',rv('Add'))}
+    ${row('page','led','Status light','What the light on the board means',rv(lv&&lv.led&&S.led?((S.led.patterns.find(x=>x.id===lv.led)||{}).name||''):''))}
     <button class="row" data-a="restart"><span class="rt" style="color:var(--blue)">Restart EngineLink</span></button>
     <button class="row" data-a="sheet" data-v="reset"><span class="rt" style="color:var(--red)">Factory reset</span></button></div>`;
   h+=`<div class="s12 sub" style="text-align:center;padding:0 0 10px">Engine Link ${lv?lv.v:''}</div>`;
+  return h;
+}
+
+// ---------- Events and diagnosis ----------
+const engName=ch=>{const pi=S.live?S.live.port:0;if(ch>1)return 'Both engines';if(pi<0)return ch===0?'J7':'J6';return (pi===1?ch===1:ch===0)?'Port':'Starboard';};
+const engCol=ch=>{const pi=S.live?S.live.port:0;return (pi===1?ch===1:ch===0)?'var(--port)':'var(--stbd)';};
+const TT=v=>NF(U.temp(v),0)+' '+U.tu();
+const PCT=v=>NF(Math.abs(v)*100,0)+' %';
+const HEX=v=>'0x'+(v>>>0).toString(16).toUpperCase().padStart(4,'0');
+// What each event means: a title from the measured values, then what to check.
+const EVT={
+  'cool-high':[e=>`Coolant ${TT(e.v)}`,e=>`Above the warning limit of ${TT(e.ref)}. Check the raw-water intake and strainer, the impeller and the heat exchanger, and lower the rpm until it is back to normal.`],
+  'cool-crit':[e=>`Coolant ${TT(e.v)}, too hot`,e=>`Above ${TT(e.ref)}. Go to idle and find the cause before going on: raw-water intake, impeller, heat exchanger and coolant level.`],
+  'air-high':[e=>`Charge air ${TT(e.v)}`,e=>`Above ${TT(e.ref)} after the intercooler. A dirty intercooler or too little cooling water; the engine loses power.`],
+  'volt-low':[e=>`Battery ${NF(e.v,1)} V while running`,e=>`Below ${NF(e.ref,1)} V for half a minute: the alternator is probably not charging. Check the belt, the alternator and its wiring.`],
+  'volt-high':[e=>`Battery ${NF(e.v,1)} V`,e=>`Above ${NF(e.ref,1)} V: the alternator may be overcharging, which harms the batteries.`],
+  'rpm-short':[e=>`${NF(e.v,0)} rpm, the lever asks ${NF(e.ref,0)}`,e=>`At part throttle the engine should reach the rpm the lever asks for. Typical causes: fuel filter, air filter, turbo or compressor, a damaged or fouled propeller.`],
+  'rpm-hunt':[e=>`Rpm swings ±${NF(e.v,0)}`,e=>`The rpm goes up and down while the lever is still. Often air in the fuel, a clogged fuel filter or an injection problem.`],
+  'dev-cool':[e=>`Coolant ${TT(e.v)}, normally ${TT(e.ref)}`,e=>`Warmer than this engine usually runs at this rpm, for some time. An early sign of a worn impeller or a blocked heat exchanger.`],
+  'dev-boost':[e=>`Boost ${PCT(1-e.v/e.ref)} below normal`,e=>`Less boost than this engine usually has at this rpm. Check the air filter, the turbo, and the compressor and its clutch.`],
+  'dev-air':[e=>`Charge air ${TT(e.v)}, normally ${TT(e.ref)}`,e=>`The intercooler cools less than usual: dirt on the air side or scale on the water side.`],
+  'dev-fuel':[e=>`Fuel ${PCT(e.v/e.ref-1)} above normal`,e=>`More fuel than usual at this rpm: fouling on the hull or propeller, a heavy load, or the engine works harder.`],
+  'imb-fuel':[e=>`${PCT(e.v)} more fuel than the other engine`,e=>`At the same rpm, for a while. Compare boost and temperatures of the two engines under "Port and starboard", and the propellers.`],
+  'imb-boost':[e=>`${PCT(e.v)} less boost than the other engine`,e=>`At the same rpm. Check the air filter, turbo and compressor of this engine.`],
+  'comm-lost':[e=>`Stopped answering while running`,e=>`No answer for ${NF(e.v,0)} seconds above idle. Check the J1708 connector and cable to this engine.`],
+  'stopped':[e=>`Stopped from ${NF(e.ref,0)} rpm`,e=>`The engine went from ${NF(e.ref,0)} rpm to a stop within seconds. If nobody switched it off, check the fuel supply first.`],
+  'overspeed':[e=>`Overspeed ${NF(e.v,0)} rpm`,e=>`Above ${NF(e.ref,0)} rpm. Usually the propeller left the water.`],
+  'cold-load':[e=>`High rpm at ${TT(e.v)} coolant`,e=>`Full throttle before the engine is warm wears it faster. Wait until the warm-up guide on the Trip page says ready.`],
+  'status':[e=>`Status bits changed`,e=>`From ${HEX(e.ref)} to ${HEX(e.v)}. A lamp, relay or switch changed. Note what you saw on the panel: it helps to decode these bits.`],
+  'long-idle':[e=>`Idled for 20 minutes`,e=>`Long idling makes a diesel soot up. Run it under load now and then.`],
+  'stays-cold':[e=>`Coolant only ${TT(e.v)} after 20 minutes`,e=>`The engine does not warm up under load. The thermostat may be stuck open.`],
+  'mark':[e=>`You marked something odd`,e=>`The two minutes before and after are saved. Look at the curves below, and write down what you noticed.`]
+};
+const SEVC=['var(--blue)','var(--orange)','var(--red)'];
+function evTitle(e){const d=EVT[e.t];return (e.eng<2?engName(e.eng)+': ':'')+(d?d[0](e):e.t);}
+function evWhen(e){if(!e.utc)return 'Time unknown';const d=new Date(e.utc*1000);return d.toLocaleDateString(LOC,{day:'numeric',month:'short'})+' '+hm(e.utc);}
+function alertCard(){
+  const lv=S.live;if(!lv||!lv.ev||!lv.ev.last)return '';
+  const e=lv.ev.last;
+  if(!(lv.ev.alarm||(lv.ev.n>0&&!e.ack&&e.sev>=1)))return '';
+  const a=lv.ev.alarm;
+  return `<div class="card" style="margin-bottom:12px;border:1px solid ${a?'var(--red)':'var(--orange)'};background:${a?'rgba(255,107,107,.12)':'var(--osoft)'}"><div style="display:flex;gap:12px;align-items:flex-start">${svg(IC.alert,22,a?'var(--red)':'var(--orange)',2)}<div style="flex:1;min-width:0"><div style="font-weight:600;color:${a?'var(--red)':'var(--orange)'}">${esc(evTitle(e))}</div><div class="s12 sub" style="margin-top:2px">${evWhen(e)}${lv.ev.n>1?' · '+lv.ev.n+' new events':''}</div></div></div>
+    <div class="grid2" style="gap:8px;margin-top:12px"><button class="btn sm" data-a="page" data-v="events">What it means</button><button class="btn sm" data-a="evAck" data-v="all">Seen</button></div></div>`;
+}
+// Line chart of one value for both engines. series: JSON from /api/*/series.
+const CHARTM=[['rpm','Rpm'],['lph','Fuel'],['cool','Coolant'],['boost','Boost'],['air','Charge air'],['volt','Battery'],['req','Lever']];
+function chartVal(m,v){if(v==null)return null;if(m==='cool'||m==='air')return U.temp(v);if(m==='boost')return U.press(v);if(m==='lph')return imp()?v*0.264172:v;return v;}
+function chartUnit(m){return m==='rpm'||m==='req'?'rpm':m==='lph'?U.ru():m==='cool'||m==='air'?U.tu():m==='boost'?U.pu():'V';}
+function chartSvg(sr,m,mark){
+  if(!sr||!sr.t||!sr.t.length)return '<div class="empty">No recording yet.</div>';
+  const W=320,H=150,P=[34,8,10,22],t=sr.t,t0=t[0],t1=t[t.length-1]||1;
+  const vals=[0,1].map(c=>(sr[m]||[[],[]])[c].map(v=>chartVal(m,v)));
+  const all=vals.flat().filter(v=>v!=null);
+  if(!all.length)return '<div class="empty">This value was not read during the recording.</div>';
+  let lo=Math.min(...all),hi=Math.max(...all);if(hi-lo<1e-6){hi+=1;lo-=1;}const pad=(hi-lo)*0.08;lo-=pad;hi+=pad;
+  const X=s=>P[0]+(s-t0)/Math.max(1,t1-t0)*(W-P[0]-P[1]),Y=v=>P[2]+(hi-v)/(hi-lo)*(H-P[2]-P[3]);
+  const line=c=>{let d='',on=false;vals[c].forEach((v,i)=>{if(v==null){on=false;return;}d+=(on?'L':'M')+X(t[i]).toFixed(1)+' '+Y(v).toFixed(1);on=true;});return d;};
+  const dec=m==='volt'?1:m==='boost'&&!imp()?2:0;
+  const tick=s=>{if(mark!=null){const d=s-mark;return (d<0?'−':'+')+Math.floor(Math.abs(d)/60)+':'+String(Math.round(Math.abs(d))%60).padStart(2,'0');}return sr.start?hm(sr.start+s):dur(s);};
+  return `<svg viewBox="0 0 ${W} ${H}" width="100%" style="display:block" role="img" aria-label="${chartUnit(m)} over time">
+    ${[0,0.5,1].map(f=>{const v=lo+(hi-lo)*f,y=Y(v);return `<line x1="${P[0]}" x2="${W-P[1]}" y1="${y}" y2="${y}" stroke="var(--line)"/><text x="${P[0]-4}" y="${y+3.5}" text-anchor="end" font-size="9.5" fill="var(--sub)">${NF(v,dec)}</text>`;}).join('')}
+    ${mark!=null?`<line x1="${X(mark)}" x2="${X(mark)}" y1="${P[2]}" y2="${H-P[3]}" stroke="var(--orange)" stroke-dasharray="3 3"/>`:''}
+    ${[0,1].map(c=>`<path d="${line(c)}" fill="none" stroke="${engCol(c)}" stroke-width="1.8" stroke-linejoin="round"/>`).join('')}
+    <text x="${P[0]}" y="${H-6}" font-size="9.5" fill="var(--sub)">${tick(t0)}</text><text x="${W-P[1]}" y="${H-6}" font-size="9.5" fill="var(--sub)" text-anchor="end">${tick(t1)}</text></svg>
+    <div class="cth s12 sub" style="margin-top:4px"><span><span style="color:${engCol(0)}">●</span> ${engName(0)} <span style="color:${engCol(1)};margin-left:8px">●</span> ${engName(1)}</span><span>${chartUnit(m)}</span></div>`;
+}
+function chartBlock(key,sr,mark){
+  const m=S.chartM[key]||'rpm';
+  return `<div class="seg" style="grid-template-columns:repeat(4,minmax(0,1fr));margin-bottom:10px">${CHARTM.filter(x=>x[0]!=='req'||key!=='recent').map(([k,l])=>`<button class="${m===k?'on':''}" data-a="chartM" data-v="${key}:${k}">${l}</button>`).join('')}</div>${chartSvg(sr,m,mark)}`;
+}
+function recentCard(){
+  return `<div class="card"><div class="cth" style="margin-bottom:10px"><span class="ct">Last 10 minutes</span><span class="s12 sub">every second</span></div>${S.recent?chartBlock('recent',S.recent):'<div class="empty">Loading…</div>'}</div>`;
+}
+// Port against starboard at the same rpm, from what each engine learned.
+function balanceCard(es){
+  const lf=S.life;if(!lf)return '';
+  const pi=lf.port===1?1:0,sb=1-pi,a=lf.e[pi].base,b=lf.e[sb].base,rows=[];
+  for(let i=0;i<a.length;i++)if(a[i]&&b[i])rows.push([1000+i*250+125,a[i],b[i]]);
+  const diffPct=(x,y)=>y&&Math.abs(y)>0.5?((x-y)/Math.abs(y)*100):null;
+  const cell=(v,unit,bad)=>v==null?'<span class="sub">—</span>':`<span style="color:${Math.abs(v)>=bad?'var(--orange)':'var(--text)'}">${v>=0?'+':''}${NF(v,unit==='%'?0:1)}${unit==='%'?' %':' '+U.tu()}</span>`;
+  return `<div class="card"><div class="ct">Port and starboard</div><div class="s12 sub" style="margin-top:2px">Starboard compared with port at the same rpm, from what both engines learned over the trips.</div>
+    ${rows.length?`<div style="display:grid;grid-template-columns:auto repeat(4,minmax(0,1fr));gap:8px 10px;margin-top:12px;font-size:13px;font-variant-numeric:tabular-nums"><span class="sub">rpm</span><span class="sub">Fuel</span><span class="sub">Boost</span><span class="sub">Coolant</span><span class="sub">Ch. air</span>
+      ${rows.map(([r,x,y])=>`<span>${NF(r,0)}</span>${cell(diffPct(y[3],x[3]),'%',10)}${cell(diffPct(y[1],x[1]),'%',12)}${cell(U.tempD(y[0]-x[0]),'t',4)}${cell(U.tempD(y[2]-x[2]),'t',6)}`).join('')}</div>`:'<div class="s13 sub" style="margin-top:10px">Shows up after a few trips where both engines ran a few minutes at the same rpm.</div>'}</div>`;
+}
+// Each engine's life story.
+function lifeCard(es){
+  const lf=S.life;if(!lf)return '';
+  const bands=[['Idle',0,1],['1,000–2,000',1,5],['2,000–3,000',5,9],['3,000+',9,13]];
+  return `<div class="card"><div class="ct">Life story</div><div class="s12 sub" style="margin-top:2px">Since EngineLink was installed. Long idling, cold full throttle and heat are what wear a diesel.</div>
+    ${es.map(e=>{const l=lf.e[e.ch],tot=l.sec.reduce((a,b)=>a+b,0)||1,bs=bands.map(([n,i,j])=>[n,l.sec.slice(i,j).reduce((a,b)=>a+b,0)]);
+      return `<div style="margin-top:14px"><div class="lbl" style="color:${e.color}"><span class="dot" style="background:${e.color}"></span>${e.name}</div>
+        <div style="display:flex;height:10px;border-radius:6px;overflow:hidden;margin-top:8px;background:var(--track)">${bs.map(([n,s],k)=>`<i style="width:${s/tot*100}%;background:${['var(--blue)','var(--teal)','var(--green)','var(--orange)'][k]}"></i>`).join('')}</div>
+        <div class="s12 sub" style="display:flex;flex-wrap:wrap;gap:4px 12px;margin-top:6px">${bs.map(([n,s],k)=>`<span><span style="color:${['var(--blue)','var(--teal)','var(--green)','var(--orange)'][k]}">●</span> ${n}: ${dur(s)}</span>`).join('')}</div>
+        <div class="grid3" style="gap:8px;margin-top:10px">${[['Starts',l.starts],['Cold starts',l.coldStarts],['Full throttle',l.wot?NF(l.wot,0)+' rpm':'—'],['Best ever',l.wotBest?NF(l.wotBest,0)+' rpm':'—'],['Battery at start',l.startVolt!=null?NF(l.startVolt,1)+' V':'—'],['Above 95 °C',dur(l.hotSec)],['Cold, high rpm',dur(l.coldLoadSec)],['Long idles',l.longIdles],['Overspeed',dur(l.overSec)]].map(([k,v])=>`<div style="background:var(--track);border-radius:12px;padding:8px 10px"><div class="s12 sub">${k}</div><div style="font-weight:600;margin-top:2px">${v}</div></div>`).join('')}</div></div>`;}).join('')}</div>`;
+}
+function eventsView(){
+  const ev=S.events;
+  let h=backPill();
+  h+=`<div class="grid2" style="gap:8px;margin-bottom:14px"><button class="btn" data-a="mark">${svg(IC.flag,15)}Something's odd</button><button class="btn" data-a="evAck" data-v="all">Mark all as seen</button></div>`;
+  if(!ev)return h+waiting();
+  if(!ev.list.length)return h+`<div class="card"><div class="empty">Nothing noticed yet. EngineLink watches both engines all the time and lists here what is out of the ordinary, with the two minutes before and after.</div></div>`;
+  h+='<div class="card" style="padding:0 18px">';
+  ev.list.forEach((e,i)=>{
+    const open=S.evOpen===e.id,d=EVT[e.t];
+    h+=`<div style="${i?'border-top:1px solid var(--line)':''}"><button class="row" data-a="evOpen" data-v="${e.id}" style="align-items:flex-start"><span style="display:flex;gap:10px;align-items:flex-start;min-width:0"><span class="dot" style="margin-top:6px;background:${SEVC[e.sev]}"></span><span style="min-width:0"><span class="rt" style="font-weight:${e.ack?400:600}">${esc(evTitle(e))}</span><span class="rh">${evWhen(e)}${e.sev===2?' · alarm':e.sev===1?' · warning':''}</span></span></span><span class="sub">${open?'⌃':'⌄'}</span></button>
+      ${open?`<div style="padding:0 0 14px" class="stack"><div class="s13">${d?d[1](e):''}</div>
+        ${e.box===3?'<div class="s12 sub">The data around it was not saved (no SD card, or EngineLink restarted).</div>':S.evSeries[e.id]?chartBlock('ev'+e.id,S.evSeries[e.id],e.up-S.evSeries[e.id].up0):'<div class="empty">Loading the recording…</div>'}
+        ${!e.ack?`<button class="btn sm" data-a="evAck" data-v="${e.id}">Seen</button>`:''}</div>`:''}</div>`;
+  });
+  return h+'</div>';
+}
+function tripTimelineView(){
+  const tv=S.tripView;let h=backPill();
+  if(!tv)return h+waiting();
+  const ids=tv.ids;
+  if(ids.length>1)h+=`<div class="seg" style="grid-template-columns:repeat(${Math.min(ids.length,4)},minmax(0,1fr));margin-bottom:12px">${ids.map((id,i)=>`<button class="${tv.id===id?'on':''}" data-a="tripPart" data-v="${id}">Part ${i+1}</button>`).join('')}</div>`;
+  const sr=S.tripSeries[tv.id];
+  h+=`<div class="card">${sr===undefined?'<div class="empty">Loading…</div>':sr===null?'<div class="empty">No timeline for this trip. Trips are recorded second by second from version 0.7.0, on the SD card.</div>':chartBlock('trip',sr)}</div>`;
+  if(sr)h+=`<button class="btn" style="width:100%;margin-top:12px" data-a="dlSeries" data-v="${ids.join(',')}">${svg(IC.down,15)}Download as spreadsheet (CSV)</button><div class="s12 sub" style="text-align:center;padding:8px 20px 0">One row per second with every value of both engines. Opens in Excel or Numbers.</div>`;
+  return h;
+}
+// The rhythm in words: "green steady", "green, dark for a moment every 2 s", "red long, blue short".
+function ledWords(p){
+  const lit=p.steps.filter(s=>s[0]!=='off'),off=p.steps.filter(s=>s[0]==='off').reduce((a,s)=>a+s[1],0),tot=p.steps.reduce((a,s)=>a+s[1],0);
+  if(!off)return lit[0][0]+' steady';
+  if(lit.length===1&&off<400&&!p.breathe)return lit[0][0]+', dark for a moment every '+NF(tot/1000,0)+' s';
+  return lit.map(s=>s[0]+' '+(s[1]>=600?'long':'short')).join(', ')+(p.breathe?', breathing':'');
+}
+function ledSwatch(p,col){
+  const tot=p.steps.reduce((a,s)=>a+s[1],0)||1;let acc=0;
+  const kf=p.steps.map(([c,ms])=>{const a=acc/tot*100;acc+=ms;const colr=c==='off'?'transparent':col[c];return `${NF(a,2).replace(',','.')}%{background:${colr};box-shadow:${c==='off'?'none':'0 0 10px '+colr}}`;}).join('');
+  return `<style>@keyframes led-${p.id}{${kf}}</style><span style="width:22px;height:22px;border-radius:50%;flex:none;border:1px solid var(--line);animation:led-${p.id} ${tot}ms ${p.breathe?'ease-in-out':'step-end'} infinite"></span>`;
+}
+function ledView(){
+  const l=S.led;let h=backPill();
+  if(!l)return h+waiting();
+  const demo=l.demo!=null?l.patterns[l.demo]:null;
+  h+=`<div class="s13 sub" style="padding:0 8px 12px">The light on the board shows the most important thing at the moment. Colour and rhythm both carry the meaning, so it can be read in sunlight and without telling red from green.</div>`;
+  h+=`<div class="card" style="padding:0 18px">${l.patterns.map((p,i)=>{const now=demo?demo.id===p.id:l.now===p.id;return `<div style="display:flex;gap:14px;align-items:flex-start;padding:13px 0;${i?'border-top:1px solid var(--line)':''}">${ledSwatch(p,l.colours)}<div style="flex:1;min-width:0"><div class="cth"><span class="rt" style="font-weight:600">${esc(p.name)}</span>${now?`<span class="chip" style="background:var(--gsoft);color:var(--gtext);font-size:12px">${demo?'Showing':'Now'}</span>`:''}</div><div class="rh">${esc(p.meaning)}</div><div class="s12 sub" style="margin-top:3px">${ledWords(p)}</div></div></div>`;}).join('')}</div>`;
+  h+=`<button class="btn" style="width:100%;margin-top:12px" data-a="ledTest">${svg(IC.bulb,15)}${demo?'Showing on the board: '+esc(demo.name):'Show every pattern on the board ('+Math.round(l.stepMs*(l.patterns.length-1)/1000)+' s)'}</button>`;
   return h;
 }
 
@@ -933,6 +1095,9 @@ const hostDraft=(d,c)=>String(d.hostName??(c.host||'enginelink')).trim().toLower
 const FILLQ=[[1,'Nozzle clicked off','Tank full the normal way'],[2,'Topped up to the filler pipe','Filled slowly to the top of the pipe. Most exact'],[0,'Not full','The litres are added to what is aboard']];
 const CALST={1:['var(--green)','Used for calibration'],2:['var(--orange)','Looks odd. Was the tank really full?'],3:['var(--sub)','Not used for calibration'],4:['var(--sub)','Too little fuel since the last full tank to calibrate'],5:['var(--sub)','Starting point for the next full tank']};
 const PAGE_VIEWS={
+  events:()=>eventsView(),
+  trip:()=>tripTimelineView(),
+  led:()=>ledView(),
   dest(){
     let h=backPill()+`<div class="sec">${P.places.length?P.places.map((p,i)=>`<div class="row"><span><span class="rt">${esc(p[0])}</span><span class="rh">${NF(p[1],1).replace(/[.,]0$/,'')} nm one way</span></span><button class="btn sm" style="width:40px;padding:0" data-a="placeDel" data-v="${i}" aria-label="Delete ${esc(p[0])}">${svg(IC.trash,18,'var(--red)',2)}</button></div>`).join(''):'<div class="empty">No places yet. Add the ones you sail to most.</div>'}</div>`;
     const ok=S.newPlace.trim()&&parseFloat(S.newNm.replace(',','.'))>0;
@@ -1036,6 +1201,7 @@ const PAGE_VIEWS={
     const qd=d.quality;
     if(qd)h+=`<div class="hd">Engine data</div><div class="sec"><div class="rowx"><div class="grid3" style="gap:8px">${es.map(e=>[[e.name+' held back',qd.held[e.ch]],[e.name+' rejected',qd.rejected[e.ch]],[e.name+' bridged',qd.bridgedSec[e.ch]+' s']]).flat().map(([k,v])=>`<div style="background:var(--track);border-radius:12px;padding:8px 10px"><div class="s12 sub">${k}</div><div style="font-weight:600;margin-top:2px">${v}</div></div>`).join('')}</div>
       <div class="s12 sub" style="margin-top:8px">Every answer is checked against what an engine can physically do. A sudden jump is held back until the next answer confirms it; impossible values are rejected. Short gaps in the fuel figures (up to 2 minutes, while the engine kept answering for rpm) are bridged and counted.</div></div></div>`;
+    h+=readingBlock(d,es);
     // Advanced
     h+=`<button class="btn" style="width:100%;justify-content:space-between;background:var(--card);padding:0 18px;min-height:56px;margin-bottom:${S.advOpen?14:20}px" data-a="adv"><span style="text-align:left"><span class="rt">Advanced</span><span class="rh">Reading, motor test, bus monitor, raw values</span></span><span class="sub">${S.advOpen?'⌃':'⌄'}</span></button>`;
     if(S.advOpen)h+=advanced(d,c,es);
@@ -1043,6 +1209,18 @@ const PAGE_VIEWS={
     return h;
   }
 };
+// How fast EngineLink reads each engine, and the scan for more values.
+function readingBlock(d,es){
+  const rd=d.reading;if(!rd)return '';
+  const rows=es.map(e=>{const r=rd[e.ch];if(!r)return '';const ds=r.disc||{};
+    const found=(ds.found||[]).map(k=>`<span style="display:inline-block;padding:2px 8px;border-radius:99px;background:var(--line);margin:0 4px 4px 0">${k}${PNAMES[k]?' · '+esc(PNAMES[k]):''}</span>`).join('');
+    return `<div class="rowx"><div class="cth"><span class="rt">${esc(e.name)}</span><span class="rv">${r.polling?NF(r.rate,1)+' requests/s':'Not reading'}</span></div>
+      <div class="s12 sub" style="margin-top:3px">${r.polling?`A request every ${NF(r.interval,0)} ms${fin(r.answered)?' · '+NF(r.answered*100,0)+' % answered':''}`:'Turn on reading the engines to see the speed.'}${r.skip&&r.skip.length?' · skipped (no answer): '+r.skip.join(', '):''}</div>
+      ${ds.active?`<div class="s12" style="margin-top:8px">Looking for more values · at ${256+ds.pos} of 256–319${(ds.found||[]).length?' · found so far:':''}</div><div class="s12" style="margin-top:6px">${found}</div>`
+        :ds.done?`<div class="s12" style="margin-top:8px">${(ds.found||[]).length?'This engine answers:':'No values found.'}</div><div class="s12" style="margin-top:6px">${found}</div>`:''}
+      ${r.polling&&!ds.active?`<button class="btn" style="width:100%;margin-top:10px" data-a="discover" data-v="${e.ch}">Discover more values</button>`:''}</div>`;}).join('');
+  return `<div class="hd">Reading speed</div><div class="sec">${rows}<div class="rowx"><div class="s12 sub">EngineLink asks as fast as the engine answers and slows down when answers go missing. Values an engine never answers are skipped. "Discover more values" asks once for every value number from 256 to 319, with the same read request as always: nothing is changed in the engine.</div></div></div>`;
+}
 function voltBlock(c,es){
   const raw=es.map(e=>S.diag.t[e.ch].raw[293]).find(Boolean);
   const vA=raw?raw[0]*0.01308:null,vB=raw?raw[0]*0.0125:null,m=parseFloat(String(S.voltMeas).replace(',','.'));
@@ -1056,7 +1234,7 @@ function voltBlock(c,es){
 const PNAMES={256:'Engine speed',258:'Air inlet pressure (abs.)',259:'Coolant temperature',260:'Fuel temperature',261:'Charge air temperature',263:'Panel buttons, start input',264:'Gear, relays, lamps',265:'Boost pressure',266:'Engine hours',267:'Active MS unit',288:'Relative load',289:'Fuel rate',291:'Engine speed request',293:'System voltage',295:'Fuel rack position',296:'Injection angle'};
 function advanced(d,c,es){
   const st=S.state;
-  let h=`<div class="sec">${es.map(e=>row('pollTog',e.ch,'Read '+e.name.toLowerCase()+' engine now',e.poll?'Sending read requests about 4 times a second':(e.why?esc(e.why):'Off'),tg(e.poll))).join('')}
+  let h=`<div class="sec">${es.map(e=>row('pollTog',e.ch,'Read '+e.name.toLowerCase()+' engine now',e.poll?'Asking as fast as the engine answers (see Reading speed in Diagnostics)':(e.why?esc(e.why):'Off'),tg(e.poll))).join('')}
     ${row('cycle','proto','Engine protocol','Volvo Penta KAD / EDC I, or SAE J1587',rv(d.proto==='kad'?'Volvo KAD':'J1587'))}</div>`;
   const t=st&&st.test;
   h+=`<div class="hd">Motor test</div><div class="sec">${t&&t.running?`<div class="rowx"><div class="cth"><span class="rt">Recording · step ${t.step}</span><span class="rv">${t.rows} rows · ${dur(t.seconds)}</span></div><div class="seg" style="grid-template-columns:repeat(3,minmax(0,1fr));margin-top:10px">${['idle','low','medium','high','cruise','custom'].map(p=>`<button data-a="testMark" data-v="${p}" class="${t.phase===p?'on':''}">${p}</button>`).join('')}</div><button class="btn red" style="width:100%;margin-top:10px" data-a="testStop">Stop and save</button></div>`:
@@ -1155,7 +1333,7 @@ function renderSheet(){
         `<button class="btn pri" data-a="androidAdd">Add to home screen</button><div class="s12 sub">If Chrome shows nothing, open the ⋮ menu and choose "Add to Home screen".</div>`}
       <button class="btn" data-a="close">Close</button>`;
   }else if(k==='autoPoll'){
-    h=`${grab}<span style="font-size:22px;font-weight:600">Read engines automatically?</span><div class="s14 sub">EngineLink then asks both engines for their values about 4 times a second whenever it is powered. It only sends the read request, never a command, and it stops by itself if another device (such as an EDC display) is already asking.</div>
+    h=`${grab}<span style="font-size:22px;font-weight:600">Read engines automatically?</span><div class="s14 sub">EngineLink then asks both engines for their values several times a second whenever it is powered. It only sends the read request, never a command, and it stops by itself if another device (such as an EDC display) is already asking.</div>
       <div class="s14 sub">If an engine does not answer, for example with the ignition off, EngineLink tries again every 30 seconds.</div>
       <div class="grid2" style="gap:10px"><button class="btn" data-a="close">Cancel</button><button class="btn pri" data-a="autoPollOn">Switch on</button></div>`;
   }else if(k.startsWith('fw:')){
@@ -1174,6 +1352,8 @@ function nextOf(list,v){const i=list.indexOf(v);return list[(i+1)%list.length];}
 function goPage(p,back){S.backScroll=$('#main').scrollTop;S.back=back||null;S.page=p;S.d={};
   if(back)S.tab='more';
   if(p==='diag'){load('diag');load('fuel');load('state');}
+  if(p==='events')load('events');
+  if(p==='led')load('led');
   if(p==='fw')load('fw');
   if(p==='ap'||p==='router')load('state');
   history.pushState({page:1},'');
@@ -1184,6 +1364,7 @@ function goTab(t){
   S.tab=t;S.page=null;S.back=null;S.selMode=null;S.sel=[];S.open=null;
   if(t==='economy'){load('econ');if(!S.trips)load('trips');}
   if(t==='history')load('trips');
+  if(t==='engines'){load('life');load('recent');}
   if(t==='tank')load('fuel');
   if(t==='engines')load('econ');
   if(t==='more'){load('state');load('sd');load('diag');}
@@ -1303,6 +1484,15 @@ const A={
     toast('Downloading '+us.length+' trip'+(us.length>1?'s':''));S.selMode=null;S.sel=[];render(true);},
   rawGo:()=>{download('/api/export/raw.csv?ids='+S.rawReady);S.rawReady=null;S.selMode=null;S.sel=[];render(true);},
   dlTrips:v=>download('/api/export/trips.csv?ids='+v),
+  dlSeries:v=>download('/api/export/series.csv?ids='+v),
+  tripView:v=>{const ids=v.split(',').map(Number);S.tripView={ids,id:ids[0]};goPage('trip','history');loadTripSeries(ids[0]);},
+  tripPart:v=>{S.tripView.id=+v;render(true);loadTripSeries(+v);},
+  chartM:v=>{const [k,m]=v.split(':');S.chartM[k]=m;render(true);},
+  mark:async()=>{const r=await act('/api/mark',{});if(r.ok)setTimeout(()=>load('events'),1500);},
+  evAck:async v=>{await post('/api/events/ack',{id:v});await load('events');if(S.live&&S.live.ev){if(v==='all')S.live.ev.n=0;}render(true);},
+  evOpen:async v=>{const id=+v;S.evOpen=S.evOpen===id?null:id;render(true);if(S.evOpen&&!S.evSeries[id]){try{S.evSeries[id]=await get('/api/event/series?id='+id,10000);}catch(e){S.evSeries[id]=null;}render(true);}},
+  ledTest:async()=>{await act('/api/led/test',{});load('led');},
+  discover:async v=>{await act('/api/kad/discover',{ch:v});setTimeout(()=>load('diag'),2000);},
   combine:async()=>{const us=units().filter(u=>S.sel.includes(u.key)),ids=us.flatMap(u=>u.ids).join(',');const r=await act('/api/trip/combine',{ids});if(r.ok){S.selMode=null;S.sel=[];load('trips');}},
   split:async v=>{await act('/api/trip/split',{group:v});S.open=null;load('trips');},
   nPeople:v=>{S.d.n.p=clamp(S.d.n.p+(+v),1,30);renderSheet();},

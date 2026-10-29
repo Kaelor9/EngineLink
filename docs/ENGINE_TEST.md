@@ -50,21 +50,27 @@ The application currently tries the *standard* J1587 page-0 representations:
 
 The existence of a standard PID does not mean your engine broadcasts it; nonstandard Volvo Penta data may require further identification. Raw original bytes are kept for this reason.
 
-## Fixed onboard LED behavior
+## Onboard status light
 
-The previous free color picker has been removed; the LED is controlled by actual system state.
+The light shows the most important thing at the moment (top of the table first). Colour and rhythm both carry the meaning, so it can be read in sunlight and by people who see red and green alike. Two colours that are easy to mix up (red and orange, blue and magenta) never follow each other in one pattern, and red never follows green. The same legend, with the pattern on now, is in the app under Settings → Status light; "Show every pattern on the board" plays each one for 3 seconds. The rules are checked by `tools/test_ledpatterns.cpp`.
 
-| State | Fixed LED |
-|---|---|
-| First setup | Blue breathing |
-| Working, no higher-priority issues | Steady green |
-| Router reconnecting, if router mode selected | Amber single pulse |
-| SD card unavailable | Amber double flash |
-| SD mount/write failure | Rapid red flash |
-| J1708 UART queue overflow | Red double flash |
-| Motor test recording | Cyan pulse |
+| Light | Meaning | What to do |
+|---|---|---|
+| White, fast blink | Updating firmware | Keep the power on |
+| Red, fast blink | Engine alarm (for example coolant too hot) | Look at Events in the app now |
+| Long red, then short blue | SD card error: nothing is saved | Take out the card and put it back, or replace it |
+| Three short red blinks, pause | Engine data fault (J1708 garbled or overflowing) | Check the engine connectors and cables |
+| Two short orange blinks, pause | Engine warning (a value outside what is normal for that engine) | Look at Events in the app |
+| Short blue, then long orange | No SD card | Everything works, but trips and raw data are not saved |
+| Magenta, slow blink (1 s on, 1 s off) | Recording a motor test | – |
+| Blue, breathing | Setup not finished | Join the EngineLink Wi-Fi and open the app |
+| Long green, then short blue | Boat router not reached | EngineLink's own Wi-Fi still works |
+| Green, dark for a moment every 2 s | Reading the engines, all is well | – |
+| Green, steady | Ready, engines off or not being read | – |
+| White, steady | Starting | – |
+| Three quick magenta flashes | "Something's odd" mark was saved | – |
 
-The **Show all LED signals** button (Device page) shows a 16-second diagnostic sequence, then returns to actual system indication. A J1708 overflow indication automatically clears after 30 seconds without a new overflow; historical counters remain visible.
+A J1708 fault clears by itself 30 seconds after the last one; the counters stay in Diagnostics. An engine alarm shows for 60 seconds and a warning for 10 minutes, or until it is marked as seen in the app.
 
 ## Wi-Fi troubleshooting
 
