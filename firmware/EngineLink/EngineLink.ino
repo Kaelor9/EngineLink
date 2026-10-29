@@ -47,7 +47,7 @@
 #include "diagrules.h"
 #include "miniz.h"  // the deflate compressor in the chip's ROM
 
-#define EL_VERSION "0.7.8"
+#define EL_VERSION "0.7.9"
 // Releases list published by the Pages workflow; firmware files come from
 // GitHub Releases of the same repository. Nothing else is downloaded.
 #define EL_RELEASES_URL "https://kaelor9.github.io/EngineLink/releases.json"
@@ -95,6 +95,10 @@ constexpr uint32_t HTTP_IO_TIMEOUT_MS=2000;
 // used to stop.
 SemaphoreHandle_t engineMx=nullptr;
 bool engineTaskOn=false;
+// How the engine task is doing: when it last finished a round, since when it
+// waits for the lock, the longest wait and how often it waited over 100 ms.
+volatile uint32_t engineBeat=0,engineWaitSince=0;
+uint32_t engineMaxWaitMs=0,engineSlowWaits=0;
 // Macros, not functions: Arduino puts its prototypes before the first function.
 #define netWaitBegin() do{if(engineTaskOn)xSemaphoreGive(engineMx);}while(0)
 #define netWaitEnd() do{if(engineTaskOn)xSemaphoreTake(engineMx,portMAX_DELAY);}while(0)
@@ -3778,6 +3782,7 @@ void handleDiag(){
   }
   s+=",\"cov\":";coverageJson(s,bootCov);
   s+=",\"engineTask\":";s+=engineTaskOn?"true":"false";
+  s+=",\"engineWait\":{\"max\":";s+=engineMaxWaitMs;s+=",\"slow\":";s+=engineSlowWaits;s+='}';
   s+=",\"reading\":[";
   for(uint8_t c=0;c<2;c++){
     const KadLink &k=kad[c];
@@ -4333,12 +4338,18 @@ void engineTask(void *){
   for(;;){
     Frame f;
     xQueuePeek(framesQueue,&f,pdMS_TO_TICKS(5));  // wake as soon as a frame is in, or every 5 ms
+    const uint32_t w0=millis();engineWaitSince=w0?w0:1;
     xSemaphoreTake(engineMx,portMAX_DELAY);
+    engineWaitSince=0;
+    const uint32_t waited=millis()-w0;
+    if(waited>engineMaxWaitMs)engineMaxWaitMs=waited;
+    if(waited>100)++engineSlowWaits;
     int handled=0;
     while(handled<128&&xQueueReceive(framesQueue,&f,0)==pdTRUE){processFrame(f);handled++;}
     serviceKad();
     serviceAutoPoll();
     serviceEngines();
+    engineBeat=millis();
     xSemaphoreGive(engineMx);
     vTaskDelay(1);  // leave time for the idle task on this core
   }
@@ -4428,6 +4439,13 @@ void loop(){
   serviceNetwork();
   updateLED();
   serialStatus();
+  // Watchdog for the engine task: stuck for 10 s without waiting for the lock
+  // means something inside it hangs. Without it nothing is read, so start over
+  // (totals are saved first; automatic reading starts again by itself).
+  if(engineTaskOn&&!restartAt&&engineBeat&&!engineWaitSince&&(uint32_t)(millis()-engineBeat)>10000){
+    Serial.println("Engine task stalled: restarting");
+    prepareRestart();restartAt=millis()+200;
+  }
   if(rollbackPending&&millis()>60000&&apStarted){esp_ota_mark_app_valid_cancel_rollback();rollbackPending=false;}
   if(fwState==4&&!restartAt){prepareRestart();restartAt=millis()+2000;}
   if(restartAt&&(int32_t)(millis()-restartAt)>=0){delay(100);ESP.restart();}

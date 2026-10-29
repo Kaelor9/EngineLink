@@ -1,6 +1,11 @@
-# EngineLink application v0.7.8
+# EngineLink application v0.7.9
 
 This is a **working application foundation**, not a validated production release. The former Lab firmware is retained under \`experiments/\`. The application is in \`firmware/EngineLink/\`.
+
+## Changes in 0.7.9: engine watchdog
+
+- **A watchdog for engine reading.** If the engine task ever hangs for 10 seconds (other than waiting its turn), EngineLink saves its totals and starts over instead of going on without data; automatic reading starts again by itself.
+- **Diagnostics → Reading speed → Engine reading** shows that reading runs in its own task, and the longest it ever had to wait for the rest of EngineLink, so the split can be checked on the boat.
 
 ## Changes in 0.7.8: engine task and data read
 

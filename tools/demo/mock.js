@@ -63,6 +63,7 @@ function diag(){
   return {t:[0,1].map(c=>({utc:now()-3600,req:140,rep:139,err:0,ms:34,running:false,prog:0,poll:true,frames:23844,invalid:c,replyAge:120,
       raw:{256:[11400+c*120,2850+c*30,90],259:[316+c*4,79+c,700],289:[5274-c*77,41.2-c*0.6,90],293:[1063,13.9,900],264:[gearRaw|(c?0x4000:0),0,300],266:[278025+c*290,772.3+c*0.8,1200]}})),
     quality:{rejected:[0,1],held:[3,2],bridged:[1,0],bridgedSec:[6,0],gaps:[2,2],focus:0},
+    engineTask:true,engineWait:{max:14,slow:0},
     cov:[{good:5400,missing:6,fuel:5390,longest:3,gaps:1},{good:5310,missing:96,fuel:5280,longest:52,gaps:4}],
     reading:[0,1].map(c=>({polling:true,interval:[120,140][c],rate:[8.3,7.1][c],answered:[0.99,0.97][c],skip:c?[296]:[],disc:{active:disc[c]>=0&&disc[c]<64,done:disc[c]>=64,pos:Math.max(0,Math.min(63,disc[c])),found:disc[c]>=0?DISC_FOUND.filter(k=>k-256<disc[c]):[]}})),
     dl:lastDl,sp:lastSp,
