@@ -1,6 +1,10 @@
-# EngineLink application v0.7.4
+# EngineLink application v0.7.5
 
 This is a **working application foundation**, not a validated production release. The former Lab firmware is retained under \`experiments/\`. The application is in \`firmware/EngineLink/\`.
+
+## Changes in 0.7.5: download speed test
+
+- **Find out what makes a download slow.** Diagnostics → Wi-Fi has a new **Test download speed** button: EngineLink sends 512 kB from memory, without the SD card, so the result is the Wi-Fi alone, and it says whether that went over the EngineLink Wi-Fi or the boat router, with the signal. Below it, **Last download** splits the last raw-data export into finding the trip, reading the SD card and sending, and says which took the time.
 
 ## Changes in 0.7.4: fast raw download
 
