@@ -1,6 +1,10 @@
-# EngineLink application v0.7.2
+# EngineLink application v0.7.3
 
 This is a **working application foundation**, not a validated production release. The former Lab firmware is retained under \`experiments/\`. The application is in \`firmware/EngineLink/\`.
+
+## Changes in 0.7.3: protocol safety
+
+- **No more silent stop when the protocol is wrong.** With the engine protocol set to SAE J1587, EngineLink only listens and never asks the Volvo Penta KAD / EDC I control units, so nothing comes in, even with "Read engines automatically" on. One tap on "Engine protocol" in Diagnostics → Advanced switched it, without asking. Now switching to J1587 asks first and says what it does, and while J1587 is set and no engine is seen, every screen shows "Not reading the engines" with a button that switches back. Automatic reading starts again right after switching.
 
 ## Changes in 0.7.2: iPhone menu
 

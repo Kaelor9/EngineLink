@@ -494,7 +494,16 @@ function render(force){
 }
 function view(){
   if(S.page)return PAGE_VIEWS[S.page]();
-  return alertCard()+mainView();
+  return protoCard()+alertCard()+mainView();
+}
+// With SAE J1587 chosen, EngineLink only listens and never asks the KAD/EDC I
+// control units, so nothing comes in. Say so on every screen, with the fix.
+function protoCard(){
+  const lv=S.live;if(!lv||lv.proto!=='j1587'||lv.e.some(e=>e.run))return '';
+  return `<div class="card" style="background:var(--osoft);border:1px solid rgba(240,192,110,.35);margin-bottom:14px">
+    <div style="display:flex;gap:12px;align-items:flex-start">${svg(IC.alert,22,'var(--orange)',2)}<div style="flex:1"><div style="font-weight:600;color:var(--orange)">Not reading the engines</div>
+    <div class="s13" style="margin-top:4px">The engine protocol is set to SAE J1587, so EngineLink only listens and never asks your Volvo Penta KAD / EDC I engines for values. Switch back to read them.</div></div></div>
+    <button class="btn pri" style="width:100%;margin-top:12px" data-a="protoKad">Read Volvo Penta KAD engines</button></div>`;
 }
 function mainView(){
   return ({trip:vTrip,economy:vEconomy,tank:vTank,history:vHistory,engines:vEngines,more:vSettings})[S.tab]();
@@ -1491,7 +1500,10 @@ const A={
     if(CYCLE[v]){const [list,key]=CYCLE[v];await cfgSet({[key]:nextOf(list,v==='port'?c.portChannel:c[key])});render(true);return;}
     if(v==='can'){await cfgSet({can:c.canListen?0:1});render(true);return;}
     if(v==='ntp'){await cfgSet({ntp:c.ntp?0:1});render(true);return;}
-    if(v==='proto'){await cfgSet({protocol:c.protocol==='kad'?'j1587':'kad'});load('diag');return;}
+    if(v==='proto'){
+      const to=c.protocol==='kad'?'j1587':'kad';
+      if(to==='j1587'&&!confirm('Switch to SAE J1587?\n\nEngineLink then stops reading Volvo Penta KAD / EDC I engines (like the KAD300) and only listens. Only for engines that send J1587 by themselves.'))return;
+      await cfgSet({protocol:to});load('diag');return;}
     const pc={warmTarget:[50,60,70],warmClose:[10,30,60,300,0],theme:['dark','light'],night:['off','sunset','on'],start:['trip','economy','tank','history','engines'],units:['metric','imperial'],cur:['DKK','EUR','SEK','NOK','GBP','USD']}[v];
     if(pc){P[v]=nextOf(pc,P[v]);savePrefs();applyTheme();render(true);}
   },
@@ -1550,6 +1562,7 @@ const A={
   testStop:async()=>{await act('/api/test/stop',{});load('state');},
   busRefresh:()=>load('state'),
   dl:v=>download(v),
+  protoKad:async()=>{const r=await cfgSet({protocol:'kad'});if(r.ok){toast('Reading Volvo Penta KAD engines');load('diag');}},
   exFile:v=>{download(v);if(!IOS_APP())toast('Downloading');},
   exReport:v=>openWin(reportUrl(v)),
   exTrips:v=>openExport('trips',String(v).split(',').map(Number)),
