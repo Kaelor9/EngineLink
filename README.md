@@ -13,7 +13,7 @@
   <img src="https://img.shields.io/badge/Engines-2%C3%97%20J1708%20isolated-success" alt="2 × isolated J1708">
   <img src="https://img.shields.io/badge/Volvo%20Penta-KAD300%20%2F%20EDC%20I-0b5394" alt="Volvo Penta KAD300 / EDC I">
   <img src="https://img.shields.io/badge/NMEA%202000-listen--only-informational" alt="NMEA 2000 listen-only">
-  <img src="https://img.shields.io/badge/Firmware-0.7.9-orange" alt="Firmware 0.7.9">
+  <img src="https://img.shields.io/badge/Firmware-0.8.0-orange" alt="Firmware 0.8.0">
 </p>
 
 <p align="center">
@@ -168,7 +168,7 @@ See [KAD300 / EDC I](docs/KAD300_EDC1.md), [alpha status and safety](docs/PRODUC
 
 | Hardware | Firmware | Engine validation |
 |----------|----------|-------------------|
-| ✅ Revision 1 assembled | 🚧 0.7.9 | ⏳ Pending first KAD300 test |
+| ✅ Revision 1 assembled | 🚧 0.8.0 | ⏳ Pending first KAD300 test |
 
 | Area | Status |
 |------|--------|
