@@ -17,9 +17,20 @@
 </p>
 
 <p align="center">
+  <a href="https://kaelor9.github.io/EngineLink/demo/">
+    <img src="https://img.shields.io/badge/TRY%20THE%20APP-LIVE%20DEMO-46cabc?style=for-the-badge&labelColor=0b1420" alt="Try the app: live demo">
+  </a>
   <a href="https://kaelor9.github.io/EngineLink/">
     <img src="https://img.shields.io/badge/INSTALL%20FIRMWARE-OPEN%20WEB%20INSTALLER-ffffff?style=for-the-badge&labelColor=0b1420" alt="Open Web Installer">
   </a>
+</p>
+
+<p align="center">
+  <a href="https://kaelor9.github.io/EngineLink/demo/">
+    <img src="docs/images/app-screens.png" width="100%" alt="The EngineLink app: Trip, Tank, Engines and Diagnostics">
+  </a>
+  <br>
+  <sub>The phone app served by the board. <a href="https://kaelor9.github.io/EngineLink/demo/">Open the live demo</a> to use it in your browser against a simulated boat.</sub>
 </p>
 
 ---
@@ -118,8 +129,6 @@ The app source is [`firmware/ui/app.html`](firmware/ui/app.html); `tools/build_u
 ---
 
 ## Getting Started
-
-Want to see the app first? **[Try it in your browser](https://kaelor9.github.io/EngineLink/demo/)** against a simulated boat.
 
 1. Open the **[web installer](https://kaelor9.github.io/EngineLink/)** in Chrome or Edge on a computer.
 2. Connect the board with a USB-C data cable, tick the safety confirmation and click **Install**.
