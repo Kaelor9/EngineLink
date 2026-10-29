@@ -48,7 +48,7 @@
 #include "diagrules.h"
 #include "miniz.h"  // the deflate compressor in the chip's ROM
 
-#define EL_VERSION "0.8.0"
+#define EL_VERSION "0.8.1"
 // Releases list published by the Pages workflow; firmware files come from
 // GitHub Releases of the same repository. Nothing else is downloaded.
 #define EL_RELEASES_URL "https://kaelor9.github.io/EngineLink/releases.json"
@@ -724,6 +724,10 @@ volatile bool staGotConflict=false; // the router handed out an address in 192.1
 bool staConflict=false;
 uint32_t staNextTry=0,staBackoff=15000,staFails=0,staConnects=0,apRestarts=0,lastApCheck=0;
 uint32_t staConnectedAt=0;
+// Why the router connection last dropped (Wi-Fi reason code), when, and
+// since when it is down; the last full router search; the keep-alive.
+volatile uint8_t staLastReason=0;volatile uint32_t staLastDropAt=0;
+uint32_t staDownSince=0,staLastScan=0,staLastKeepAlive=0;
 // Last access point event. AP_STOP also arrives (late) when the network only
 // changed its settings, so the watchdog acts on "stopped and not started again".
 volatile uint8_t apLastEvent=0;      // 1 started, 2 stopped
@@ -766,7 +770,7 @@ void onWiFi(WiFiEvent_t e,WiFiEventInfo_t info){
   if(e==ARDUINO_EVENT_WIFI_AP_STOP){++apStops;apLastEvent=2;apLastEventMs=millis();}
   if(e==ARDUINO_EVENT_WIFI_AP_STACONNECTED)++apJoins;
   if(e==ARDUINO_EVENT_WIFI_AP_STADISCONNECTED){++apLeaves;apReason=info.wifi_ap_stadisconnected.reason;}
-  if(e==ARDUINO_EVENT_WIFI_STA_DISCONNECTED)++staDisconnects;
+  if(e==ARDUINO_EVENT_WIFI_STA_DISCONNECTED){++staDisconnects;staLastReason=info.wifi_sta_disconnected.reason;staLastDropAt=millis();}
   if(e==ARDUINO_EVENT_WIFI_STA_GOT_IP){
     ++staConnects;staConnectedAt=millis();
     const uint32_t ip=info.got_ip.ip_info.ip.addr; // first octet in the low byte
@@ -2417,7 +2421,7 @@ void applyNetwork(){
   if(withRouter){
     esp_wifi_disconnect();
     connectRouter();
-    staBackoff=15000;staFails=0;staNextTry=millis()+staBackoff;
+    staBackoff=8000;staFails=0;staNextTry=millis()+staBackoff;
   }
   if(!mdnsReady)startNameService();
 }
@@ -2446,21 +2450,36 @@ void serviceNetwork(){
   }
   if(routerConfigured()&&!staConflict){
     if(WiFi.status()==WL_CONNECTED){
-      staFails=0;staBackoff=15000;
+      staFails=0;staBackoff=8000;staDownSince=0;
       const uint8_t ch=(uint8_t)WiFi.channel();
       if(ch&&ch!=apChannelNow){apChannelNow=ch;staChannel=ch;}
-    }else if((int32_t)(millis()-staNextTry)>=0){
-      ++staFails;
-      // The router may have moved to another channel: look again, but only
-      // while no phone depends on the EngineLink network.
-      if(staFails%6==0&&WiFi.softAPgetStationNum()==0&&!scanBusy){
-        staBssidKnown=findRouter();
-        if(staBssidKnown&&staChannel!=apChannelNow){apChannelNow=staChannel;startAP();}
+      // Keep-alive: a small packet to the router every 25 s. Some routers drop
+      // clients that stay quiet, and keep the way to EngineLink fresh this way.
+      if((uint32_t)(millis()-staLastKeepAlive)>=25000){
+        staLastKeepAlive=millis();
+        NetworkUDP u;if(u.beginPacket(WiFi.gatewayIP(),9)){u.write((const uint8_t*)"EL",2);u.endPacket();}
       }
-      esp_wifi_disconnect();
-      connectRouter();
-      staBackoff=min<uint32_t>(staBackoff*2,300000UL);
-      staNextTry=millis()+staBackoff;
+    }else{
+      if(!staDownSince)staDownSince=millis()?millis():1;
+      if((int32_t)(millis()-staNextTry)>=0){
+        ++staFails;
+        // Routers move to another channel by themselves; then reconnecting on
+        // the old one never works. Search again after a few tries: right away
+        // with no phone on the EngineLink network, otherwise at most every 5
+        // minutes (a search briefly leaves the channel, phones stay joined).
+        const bool phones=WiFi.softAPgetStationNum()>0;
+        if(staFails%3==0&&!scanBusy&&(!phones||!staLastScan||(uint32_t)(millis()-staLastScan)>=300000UL)){
+          staLastScan=millis();
+          staBssidKnown=findRouter();
+          if(staBssidKnown&&staChannel!=apChannelNow){apChannelNow=staChannel;startAP();}
+        }
+        esp_wifi_disconnect();
+        connectRouter();
+        // Reconnecting on the known channel does not disturb the phones, so
+        // it is tried often: 8 s, 16 s, then every 30 s.
+        staBackoff=min<uint32_t>(staBackoff*2,30000UL);
+        staNextTry=millis()+staBackoff;
+      }
     }
   }
   if(routerConfigured()&&WiFi.status()==WL_CONNECTED&&!ntpStarted&&cfg.ntpOn&&allowTime("ntp")){
@@ -2837,7 +2856,7 @@ ledlang::State ledStateNow(){
   if(!sdReady)return S_NO_SD;
   if(calActive)return S_TEST;
   if(!cfg.completed)return S_SETUP;
-  if(cfg.router&&cfg.ssid.length()&&WiFi.status()!=WL_CONNECTED)return S_ROUTER;
+  if(cfg.router&&cfg.ssid.length()&&WiFi.status()!=WL_CONNECTED&&staDownSince&&(uint32_t)(millis()-staDownSince)>15000)return S_ROUTER;
   const uint64_t now=elapsedMs();
   for(uint8_t c=0;c<2;c++)if(kad[c].polling&&rpmFresh(c,now))return S_LIVE;
   if(cfg.protocol!=PROTO_KAD&&(rpmFresh(0,now)||rpmFresh(1,now)))return S_LIVE;
@@ -3858,6 +3877,8 @@ void handleDiag(){
   s+="]";
   s+=",\"wifi\":{\"apRestarts\":";s+=apRestarts;s+=",\"joins\":";s+=(unsigned long)apJoins;s+=",\"leaves\":";s+=(unsigned long)apLeaves;
   s+=",\"reason\":";s+=(unsigned)apReason;s+=",\"staFails\":";s+=staFails;s+=",\"staDrops\":";s+=(unsigned long)staDisconnects;
+  s+=",\"staReason\":";s+=(unsigned)staLastReason;s+=",\"staDropAgo\":";if(staLastDropAt)s+=(unsigned long)((millis()-staLastDropAt)/1000);else s+="null";
+  s+=",\"staDown\":";if(staDownSince)s+=(unsigned long)((millis()-staDownSince)/1000);else s+="null";
   s+=",\"staConnects\":";s+=staConnects;s+=",\"ch\":";s+=apChannelNow;
   s+=",\"conflict\":";s+=staConflict?"true":"false";
   s+=",\"apStops\":";s+=(unsigned long)apStops;s+=",\"chMoves\":";s+=apChannelChanges;s+=",\"autoNets\":";s+=autoChannelNets;s+=",\"bw\":";{wifi_bandwidth_t b=WIFI_BW_HT20;esp_wifi_get_bandwidth(WIFI_IF_AP,&b);s+=b==WIFI_BW_HT40?40:20;}
