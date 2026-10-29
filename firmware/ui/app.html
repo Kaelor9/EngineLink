@@ -1300,7 +1300,8 @@ function readingBlock(d,es){
       ${ds.active?`<div class="s12" style="margin-top:8px">Looking for more values · at ${256+ds.pos} of 256–319${(ds.found||[]).length?' · found so far:':''}</div><div class="s12" style="margin-top:6px">${found}</div>`
         :ds.done?`<div class="s12" style="margin-top:8px">${(ds.found||[]).length?'This engine answers:':'No values found.'}</div><div class="s12" style="margin-top:6px">${found}</div>`:''}
       ${r.polling&&!ds.active?`<button class="btn" style="width:100%;margin-top:10px" data-a="discover" data-v="${e.ch}">Discover more values</button>`:''}</div>`;}).join('');
-  return `<div class="hd">Reading speed</div><div class="sec">${rows}<div class="rowx"><div class="s12 sub">EngineLink asks as fast as the engine answers and slows down when answers go missing. Values an engine never answers are skipped. "Discover more values" asks once for every value number from 256 to 319, with the same read request as always: nothing is changed in the engine.</div></div></div>`;
+  const ew=d.engineWait;
+  return `<div class="hd">Reading speed</div><div class="sec">${rows}${d.engineTask?`<div class="rowx"><div class="cth"><span class="rt">Engine reading</span><span class="rv">Own task</span></div><div class="s12 sub" style="margin-top:3px">Runs on its own processor core. ${ew?`Longest wait for the rest of EngineLink: ${NF(ew.max,0)} ms${ew.slow?` · ${ew.slow} waits over 0.1 s`:''}.`:''}</div></div>`:''}<div class="rowx"><div class="s12 sub">EngineLink asks as fast as the engine answers and slows down when answers go missing. Values an engine never answers are skipped. "Discover more values" asks once for every value number from 256 to 319, with the same read request as always: nothing is changed in the engine.</div></div></div>`;
 }
 // Download speed: a test from memory (network only), and the last big
 // download split into finding the trip, reading the SD card and sending.
