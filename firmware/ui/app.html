@@ -1268,6 +1268,7 @@ const PAGE_VIEWS={
       ${w.leaves?`<div class="s12" style="margin-top:8px">Last phone drop: <b>${LEAVE[w.reason]||'code '+w.reason}</b></div>`:''}
       </div>${dlBlock(d.dl,d.sp)}<div class="rowx">
       <div class="s12 sub">"Missed here" counts the live updates this phone did not get since the app was opened. Up for ${dur(d.up||0)}${d.reset!=null?' · last restart: '+(RESET[d.reset]||'code '+d.reset):''}.</div></div></div>`;
+    h+=restartsBlock(d);
     // Calibration
     const lastFull=S.fuel&&S.fuel.log.find(r=>r.full&&r.base!=null&&r.pump>0);
     h+=`<div class="hd">Calibration</div><div class="sec"><div class="rowx"><div class="cth"><span class="rt">Fuel rate scale</span><span class="s12" style="font-weight:600;color:${c.scaleOk?'var(--green)':'var(--orange)'}">${c.scaleOk?'Confirmed':'Not confirmed yet'}</span></div>
@@ -1305,6 +1306,20 @@ function readingBlock(d,es){
 }
 // Download speed: a test from memory (network only), and the last big
 // download split into finding the trip, reading the SD card and sending.
+// Why EngineLink restarted lately, in plain words, with advice for the
+// restarts that point at a problem.
+function restartsBlock(d){
+  const rs=d.restarts||[];if(!rs.length&&!(S.appErrs||[]).length)return '';
+  const bad=rs.filter(r=>[4,5,6,7,9,14,15].includes(r.r));
+  const brown=rs.some(r=>r.r===9||r.r===14);
+  const when=r=>r.utc?new Date(r.utc*1000).toLocaleString(LOC,{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}):'Time unknown';
+  let h=`<div class="hd">Restarts</div><div class="sec">${rs.slice(0,8).map((r,i)=>`<div class="rowx" style="padding:10px 0"><div class="cth"><span class="rt" style="color:${[4,5,6,7,9,14,15].includes(r.r)?'var(--orange)':'var(--text)'}">${esc((w=>w[0].toUpperCase()+w.slice(1))(RESET[r.r]||'code '+r.r))}</span><span class="rv s13">${i?when(r):'This start'}</span></div><div class="s12 sub" style="margin-top:2px">${r.up?'Had been on for about '+dur(r.up)+' · ':''}version ${esc(r.v)}</div></div>`).join('')}
+    ${bad.length?`<div class="rowx"><div class="s13" style="background:var(--osoft);color:var(--orange);border-radius:12px;padding:10px 12px">${brown?'The supply voltage dipped so low that EngineLink restarted. Check the 12 V wiring, the fuse and the connections; starting the engines can pull the battery voltage down.':'EngineLink restarted after a fault and saved what it could. If it happens again, send the technical file (Engine report and files).'}</div></div>`:''}
+    ${d.sdRecoveries?`<div class="rowx s12 sub">The SD card stopped working ${d.sdRecoveries} time${d.sdRecoveries>1?'s':''} and was started again by itself.</div>`:''}
+    ${(S.appErrs||[]).length?`<div class="rowx"><div class="rt">App errors this time</div>${S.appErrs.slice(-5).map(e=>`<div class="s12 sub" style="margin-top:4px">${esc(e.msg)}</div>`).join('')}</div>`:''}
+    <div class="rowx s12 sub">"Power on" is normal: the power was switched off and on. Totals are saved every 30 seconds while an engine runs, so a power cut loses at most that.</div></div>`;
+  return h;
+}
 function dlBlock(dl,spd){
   const sp=S.speed,secs=ms=>ms<1000?NF(ms,0)+' ms':ms<60000?NF(ms/1000,ms<10000?1:0)+' s':dur(Math.round(ms/1000));
   const via=x=>x.ap?'over the EngineLink Wi-Fi':'over the boat router'+(x.rssi?` (signal ${x.rssi} dBm, ${x.rssi>-60?'strong':x.rssi>-72?'good':'weak'})`:'');
@@ -1598,7 +1613,7 @@ const A={
   rClose:()=>{window.close();setTimeout(()=>toast('Close this window to go back to the app'),300);},
   rPrint:()=>window.print(),
   fileCopy:()=>{const ta=$('#filetext');if(!ta)return;ta.focus();ta.setSelectionRange(0,ta.value.length);let ok=false;try{ok=document.execCommand('copy');}catch(e){}toast(ok?'Copied':'Select all and copy');},
-  report:async()=>{const out={app:'EngineLink',made:new Date().toISOString()};
+  report:async()=>{const out={app:'EngineLink',made:new Date().toISOString(),appErrors:S.appErrs||[]};
     for(const [k,u] of [['live','/api/live'],['state','/api/state'],['diag','/api/diag'],['fuel','/api/fuel'],['economy','/api/economy'],['trips','/api/trips'],['pids','/api/pids']]){try{out[k]=await get(u,8000);}catch(e){out[k]='unavailable';}}
     saveFile('EngineLink-diagnostics-'+Date.now()+'.json',JSON.stringify(out,null,1));},
   seasonReset:async()=>{if(!confirm('Start a new season? The learned speed table and "This season" start from zero. Trips are kept.'))return;await act('/api/season/reset',{});load('econ');},
@@ -1813,6 +1828,16 @@ addEventListener('beforeinstallprompt',e=>{e.preventDefault();window._bip=e;});
 async function loadPrefs(){
   try{const p=await get('/api/prefs',4000);if(p&&typeof p==='object'){for(const k of Object.keys(P))if(p[k]!==undefined)P[k]=typeof P[k]==='object'&&!Array.isArray(P[k])?Object.assign({},P[k],p[k]):p[k];}prefsLoaded=true;}catch(e){}
 }
+// App errors: kept for Diagnostics and the technical file; network hiccups
+// are expected on a boat and only counted there, real errors get a toast.
+function appError(msg){
+  msg=String(msg||'Unknown error').slice(0,200);
+  (S.appErrs=S.appErrs||[]).push({t:Date.now(),msg});if(S.appErrs.length>20)S.appErrs.shift();
+  if(/abort|failed to fetch|load failed|network/i.test(msg))return;
+  const now=Date.now();if(now-(S.lastErrToast||0)>15000){S.lastErrToast=now;toast('Something went wrong in the app. Pull down or reopen it if a screen looks wrong.');}
+}
+addEventListener('error',e=>appError(e.message||(e.error&&e.error.message)));
+addEventListener('unhandledrejection',e=>appError(e.reason&&(e.reason.message||e.reason)));
 (async function init(){
   if(RQ.get('report')){renderReport(RQ.get('report'));return;}
   renderNav();render(true);

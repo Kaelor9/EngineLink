@@ -38,6 +38,7 @@
 #include <math.h>
 #include <esp_wifi.h>
 #include <esp_ota_ops.h>
+#include <esp_task_wdt.h>
 #include <HTTPClient.h>
 #include <NetworkClientSecure.h>
 #include "ui.h"
@@ -47,7 +48,7 @@
 #include "diagrules.h"
 #include "miniz.h"  // the deflate compressor in the chip's ROM
 
-#define EL_VERSION "0.7.9"
+#define EL_VERSION "0.8.0"
 // Releases list published by the Pages workflow; firmware files come from
 // GitHub Releases of the same repository. Nothing else is downloaded.
 #define EL_RELEASES_URL "https://kaelor9.github.io/EngineLink/releases.json"
@@ -71,6 +72,7 @@ constexpr uint32_t CSV_FLUSH_MS=1200;
 constexpr float ENGINE_RUN_RPM=300.0f;        // above cranking speed
 constexpr uint32_t ENGINE_STOP_DEBOUNCE_MS=10000;
 constexpr uint32_t TOTALS_SAVE_MS=300000;      // NVS wear: at most every 5 min
+constexpr uint32_t TOTALS_SAVE_RUNNING_MS=30000;  // while an engine runs
 constexpr uint16_t HISTORY_LEN=360;            // 1 hour at 10 s
 constexpr uint32_t HISTORY_STEP_MS=10000;
 constexpr uint8_t MAX_SEGMENTS=12;
@@ -611,6 +613,7 @@ struct ChunkOut {
     web.sendContent("");
   }
   void send(const char *s,size_t len){
+    feedLoopWDT();  // a long download over a weak link is not a hang
     downloadBreath();
     const uint32_t t0=millis();web.sendContent(s,len);dlStat.netMs+=millis()-t0;dlStat.bytes+=len;
   }
@@ -651,6 +654,7 @@ uint32_t bootId=0,lastFlush=0,lastWifiRetry=0,lastLed=0,ledPrev=0xFFFFFFFF;
 uint32_t ledTestStartedMs=0;
 uint8_t ledBrightness=42;
 bool sdFaultLatched=false;
+uint32_t lastSdRetry=0,sdRetries=0,sdRecoveries=0;
 bool uartReady[2]={false,false};
 bool sdReady=false,sdLogging=false,canReady=false,pendingNetwork=false,mdnsReady=false;
 bool hasTime=false,ntpStarted=false;
@@ -819,11 +823,38 @@ void loadTotals(){
   pref.end();
 }
 void saveLife();
+// Restart log: why EngineLink started, how long it had run before, and the
+// version. "alive" is the uptime at the last save, so after a power cut it
+// tells roughly how long the board had been on.
+struct RestartRec{uint32_t utc=0,upBefore=0;uint8_t reason=0;char ver[11]="";};
+constexpr uint8_t RESTART_LOG_N=8;
+RestartRec restartLog[RESTART_LOG_N];
+bool restartUtcPending=false;
+void restartLogBoot(){
+  Preferences p;p.begin("rlog",false);
+  p.getBytes("r",restartLog,sizeof(restartLog));
+  for(int i=RESTART_LOG_N-1;i>0;i--)restartLog[i]=restartLog[i-1];
+  RestartRec &r=restartLog[0];r=RestartRec();
+  r.reason=(uint8_t)esp_reset_reason();r.upBefore=p.getUInt("alive",0);
+  strlcpy(r.ver,EL_VERSION,sizeof(r.ver));
+  p.putUInt("alive",0);
+  p.putBytes("r",restartLog,sizeof(restartLog));
+  p.end();
+  restartUtcPending=true;
+}
+// The clock is set a little after start (phone, GPS or NTP): date the entry then.
+void restartLogDate(){
+  if(!restartUtcPending||!validWall())return;
+  restartUtcPending=false;
+  restartLog[0].utc=(uint32_t)(time(nullptr)-(time_t)(millis()/1000));
+  Preferences p;p.begin("rlog",false);p.putBytes("r",restartLog,sizeof(restartLog));p.end();
+}
 void saveTotals(){
   if(lifeDirty)saveLife();
   pref.begin("totals",false);
   pref.putBytes("t",&totals,sizeof(totals));
   pref.end();
+  {Preferences p;p.begin("rlog",false);p.putUInt("alive",(uint32_t)(millis()/1000));p.end();}
   totalsDirty=false;lastTotalsSave=millis();
 }
 void resetTrip(){
@@ -885,6 +916,19 @@ void serviceSD(){
       cardChangeAt=0;
       initSD();
       refreshTestAvailable();
+    }
+  }
+  // After a write failure with the card still in, try again: mount anew,
+  // resume the raw log and the trip log. Every minute, then every 5 minutes.
+  if(sdFaultLatched&&cardInserted()&&!calActive&&!otaActive&&(uint32_t)(millis()-lastSdRetry)>=(sdRetries<3?60000UL:300000UL)){
+    lastSdRetry=millis();++sdRetries;
+    if(sdLogging)stopLog();
+    if(tripSeries)tripSeries.close();
+    if(sdReady){SD.end();sdReady=false;}
+    initSD();
+    if(sdReady){
+      tripSeriesReopen();refreshTestAvailable();
+      if(!sdFaultLatched){++sdRecoveries;sdRetries=0;}
     }
   }
   if(sdLogging && (uint32_t)(millis()-lastFlush)>=CSV_FLUSH_MS){
@@ -1662,7 +1706,11 @@ void serviceEngines(){
   coverageSecond();
   serviceTripSecond();
   serviceDiagnosis();
-  if(totalsDirty&&(uint32_t)(millis()-lastTotalsSave)>=TOTALS_SAVE_MS)saveTotals();
+  // While an engine runs the totals are saved every 30 s: power often goes with
+  // the ignition, before an engine is seen to stop, and everything since the
+  // last save would be lost. NVS spreads the writes; this is years of use.
+  const uint32_t every=(motor[0].running||motor[1].running)?TOTALS_SAVE_RUNNING_MS:TOTALS_SAVE_MS;
+  if(totalsDirty&&(uint32_t)(millis()-lastTotalsSave)>=every)saveTotals();
 }
 
 // ---------- One-hour trend ----------
@@ -2501,6 +2549,13 @@ void tripSeriesOpen(){
   tripSeriesId=totals.nextTripId;
   tripCov=Coverage();
 }
+// After the card was mounted again: carry on with the trip that is running.
+void tripSeriesReopen(){
+  if(!totals.tripActive||tripSeries||!sdReady)return;
+  char name[32];snprintf(name,sizeof(name),"/TRIPS/T%06lu.BIN",(unsigned long)totals.nextTripId);
+  if(SD.exists(name)){tripSeries=SD.open(name,FILE_APPEND);if(tripSeries)tripSeriesId=totals.nextTripId;return;}
+  const Coverage keep=tripCov;tripSeriesOpen();tripCov=keep;
+}
 void tripSeriesClose(bool keep){
   if(!tripSeries)return;
   tripSeries.close();
@@ -2578,7 +2633,7 @@ void serviceDiagnosis(){
   updateLife(in,s.up);
   if(totals.tripActive&&tripSeries){
     tripSeries.write((const uint8_t*)&s,sizeof(s));
-    if((uint32_t)(millis()-tripSeriesFlush)>30000){tripSeries.flush();tripSeriesFlush=millis();}
+    if((uint32_t)(millis()-tripSeriesFlush)>10000){tripSeries.flush();tripSeriesFlush=millis();}
   }
   serviceBlackBoxes(s.up);
 }
@@ -3781,6 +3836,10 @@ void handleDiag(){
     s+=",\"ap\":";s+=x.ap?"true":"false";s+=",\"rssi\":";s+=x.rssi;s+='}';
   }
   s+=",\"cov\":";coverageJson(s,bootCov);
+  s+=",\"restarts\":[";
+  {bool f=true;for(uint8_t i=0;i<RESTART_LOG_N;i++){const RestartRec &r=restartLog[i];if(!r.ver[0])continue;if(!f)s+=',';f=false;
+    s+="{\"r\":";s+=r.reason;s+=",\"up\":";s+=r.upBefore;s+=",\"utc\":";s+=r.utc;s+=",\"v\":";jsonString(s,r.ver);s+='}';}}
+  s+="],\"sdRecoveries\":";s+=sdRecoveries;
   s+=",\"engineTask\":";s+=engineTaskOn?"true":"false";
   s+=",\"engineWait\":{\"max\":";s+=engineMaxWaitMs;s+=",\"slow\":";s+=engineSlowWaits;s+='}';
   s+=",\"reading\":[";
@@ -3918,6 +3977,7 @@ uint32_t removeTree(const String &path){
   if(!dir)return 0;
   if(!dir.isDirectory()){dir.close();return SD.remove(path)?1:0;}
   for(File f=dir.openNextFile();f;f=dir.openNextFile()){
+    feedLoopWDT();
     String child=String(f.path());
     const bool sub=f.isDirectory();
     f.close();
@@ -4196,6 +4256,7 @@ void handleUpdateUpload(){
         otaError="Not an ESP32 application image";Update.abort();otaActive=false;return;
       }
     }
+    feedLoopWDT();
     if(Update.write(u.buf,u.currentSize)!=u.currentSize){otaError=Update.errorString();Update.abort();otaActive=false;return;}
     otaBytes+=u.currentSize;
   }else if(u.status==UPLOAD_FILE_END){
@@ -4366,6 +4427,7 @@ void setup(){
     rollbackPending=run&&esp_ota_get_state_partition(run,&st)==ESP_OK&&st==ESP_OTA_IMG_PENDING_VERIFY;
   }
   bootId=esp_random();
+  restartLogBoot();
   sketchKB=ESP.getSketchSize()/1024;
   pinMode(SD_DETECT,INPUT);
   pinMode(OPTO_PIN,INPUT);
@@ -4412,6 +4474,9 @@ void setup(){
   // NTP time sync callback is non-blocking.
   sntp_set_time_sync_notification_cb(ntpCallback);
   xTaskCreatePinnedToCore(fwWorker,"fw",12288,nullptr,1,nullptr,0);
+  // Watchdog for the main loop: if it hangs for a minute (it normally runs
+  // every few ms), the chip restarts and the restart log says "watchdog".
+  {esp_task_wdt_config_t w={60000,(1<<0),true};esp_task_wdt_reconfigure(&w);enableLoopWDT();}
   engineMx=xSemaphoreCreateMutex();
   if(engineMx&&framesQueue){
     xSemaphoreTake(engineMx,portMAX_DELAY);  // the loop holds it while it works
@@ -4439,6 +4504,7 @@ void loop(){
   serviceNetwork();
   updateLED();
   serialStatus();
+  restartLogDate();
   // Watchdog for the engine task: stuck for 10 s without waiting for the lock
   // means something inside it hangs. Without it nothing is read, so start over
   // (totals are saved first; automatic reading starts again by itself).
