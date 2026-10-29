@@ -1,6 +1,13 @@
-# EngineLink application v0.7.0
+# EngineLink application v0.7.1
 
 This is a **working application foundation**, not a validated production release. The former Lab firmware is retained under \`experiments/\`. The application is in \`firmware/EngineLink/\`.
+
+## Changes in 0.7.1: reports, export and the iPhone menu
+
+- **iPhone home-screen app: the menu is clear of the home bar.** When EngineLink stretches the app to the bottom of the screen (the iOS sizing fault fixed in 0.5.4), iOS reports no room for the home bar, so the menu labels sat under it. The menu now keeps the 34 pt the home bar needs on iPhones without a home button (20 pt on iPads).
+- **Export, done properly.** One Export sheet for everything: a clear **trip report** or **engine report** at the top, and the spreadsheet files (trip summary, second by second, raw engine messages) below, with their sizes. The report is a light document with the key figures, curves for rpm, fuel, coolant and boost, what EngineLink noticed, port against starboard and each engine's life story. "Save as PDF or print" makes a PDF you can keep or send to a mechanic. It opens in its own window, so the app stays where you were. Open it from History (a trip → Export, or select several trips), the trip timeline, or Diagnostics → Engine report and files.
+- Charts no longer blow up the noise at a steady idle: each value has a smallest scale (300 rpm, 6 L/h, 10 °C, 0.2 bar, 1 V).
+- **Exporting no longer traps the iPhone app.** A home-screen app on iPhone shows a download full screen with no way back, so you had to close the app. Now the file opens in a Safari window: save it with the share button (Save to Files) or send it, and tap Done to come back where you were. The diagnostics report, which is made in the app, is shown in a sheet with a Copy button. Other phones and browsers download as before.
 
 ## Changes in 0.7.0: diagnostics
 
