@@ -46,7 +46,7 @@
 #include "ledpatterns.h"
 #include "diagrules.h"
 
-#define EL_VERSION "0.7.3"
+#define EL_VERSION "0.7.4"
 // Releases list published by the Pages workflow; firmware files come from
 // GitHub Releases of the same repository. Nothing else is downloaded.
 #define EL_RELEASES_URL "https://kaelor9.github.io/EngineLink/releases.json"
@@ -3753,6 +3753,19 @@ bool rowAt(File &f,uint32_t pos,uint64_t &ms,uint32_t &lineStart){
   return true;
 }
 // Raw engine rows of the chosen trips, streamed from the session files.
+// Collects a streamed reply into large pieces (static: kept off the stack).
+struct ChunkOut {
+  char b[8192];size_t n=0;
+  ChunkOut &add(const char *s,size_t len){
+    if(n+len>sizeof(b))flush();
+    if(len>sizeof(b)){web.sendContent(s,len);return *this;}
+    memcpy(b+n,s,len);n+=len;return *this;
+  }
+  ChunkOut &add(const char *s){return add(s,strlen(s));}
+  void flush(){if(n){web.sendContent(b,n);n=0;}}
+};
+static ChunkOut chunkOut;
+static uint8_t rawIn[4096];
 void handleExportRaw(){
   uint32_t ids[MAX_TRIPS];uint8_t n;
   if(!parseIds(web.arg("ids"),ids,n)){web.send(400,"text/plain","No trips selected");return;}
@@ -3761,7 +3774,8 @@ void handleExportRaw(){
   web.sendHeader("Content-Disposition","attachment; filename=EngineLink-raw-trips.csv");
   web.setContentLength(CONTENT_LENGTH_UNKNOWN);
   web.send(200,"text/csv","");
-  web.sendContent("trip_id,boot_id,uptime_ms,utc_epoch,channel,mid,checksum,raw_hex,engine,fuel_lph,rpm,direction,kad_index,kad_value\n");
+  ChunkOut &out=chunkOut;out.n=0;
+  out.add("trip_id,boot_id,uptime_ms,utc_epoch,channel,mid,checksum,raw_hex,engine,fuel_lph,rpm,direction,kad_index,kad_value\n");
   char line[400];
   for(uint8_t j=0;j<n;j++){
     const TripRec *r=tripById(ids[j]);
@@ -3779,20 +3793,29 @@ void handleExportRaw(){
     f.seek(lo);
     {int c;if(lo==0){do{c=f.read();}while(c>=0&&c!='\n');}else{do{c=f.read();}while(c>=0&&c!='\n');}}
     char prefix[16];const int pl=snprintf(prefix,sizeof(prefix),"%lu,",(unsigned long)r->id);
-    while(f.available()){
-      const size_t len=f.readBytesUntil('\n',line,sizeof(line)-1);
-      if(!len)continue;
-      line[len]=0;
-      const char *c1=strchr(line,',');if(!c1)continue;
-      const uint64_t ms=strtoull(c1+1,nullptr,10);
-      if(ms<from)continue;
-      if(ms>to)break;
-      web.sendContent(prefix,pl);
-      web.sendContent(line,len);
-      web.sendContent("\n",1);
+    // Read the card in blocks and send in large pieces: one small piece per
+    // row made a chunk and a network packet each, about 1 kB/s.
+    size_t ll=0;bool done=false;
+    while(!done){
+      const int got=f.read(rawIn,sizeof(rawIn));
+      if(got<=0)break;
+      for(int i=0;i<got&&!done;i++){
+        const char ch=(char)rawIn[i];
+        if(ch!='\n'){if(ll<sizeof(line)-1)line[ll++]=ch;continue;}
+        if(ll&&line[ll-1]=='\r')--ll;
+        line[ll]=0;
+        const char *c1=ll?strchr(line,','):nullptr;
+        if(c1){
+          const uint64_t ms=strtoull(c1+1,nullptr,10);
+          if(ms>to)done=true;
+          else if(ms>=from)out.add(prefix,pl).add(line,ll).add("\n",1);
+        }
+        ll=0;
+      }
     }
     f.close();
   }
+  out.flush();
   web.sendContent("");
 }
 
