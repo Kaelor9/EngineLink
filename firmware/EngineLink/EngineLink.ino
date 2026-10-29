@@ -46,7 +46,7 @@
 #include "ledpatterns.h"
 #include "diagrules.h"
 
-#define EL_VERSION "0.7.2"
+#define EL_VERSION "0.7.3"
 // Releases list published by the Pages workflow; firmware files come from
 // GitHub Releases of the same repository. Nothing else is downloaded.
 #define EL_RELEASES_URL "https://kaelor9.github.io/EngineLink/releases.json"
@@ -3084,6 +3084,7 @@ void applyProtocol(){
   for(uint8_t c=0;c<2;c++){
     if(kad[c].polling)stopPolling(c,"Protocol changed");
     kad[c].pending=false;
+    kad[c].lastAutoTry=0;  // automatic reading starts again right away
     if(uartReady[c])uart_set_rx_timeout(portFor(c),rxTimeoutSymbols());
   }
 }
