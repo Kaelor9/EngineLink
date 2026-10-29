@@ -46,7 +46,7 @@
 #include "ledpatterns.h"
 #include "diagrules.h"
 
-#define EL_VERSION "0.7.1"
+#define EL_VERSION "0.7.2"
 // Releases list published by the Pages workflow; firmware files come from
 // GitHub Releases of the same repository. Nothing else is downloaded.
 #define EL_RELEASES_URL "https://kaelor9.github.io/EngineLink/releases.json"

@@ -1,6 +1,10 @@
-# EngineLink application v0.7.1
+# EngineLink application v0.7.2
 
 This is a **working application foundation**, not a validated production release. The former Lab firmware is retained under \`experiments/\`. The application is in \`firmware/EngineLink/\`.
+
+## Changes in 0.7.2: iPhone menu
+
+- **The menu on iPhone really clears the home bar now.** 0.7.1 only made room when it detected the iOS sizing fault, but on newer iOS the home-screen app also reports no room at the bottom without that fault, so the tabs still sat on the home bar and in the rounded corners. The menu now always keeps Apple's own room for the home bar in the home-screen app: 34 pt on iPhones without a home button (21 pt sideways) and 20 pt on iPads, plus a little room at the sides.
 
 ## Changes in 0.7.1: reports, export and the iPhone menu
 
