@@ -11,6 +11,7 @@ const cfg={router:true,portChannel:1,apChannel:6,timePref:'auto',canListen:false
   kadFuelDiv:128,kadVolt:0,fuelCorr:[1,1],apName:'EngineLink',host:'enginelink',ssid:'Boat router',tankL:575,reserve:10,price:20.03,
   tripEnd:5,autoPoll:true,rawKeep:90,ntp:true,ntpServer:'pool.ntp.org',scaleOk:false,voltOk:false,fineTunes:1,gear:[0,0,0,0]};
 let prefs='{}',gearStep=-1,odd=false;
+let lastSp=null,lastDl={what:'raw engine data',bytes:287000,ms:362000,findMs:2100,sdMs:3400,netMs:356000,ap:false,rssi:-81,active:false};
 // "Discover more values": position per engine, -1 not started; found values.
 const disc=[-1,-1],DISC_FOUND=[256,258,259,260,261,263,264,265,266,267,288,289,291,293,295];
 // Example fill-ups: 45 L (full) then 12.1 L (full), logged as "nozzle clicked
@@ -63,6 +64,7 @@ function diag(){
       raw:{256:[11400+c*120,2850+c*30,90],259:[316+c*4,79+c,700],289:[5274-c*77,41.2-c*0.6,90],293:[1063,13.9,900],264:[gearRaw|(c?0x4000:0),0,300],266:[278025+c*290,772.3+c*0.8,1200]}})),
     quality:{rejected:[0,1],held:[3,2],bridged:[1,0],bridgedSec:[6,0],gaps:[2,2],focus:0},
     reading:[0,1].map(c=>({polling:true,interval:[120,140][c],rate:[8.3,7.1][c],answered:[0.99,0.97][c],skip:c?[296]:[],disc:{active:disc[c]>=0&&disc[c]<64,done:disc[c]>=64,pos:Math.max(0,Math.min(63,disc[c])),found:disc[c]>=0?DISC_FOUND.filter(k=>k-256<disc[c]):[]}})),
+    dl:lastDl,sp:lastSp,
     nmea:0,can:false,sog:null,fuelDiv:128,scaleOk:false,volt:0,voltOk:false,hrs:[772.3,773.1],missed:0,autoPoll:true,proto:'kad',
     wifi:{apRestarts:0,joins:1,leaves:0,reason:0,staFails:0,staDrops:0,staConnects:1,ch:1,conflict:false,apStops:1,chMoves:0,httpServed:4126,httpReused:4061,httpEvicted:1,httpSlowMs:226,httpOpen:2,loopMaxMs:41},
     heap:173488,minHeap:164424,reset:3,up:1800};
@@ -121,6 +123,7 @@ window.fetch=function(url,opt){
     if(p==='/api/sd/info')return reply({ok:true,inserted:true,logging:true,usedMB:2150,totalMB:30400,files:12,rawMB:1900,rawFiles:8,exports:0,trips:3,fuel:2,status:'Logging raw J1708'});
     if(p==='/api/state'){cfg.fuelCorr=[cal().f,cal().f];return reply({config:cfg,test:{running:false,available:false,rows:0,step:0,phase:'idle',seconds:0},recent:[]});}
     if(p==='/api/fw/status')return reply({state:0,bytes:0,total:0,error:'',target:'',running:'__VERSION__',pending:false,online:true,list:null});
+    if(p==='/api/speedtest'){const kb=Math.min(4096,+u.searchParams.get('kb')||256);lastSp={what:'speed test',bytes:kb*1024,ms:1600,findMs:0,sdMs:0,netMs:1590,ap:false,rssi:-58};return new Promise(r=>setTimeout(()=>r(new Response('x'.repeat(kb*1024))),1600));}
     if(p==='/api/events')return reply({n:unacked(),alarm:false,warn:unacked()>0,boot:4,up:Math.round(1800+(Date.now()-t0)/1000),list:evs});
     if(p==='/api/life')return reply(lifeData);
     if(p==='/api/led'){const d=ledDemoStart?Math.floor((Date.now()-ledDemoStart)/3000):null;if(d!=null&&d>=12)ledDemoStart=0;return reply(Object.assign({now:ledNow(),demo:ledDemoStart?d:null,stepMs:3000},LEDS));}

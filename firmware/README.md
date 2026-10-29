@@ -46,6 +46,7 @@ Build settings: ESP32S3 Dev Module, 8 MB flash, `default_8MB` partitions (two OT
 | GET | `/api/sd/info` · POST `/api/sd/wipe` (`confirm=WIPE`) | SD card |
 | GET | `/api/events` · POST `/api/events/ack` (`id` or `all`), `/api/mark` | Diagnosis events, marking them seen, "Something's odd" |
 | GET | `/api/event/series` (`id`), `/api/trip/series` (`id`), `/api/series/recent` (`secs` 60–3600) | Second-by-second curves (columns `t`, `rpm`, `req`, `lph`, `cool`, `air`, `boost`, `volt`, each `[port..., starboard...]` by channel), at most 600 points |
+| GET | `/api/speedtest` (`kb` 16–4096) | Download speed test from memory (no SD card); result and the last export's timing in `/api/diag` → `sp`, `dl` |
 | GET | `/api/export/series.csv` (`id`) | A trip's 1 Hz log as CSV |
 | GET | `/api/life` | Each engine's life story and its learned normal values per rpm band |
 | POST | `/api/kad/discover` (`ch`) | Ask once for each KAD value 256–319 (read requests only; reading must be on). Progress in `/api/diag` → `reading` |

@@ -46,7 +46,7 @@
 #include "ledpatterns.h"
 #include "diagrules.h"
 
-#define EL_VERSION "0.7.4"
+#define EL_VERSION "0.7.5"
 // Releases list published by the Pages workflow; firmware files come from
 // GitHub Releases of the same repository. Nothing else is downloaded.
 #define EL_RELEASES_URL "https://kaelor9.github.io/EngineLink/releases.json"
@@ -3501,6 +3501,12 @@ void handleSeasonReset(){
 }
 
 // ---------- Diagnostics ----------
+// The last big download, timed, so Diagnostics can say whether the SD card
+// or the network is what takes the time.
+struct DlStat {
+  char what[20]="";uint32_t bytes=0,ms=0,findMs=0,sdMs=0,netMs=0;bool ap=false;int16_t rssi=0;bool active=false;
+};
+DlStat dlStat,spStat;  // last export; last speed test
 void handleDiag(){
   const uint64_t now=elapsedMs();
   String s;s.reserve(3000);
@@ -3543,6 +3549,14 @@ void handleDiag(){
   s+="],\"gaps\":[";s+=motor[0].gaps;s+=',';s+=motor[1].gaps;
   s+="],\"focus\":";s+=(kadFocusIndex&&(int32_t)(kadFocusUntil-millis())>0)?kadFocusIndex:0;
   s+="}";
+  for(uint8_t k=0;k<2;k++){
+    const DlStat &x=k?spStat:dlStat;
+    if(!x.what[0])continue;
+    s+=k?",\"sp\":":",\"dl\":";
+    s+="{\"what\":";jsonString(s,x.what);s+=",\"bytes\":";s+=x.bytes;s+=",\"ms\":";s+=x.ms;
+    s+=",\"findMs\":";s+=x.findMs;s+=",\"sdMs\":";s+=x.sdMs;s+=",\"netMs\":";s+=x.netMs;
+    s+=",\"ap\":";s+=x.ap?"true":"false";s+=",\"rssi\":";s+=x.rssi;s+='}';
+  }
   s+=",\"reading\":[";
   for(uint8_t c=0;c<2;c++){
     const KadLink &k=kad[c];
@@ -3753,16 +3767,24 @@ bool rowAt(File &f,uint32_t pos,uint64_t &ms,uint32_t &lineStart){
   return true;
 }
 // Raw engine rows of the chosen trips, streamed from the session files.
+void dlBegin(const char *what){
+  dlStat=DlStat();strlcpy(dlStat.what,what,sizeof(dlStat.what));dlStat.active=true;
+  dlStat.ap=web.client().localIP()==WiFi.softAPIP();
+  dlStat.rssi=(!dlStat.ap&&WiFi.status()==WL_CONNECTED)?WiFi.RSSI():0;
+  dlStat.ms=millis();
+}
+void dlEnd(){dlStat.ms=millis()-dlStat.ms;dlStat.active=false;}
 // Collects a streamed reply into large pieces (static: kept off the stack).
 struct ChunkOut {
   char b[8192];size_t n=0;
   ChunkOut &add(const char *s,size_t len){
     if(n+len>sizeof(b))flush();
-    if(len>sizeof(b)){web.sendContent(s,len);return *this;}
+    if(len>sizeof(b)){send(s,len);return *this;}
     memcpy(b+n,s,len);n+=len;return *this;
   }
   ChunkOut &add(const char *s){return add(s,strlen(s));}
-  void flush(){if(n){web.sendContent(b,n);n=0;}}
+  void flush(){if(n){send(b,n);n=0;}}
+  void send(const char *s,size_t len){const uint32_t t0=millis();web.sendContent(s,len);dlStat.netMs+=millis()-t0;dlStat.bytes+=len;}
 };
 static ChunkOut chunkOut;
 static uint8_t rawIn[4096];
@@ -3774,6 +3796,7 @@ void handleExportRaw(){
   web.sendHeader("Content-Disposition","attachment; filename=EngineLink-raw-trips.csv");
   web.setContentLength(CONTENT_LENGTH_UNKNOWN);
   web.send(200,"text/csv","");
+  dlBegin("raw engine data");
   ChunkOut &out=chunkOut;out.n=0;
   out.add("trip_id,boot_id,uptime_ms,utc_epoch,channel,mid,checksum,raw_hex,engine,fuel_lph,rpm,direction,kad_index,kad_value\n");
   char line[400];
@@ -3785,6 +3808,7 @@ void handleExportRaw(){
     if(!f)continue;
     const uint64_t from=(uint64_t)r->startSec*1000ULL,to=(uint64_t)r->endSec*1000ULL+15000ULL;
     // Rows are in time order: binary search for the first row of the trip.
+    const uint32_t tf=millis();
     uint32_t lo=0,hi=f.size();
     while(hi-lo>8192){
       const uint32_t mid=lo+(hi-lo)/2;uint64_t ms;uint32_t ls;
@@ -3792,12 +3816,15 @@ void handleExportRaw(){
     }
     f.seek(lo);
     {int c;if(lo==0){do{c=f.read();}while(c>=0&&c!='\n');}else{do{c=f.read();}while(c>=0&&c!='\n');}}
+    dlStat.findMs+=millis()-tf;
     char prefix[16];const int pl=snprintf(prefix,sizeof(prefix),"%lu,",(unsigned long)r->id);
     // Read the card in blocks and send in large pieces: one small piece per
     // row made a chunk and a network packet each, about 1 kB/s.
     size_t ll=0;bool done=false;
     while(!done){
+      const uint32_t tr=millis();
       const int got=f.read(rawIn,sizeof(rawIn));
+      dlStat.sdMs+=millis()-tr;
       if(got<=0)break;
       for(int i=0;i<got&&!done;i++){
         const char ch=(char)rawIn[i];
@@ -3817,6 +3844,24 @@ void handleExportRaw(){
   }
   out.flush();
   web.sendContent("");
+  dlEnd();
+}
+// Download speed test: text from memory, no SD card, so it measures only the
+// network between the phone or computer and EngineLink.
+void handleSpeedTest(){
+  const uint32_t kb=constrain(web.arg("kb").toInt(),16,4096);
+  web.sendHeader("Cache-Control","no-store");
+  web.setContentLength(CONTENT_LENGTH_UNKNOWN);
+  web.send(200,"text/plain","");
+  const DlStat keep=dlStat;
+  dlBegin("speed test");
+  ChunkOut &out=chunkOut;out.n=0;
+  static const char row[]="EngineLink speed test,0123456789abcdefghijklmnopqrstuvwxyz,0123456789\n";  // 64 bytes
+  for(uint32_t i=0;i<kb*16;i++)out.add(row,sizeof(row)-1);
+  out.flush();
+  web.sendContent("");
+  dlEnd();
+  spStat=dlStat;dlStat=keep;
 }
 
 // ---------- Backup ----------
@@ -4064,6 +4109,7 @@ void initializeWeb(){
   web.on("/api/sd/wipe",HTTP_POST,handleSdWipe);
   web.on("/api/export/trips.csv",HTTP_GET,handleExportTrips);
   web.on("/api/export/raw.csv",HTTP_GET,handleExportRaw);
+  web.on("/api/speedtest",HTTP_GET,handleSpeedTest);
   web.on("/api/backup",HTTP_GET,handleBackup);
   web.on("/api/fw/check",HTTP_POST,handleFwCheck);
   web.on("/api/fw/install",HTTP_POST,handleFwInstall);
