@@ -31,6 +31,11 @@ jobs:
           print("UI JS size:",end-start)
           PY2
           node --check /tmp/enginelink-ui.js
+      - name: Build the app demo
+        run: |
+          python3 tools/build_demo.py
+          node --check tools/demo/mock.js
+          node --check tools/demo/control.js
       - name: Test the fuel calibration maths
         run: |
           g++ -O2 -std=c++17 -Wall -I firmware/EngineLink tools/test_fuelcal.cpp -o /tmp/test_fuelcal

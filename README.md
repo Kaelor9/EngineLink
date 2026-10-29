@@ -119,6 +119,8 @@ The app source is [`firmware/ui/app.html`](firmware/ui/app.html); `tools/build_u
 
 ## Getting Started
 
+Want to see the app first? **[Try it in your browser](https://kaelor9.github.io/EngineLink/demo/)** against a simulated boat.
+
 1. Open the **[web installer](https://kaelor9.github.io/EngineLink/)** in Chrome or Edge on a computer.
 2. Connect the board with a USB-C data cable, tick the safety confirmation and click **Install**.
 3. On your phone, join the Wi-Fi **EngineLink** (password `12345678`) and open **http://192.168.4.1**.

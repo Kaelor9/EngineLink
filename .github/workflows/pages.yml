@@ -7,6 +7,8 @@ on:
       - 'site/**'
       - 'firmware/EngineLink/**'
       - 'firmware/ui/**'
+      - 'tools/demo/**'
+      - 'tools/build_demo.py'
       - '.github/workflows/pages.yml'
   workflow_dispatch:
 
@@ -131,6 +133,10 @@ jobs:
           json.dump({"releases": out[:15]}, open("site/releases.json", "w"), indent=2)
           print("releases.json:", [x["v"] for x in out[:15]])
           PY2
+
+      - name: Build the app demo
+        # site/demo: the phone app against a simulated boat, in the browser.
+        run: python3 tools/build_demo.py
 
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
