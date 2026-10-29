@@ -6,6 +6,7 @@ The application firmware is in [`EngineLink/`](EngineLink/):
 - `ui.h`: the phone app, gzip-compressed and served from flash. **Generated**: edit [`ui/app.html`](ui/app.html) and run `python3 tools/build_ui.py` (CI fails if they differ). No CDN, works offline.
 - `icons.h`: the Engine Link app icon (SVG and PNG for the home screen).
 - `rollback.cpp`: turns on the bootloader rollback check for Wi-Fi updates.
+- `fuelcal.h`: the fuel calibration (weighted ridge regression over fill-ups, leave-one-out check). Plain C++, tested on a PC by `tools/test_fuelcal.cpp` in CI.
 
 Data on the board: settings and lifetime totals in NVS; trips, the fuel log, engine health, diagnostics results and app preferences in LittleFS on the `spiffs` partition (written to a temporary file and renamed, so a power cut never leaves half a file); raw J1708 logs on the SD card, cleaned up after the number of days set in Settings.
 
@@ -36,12 +37,12 @@ Build settings: ESP32S3 Dev Module, 8 MB flash, `default_8MB` partitions (two OT
 | POST | `/api/led/test` | 16 s LED demonstration |
 | GET | `/api/live` | Compact live data for the app (polled every 0.5 s) |
 | GET | `/api/trips` · POST `/api/trip/note`, `/combine`, `/split` | Trip list and editing |
-| GET | `/api/fuel` · POST `/api/fuel/add`, `/delete` | Fuel log, tank estimate, fine-tuning |
+| GET | `/api/fuel` · POST `/api/fuel/add` (`q` 0 not full, 1 clicked off, 2 topped up), `/edit` (`i`, `q`, `use` 0 auto/1 use/2 never), `/delete` | Fuel log with calibration state per entry, calibration result (`cal`), tank ± |
 | GET | `/api/economy` · POST `/api/season/reset` | RPM/speed statistics, zones, health |
 | GET/POST | `/api/prefs` | App preferences shared by all phones |
-| POST | `/api/cfg` | Tank, price, trip end, raw log days, NTP, port, scaling, `host` (mDNS name for `<host>.local`, also the DHCP hostname). `autoPoll=1` needs `confirm=POLL` |
+| POST | `/api/cfg` | Tank, price, trip end, raw log days, NTP, port, scaling, `host` (mDNS name for `<host>.local`, also the DHCP hostname), `gearF`/`gearR` (`mask:value` learned at the dock). `autoPoll=1` needs `confirm=POLL` |
 | POST | `/api/wifi/ap`, `/connect`, `/forget` · GET `/api/wifi/scan` | EngineLink network and boat router |
-| GET | `/api/diag` · POST `/api/diag/test` | Diagnostics and 30 s connection test |
+| GET | `/api/diag` · POST `/api/diag/test`, `/api/diag/focus` (`idx`, `secs` ≤ 90) | Diagnostics, 30 s connection test, data quality counters, one value read in every slow slot (gear learning) |
 | GET | `/api/sd/info` · POST `/api/sd/wipe` (`confirm=WIPE`) | SD card |
 | GET | `/api/export/trips.csv`, `/api/export/raw.csv`, `/api/backup` | Downloads |
 | POST | `/api/fw/check`, `/api/fw/install` · GET `/api/fw/status` | Firmware from GitHub Releases |

@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Try EngineLink</title>
+<meta name="description" content="The EngineLink phone app running in your browser against a simulated boat.">
+<link rel="icon" type="image/svg+xml" href="../assets/enginelink-mark.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600&display=swap">
+<style>
+/* Built by tools/build_demo.py. Left: what to try; right: the real app in a phone frame. */
+:root{
+  --bg:#0a1420;--panel:#112131;--line:#1c3447;--fg:#eef5f8;--sub:#9bb6c6;--teal:#46cabc;--onteal:#062022;
+  --display:"Barlow Semi Condensed","Arial Narrow",system-ui,sans-serif;--body:"Barlow",system-ui,-apple-system,"Segoe UI",sans-serif;
+  color-scheme:dark}
+@media (prefers-color-scheme: light){:root{--bg:#eef2f5;--panel:#ffffff;--line:#d9e1e8;--fg:#0b1620;--sub:#5b6b78;--teal:#0b8f8a;--onteal:#ffffff;color-scheme:light}}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--fg);font:16px/1.45 var(--body);padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:max(24px,env(safe-area-inset-top,0px)) 40px}
+a{color:var(--teal)}
+.wrap{max-width:1120px;margin:0 auto;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:40px;align-items:start}
+.top{display:flex;justify-content:space-between;align-items:center;gap:12px;max-width:1120px;margin:0 auto 26px;font-size:14px}
+.top a.brand{display:flex;align-items:center;gap:8px;color:var(--fg);text-decoration:none;font:600 17px var(--display)}
+.top img{width:26px;height:26px}
+h1{font:700 40px/1.05 var(--display);letter-spacing:-.3px;margin:0;text-wrap:balance}
+.eyebrow{font:600 13px/1 var(--display);letter-spacing:1.4px;text-transform:uppercase;color:var(--teal);margin-bottom:10px}
+.lede{color:var(--sub);margin:12px 0 0;max-width:60ch}
+.note{font-size:13.5px;color:var(--sub);margin-top:14px;max-width:60ch}
+.scenes{display:flex;flex-direction:column;gap:8px;margin-top:26px}
+.scene{display:grid;grid-template-columns:28px minmax(0,1fr);gap:12px;align-items:start;text-align:left;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:13px 14px;color:inherit;font:inherit;cursor:pointer}
+.scene:hover{border-color:var(--teal)}
+.scene:focus-visible{outline:2px solid var(--teal);outline-offset:2px}
+.scene[aria-pressed="true"]{border-color:var(--teal);box-shadow:inset 3px 0 0 var(--teal)}
+.scene .n{font:700 15px/28px var(--display);font-style:normal;text-align:center;width:28px;height:28px;border-radius:50%;background:var(--line);color:var(--sub)}
+.scene[aria-pressed="true"] .n{background:var(--teal);color:var(--onteal)}
+.scene b{display:block;font:600 17px/1.25 var(--display)}
+.scene span{display:block;font-size:14px;color:var(--sub);margin-top:2px}
+.phonecol{position:sticky;top:max(20px,env(safe-area-inset-top,0px))}
+.phone{border-radius:44px;padding:10px;background:#05090e;box-shadow:0 0 0 1px var(--line),0 30px 60px rgba(0,0,0,.35)}
+.screen{overflow:hidden;border-radius:34px;position:relative;background:#0a1420}
+.screen iframe{border:0;width:390px;height:844px;transform-origin:0 0;display:block}
+.cap{font-size:12.5px;color:var(--sub);text-align:center;margin-top:10px}
+@media (max-width:900px){
+  .wrap{grid-template-columns:minmax(0,1fr);gap:22px}
+  .phonecol{position:static;justify-self:center}
+  .scenes{flex-direction:row;flex-wrap:wrap;margin-top:18px}
+  .scene{grid-template-columns:auto;padding:9px 12px;border-radius:99px}
+  .scene .n,.scene span{display:none}
+  .scene b{font-size:15px}
+  h1{font-size:32px}
+}
+</style>
+</head>
+<body>
+<div class="top"><a class="brand" href="../"><img src="../assets/enginelink-mark.svg" alt="">EngineLink</a><a href="../#downloads">Install firmware</a></div>
+<div class="wrap">
+  <div>
+    <div class="eyebrow">Live demo · app __VERSION__</div>
+    <h1>Try the EngineLink app</h1>
+    <p class="lede">This is the real phone app from the EngineLink firmware, running in your browser against a simulated boat with two Volvo Penta KAD300 engines at cruise. Use it freely, or tap a step to jump to it.</p>
+    <div class="scenes" role="group" aria-label="Things to try">
+      <button class="scene" data-s="log" aria-pressed="false"><i class="n">1</i><div><b>Log fuel: how full is the tank?</b><span>Nozzle clicked off, topped up to the filler pipe, or not full. How exact the fill-up was decides how much it counts in the calibration.</span></div></button>
+      <button class="scene" data-s="entry" aria-pressed="false"><i class="n">2</i><div><b>A fill-up: pump against engines</b><span>12.1 L at the pump, 13.9 L reported by the engines. Both fill-ups are logged as "clicked off": open each and choose "Topped up to the pipe". With one the figures are within ±29 %, with both about ±8 %.</span></div></button>
+      <button class="scene" data-s="tank" aria-pressed="false"><i class="n">3</i><div><b>Fuel aboard with an honest ±</b><span>The ± grows with every litre counted and shrinks with exact fill-ups and a better calibration.</span></div></button>
+      <button class="scene" data-s="odd" aria-pressed="false"><i class="n">4</i><div><b>A fill-up that does not fit</b><span>What-if: had this fill-up been 25 % short, EngineLink sets it aside and asks if the tank was really full.</span></div></button>
+      <button class="scene" data-s="diag" aria-pressed="false"><i class="n">5</i><div><b>Calibration in Diagnostics</b><span>Fuel scale, fuel figures ±, battery voltage and gear, in one place.</span></div></button>
+      <button class="scene" data-s="quality" aria-pressed="false"><i class="n">6</i><div><b>Engine data quality</b><span>Answers held back until confirmed, rejected values and bridged gaps, per engine.</span></div></button>
+      <button class="scene" data-s="gear" aria-pressed="false"><i class="n">7</i><div><b>Learn the gear</b><span>Five steps at the dock: N, F, N, R, N. Press Record in each; the demo plays the gear values.</span></div></button>
+      <button class="scene" data-s="engines" aria-pressed="false"><i class="n">8</i><div><b>Engines without guesses</b><span>Every value with its unit. After step 7 the gear shows Forward instead of "Not learned".</span></div></button>
+    </div>
+    <p class="note">Demo only: nothing here talks to a boat, and saving changes nothing. On a real EngineLink the app opens at http://192.168.4.1 on the board's own Wi-Fi.</p>
+  </div>
+  <div class="phonecol">
+    <div class="phone"><div class="screen" id="screen"><iframe id="app" src="app.html" title="EngineLink app"></iframe></div></div>
+    <div class="cap">EngineLink app __VERSION__ · simulated engines</div>
+  </div>
+</div>
+<script>
+const frame=document.getElementById('app');
+function fit(){
+  const narrow=innerWidth<=900;
+  const avail=narrow?Math.min(innerWidth-32,430)-20:430;
+  const s=Math.min(1,avail/390,Math.max(0.5,(innerHeight-90)/844),narrow?1:0.92);
+  frame.style.transform='scale('+s+')';
+  const sc=document.getElementById('screen');sc.style.width=Math.round(390*s)+'px';sc.style.height=Math.round(844*s)+'px';
+}
+fit();addEventListener('resize',fit);
+document.querySelectorAll('.scene').forEach(b=>b.addEventListener('click',()=>{
+  document.querySelectorAll('.scene').forEach(x=>x.setAttribute('aria-pressed',x===b?'true':'false'));
+  frame.contentWindow.postMessage({scene:b.dataset.s},'*');
+  if(innerWidth<=900)document.querySelector('.phonecol').scrollIntoView({behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth',block:'start'});
+}));
+</script>
+</body>
+</html>

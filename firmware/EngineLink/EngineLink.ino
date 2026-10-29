@@ -42,8 +42,9 @@
 #include <NetworkClientSecure.h>
 #include "ui.h"
 #include "icons.h"
+#include "fuelcal.h"
 
-#define EL_VERSION "0.5.5"
+#define EL_VERSION "0.6.0"
 // Releases list published by the Pages workflow; firmware files come from
 // GitHub Releases of the same repository. Nothing else is downloaded.
 #define EL_RELEASES_URL "https://kaelor9.github.io/EngineLink/releases.json"
@@ -184,6 +185,7 @@ struct Motor {
   float previousFuelLph=0;
   double observedLiters=0;
   uint32_t fuelSamples=0, rpmSamples=0, gaps=0;
+  uint32_t rpmSamplesAtFuel=0; // rpm answers so far when the last fuel answer came
   uint8_t lastMID=0;
   // Engine-run segment tracking (physical channel based)
   bool running=false;
@@ -216,12 +218,52 @@ struct TotalsV4 {
 };
 // Fuel counters at one moment. Fuel used between two snapshots is computed
 // with today's scale and correction, so calibration also fixes the past.
-struct FuelSnap { double raw[2]={0,0}, lit[2]={0,0}, missed=0; };
+// Fuel is also counted per engine-speed band (idle, part load, cruise), so
+// calibration can correct each band and still fix everything recorded.
+// Raw counted before 0.6.0 has no band ("legacy" = total minus the bands).
+constexpr uint8_t FUEL_BANDS=3;
+constexpr float BAND_PART_RPM=1100.0f, BAND_CRUISE_RPM=2500.0f;
+struct FuelSnapV1 { double raw[2]={0,0}, lit[2]={0,0}, missed=0; };
+struct FuelSnap { double raw[2]={0,0}, lit[2]={0,0}, missed=0; double rawB[2][FUEL_BANDS]={}; };
 // Learned figures per 250 rpm step from 1000 rpm (index 0) to 3750+ (11).
 constexpr uint8_t RPM_BUCKETS=12;
 constexpr uint8_t ZONES=5; // idle <1000, low <2000, rising <2500, cruise <3000, fast
-struct Totals {
+struct TotalsV5 {
   uint32_t magic=0xE1170005;
+  double lifetimeL[2]={0,0};   // J1587 path: liters as decoded
+  double tripL[2]={0,0};
+  uint32_t runSeconds[2]={0,0};
+  uint32_t tripRunSeconds[2]={0,0};
+  int64_t tripStartUtc=0;
+  uint32_t tripResets=0;
+  // KAD path: integral of the RAW fuel-rate count over hours. Liters are
+  // raw x scale x correction, so a later scale/correction choice applies to
+  // everything already recorded.
+  double lifeRawH[2]={0,0};
+  double tripRawH[2]={0,0};
+  // ---- 0.5.0 ----
+  // The trip that is running now (first engine on -> both engines off).
+  bool tripActive=false;
+  uint32_t tripBoot=0;          // boot the trip started in (for raw export)
+  uint32_t tripStartSec=0;      // uptime seconds at trip start
+  uint32_t tripAnySec=0;        // seconds with at least one engine running
+  int64_t tripLastUtc=0;        // last time an engine ran, wall clock
+  uint16_t tripMaxRpm=0;
+  uint32_t nextTripId=1;
+  // Tank: fuel aboard = tankRefL - fuel used since tankRef.
+  double tankRefL=-1;           // -1 = never set
+  FuelSnapV1 tankRef;
+  double estMissedL=0;          // estimated from engine hour meters
+  uint32_t missedEvents=0;
+  float lastEcuHours[2]={0,0};
+  // Economy, all trips since the season started.
+  int64_t seasonStartUtc=0;
+  float bucketSec[RPM_BUCKETS]={}, bucketL[RPM_BUCKETS]={};
+  float bucketSogSec[RPM_BUCKETS]={}, bucketSogL[RPM_BUCKETS]={}, bucketNm[RPM_BUCKETS]={};
+  float zoneL[ZONES]={}, zoneSec[ZONES]={}, zoneNm[ZONES]={};
+};
+struct Totals {
+  uint32_t magic=0xE1170006;
   double lifetimeL[2]={0,0};   // J1587 path: liters as decoded
   double tripL[2]={0,0};
   uint32_t runSeconds[2]={0,0};
@@ -253,10 +295,14 @@ struct Totals {
   float bucketSec[RPM_BUCKETS]={}, bucketL[RPM_BUCKETS]={};
   float bucketSogSec[RPM_BUCKETS]={}, bucketSogL[RPM_BUCKETS]={}, bucketNm[RPM_BUCKETS]={};
   float zoneL[ZONES]={}, zoneSec[ZONES]={}, zoneNm[ZONES]={};
+  // ---- 0.6.0 ----
+  double lifeRawB[2][FUEL_BANDS]={}, tripRawB[2][FUEL_BANDS]={};
+  double tankRefVar=0;          // variance (L^2) of the tank level at tankRef
+  uint32_t gapFillSec[2]={0,0}; // seconds of fuel interpolated over short gaps
 };
 // One finished trip. Liters are kept as the raw KAD integral (or J1587
 // liters) so later calibration also corrects old trips.
-struct TripRec {
+struct TripRecV1 {
   uint32_t id=0;
   uint32_t group=0;             // id of the first trip of a combined group, 0 = alone
   int64_t startUtc=0,endUtc=0;
@@ -268,7 +314,31 @@ struct TripRec {
   uint8_t people=0,sea=0,wind=0,extras=0; // notes, 0 = not set; extras bits
   char note[40]={};
 };
+struct TripRec {
+  uint32_t id=0;
+  uint32_t group=0;             // id of the first trip of a combined group, 0 = alone
+  int64_t startUtc=0,endUtc=0;
+  uint32_t anySec=0;            // running time (at least one engine)
+  uint32_t bootId=0,startSec=0,endSec=0;
+  float rawH[2]={0,0};
+  float litJ[2]={0,0};
+  uint16_t maxRpm=0;
+  uint8_t people=0,sea=0,wind=0,extras=0; // notes, 0 = not set; extras bits
+  char note[40]={};
+  float rawB[2][FUEL_BANDS]={};  // 0.6.0: raw per engine-speed band
+};
 constexpr uint8_t MAX_TRIPS=60;
+struct FuelRecV1 {
+  int64_t utc=0;
+  float litres=0;               // 0 allowed for "tank full" without pump litres
+  float price=0;                // per litre, 0 = not given
+  uint8_t full=0;
+  float counted=-1;             // fuel EngineLink counted since the previous full tank, -1 = unknown
+  float rawDelta=0;             // uncorrected raw integral since that full tank (scale decision)
+  FuelSnapV1 at;                  // counters when this was logged
+  double prevRefL=-1;           // tank reference before this entry (undo of the newest entry)
+  FuelSnapV1 prevRef;
+};
 struct FuelRec {
   int64_t utc=0;
   float litres=0;               // 0 allowed for "tank full" without pump litres
@@ -279,6 +349,9 @@ struct FuelRec {
   FuelSnap at;                  // counters when this was logged
   double prevRefL=-1;           // tank reference before this entry (undo of the newest entry)
   FuelSnap prevRef;
+  // ---- 0.6.0 ----
+  uint8_t quality=0;            // 0 not full, 1 nozzle clicked off, 2 topped up to the filler pipe
+  uint8_t calUse=0;             // 0 automatic, 1 use although it looks odd, 2 never use
 };
 constexpr uint8_t MAX_FUEL=30;
 // Engine-health baselines: per engine and rpm step, a slow average of what is
@@ -338,6 +411,12 @@ struct Settings {
   uint8_t fineTunes=0;       // full fill-ups used to fine-tune the fuel figures
   float lastTuneDev=0;       // pump vs counted at the last fine-tune
   String prefs="{}";         // app-only preferences (JSON written by the app)
+  // ---- 0.6.0: calibration result, gear learned at the dock ----
+  float bandAdj[3]={1.0f,1.0f,1.0f}; // idle, part load, cruise relative to fuelCorr
+  float calSig=0;            // relative 1-sigma of the fuel figures, 0 = not calibrated
+  uint8_t calFills=0;        // fill-ups used by the calibration
+  float calLitres=0;         // pump litres those fill-ups cover
+  uint16_t gearMaskF=0,gearValF=0,gearMaskR=0,gearValR=0; // mask 0 = not learned
 };
 constexpr uint8_t PROTO_J1587=0, PROTO_KAD=1;
 struct Counters {
@@ -569,6 +648,27 @@ void loadTotals(){
   if(stored==sizeof(Totals)){
     Totals t;
     if(pref.getBytes("t",&t,sizeof(t))==sizeof(t)&&t.magic==totals.magic)totals=t;
+  }else if(stored==sizeof(TotalsV5)){
+    // 0.5.x: same counters; fuel per band starts now, the tank level keeps its reference.
+    TotalsV5 *o=new TotalsV5();
+    if(pref.getBytes("t",o,sizeof(*o))==sizeof(*o)&&o->magic==0xE1170005){
+      for(int c=0;c<2;c++){totals.lifetimeL[c]=o->lifetimeL[c];totals.tripL[c]=o->tripL[c];
+        totals.runSeconds[c]=o->runSeconds[c];totals.tripRunSeconds[c]=o->tripRunSeconds[c];
+        totals.lifeRawH[c]=o->lifeRawH[c];totals.tripRawH[c]=o->tripRawH[c];
+        totals.tankRef.raw[c]=o->tankRef.raw[c];totals.tankRef.lit[c]=o->tankRef.lit[c];
+        totals.lastEcuHours[c]=o->lastEcuHours[c];}
+      totals.tripStartUtc=o->tripStartUtc;totals.tripResets=o->tripResets;
+      totals.tripActive=o->tripActive;totals.tripBoot=o->tripBoot;totals.tripStartSec=o->tripStartSec;
+      totals.tripAnySec=o->tripAnySec;totals.tripLastUtc=o->tripLastUtc;totals.tripMaxRpm=o->tripMaxRpm;
+      totals.nextTripId=o->nextTripId;totals.tankRefL=o->tankRefL;totals.tankRef.missed=o->tankRef.missed;
+      totals.estMissedL=o->estMissedL;totals.missedEvents=o->missedEvents;totals.seasonStartUtc=o->seasonStartUtc;
+      memcpy(totals.bucketSec,o->bucketSec,sizeof(o->bucketSec));memcpy(totals.bucketL,o->bucketL,sizeof(o->bucketL));
+      memcpy(totals.bucketSogSec,o->bucketSogSec,sizeof(o->bucketSogSec));memcpy(totals.bucketSogL,o->bucketSogL,sizeof(o->bucketSogL));
+      memcpy(totals.bucketNm,o->bucketNm,sizeof(o->bucketNm));
+      memcpy(totals.zoneL,o->zoneL,sizeof(o->zoneL));memcpy(totals.zoneSec,o->zoneSec,sizeof(o->zoneSec));memcpy(totals.zoneNm,o->zoneNm,sizeof(o->zoneNm));
+      totals.tankRefVar=totals.tankRefL>=0?9.0:0; // unknown fill quality: about 3 L
+    }
+    delete o;
   }else if(stored==sizeof(TotalsV4)){
     // 0.4.x: keep every counter; the new fields start empty.
     TotalsV4 o;
@@ -595,7 +695,7 @@ void saveTotals(){
   totalsDirty=false;lastTotalsSave=millis();
 }
 void resetTrip(){
-  for(int c=0;c<2;c++){totals.tripL[c]=0;totals.tripRawH[c]=0;totals.tripRunSeconds[c]=0;}
+  for(int c=0;c<2;c++){totals.tripL[c]=0;totals.tripRawH[c]=0;totals.tripRunSeconds[c]=0;for(uint8_t b=0;b<FUEL_BANDS;b++)totals.tripRawB[c][b]=0;}
   totals.tripStartUtc=validWall()?(int64_t)time(nullptr):0;
   ++totals.tripResets;
   saveTotals();
@@ -885,18 +985,31 @@ bool validChecksum(const Frame &f){
   return sum==0;
 }
 double prevFuelRaw[2]={0,0};
+uint32_t gapFills[2]={0,0};
+uint8_t fuelBandFor(float rpm){return rpm<BAND_PART_RPM?0:rpm<BAND_CRUISE_RPM?1:2;}
 // rawRate < 0 means J1587 (liters are stored directly); otherwise the KAD raw
 // count is integrated too, so later scale/correction changes stay exact.
+// Samples are joined with the trapezoid rule. A gap of up to 2 minutes while
+// the engine kept answering for rpm (fuel requests lost, rpm still coming) is
+// bridged the same way and counted as interpolated; longer gaps are not.
 void updateFuel(Motor &m,uint8_t ch,float newRate,uint64_t timestamp,double rawRate){
   if(m.fuelEver && timestamp>m.prevFuelAt) {
     const uint64_t dt=timestamp-m.prevFuelAt;
-    if(dt<=5000) {
+    // Only bridge if rpm kept coming during the whole gap (at least one
+    // answer per 2 s): then the engine ran and only the fuel answers were lost.
+    const bool rpmKept=m.rpmEver&&timestamp>=m.rpmAt&&timestamp-m.rpmAt<3000&&m.rpm>=ENGINE_RUN_RPM&&
+                       (uint64_t)(m.rpmSamples-m.rpmSamplesAtFuel)*2000ULL>=dt;
+    const bool bridge=dt>5000&&dt<=120000&&rpmKept;
+    if(bridge){++gapFills[ch];totals.gapFillSec[ch]+=(uint32_t)(dt/1000);}
+    if(dt<=5000||bridge) {
       const double hours=(double)dt/3600000.0;
       const double liters=((double)m.previousFuelLph+(double)newRate)*0.5*hours;
       m.observedLiters+=liters;
       if(rawRate>=0){
         const double rawH=(prevFuelRaw[ch]+rawRate)*0.5*hours;
         totals.lifeRawH[ch]+=rawH;totals.tripRawH[ch]+=rawH;
+        const uint8_t b=fuelBandFor(m.rpm);
+        totals.lifeRawB[ch][b]+=rawH;totals.tripRawB[ch][b]+=rawH;
       }else{
         totals.lifetimeL[ch]+=liters;
         totals.tripL[ch]+=liters;
@@ -906,11 +1019,24 @@ void updateFuel(Motor &m,uint8_t ch,float newRate,uint64_t timestamp,double rawR
   }
   if(rawRate>=0)prevFuelRaw[ch]=rawRate;
   m.fuelLph=newRate;m.fuelAt=timestamp;m.prevFuelAt=timestamp;
-  m.previousFuelLph=newRate;m.fuelEver=true;++m.fuelSamples;
+  m.previousFuelLph=newRate;m.fuelEver=true;++m.fuelSamples;m.rpmSamplesAtFuel=m.rpmSamples;
 }
 double kadFuelScale(uint8_t ch){return (1.0/(double)cfg.kadFuelDiv)*(double)cfg.fuelCorr[ch];}
-double tripLitersFor(uint8_t ch){return cfg.protocol==PROTO_KAD?totals.tripRawH[ch]*kadFuelScale(ch):totals.tripL[ch];}
-double lifetimeLitersFor(uint8_t ch){return cfg.protocol==PROTO_KAD?totals.lifeRawH[ch]*kadFuelScale(ch):totals.lifetimeL[ch];}
+// Litres from a raw integral and its part per band, with today's scale,
+// correction and band factors. Raw without a band (before 0.6.0) gets the
+// common correction only.
+double rawToLitres(uint8_t ch,double total,double b0,double b1,double b2){
+  const double legacy=max(0.0,total-(b0+b1+b2));
+  return (legacy+b0*cfg.bandAdj[0]+b1*cfg.bandAdj[1]+b2*cfg.bandAdj[2])*kadFuelScale(ch);
+}
+double tripLitersFor(uint8_t ch){
+  if(cfg.protocol!=PROTO_KAD)return totals.tripL[ch];
+  const double *b=totals.tripRawB[ch];return rawToLitres(ch,totals.tripRawH[ch],b[0],b[1],b[2]);
+}
+double lifetimeLitersFor(uint8_t ch){
+  if(cfg.protocol!=PROTO_KAD)return totals.lifetimeL[ch];
+  const double *b=totals.lifeRawB[ch];return rawToLitres(ch,totals.lifeRawH[ch],b[0],b[1],b[2]);
+}
 // Remembers the latest bytes of every page-0 PID seen on each channel, so the
 // UI can show what an ECU really transmits before any decoder is trusted.
 void rememberPid(uint8_t ch,uint8_t mid,uint8_t pid,const uint8_t *data,uint8_t width,uint64_t at){
@@ -991,6 +1117,43 @@ int32_t kadSigned(uint32_t v,const KadParam *p){
 }
 void stopPolling(uint8_t ch,const String &why);
 void checkEcuHours(uint8_t ch,float hours);
+// ---------- Plausibility of engine answers ----------
+// Physical limits per parameter (scaled units): the range, and the largest
+// change between two answers that is still real. A value outside the range is
+// dropped. A bigger jump is held back until the next answer confirms it, so a
+// single garbled reply never reaches the display or the fuel totals, while a
+// real fast change (full throttle) only arrives one answer later.
+struct Sanity{uint16_t index;float lo,hi,step;};
+constexpr Sanity KAD_SANITY[]={
+  {256,0,4500,1500},{291,0,4500,2500},{289,0,120,45},{259,-30,130,8},{260,-30,110,8},
+  {261,-30,130,15},{258,30,450,200},{265,-60,350,200},{293,6,36,4},{266,0,200000,0.3f}};
+int32_t kadHeld[2][32];
+bool kadHeldOk[2][32];
+uint32_t kadRejected[2]={0,0},kadHeldBack[2]={0,0};
+uint32_t kadTransientUntil[2]={0,0};
+uint16_t kadFocusIndex=0;uint32_t kadFocusUntil=0;
+float kadBaseFactor(uint8_t slot){
+  const KadParam &p=KAD_PARAMS[slot];
+  if(p.index==289)return 1.0f/(float)cfg.kadFuelDiv;
+  if(p.index==293)return cfg.kadVolt?0.0125f:0.01308f;
+  return p.factor;
+}
+bool kadPlausible(uint8_t ch,uint8_t slot,int32_t raw,uint64_t at){
+  const KadParam &p=KAD_PARAMS[slot];
+  const Sanity *s=nullptr;
+  for(const Sanity &x:KAD_SANITY)if(x.index==p.index){s=&x;break;}
+  if(!s)return true;
+  const float k=kadBaseFactor(slot),v=(float)raw*k;
+  if(v<s->lo||v>s->hi){++kadRejected[ch];return false;}
+  const bool fresh=kadRawAt[ch][slot]&&at>=kadRawAt[ch][slot]&&at-kadRawAt[ch][slot]<10000;
+  if(!fresh){kadHeldOk[ch][slot]=false;return true;}
+  const float last=(float)kadRawV[ch][slot]*k;
+  if(p.index==266&&v<last-0.01f){++kadRejected[ch];return false;} // hour meters only count up
+  if(fabsf(v-last)<=s->step){kadHeldOk[ch][slot]=false;return true;}
+  if(kadHeldOk[ch][slot]&&fabsf(v-(float)kadHeld[ch][slot]*k)<=s->step){kadHeldOk[ch][slot]=false;return true;}
+  kadHeld[ch][slot]=raw;kadHeldOk[ch][slot]=true;++kadHeldBack[ch];
+  return false;
+}
 // Pairs requests (ours or another device's, e.g. an EDC display) with the
 // next checksum-valid frame. The value is taken as the parameter's width in
 // bytes just before the checksum; both byte orders are kept.
@@ -1036,13 +1199,22 @@ void decodeKad(const Frame &f,Decoded &d){
   const uint32_t invalid=w>=4?0xFFFFFFFFUL:((1UL<<(8*w))-1UL);
   d.kadIndex=index;d.kadValue=kadSigned(raw,p);d.kadValueOk=true;
   if(raw==invalid)return; // all-ones = not available
-  for(uint8_t i=0;i<KAD_N;i++)if(KAD_PARAMS[i].index==index){kadRawV[f.channel][i]=d.kadValue;kadRawAt[f.channel][i]=f.bootMs;break;}
+  for(uint8_t i=0;i<KAD_N;i++)if(KAD_PARAMS[i].index==index){
+    if(!kadPlausible(f.channel,i,d.kadValue,f.bootMs))return;
+    // Throttle moving: ask for fuel more often for a few seconds.
+    if((index==256||index==289)&&kadRawAt[f.channel][i]){
+      const float was=(float)kadRawV[f.channel][i],now=(float)d.kadValue;
+      const bool moving=index==256?fabsf(now-was)*0.25f>40.0f:fabsf(now-was)>max(0.08f*was,64.0f);
+      if(moving)kadTransientUntil[f.channel]=millis()+4000;
+    }
+    kadRawV[f.channel][i]=d.kadValue;kadRawAt[f.channel][i]=f.bootMs;break;
+  }
   Motor &m=motor[f.channel];
   if(index==256){
     d.rpm=(float)raw*0.25f;d.gotRPM=true;
     m.rpm=d.rpm;m.rpmAt=f.bootMs;m.rpmEver=true;++m.rpmSamples;
   }else if(index==289){
-    d.lph=(float)((double)raw*kadFuelScale(f.channel));d.gotFuel=true;
+    d.lph=(float)((double)raw*kadFuelScale(f.channel)*cfg.bandAdj[fuelBandFor(m.rpm)]);d.gotFuel=true;
     updateFuel(m,f.channel,d.lph,f.bootMs,(double)raw);
   }else if(index==266){
     checkEcuHours(f.channel,(float)raw*0.0027778f);
@@ -1141,9 +1313,15 @@ void serviceKad(){
     }
     if((uint32_t)(millis()-k.lastPollMs)<KAD_POLL_MS)continue;
     if((uint32_t)(millis()-lastRxActivityMs[ch])<KAD_BUS_IDLE_MS)continue; // bus busy
+    // Steady: rpm, fuel, one slow value. Throttle moving: fuel, rpm, fuel,
+    // slow value, so the fuel integral follows the change closely. A value
+    // the app is studying (learning the gear bits) takes the slow slot.
     uint16_t index;
-    const uint8_t slot=k.seq%3;
-    if(slot<2)index=KAD_POLL_FAST[slot];
+    const bool moving=(int32_t)(kadTransientUntil[ch]-millis())>0;
+    const uint8_t slot=moving?k.seq%4:k.seq%3;
+    const bool slowSlot=moving?slot==3:slot==2;
+    if(!slowSlot)index=moving?(slot==1?256:289):KAD_POLL_FAST[slot];
+    else if(kadFocusIndex&&(int32_t)(kadFocusUntil-millis())>0)index=kadFocusIndex;
     else{index=KAD_POLL_SLOW[k.slowPos];k.slowPos=(k.slowPos+1)%(sizeof(KAD_POLL_SLOW)/sizeof(KAD_POLL_SLOW[0]));}
     ++k.seq;
     uint8_t req[6]={0x01,0x43,0x21,(uint8_t)(index>>8),(uint8_t)(index&0xFF),0};
@@ -1238,7 +1416,7 @@ void serviceHistory(){
 // Factor for a KAD parameter now; fuel and voltage follow the chosen scale.
 float kadFactor(uint8_t ch,uint8_t slot){
   const KadParam &p=KAD_PARAMS[slot];
-  if(p.index==289)return (float)kadFuelScale(ch);
+  if(p.index==289)return (float)(kadFuelScale(ch)*cfg.bandAdj[fuelBandFor(motor[ch].rpm)]);
   if(p.index==293)return cfg.kadVolt?0.0125f:0.01308f;
   return p.factor;
 }
@@ -1265,7 +1443,7 @@ bool engineValue(uint8_t ch,uint16_t index,float &out){return engineValueAge(ch,
 // ---------- Fuel counters, tank ----------
 FuelSnap fuelSnapNow(){
   FuelSnap s;
-  for(uint8_t c=0;c<2;c++){s.raw[c]=totals.lifeRawH[c];s.lit[c]=totals.lifetimeL[c];}
+  for(uint8_t c=0;c<2;c++){s.raw[c]=totals.lifeRawH[c];s.lit[c]=totals.lifetimeL[c];for(uint8_t b=0;b<FUEL_BANDS;b++)s.rawB[c][b]=totals.lifeRawB[c][b];}
   s.missed=totals.estMissedL;
   return s;
 }
@@ -1273,7 +1451,10 @@ FuelSnap fuelSnapNow(){
 double usedSince(const FuelSnap &a){
   double l=0;
   for(uint8_t c=0;c<2;c++){
-    if(cfg.protocol==PROTO_KAD)l+=(totals.lifeRawH[c]-a.raw[c])*kadFuelScale(c);
+    if(cfg.protocol==PROTO_KAD){
+      const double *n=totals.lifeRawB[c];
+      l+=rawToLitres(c,totals.lifeRawH[c]-a.raw[c],n[0]-a.rawB[c][0],n[1]-a.rawB[c][1],n[2]-a.rawB[c][2]);
+    }
     else l+=totals.lifetimeL[c]-a.lit[c];
   }
   return max(0.0,l+(totals.estMissedL-a.missed));
@@ -1284,13 +1465,18 @@ double tankAboard(){
   return constrain(totals.tankRefL-usedSince(totals.tankRef),0.0,(double)cfg.tankL);
 }
 int lastFullIndex(){for(uint8_t i=0;i<fuelCount;i++)if(fuelLog[i].full)return i;return -1;}
-// Uncertainty of the fuel aboard: grows with litres counted since the last full
-// tank, smaller once full fill-ups have fine-tuned the figures.
-double tankPlusMinus(){
+// Uncertainty of the fuel aboard, carried like a Kalman filter: the variance
+// of the last reference (how exactly the tank was filled) plus what the
+// counting can be off by since then. Uncalibrated engine figures are taken
+// as +/-15 %, after calibration their own fitted uncertainty.
+double tankVariance(){
   if(!tankKnown())return 0;
   const double since=usedSince(totals.tankRef);
-  return 3.0+since*(cfg.fineTunes?0.025:0.07);
+  const double rel=cfg.calFills?max((double)cfg.calSig,0.01):0.15;
+  return totals.tankRefVar+(rel*since)*(rel*since)+(0.005*since)*(0.005*since);
 }
+// About 95 % of the time the fuel aboard is within this many litres.
+double tankPlusMinus(){return tankKnown()?2.0*sqrt(tankVariance()):0;}
 double latestPrice(){
   for(uint8_t i=0;i<fuelCount;i++)if(fuelLog[i].price>0)return fuelLog[i].price;
   return cfg.defaultPrice;
@@ -1323,10 +1509,76 @@ size_t fsRead(const char *path,void *data,size_t maxLen,size_t item){
   f.close();
   return got==n?n:0;
 }
-void saveTrips(){fsWrite("/trips.bin",trips,sizeof(TripRec)*tripCount);}
-void loadTrips(){tripCount=fsRead("/trips.bin",trips,sizeof(trips),sizeof(TripRec))/sizeof(TripRec);}
-void saveFuel(){fsWrite("/fuel.bin",fuelLog,sizeof(FuelRec)*fuelCount);}
-void loadFuel(){fuelCount=fsRead("/fuel.bin",fuelLog,sizeof(fuelLog),sizeof(FuelRec))/sizeof(FuelRec);}
+// Files from 0.6.0 on start with a small header (magic, record size), so a
+// later layout can still read them. 0.5.x files have no header.
+struct FileHead { uint32_t magic; uint16_t recSize; uint16_t count; };
+constexpr uint32_t TRIPS_MAGIC=0x32505254, FUEL_MAGIC=0x324C4546; // "TRP2", "FEL2"
+bool fsWriteRecords(const char *path,uint32_t magic,const void *recs,uint16_t recSize,uint16_t count){
+  const size_t len=sizeof(FileHead)+(size_t)recSize*count;
+  uint8_t *buf=(uint8_t*)malloc(len);
+  if(!buf)return false;
+  FileHead h={magic,recSize,count};
+  memcpy(buf,&h,sizeof(h));memcpy(buf+sizeof(h),recs,(size_t)recSize*count);
+  const bool ok=fsWrite(path,buf,len);
+  free(buf);return ok;
+}
+// Whole file into a new buffer (caller frees), or nullptr.
+uint8_t *fsSlurp(const char *path,size_t &n,size_t maxLen){
+  n=0;
+  if(!fsReady||!LittleFS.exists(path))return nullptr;
+  File f=LittleFS.open(path,"r");
+  if(!f)return nullptr;
+  n=f.size();
+  if(!n||n>maxLen){f.close();n=0;return nullptr;}
+  uint8_t *buf=(uint8_t*)malloc(n);
+  if(buf&&f.read(buf,n)!=n){free(buf);buf=nullptr;}
+  f.close();
+  return buf;
+}
+void snapFromV1(FuelSnap &d,const FuelSnapV1 &s){d=FuelSnap();for(uint8_t c=0;c<2;c++){d.raw[c]=s.raw[c];d.lit[c]=s.lit[c];}d.missed=s.missed;}
+void saveTrips(){fsWriteRecords("/trips.bin",TRIPS_MAGIC,trips,sizeof(TripRec),tripCount);}
+void loadTrips(){
+  size_t n;uint8_t *buf=fsSlurp("/trips.bin",n,sizeof(FileHead)+sizeof(trips)+4096);
+  tripCount=0;
+  if(!buf)return;
+  FileHead h;memcpy(&h,buf,min(n,sizeof(h)));
+  if(n>=sizeof(h)&&h.magic==TRIPS_MAGIC&&h.recSize==sizeof(TripRec)&&n==sizeof(h)+(size_t)h.count*sizeof(TripRec)){
+    tripCount=min<uint16_t>(h.count,MAX_TRIPS);memcpy(trips,buf+sizeof(h),sizeof(TripRec)*tripCount);
+  }else if(n%sizeof(TripRecV1)==0){
+    const uint16_t c=min<size_t>(n/sizeof(TripRecV1),MAX_TRIPS);
+    for(uint16_t i=0;i<c;i++){
+      TripRecV1 o;memcpy(&o,buf+i*sizeof(o),sizeof(o));
+      TripRec &r=trips[i];r=TripRec();
+      r.id=o.id;r.group=o.group;r.startUtc=o.startUtc;r.endUtc=o.endUtc;r.anySec=o.anySec;
+      r.bootId=o.bootId;r.startSec=o.startSec;r.endSec=o.endSec;
+      for(uint8_t k=0;k<2;k++){r.rawH[k]=o.rawH[k];r.litJ[k]=o.litJ[k];}
+      r.maxRpm=o.maxRpm;r.people=o.people;r.sea=o.sea;r.wind=o.wind;r.extras=o.extras;memcpy(r.note,o.note,sizeof(r.note));
+    }
+    tripCount=c;saveTrips();
+  }
+  free(buf);
+}
+void saveFuel(){fsWriteRecords("/fuel.bin",FUEL_MAGIC,fuelLog,sizeof(FuelRec),fuelCount);}
+void loadFuel(){
+  size_t n;uint8_t *buf=fsSlurp("/fuel.bin",n,sizeof(FileHead)+sizeof(fuelLog)+4096);
+  fuelCount=0;
+  if(!buf)return;
+  FileHead h;memcpy(&h,buf,min(n,sizeof(h)));
+  if(n>=sizeof(h)&&h.magic==FUEL_MAGIC&&h.recSize==sizeof(FuelRec)&&n==sizeof(h)+(size_t)h.count*sizeof(FuelRec)){
+    fuelCount=min<uint16_t>(h.count,MAX_FUEL);memcpy(fuelLog,buf+sizeof(h),sizeof(FuelRec)*fuelCount);
+  }else if(n%sizeof(FuelRecV1)==0){
+    const uint16_t c=min<size_t>(n/sizeof(FuelRecV1),MAX_FUEL);
+    for(uint16_t i=0;i<c;i++){
+      FuelRecV1 o;memcpy(&o,buf+i*sizeof(o),sizeof(o));
+      FuelRec &r=fuelLog[i];r=FuelRec();
+      r.utc=o.utc;r.litres=o.litres;r.price=o.price;r.full=o.full;r.counted=o.counted;r.rawDelta=o.rawDelta;
+      snapFromV1(r.at,o.at);r.prevRefL=o.prevRefL;snapFromV1(r.prevRef,o.prevRef);
+      r.quality=o.full?1:0; // unknown: treated as "nozzle clicked off" until the owner says otherwise
+    }
+    fuelCount=c;saveFuel();
+  }
+  free(buf);
+}
 void saveHealth(){fsWrite("/health.bin",&health,sizeof(health));healthDirty=false;}
 void loadHealth(){
   Health h;
@@ -1335,47 +1587,151 @@ void loadHealth(){
 void saveDiag(){fsWrite("/diag.bin",diagTests,sizeof(diagTests));}
 void loadDiag(){fsRead("/diag.bin",diagTests,sizeof(diagTests),sizeof(diagTests));}
 
-// ---------- Fuel log ----------
-// A full tank sets the estimate to the tank size; litres from the pump are
-// compared with what EngineLink counted and fine-tune both engines (damped).
-bool addFuel(float litres,float price,bool full,int64_t utc,String &msg){
+// ---------- Fuel log and calibration ----------
+// Every full tank after an earlier full tank is one calibration equation
+// (fuelcal.h): the pump litres of the full tank and of any partial fill-ups
+// in between, against what EngineLink counted in that time, split by
+// engine-speed band. The calibration is solved again from the whole log after
+// every change, so deleting or correcting an entry also undoes its effect.
+enum CalState : uint8_t { CAL_NONE=0, CAL_USED=1, CAL_ODD=2, CAL_OFF=3, CAL_SMALL=4, CAL_FIRST=5 };
+uint8_t calState[MAX_FUEL];
+float calZ[MAX_FUEL],calPump[MAX_FUEL],calCounted[MAX_FUEL],calBase[MAX_FUEL];
+// The equation for full tank i against the next older full tank; false if
+// there is none.
+bool calRow(uint8_t i,fuelcal::Row &row,uint8_t &older){
+  older=0xFF;
+  for(uint8_t k=i+1;k<fuelCount;k++)if(fuelLog[k].full){older=k;break;}
+  if(older==0xFF)return false;
+  const FuelRec &a=fuelLog[i],&o=fuelLog[older];
+  double pump=a.litres;
+  for(uint8_t k=i+1;k<older;k++)pump+=fuelLog[k].litres;
+  const double div=(double)cfg.kadFuelDiv;
+  double X=0,x[FUEL_BANDS]={0,0,0};
+  for(uint8_t c=0;c<2;c++){
+    if(cfg.protocol==PROTO_KAD){
+      X+=(a.at.raw[c]-o.at.raw[c])/div;
+      for(uint8_t b=0;b<FUEL_BANDS;b++)x[b]+=(a.at.rawB[c][b]-o.at.rawB[c][b])/div;
+    }else X+=a.at.lit[c]-o.at.lit[c];
+  }
+  X+=a.at.missed-o.at.missed;
+  for(uint8_t b=0;b<FUEL_BANDS;b++)x[b]=max(0.0,x[b]);
+  row.a[0]=max(0.0,X);row.a[1]=x[0];row.a[2]=x[1];row.a[3]=x[2];
+  row.y=pump;
+  row.var=fuelcal::rowVariance(a.quality,o.quality,pump,row.a[0]);
+  return true;
+}
+void recalibrate(){
+  const float before[7]={cfg.fuelCorr[0],cfg.fuelCorr[1],cfg.bandAdj[0],cfg.bandAdj[1],cfg.bandAdj[2],cfg.calSig,(float)cfg.calFills};
+  fuelcal::Row rows[MAX_FUEL];
+  bool use[MAX_FUEL];
+  int8_t rowOf[MAX_FUEL];
+  int n=0;
+  for(uint8_t i=0;i<fuelCount;i++){
+    calState[i]=CAL_NONE;calZ[i]=0;calPump[i]=0;calCounted[i]=-1;calBase[i]=-1;rowOf[i]=-1;
+    if(!fuelLog[i].full)continue;
+    uint8_t older;
+    fuelcal::Row r;
+    if(!calRow(i,r,older)){calState[i]=CAL_FIRST;continue;}
+    calPump[i]=(float)r.y;calBase[i]=(float)r.a[0];
+    if(r.a[0]<3||r.y<3){calState[i]=CAL_SMALL;continue;}
+    const double ratio=r.y/r.a[0];
+    if(fuelLog[i].calUse==2)calState[i]=CAL_OFF;
+    else if(fuelLog[i].calUse!=1&&(ratio<0.5||ratio>1.6))calState[i]=CAL_ODD;
+    else calState[i]=CAL_USED;
+    rows[n]=r;use[n]=calState[i]==CAL_USED;rowOf[i]=n;n++;
+  }
+  // Each equation is checked against all the others; one that does not fit
+  // (more than 3 sigma) is set aside and the owner is asked about it.
+  for(uint8_t i=0;i<fuelCount;i++){
+    if(rowOf[i]<0||calState[i]!=CAL_USED)continue;
+    const double z=fuelcal::zScore(rows,use,n,rowOf[i]);
+    calZ[i]=(float)z;
+    if(fuelLog[i].calUse!=1&&fabs(z)>3.0){calState[i]=CAL_ODD;use[rowOf[i]]=false;}
+  }
+  uint8_t used=0;double litres=0;
+  fuelcal::Row mix{{0,0,0,0},0,0};
+  for(uint8_t i=0;i<fuelCount;i++)if(rowOf[i]>=0&&use[rowOf[i]]){
+    ++used;litres+=rows[rowOf[i]].y;
+    for(int k=0;k<fuelcal::P;k++)mix.a[k]+=rows[rowOf[i]].a[k];
+  }
+  if(used){
+    const fuelcal::Fit f=fuelcal::solve(rows,use,n);
+    if(f.ok){
+      const double common=constrain(f.th[0],0.5,2.0);
+      for(uint8_t c=0;c<2;c++)cfg.fuelCorr[c]=(float)common;
+      for(uint8_t b=0;b<FUEL_BANDS;b++)cfg.bandAdj[b]=(float)constrain((common+f.th[1+b])/common,0.8,1.25);
+      // Uncertainty of the owner's own typical mix of trips.
+      const double est=fuelcal::predict(f,mix);
+      cfg.calSig=est>0?(float)(sqrt(fuelcal::predictVar(f,mix))/est):0.1f;
+    }
+  }else if(cfg.calFills){
+    // The last fill-up that calibrated was removed: back to the plain scale.
+    for(uint8_t c=0;c<2;c++)cfg.fuelCorr[c]=1.0f;
+    for(uint8_t b=0;b<FUEL_BANDS;b++)cfg.bandAdj[b]=1.0f;
+    cfg.calSig=0;
+  }
+  cfg.calFills=used;cfg.calLitres=(float)litres;
+  cfg.fineTunes=used;
+  // What EngineLink counts now (with the new figures) between full tanks.
+  for(uint8_t i=0;i<fuelCount;i++)if(fuelLog[i].full&&calState[i]!=CAL_FIRST){
+    uint8_t older;fuelcal::Row r;
+    if(calRow(i,r,older)){
+      const FuelRec &a=fuelLog[i],&o=fuelLog[older];
+      double l=0;
+      for(uint8_t c=0;c<2;c++){
+        if(cfg.protocol==PROTO_KAD)l+=rawToLitres(c,a.at.raw[c]-o.at.raw[c],a.at.rawB[c][0]-o.at.rawB[c][0],a.at.rawB[c][1]-o.at.rawB[c][1],a.at.rawB[c][2]-o.at.rawB[c][2]);
+        else l+=a.at.lit[c]-o.at.lit[c];
+      }
+      calCounted[i]=(float)(l+a.at.missed-o.at.missed);
+    }
+  }
+  const float after[7]={cfg.fuelCorr[0],cfg.fuelCorr[1],cfg.bandAdj[0],cfg.bandAdj[1],cfg.bandAdj[2],cfg.calSig,(float)cfg.calFills};
+  if(memcmp(before,after,sizeof(before)))saveSettings();
+}
+// quality: 0 not full, 1 nozzle clicked off, 2 topped up to the filler pipe.
+bool addFuel(float litres,float price,uint8_t quality,int64_t utc,String &msg){
   if(!(litres>=0&&litres<=5000)){msg="Litres out of range";return false;}
   if(!(price>=0&&price<1000)){msg="Price out of range";return false;}
+  if(quality>2)quality=1;
+  const bool full=quality>0;
   if(!full&&litres<=0){msg="Enter the litres you added";return false;}
   FuelRec r;
   r.utc=utc>1700000000?utc:(validWall()?(int64_t)time(nullptr):0);
-  r.litres=litres;r.price=price;r.full=full?1:0;
+  r.litres=litres;r.price=price;r.full=full?1:0;r.quality=quality;
   r.prevRefL=totals.tankRefL;r.prevRef=totals.tankRef;
+  // Old fields, kept for the scale check (1/128 against 1/256).
   const int pf=lastFullIndex();
-  msg="Saved";
+  if(full&&pf>=0){
+    r.counted=(float)usedSince(fuelLog[pf].at);
+    double rd=0;for(uint8_t c=0;c<2;c++)rd+=totals.lifeRawH[c]-fuelLog[pf].at.raw[c];
+    r.rawDelta=(float)rd;
+  }
   if(full){
-    if(pf>=0){
-      r.counted=(float)usedSince(fuelLog[pf].at);
-      double rd=0;for(uint8_t c=0;c<2;c++)rd+=totals.lifeRawH[c]-fuelLog[pf].at.raw[c];
-      r.rawDelta=(float)rd;
-      if(litres>30&&r.counted>30){
-        const float ratio=litres/r.counted;
-        if(ratio>0.6f&&ratio<1.6f){
-          const float adj=1.0f+(ratio-1.0f)*0.5f;
-          for(uint8_t c=0;c<2;c++)cfg.fuelCorr[c]=constrain(cfg.fuelCorr[c]*adj,0.5f,2.0f);
-          if(cfg.fineTunes<250)++cfg.fineTunes;
-          cfg.lastTuneDev=ratio-1.0f;
-          saveSettings();
-          msg=String("Fuel figures fine-tuned by ")+String((adj-1.0f)*100.0f,1)+" %";
-        }else msg="Pump litres differ a lot from what EngineLink counted, so nothing was fine-tuned";
-      }
-    }
     totals.tankRefL=cfg.tankL>0?cfg.tankL:-1;
+    totals.tankRefVar=fuelcal::fillError(quality)*fuelcal::fillError(quality);
   }else{
     const double a=tankAboard();
-    if(a>=0)totals.tankRefL=min((double)cfg.tankL,a+litres);
+    if(a>=0){totals.tankRefVar=tankVariance()+(0.005*litres)*(0.005*litres);totals.tankRefL=min((double)cfg.tankL,a+litres);}
   }
   r.at=fuelSnapNow();
   totals.tankRef=r.at;
   if(fuelCount==MAX_FUEL)--fuelCount;
   memmove(&fuelLog[1],&fuelLog[0],sizeof(FuelRec)*fuelCount);
   fuelLog[0]=r;++fuelCount;
+  recalibrate();
   saveFuel();saveTotals();
+  msg="Saved";
+  if(full)switch(calState[0]){
+    case CAL_USED:
+      msg="Saved. EngineLink counted "+String(calBase[0]*cfg.fuelCorr[0],1)+" L, the pump "+String(calPump[0],1)+" L. Fuel figures now within about "+String(cfg.calSig*200.0f,1)+" %";
+      break;
+    case CAL_ODD:
+      msg="EngineLink counted "+String(calBase[0]*cfg.fuelCorr[0],1)+" L but the pump "+String(calPump[0],1)+" L. Was the tank really full? See the fuel log";
+      break;
+    case CAL_SMALL:msg="Saved. Too little fuel since the last full tank to calibrate";break;
+    case CAL_FIRST:msg="Saved. From the next full tank on, EngineLink compares its count with the pump";break;
+    default:break;
+  }
   return true;
 }
 // Deleting the newest entry also restores the tank estimate before it.
@@ -1383,7 +1739,22 @@ bool deleteFuel(uint8_t i){
   if(i>=fuelCount)return false;
   if(i==0){totals.tankRefL=fuelLog[0].prevRefL;totals.tankRef=fuelLog[0].prevRef;saveTotals();}
   memmove(&fuelLog[i],&fuelLog[i+1],sizeof(FuelRec)*(fuelCount-i-1));
-  --fuelCount;saveFuel();
+  --fuelCount;
+  recalibrate();
+  saveFuel();
+  return true;
+}
+// The owner corrects how full the tank was, or answers "was it really full?".
+bool editFuel(uint8_t i,int quality,int use){
+  if(i>=fuelCount)return false;
+  FuelRec &r=fuelLog[i];
+  if(quality>=1&&quality<=2&&r.full){
+    r.quality=(uint8_t)quality;
+    if(i==0)totals.tankRefVar=fuelcal::fillError(r.quality)*fuelcal::fillError(r.quality);
+  }
+  if(use>=0&&use<=2)r.calUse=(uint8_t)use;
+  recalibrate();
+  saveFuel();saveTotals();
   return true;
 }
 
@@ -1393,7 +1764,7 @@ bool deleteFuel(uint8_t i){
 // the open trip is closed at boot; two parts can be combined in History.
 uint32_t lastEngineOnMs=0,lastEngineOnSec=0;
 double tripLitres(const TripRec &r,uint8_t ch){
-  return cfg.protocol==PROTO_KAD?(double)r.rawH[ch]*kadFuelScale(ch):(double)r.litJ[ch];
+  return cfg.protocol==PROTO_KAD?rawToLitres(ch,r.rawH[ch],r.rawB[ch][0],r.rawB[ch][1],r.rawB[ch][2]):(double)r.litJ[ch];
 }
 void writeTripCSV(const TripRec &r){
   if(!sdReady||!cardInserted()||otaActive)return;
@@ -1407,7 +1778,7 @@ void writeTripCSV(const TripRec &r){
 }
 void resetTripHealth(){memset(tripHealthSum,0,sizeof(tripHealthSum));memset(tripHealthN,0,sizeof(tripHealthN));}
 void startTrip(){
-  for(uint8_t c=0;c<2;c++){totals.tripL[c]=0;totals.tripRawH[c]=0;totals.tripRunSeconds[c]=0;}
+  for(uint8_t c=0;c<2;c++){totals.tripL[c]=0;totals.tripRawH[c]=0;totals.tripRunSeconds[c]=0;for(uint8_t b=0;b<FUEL_BANDS;b++)totals.tripRawB[c][b]=0;}
   totals.tripActive=true;totals.tripBoot=bootId;
   totals.tripStartSec=(uint32_t)(elapsedMs()/1000ULL);
   totals.tripStartUtc=validWall()?(int64_t)time(nullptr):0;
@@ -1447,7 +1818,7 @@ void endTrip(){
     r.anySec=totals.tripAnySec;
     r.bootId=totals.tripBoot;r.startSec=totals.tripStartSec;
     r.endSec=totals.tripBoot==bootId&&lastEngineOnSec?lastEngineOnSec:totals.tripStartSec+totals.tripAnySec;
-    for(uint8_t c=0;c<2;c++){r.rawH[c]=(float)totals.tripRawH[c];r.litJ[c]=(float)totals.tripL[c];}
+    for(uint8_t c=0;c<2;c++){r.rawH[c]=(float)totals.tripRawH[c];r.litJ[c]=(float)totals.tripL[c];for(uint8_t b=0;b<FUEL_BANDS;b++)r.rawB[c][b]=(float)totals.tripRawB[c][b];}
     r.maxRpm=totals.tripMaxRpm;
     if(tripCount==MAX_TRIPS)--tripCount;
     memmove(&trips[1],&trips[0],sizeof(TripRec)*tripCount);
@@ -1833,6 +2204,9 @@ void saveSettings(){
   pref.putUChar("kvolt",cfg.kadVolt);
   pref.putFloat("corr0",cfg.fuelCorr[0]);
   pref.putFloat("corr1",cfg.fuelCorr[1]);
+  pref.putBytes("badj",cfg.bandAdj,sizeof(cfg.bandAdj));
+  pref.putFloat("calsig",cfg.calSig);pref.putUChar("calfills",cfg.calFills);pref.putFloat("call",cfg.calLitres);
+  {uint16_t g[4]={cfg.gearMaskF,cfg.gearValF,cfg.gearMaskR,cfg.gearValR};pref.putBytes("gear",g,sizeof(g));}
   pref.putString("apname",cfg.apName);
   pref.putString("host",cfg.hostName);
   pref.putFloat("tank",cfg.tankL);
@@ -1872,6 +2246,11 @@ void loadSettings(){
   cfg.kadFuelDiv=pref.getUShort("kdiv",128);
   cfg.kadVolt=pref.getUChar("kvolt",0);
   cfg.fuelCorr[0]=pref.getFloat("corr0",1.0f);
+  if(pref.getBytesLength("badj")==sizeof(cfg.bandAdj))pref.getBytes("badj",cfg.bandAdj,sizeof(cfg.bandAdj));
+  for(uint8_t b=0;b<3;b++)if(!(cfg.bandAdj[b]>=0.7f&&cfg.bandAdj[b]<=1.4f))cfg.bandAdj[b]=1.0f;
+  cfg.calSig=pref.getFloat("calsig",0);cfg.calFills=pref.getUChar("calfills",0);cfg.calLitres=pref.getFloat("call",0);
+  {uint16_t g[4]={0,0,0,0};if(pref.getBytesLength("gear")==sizeof(g))pref.getBytes("gear",g,sizeof(g));
+   cfg.gearMaskF=g[0];cfg.gearValF=g[1];cfg.gearMaskR=g[2];cfg.gearValR=g[3];}
   cfg.fuelCorr[1]=pref.getFloat("corr1",1.0f);
   cfg.apName=pref.getString("apname","EngineLink");
   cfg.hostName=pref.getString("host","enginelink");
@@ -2014,6 +2393,7 @@ void handleState(){
   s+=",\"fuelCorr\":[";s+=String(cfg.fuelCorr[0],4);s+=',';s+=String(cfg.fuelCorr[1],4);s+=']';
   s+=",\"apName\":";jsonString(s,cfg.apName);
   s+=",\"host\":";jsonString(s,cfg.hostName);
+  s+=",\"gear\":[";s+=cfg.gearMaskF;s+=',';s+=cfg.gearValF;s+=',';s+=cfg.gearMaskR;s+=',';s+=cfg.gearValR;s+=']';
   s+=",\"ssid\":";jsonString(s,cfg.ssid);
   s+=",\"tankL\":";s+=String(cfg.tankL,0);
   s+=",\"reserve\":";s+=cfg.reserve;
@@ -2308,6 +2688,7 @@ void handleKadConfig(){
     const int d=web.arg("fuelDiv").toInt();
     if(d!=128&&d!=256){reply(false,"Fuel scale must be 1/128 or 1/256",400);return;}
     cfg.kadFuelDiv=(uint16_t)d;
+    recalibrate();
   }
   if(web.hasArg("volt")){
     const int v=web.arg("volt").toInt();
@@ -2474,9 +2855,24 @@ void handleFuelList(){
     s+=",\"c\":";if(r.counted>=0)jnum(s,r.counted,1);else s+="null";
     s+=",\"r128\":";jnum(s,r.rawDelta/128.0,1);
     s+=",\"r256\":";jnum(s,r.rawDelta/256.0,1);
+    s+=",\"q\":";s+=r.quality;s+=",\"use\":";s+=r.calUse;
+    s+=",\"cs\":";s+=calState[i];s+=",\"z\":";jnum(s,calZ[i],1);
+    s+=",\"pump\":";jnum(s,calPump[i],1);
+    s+=",\"now\":";if(calCounted[i]>=0)jnum(s,calCounted[i],1);else s+="null";
+    s+=",\"base\":";if(calBase[i]>=0)jnum(s,calBase[i],1);else s+="null";
     s+='}';
   }
-  s+="],\"tunes\":";s+=cfg.fineTunes;
+  s+="],\"cal\":{\"f\":";jnum(s,cfg.fuelCorr[0],4);
+  s+=",\"b\":[";for(uint8_t b=0;b<FUEL_BANDS;b++){if(b)s+=',';jnum(s,cfg.bandAdj[b],4);}
+  s+="],\"sig\":";jnum(s,cfg.calSig,4);s+=",\"n\":";s+=cfg.calFills;s+=",\"l\":";jnum(s,cfg.calLitres,1);
+  s+=",\"bands\":[";
+  for(uint8_t b=0;b<FUEL_BANDS;b++){
+    double l=0;for(uint8_t c=0;c<2;c++)l+=totals.lifeRawB[c][b]/(double)cfg.kadFuelDiv;
+    if(b)s+=',';jnum(s,l,1);
+  }
+  s+="],\"pm\":";jnum(s,tankPlusMinus(),1);
+  s+=",\"gaps\":";s+=(unsigned long)(totals.gapFillSec[0]+totals.gapFillSec[1]);
+  s+="},\"tunes\":";s+=cfg.fineTunes;
   s+=",\"tuneDev\":";jnum(s,cfg.lastTuneDev,4);
   s+=",\"since\":";if(tankKnown())jnum(s,usedSince(totals.tankRef),1);else s+="null";
   s+=",\"missed\":{\"n\":";s+=totals.missedEvents;s+=",\"l\":";jnum(s,totals.estMissedL,1);
@@ -2487,11 +2883,18 @@ void handleFuelList(){
 void handleFuelAdd(){
   String msg;
   const float litres=web.arg("litres").toFloat(),price=web.arg("price").toFloat();
-  const bool full=web.arg("full")=="1";
+  int q=web.hasArg("q")?web.arg("q").toInt():(web.arg("full")=="1"?1:0);
+  if(q<0||q>2)q=1;
   const int64_t utc=strtoll(web.arg("utc").c_str(),nullptr,10);
-  if(full&&cfg.tankL<=0){reply(false,"Set the fuel tank size in Settings first",409);return;}
-  const bool ok=addFuel(litres,price,full,utc,msg);
+  if(q&&cfg.tankL<=0){reply(false,"Set the fuel tank size in Settings first",409);return;}
+  const bool ok=addFuel(litres,price,(uint8_t)q,utc,msg);
   reply(ok,msg,ok?200:400);
+}
+void handleFuelEdit(){
+  const int i=web.arg("i").toInt();
+  const int q=web.hasArg("q")?web.arg("q").toInt():-1,use=web.hasArg("use")?web.arg("use").toInt():-1;
+  if(i<0||!editFuel((uint8_t)i,q,use)){reply(false,"Entry not found",404);return;}
+  reply(true,cfg.calFills?"Fuel figures now within about "+String(cfg.calSig*200.0f,1)+" %":"Saved");
 }
 void handleFuelDelete(){
   const int i=web.arg("i").toInt();
@@ -2561,6 +2964,19 @@ void handleCfg(){
   }
   if(web.hasArg("rawKeep")){const int d=web.arg("rawKeep").toInt();if(d<0||d>3650){reply(false,"Invalid value",400);return;}cfg.rawKeepDays=d;}
   if(web.hasArg("ntp")){cfg.ntpOn=web.arg("ntp")=="1";ntpStarted=false;}
+  // Gear bits learned at the dock: "mask:value" for forward and reverse, "" to forget.
+  for(uint8_t g=0;g<2;g++){
+    const char *key=g?"gearR":"gearF";
+    if(!web.hasArg(key))continue;
+    const String v=web.arg(key);
+    uint16_t m=0,val=0;
+    if(v.length()){
+      const int c=v.indexOf(':');
+      if(c<1){reply(false,"Invalid gear pattern",400);return;}
+      m=(uint16_t)strtoul(v.substring(0,c).c_str(),nullptr,0);val=(uint16_t)strtoul(v.substring(c+1).c_str(),nullptr,0)&m;
+    }
+    if(g){cfg.gearMaskR=m;cfg.gearValR=val;}else{cfg.gearMaskF=m;cfg.gearValF=val;}
+  }
   if(web.hasArg("host")){
     String v=web.arg("host");v.trim();v.toLowerCase();v.replace(' ','-');
     if(v.endsWith(".local"))v.remove(v.length()-6);
@@ -2577,6 +2993,7 @@ void handleCfg(){
     const int d=web.arg("fuelDiv").toInt();
     if(d!=128&&d!=256){reply(false,"Fuel scale must be 1/128 or 1/256",400);return;}
     cfg.kadFuelDiv=d;cfg.fuelScaleOk=true;
+    recalibrate();
   }
   if(web.hasArg("volt")){const int v=web.arg("volt").toInt();if(v!=0&&v!=1){reply(false,"Invalid voltage factor",400);return;}cfg.kadVolt=v;cfg.voltOk=true;}
   if(web.hasArg("protocol")){
@@ -2700,6 +3117,13 @@ void handleDiag(){
   s+=",\"missed\":";s+=totals.missedEvents;
   s+=",\"autoPoll\":";s+=cfg.autoPoll?"true":"false";
   s+=",\"proto\":";s+=cfg.protocol==PROTO_KAD?"\"kad\"":"\"j1587\"";
+  s+=",\"quality\":{\"rejected\":[";s+=kadRejected[0];s+=',';s+=kadRejected[1];
+  s+="],\"held\":[";s+=kadHeldBack[0];s+=',';s+=kadHeldBack[1];
+  s+="],\"bridged\":[";s+=gapFills[0];s+=',';s+=gapFills[1];
+  s+="],\"bridgedSec\":[";s+=totals.gapFillSec[0];s+=',';s+=totals.gapFillSec[1];
+  s+="],\"gaps\":[";s+=motor[0].gaps;s+=',';s+=motor[1].gaps;
+  s+="],\"focus\":";s+=(kadFocusIndex&&(int32_t)(kadFocusUntil-millis())>0)?kadFocusIndex:0;
+  s+="}";
   s+=",\"wifi\":{\"apRestarts\":";s+=apRestarts;s+=",\"joins\":";s+=(unsigned long)apJoins;s+=",\"leaves\":";s+=(unsigned long)apLeaves;
   s+=",\"reason\":";s+=(unsigned)apReason;s+=",\"staFails\":";s+=staFails;s+=",\"staDrops\":";s+=(unsigned long)staDisconnects;
   s+=",\"staConnects\":";s+=staConnects;s+=",\"ch\":";s+=apChannelNow;
@@ -2716,6 +3140,14 @@ void handleDiag(){
 }
 // 30 s read test on one connector. Polls (read requests only) unless the
 // connector is already being polled, then counts the answers.
+// The app studies one value closely (learning the gear bits): ask for it in
+// every slow slot for up to 90 seconds.
+void handleDiagFocus(){
+  const int idx=web.arg("idx").toInt(),secs=constrain(web.arg("secs").toInt(),0,90);
+  if(!kadParam((uint16_t)idx)){reply(false,"Unknown value",400);return;}
+  kadFocusIndex=(uint16_t)idx;kadFocusUntil=millis()+(uint32_t)secs*1000UL;
+  reply(true,"OK");
+}
 void handleDiagTest(){
   const int ch=web.arg("ch").toInt();
   if(ch<0||ch>1){reply(false,"Invalid connector",400);return;}
@@ -3137,6 +3569,7 @@ void initializeWeb(){
   web.on("/api/fuel",HTTP_GET,handleFuelList);
   web.on("/api/fuel/add",HTTP_POST,handleFuelAdd);
   web.on("/api/fuel/delete",HTTP_POST,handleFuelDelete);
+  web.on("/api/fuel/edit",HTTP_POST,handleFuelEdit);
   web.on("/api/economy",HTTP_GET,handleEconomy);
   web.on("/api/season/reset",HTTP_POST,handleSeasonReset);
   web.on("/api/prefs",HTTP_GET,handlePrefsGet);
@@ -3148,6 +3581,7 @@ void initializeWeb(){
   web.on("/api/wifi/forget",HTTP_POST,handleWifiForget);
   web.on("/api/diag",HTTP_GET,handleDiag);
   web.on("/api/diag/test",HTTP_POST,handleDiagTest);
+  web.on("/api/diag/focus",HTTP_POST,handleDiagFocus);
   web.on("/api/sd/info",HTTP_GET,handleSdInfo);
   web.on("/api/sd/wipe",HTTP_POST,handleSdWipe);
   web.on("/api/export/trips.csv",HTTP_GET,handleExportTrips);
@@ -3201,6 +3635,7 @@ void setup(){
   loadPrefs();
   loadTrips();
   loadFuel();
+  recalibrate();
   loadHealth();
   loadDiag();
   lastEngineOnMs=millis();

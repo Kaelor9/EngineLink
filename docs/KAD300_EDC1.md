@@ -18,10 +18,10 @@ EngineLink 0.4.0 was connected to the port KAD300 on J6. It polled for about 6 m
 | 259 coolant × 0.25 °C | Rose steadily from 19 to 35 °C after a cold start | **CONFIRMED** (plausible and consistent) |
 | 260 / 261 fuel / boost temperature × 0.25 °C | 12–14 °C / 13–17 °C | Plausible |
 | 258 / 265 pressure × 0.03125 kPa | 258 − 265 ≈ 102 kPa = atmospheric throughout, so the abs/rel pair is consistent. About 45 kPa relative at idle | Consistent, meaning to confirm |
-| 264 gear bits | `0x4965` → bits 0x18 = 0 → neutral | Plausible (only neutral seen) |
+| 264 gear bits | `0x4965` / `0x0945` at idle in neutral. The 0x18 bits never changed | Unconfirmed: learned per installation in the app since 0.6.0 |
 | 293 voltage | 1033 raw → **13.51 V** (VODIA) or 12.91 V (Yacht Devices), with the engine running | Needs a multimeter reading |
 | 289 fuel rate | About 407 raw at idle → **3.2 L/h** (× 1/128) or 1.6 L/h (× 1/256) | Tank to tank |
-| 288 relative load / 295 rod position | 87–91 % / 52–55 % at idle | Meaning unclear; not used |
+| 288 relative load / 295 rod position | 79–91 % / 50–55 % at idle | Meaning unclear; off by default and labelled unconfirmed in the app |
 
 ## Evidence levels
 

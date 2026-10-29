@@ -180,7 +180,8 @@ const S={tab:'trip',page:null,back:null,backScroll:0,live:null,liveAt:0,fails:0,
 const P={theme:'dark',night:'off',units:'metric',cur:'DKK',start:'trip',keepOn:false,planOn:true,
   places:[],route:0,round:true,custom:'30',planIdx:null,sea:'Calm',load:'Normal',
   warmOn:true,warmTarget:60,warmClose:30,
-  vals:{load:1,req:1,cool:1,boost:1,air:1,ftemp:1,batt:1,gear:1,hours:1,rate:0,inlet:0,rack:0,inj:0,start:0,ms:0},
+  pv:0,
+  vals:{load:0,req:1,cool:1,boost:1,air:1,ftemp:1,batt:1,gear:1,hours:1,rate:0,inlet:0,rack:0,inj:0,start:0,ms:0},
   service:{}};
 let prefsLoaded=false,prefsTimer=0;
 function savePrefs(){clearTimeout(prefsTimer);prefsTimer=setTimeout(()=>post('/api/prefs',{p:JSON.stringify(P)}),400);}
@@ -316,7 +317,16 @@ function engines(){
 }
 const ev=(e,idx)=>e&&e.x&&fin(e.x[idx])?e.x[idx]:null;
 const totalLph=()=>{const es=engines();let t=0,n=0;for(const e of es){if(fin(e.lph)){t+=e.lph;n++;}}return n?t:null;};
-const gearName=v=>{if(!fin(v))return '—';const g=v&0x18;return g===0?'Neutral':g===8?'Forward':g===16?'Reverse':'—';};
+// Gear from the bits learned at the dock (Diagnostics > Learn the gear).
+// Until then the raw value is not trusted: its meaning is not confirmed.
+const gearName=v=>{
+  if(!fin(v))return '—';
+  const c=cfgv(),g=c&&c.gear;
+  if(!g||!(g[0]||g[2]))return 'Not learned';
+  if(g[0]&&(v&g[0])===g[1])return 'Forward';
+  if(g[2]&&(v&g[2])===g[3])return 'Reverse';
+  return 'Neutral';
+};
 
 // ---------- Live updates ----------
 function onLive(){
@@ -585,7 +595,7 @@ function vTank(){
   if(!(tk.cap>0)){
     h+=`<div class="card"><span class="lbl" style="color:var(--teal)">Fuel aboard</span><div class="s14 sub" style="margin-top:6px">Set the size of the fuel tank once. Then log a full tank, and EngineLink keeps track of what is aboard.</div><button class="btn pri" style="margin-top:14px;width:100%" data-a="tankEditGo">Set tank size</button></div>`;
   }else if(!fin(tk.aboard)){
-    h+=`<div class="card"><span class="lbl" style="color:var(--teal)">Fuel aboard</span><div class="s14 sub" style="margin-top:6px">Fill up and log it with "Tank is full now". From then on EngineLink counts every litre.</div></div>`;
+    h+=`<div class="card"><span class="lbl" style="color:var(--teal)">Fuel aboard</span><div class="s14 sub" style="margin-top:6px">Fill up and log it as full. From then on EngineLink counts every litre.</div></div>`;
   }else{
     const pct=Math.round(tk.aboard/tk.cap*100),col=pct<=15?'var(--red)':pct<=30?'var(--orange)':'var(--teal)';
     h+=`<div class="card"><span class="lbl" style="color:var(--teal)">Fuel aboard</span>
@@ -597,17 +607,88 @@ function vTank(){
   const log=S.fuel?S.fuel.log:[];
   h+=`<div class="card" style="padding:6px 20px"><div class="s14 sub" style="font-weight:600;padding:12px 0 2px">Fuel log</div>${log.length?'<div class="list">'+log.map((r,i)=>{
     const open=S.fuelOpen===i;
-    return `<div><button class="row" data-a="fuelOpen" data-v="${i}"><span><span class="rt">${r.full?'Filled up':'Added'}</span><span class="rh">${r.utc?new Date(r.utc*1000).toLocaleDateString(LOC,{day:'numeric',month:'short',year:'2-digit'}):'—'} · ${r.full?(r.c!=null?'tank full · counted '+L(r.c,0)+' '+U.vu():'tank full'):'not full'}</span></span><span style="text-align:right"><span class="rt" style="font-weight:600">${r.l>0?L(r.l,0)+' '+U.vu():'Full'}</span><span class="rh">${r.p>0&&r.l>0?money(r.l*r.p):''}</span></span></button>
-      ${open?`<div style="padding:0 0 12px;display:flex;gap:8px;align-items:center"><span class="s12 sub" style="flex:1">${i===0?'Deleting the newest entry also restores the fuel aboard before it.':'Older entries are only removed from the log.'}</span><button class="btn sm red" data-a="fuelDel" data-v="${i}">${svg(IC.trash,15,'#fff',2)}Delete</button></div>`:''}</div>`;}).join('')+'</div>':'<div class="empty">No fill-ups logged yet.</div>'}</div>`;
+    const st=CALST[r.cs],ql=r.q===2?'topped up':r.q===1?'nozzle clicked off':'not full';
+    return `<div><button class="row" data-a="fuelOpen" data-v="${i}"><span><span class="rt">${r.full?'Filled up':'Added'}</span><span class="rh">${r.utc?new Date(r.utc*1000).toLocaleDateString(LOC,{day:'numeric',month:'short',year:'2-digit'}):'—'} · ${ql}</span>${r.full&&st?`<span class="rh" style="color:${st[0]}">${st[1]}</span>`:''}</span><span style="text-align:right"><span class="rt" style="font-weight:600">${r.l>0?L(r.l,0)+' '+U.vu():'Full'}</span><span class="rh">${r.p>0&&r.l>0?money(r.l*r.p):''}</span></span></button>
+      ${open?fuelEntryDetail(r,i):''}</div>`;}).join('')+'</div>':'<div class="empty">No fill-ups logged yet.</div>'}</div>`;
   h+=howCard();
   return h+'</div>';
 }
+// Opened fuel log entry: what EngineLink counted against the pump, how full
+// the tank was (correctable), the answer to "was it really full?", delete.
+function fuelEntryDetail(r,i){
+  let h='<div style="padding:0 0 12px" class="stack">';
+  if(r.full&&r.base!=null&&r.pump>0){
+    const dev=r.now!=null?(r.now/r.pump-1)*100:null;
+    h+=`<div class="s13" style="background:var(--track);border-radius:12px;padding:10px 12px">Since the full tank before: the pump <b>${L(r.pump,1)} ${U.vu()}</b>${r.pump>r.l+0.05?' (with the fill-ups in between)':''}, the engines reported <b>${L(r.base,1)} ${U.vu()}</b>${r.now!=null?`, EngineLink now counts <b>${L(r.now,1)} ${U.vu()}</b>${fin(dev)?` (${dev>=0?'+':''}${NF(dev,1)} %)`:''}`:''}.</div>`;
+  }
+  if(r.full){
+    h+=`<div class="s12 sub">How full was the tank?</div><div class="seg" style="grid-template-columns:1fr 1fr"><button class="${r.q===1?'on':''}" data-a="fuelQ" data-v="${i}:1">Nozzle clicked off</button><button class="${r.q===2?'on':''}" data-a="fuelQ" data-v="${i}:2">Topped up to the pipe</button></div>`;
+    if(r.cs===2)h+=`<div class="s13" style="color:var(--orange)">This fill-up does not match the others${fin(r.z)&&r.z?` (${NF(Math.abs(r.z),1)} × the expected spread)`:''}. Perhaps the tank was not quite full, or some spilled.</div><div class="grid2" style="gap:8px"><button class="btn sm" data-a="fuelUse" data-v="${i}:1">It was full, use it</button><button class="btn sm" data-a="fuelUse" data-v="${i}:2">Don't use it</button></div>`;
+    else if(r.cs===3)h+=`<button class="btn sm" data-a="fuelUse" data-v="${i}:0">Use it for calibration again</button>`;
+    else if(r.cs===1)h+=`<button class="btn sm" style="background:none;color:var(--sub)" data-a="fuelUse" data-v="${i}:2">Leave out of the calibration</button>`;
+  }
+  h+=`<div style="display:flex;gap:8px;align-items:center"><span class="s12 sub" style="flex:1">${i===0?'Deleting the newest entry also restores the fuel aboard before it.':'Older entries are only removed from the log.'}</span><button class="btn sm red" data-a="fuelDel" data-v="${i}">${svg(IC.trash,15,'#fff',2)}Delete</button></div></div>`;
+  return h;
+}
+function gearBlock(c){
+  const g=c.gear||[0,0,0,0],ok=g[0]||g[2];
+  return `<div class="rowx"><div class="cth"><span class="rt">Gear</span><span class="s12" style="font-weight:600;color:${ok?'var(--green)':'var(--orange)'}">${ok?'Learned':'Not learned'}</span></div>
+    <div class="s12 sub" style="margin-top:3px">${ok?'EngineLink knows which bits mean forward'+(g[2]?' and reverse':'')+'.':'The engines report the gear as a set of bits whose meaning differs between installations. Learn it once at the dock: about a minute, shifting when asked.'}</div>
+    <button class="btn sm" style="margin-top:10px" data-a="sheet" data-v="gear">${ok?'Learn again':'Learn the gear'}</button></div>`;
+}
+const GEARSTEPS=[['N','Neutral','Both levers in neutral.'],['F','Forward','Both levers into forward, at idle.'],['N','Neutral','Back to neutral.'],['R','Reverse','Both levers into reverse, at idle.'],['N','Neutral','Back to neutral. Last step.']];
+// Bits that are steady within each state and differ between them.
+function learnBits(a,b){
+  if(a.length<2||b.length<2)return null;
+  let andA=0xFFFF,orA=0,andB=0xFFFF,orB=0;
+  for(const v of a){andA&=v;orA|=v;}for(const v of b){andB&=v;orB|=v;}
+  const steady=~(andA^orA)&~(andB^orB)&0xFFFF,mask=steady&(andA^andB);
+  return mask?[mask,andB&mask]:null;
+}
+function joinBits(x,y){
+  if(x&&y){const m=x[0]&y[0]&~(x[1]^y[1])&0xFFFF;return m?[m,x[1]&m]:null;}
+  return x||y;
+}
+function gearResult(){
+  const g=S.gear,per=[0,1].map(ch=>{const by=k=>g.samples.filter(s=>s.k===k).flatMap(s=>s.v[ch]);const n=by('N');return [learnBits(n,by('F')),learnBits(n,by('R'))];});
+  let f=joinBits(per[0][0],per[1][0]),r=joinBits(per[0][1],per[1][1]);
+  if(f&&r&&f[0]===r[0]&&f[1]===r[1])r=null;
+  return {f,r};
+}
+async function gearRecord(){
+  const g=S.gear;if(g.busy)return;
+  g.busy=true;g.prog=0;renderSheet();
+  for(const e of engines())if(!e.poll)await post('/api/diag/test',{ch:e.ch});
+  await post('/api/diag/focus',{idx:264,secs:30});
+  const v=[[],[]];
+  for(let i=0;i<14;i++){
+    await new Promise(r=>setTimeout(r,450));
+    try{const d=await get('/api/diag',2000);for(const ch of [0,1]){const x=d.t[ch].raw&&d.t[ch].raw[264];if(x&&x[2]<1500)v[ch].push(x[0]&0xFFFF);}}catch(e){}
+    g.prog=Math.round((i+1)/14*100);renderSheet();
+  }
+  g.samples.push({k:GEARSTEPS[g.step][0],v});g.step++;g.busy=false;
+  if(g.step>=GEARSTEPS.length)g.res=gearResult();
+  renderSheet();
+}
+function fuelFiguresBlock(){
+  const f=S.fuel;if(!f||!f.cal)return '';
+  const [c,t1,t2]=calItem(f);
+  return `<div class="rowx"><div class="cth"><span class="rt">Fuel figures</span><span class="s12" style="font-weight:600;color:${c}">${f.cal.n?'±'+NF(f.cal.sig*200,1)+' %':'Not calibrated'}</span></div><div class="s12 sub" style="margin-top:3px">${t1}. ${t2}</div></div>`;
+}
+function calItem(f){
+  const c=f.cal||{n:0};
+  if(!c.n)return ['var(--orange)','Not calibrated yet','The engines estimate their own fuel use, typically 10 to 20 % off. Fill up twice and log both as full; "Topped up to the filler pipe" is the most exact. Each full tank makes the figures better.'];
+  const bands=['idle','part load','cruise'],extra=c.b.map((b,i)=>Math.abs(b-1)>=0.005?bands[i]+' '+pct(b-1):null).filter(Boolean);
+  return [c.sig<=0.03?'var(--green)':'var(--orange)','Calibrated from '+c.n+' fill-up'+(c.n>1?'s':'')+' · within about ±'+NF(c.sig*200,1)+' %',
+    'The engines report '+NF(Math.abs(1/c.f-1)*100,1)+' % '+(c.f<1?'more':'less')+' than the pump shows, so EngineLink corrects for it'+(extra.length?', and on top at '+extra.join(', '):'')+'. Every earlier trip is recalculated. '+(c.sig>0.03?'More full tanks, ideally topped up, make it more exact.':'')];
+}
+const pct=(x,d=1)=>(x>=0?'+':'')+NF(x*100,d)+' %';
 function howCard(){
   const f=S.fuel;if(!f)return '';
   const tk=S.live.tank;
   const items=[
     ['var(--green)','Counting every litre','Both engines report their fuel use about twice a second.'+(f.since!=null?' '+L(f.since,0)+' '+U.vu()+' used since the last fill-up.':'')],
-    [f.tunes?'var(--green)':'var(--orange)',f.tunes?'Fine-tuned from '+f.tunes+' full fill-up'+(f.tunes>1?'s':''):'Not fine-tuned yet',f.tunes?'The last full tank differed '+NF(Math.abs(f.tuneDev*100),1)+' % from what EngineLink counted; the figures were adjusted.':'Fill up, enter the pump litres and switch on "Tank is full now". Each full tank makes the figures more exact.'],
+    calItem(f),
     [f.missed.n?'var(--orange)':'var(--green)','Engine hour meters',f.missed.n?'The engines ran '+f.missed.n+' time'+(f.missed.n>1?'s':'')+' while EngineLink was off. About '+L(f.missed.l,0)+' '+U.vu()+' was added as an estimate.':'Checked against the engines\' own hour meters each time EngineLink starts. No running was missed.']
   ];
   return `<div class="card" style="padding:6px 20px 8px"><div class="cth" style="padding:12px 0 2px"><span class="s14 sub" style="font-weight:600">How EngineLink knows</span>${fin(tk.aboard)?`<span class="s13" style="font-weight:600;color:var(--green)">± ${L(tk.pm,0)} ${U.vu()}</span>`:''}</div>
@@ -675,13 +756,14 @@ function renderBar(){
   }else{
     const sec=us.filter(u=>S.sel.includes(u.key)).reduce((a,u)=>a+u.run,0);
     const mb=S.raw?sec/60*0.42:0.02+sec/60*0.004;
+    if(S.rawReady){b.innerHTML=`<button class="btn pri" style="width:100%" data-a="rawGo">Download raw engine data</button>`;return;}
     b.innerHTML=`<button class="row" data-a="rawToggle" style="padding:0 0 10px"><span><span class="rt s14">Include raw engine data</span><span class="rh">Every message from both engines, for analysis</span></span><span class="tog ${S.raw?'on':''}"></span></button>
       <button class="btn ${n?'pri':''}" style="width:100%" data-a="export" ${n?'':'disabled'}>${n?'Download '+n+' trip'+(n>1?'s':'')+' · about '+(mb>=1?NF(mb,1)+' MB':NF(mb*1024,0)+' KB'):'Select trips to export'}</button>`;
   }
 }
 
 // ---------- Engines ----------
-const VALS=[['load',288,'Load','Shown as a bar under the rpm'],['req',291,'Requested rpm','What the throttle asks for'],['cool',259,'Coolant','Engine temperature'],['boost',265,'Boost','Turbo pressure'],['air',261,'Charge air','Air temperature after the intercooler'],['ftemp',260,'Fuel temp.','Diesel temperature at the pump'],['batt',293,'Battery','System voltage at the engine'],['gear',264,'Gear','Neutral, forward or reverse'],['hours',266,'Hours','Engine hours from the engine itself'],['rate',289,'Fuel rate','Also shown on Trip'],['inlet',258,'Inlet pressure','Absolute air pressure in the intake'],['rack',295,'Fuel rack','How far the injection pump is open'],['inj',296,'Injection angle','Injection timing'],['start',263,'Start input','Key and start button from the panel'],['ms',267,'Control unit','Active Volvo MS unit']];
+const VALS=[['load',288,'Relative load','Not confirmed for KAD300 yet: reads 80-90 % at idle'],['req',291,'Requested rpm','What the throttle asks for'],['cool',259,'Coolant','Engine temperature'],['boost',265,'Boost','Turbo pressure'],['air',261,'Charge air','Air temperature after the intercooler'],['ftemp',260,'Fuel temp.','Diesel temperature at the pump'],['batt',293,'Battery','System voltage at the engine'],['gear',264,'Gear','Neutral, forward or reverse, once learned in Diagnostics'],['hours',266,'Hours','Engine hours from the engine itself'],['rate',289,'Fuel rate','Also shown on Trip'],['inlet',258,'Inlet pressure','Absolute air pressure in the intake'],['rack',295,'Fuel rack','How far the injection pump is open. Not confirmed yet'],['inj',296,'Injection angle','Injection timing'],['start',263,'Start input','Key and start button from the panel'],['ms',267,'Control unit','Active Volvo MS unit']];
 function valText(key,v){
   if(!fin(v))return ['—',''];
   switch(key){
@@ -704,11 +786,10 @@ function vEngines(){
   const es=engines();
   let h='<div class="stack live">';
   for(const e of es){
-    const load=ev(e,288),on=e.run;
+    const on=e.run;
     h+=`<div class="card"><div class="cth" style="align-items:center"><span style="display:inline-flex;gap:7px;align-items:center;font-size:15px;font-weight:600;color:${e.color}"><span class="dot" style="width:10px;height:10px;background:${e.color}"></span>${e.name}</span><span class="s13 sub">${e.sock} · ${on?'Running':fin(e.rpm)?'Idle':e.seen!=null&&e.seen<30?'Stopped':'No data'}${e.poll?'':(lv.proto==='kad'?' · not read':'')}</span></div>
-      <div class="cth" style="align-items:flex-end;margin-top:6px"><div class="big" style="font-size:44px">${fin(e.rpm)?NF(e.rpm,0):'—'} <span class="unit">rpm</span></div>${P.vals.load&&fin(load)?`<div style="text-align:right;padding-bottom:6px"><div class="s12 sub">Load</div><div style="font-size:18px;font-weight:600">${NF(load,0)} %</div></div>`:''}</div>
-      ${P.vals.load&&fin(load)?`<div class="bar" style="height:6px;margin-top:4px"><i style="width:${clamp(load,0,100)}%;background:${e.color}"></i></div>`:''}
-      <div class="grid3" style="gap:12px 8px;margin-top:12px">${VALS.filter(v=>v[0]!=='load'&&P.vals[v[0]]).map(([k,idx,label])=>{const [t,u]=valText(k,ev(e,idx));return `<div style="min-width:0"><div class="s12 sub" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${label}</div><div style="font-size:18px;font-weight:600;white-space:nowrap">${t} <span style="font-size:12.5px;font-weight:500" class="sub">${u}</span></div></div>`;}).join('')}</div>
+      <div class="cth" style="align-items:flex-end;margin-top:6px"><div class="big" style="font-size:44px">${fin(e.rpm)?NF(e.rpm,0):'—'} <span class="unit">rpm</span></div></div>
+      <div class="grid3" style="gap:12px 8px;margin-top:12px">${VALS.filter(v=>P.vals[v[0]]).map(([k,idx,label])=>{const [t,u]=valText(k,ev(e,idx));return `<div style="min-width:0"><div class="s12 sub" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${label}</div><div style="font-size:18px;font-weight:600;white-space:nowrap">${t} <span style="font-size:12.5px;font-weight:500" class="sub">${u}</span></div></div>`;}).join('')}</div>
       ${!e.poll&&lv.proto==='kad'&&e.why?`<div class="s12 sub" style="margin-top:10px">${esc(e.why)}</div>`:''}</div>`;
   }
   if(lv.proto==='kad'&&es.every(e=>!e.poll))h+=`<div class="card s14 sub">EngineLink only listens right now. Switch on "Read engines automatically" in Settings, or start reading under Diagnostics.</div>`;
@@ -848,6 +929,9 @@ function vSettings(){
 
 // ---------- Sub-pages ----------
 const hostDraft=(d,c)=>String(d.hostName??(c.host||'enginelink')).trim().toLowerCase().replace(/\s+/g,'-').replace(/\.local$/,'')||'enginelink';
+// Kinds of fill-up: how exactly the tank was filled decides how much it counts.
+const FILLQ=[[1,'Nozzle clicked off','Tank full the normal way'],[2,'Topped up to the filler pipe','Filled slowly to the top of the pipe. Most exact'],[0,'Not full','The litres are added to what is aboard']];
+const CALST={1:['var(--green)','Used for calibration'],2:['var(--orange)','Looks odd. Was the tank really full?'],3:['var(--sub)','Not used for calibration'],4:['var(--sub)','Too little fuel since the last full tank to calibrate'],5:['var(--sub)','Starting point for the next full tank']};
 const PAGE_VIEWS={
   dest(){
     let h=backPill()+`<div class="sec">${P.places.length?P.places.map((p,i)=>`<div class="row"><span><span class="rt">${esc(p[0])}</span><span class="rh">${NF(p[1],1).replace(/[.,]0$/,'')} nm one way</span></span><button class="btn sm" style="width:40px;padding:0" data-a="placeDel" data-v="${i}" aria-label="Delete ${esc(p[0])}">${svg(IC.trash,18,'var(--red)',2)}</button></div>`).join(''):'<div class="empty">No places yet. Add the ones you sail to most.</div>'}</div>`;
@@ -940,12 +1024,18 @@ const PAGE_VIEWS={
       ${w.leaves?`<div class="s12" style="margin-top:8px">Last phone drop: <b>${LEAVE[w.reason]||'code '+w.reason}</b></div>`:''}
       <div class="s12 sub" style="margin-top:8px">"Missed here" counts the live updates this phone did not get since the app was opened. Up for ${dur(d.up||0)}${d.reset!=null?' · last restart: '+(RESET[d.reset]||'code '+d.reset):''}.</div></div></div>`;
     // Calibration
-    const lastFull=S.fuel&&S.fuel.log.find(r=>r.full&&r.c!=null&&r.l>0);
+    const lastFull=S.fuel&&S.fuel.log.find(r=>r.full&&r.base!=null&&r.pump>0);
     h+=`<div class="hd">Calibration</div><div class="sec"><div class="rowx"><div class="cth"><span class="rt">Fuel rate scale</span><span class="s12" style="font-weight:600;color:${c.scaleOk?'var(--green)':'var(--orange)'}">${c.scaleOk?'Confirmed':'Not confirmed yet'}</span></div>
-      ${lastFull?`<div class="s12 sub" style="margin-top:3px">Last full fill-up: the pump said <b style="color:var(--text)">${L(lastFull.l,0)} ${U.vu()}</b>. What EngineLink counted with each scale:</div>`:'<div class="s12 sub" style="margin-top:3px">Fill up twice with "Tank is full now" and the pump litres; then this shows which scale fits.</div>'}
-      <div class="stack" style="gap:6px;margin-top:10px">${[[128,lastFull?lastFull.r128:null],[256,lastFull?lastFull.r256:null]].map(([dv,l])=>{const dev=l!=null?l/lastFull.l-1:null,good=dev!=null&&Math.abs(dev)<0.15,inUse=c.kadFuelDiv===dv;
+      ${lastFull?`<div class="s12 sub" style="margin-top:3px">Last full fill-up: the pump said <b style="color:var(--text)">${L(lastFull.pump,0)} ${U.vu()}</b>. What EngineLink counted with each scale:</div>`:'<div class="s12 sub" style="margin-top:3px">Fill up twice, log both as full with the pump litres; then this shows which scale fits.</div>'}
+      <div class="stack" style="gap:6px;margin-top:10px">${[[128,lastFull?lastFull.r128:null],[256,lastFull?lastFull.r256:null]].map(([dv,l])=>{const dev=l!=null?l/lastFull.pump-1:null,good=dev!=null&&Math.abs(dev)<0.15,inUse=c.kadFuelDiv===dv;
         return `<button data-a="fuelDiv" data-v="${dv}" style="display:flex;justify-content:space-between;align-items:center;gap:10px;min-height:48px;padding:0 14px;border-radius:13px;border:2px solid ${inUse&&c.scaleOk?'var(--green)':good?'var(--teal)':'transparent'};background:var(--track);text-align:left"><span><span class="rt s14" style="font-weight:600">1/${dv}${dv===128?' (default)':''}</span><span class="rh">${l!=null?'Would have counted '+L(l,0)+' '+U.vu()+' · '+(dev>=0?'+':'')+NF(dev*100,0)+' %':'—'}</span></span><span class="s13" style="font-weight:600;color:${inUse&&c.scaleOk?'var(--green)':'var(--teal)'}">${inUse&&c.scaleOk?'In use':good?'Matches':inUse?'Selected':''}</span></button>`;}).join('')}</div></div>
-      ${voltBlock(c,es)}</div>`;
+      ${fuelFiguresBlock()}
+      ${voltBlock(c,es)}
+      ${gearBlock(c)}</div>`;
+    // Engine data quality
+    const qd=d.quality;
+    if(qd)h+=`<div class="hd">Engine data</div><div class="sec"><div class="rowx"><div class="grid3" style="gap:8px">${es.map(e=>[[e.name+' held back',qd.held[e.ch]],[e.name+' rejected',qd.rejected[e.ch]],[e.name+' bridged',qd.bridgedSec[e.ch]+' s']]).flat().map(([k,v])=>`<div style="background:var(--track);border-radius:12px;padding:8px 10px"><div class="s12 sub">${k}</div><div style="font-weight:600;margin-top:2px">${v}</div></div>`).join('')}</div>
+      <div class="s12 sub" style="margin-top:8px">Every answer is checked against what an engine can physically do. A sudden jump is held back until the next answer confirms it; impossible values are rejected. Short gaps in the fuel figures (up to 2 minutes, while the engine kept answering for rpm) are bridged and counted.</div></div></div>`;
     // Advanced
     h+=`<button class="btn" style="width:100%;justify-content:space-between;background:var(--card);padding:0 18px;min-height:56px;margin-bottom:${S.advOpen?14:20}px" data-a="adv"><span style="text-align:left"><span class="rt">Advanced</span><span class="rh">Reading, motor test, bus monitor, raw values</span></span><span class="sub">${S.advOpen?'⌃':'⌄'}</span></button>`;
     if(S.advOpen)h+=advanced(d,c,es);
@@ -1004,17 +1094,34 @@ function renderSheet(){
   const k=S.sheet;if(!k)return;
   const sh=$('#sheet'),grab='<div class="grab"></div>';
   let h='';
-  if(k==='fuel'){
+  if(k==='gear'){
+    const g=S.gear||(S.gear={step:0,samples:[],busy:false,prog:0,res:null});
+    if(g.res){
+      const fmt=x=>x?'bits 0x'+x[0].toString(16).toUpperCase()+' = 0x'+x[1].toString(16).toUpperCase():'not found';
+      h=`${grab}<div style="font-size:22px;font-weight:600">${g.res.f?'Gear learned':'Gear not found'}</div>
+        <div class="s14 sub">${g.res.f?'Forward: '+fmt(g.res.f)+'. Reverse: '+fmt(g.res.r)+'.':'No bits changed steadily between neutral and forward. Check that both engines were read (Diagnostics > Connection) and that the levers were really shifted.'}</div>
+        <div class="grid2" style="gap:10px"><button class="btn" data-a="gearAgain">Start over</button><button class="btn ${g.res.f?'pri':''}" ${g.res.f?'':'disabled'} data-a="gearSave">Save</button></div>`;
+    }else{
+      const s=GEARSTEPS[g.step];
+      h=`${grab}<div class="cth" style="align-items:center"><span style="font-size:22px;font-weight:600">Learn the gear</span><span class="s13 sub">Step ${g.step+1} of ${GEARSTEPS.length}</span></div>
+        ${g.step===0?'<div class="s13" style="background:var(--osoft);color:var(--orange);border-radius:12px;padding:10px 12px">Only at the dock with the boat moored securely, engines at idle. EngineLink only reads; you shift.</div>':''}
+        <div style="font-size:30px;font-weight:700;margin-top:4px">${s[1]}</div><div class="s14 sub">${s[2]} Then press Record and wait about 6 seconds.</div>
+        ${g.busy?`<div class="bar" style="height:8px"><i style="width:${g.prog}%;background:var(--teal)"></i></div>`:''}
+        <div class="grid2" style="gap:10px"><button class="btn" data-a="close">Cancel</button><button class="btn pri" ${g.busy?'disabled':''} data-a="gearRec">${g.busy?'Recording…':'Record'}</button></div>`;
+    }
+  }else if(k==='fuel'){
     const d=S.d,price=S.live?S.live.price:0;
-    if(d.fPrice==null){d.fPrice=price>0?NF(price,2):'';d.fLitres='';d.fFull=true;d.fWhen=null;}
+    if(d.fPrice==null){d.fPrice=price>0?NF(price,2):'';d.fLitres='';d.fQ=1;d.fWhen=null;}
+    d.fFull=d.fQ>0;
     const l=parseFloat(String(d.fLitres).replace(',','.')),p=parseFloat(String(d.fPrice).replace(',','.'));
     const can=l>0||d.fFull;
     h=`${grab}<div class="cth" style="align-items:center"><span style="font-size:22px;font-weight:600">Log fuel</span><button class="btn sm" data-a="fWhen">${svg('M12 3a9 9 0 1 0 0 18a9 9 0 1 0 0-18M12 7v5l3 2',15,'var(--sub)',2)}${d.fWhen?new Date(d.fWhen).toLocaleString(LOC,{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}):'Now'}</button></div>
       ${d.fPick?`<div style="background:var(--track);border-radius:16px;padding:12px" class="stack"><div class="seg" style="grid-template-columns:1fr 1fr"><button class="${d.fWhen?'':'on'}" data-a="fNow">Now</button><button class="${d.fWhen?'on':''}" data-a="fOther">Other time</button></div>${d.fWhen?`<input type="datetime-local" class="field" style="background:var(--card)" data-i="fWhenV" value="${new Date(d.fWhen-new Date().getTimezoneOffset()*60000).toISOString().slice(0,16)}">`:''}</div>`:''}
       <label class="s13 sub" style="display:flex;flex-direction:column;gap:6px">${imp()?'Gallons':'Litres'} added<input class="field" style="min-height:58px;font-size:28px;font-weight:600;border-radius:16px" inputmode="decimal" placeholder="0" data-i="fLitres" value="${esc(d.fLitres)}"></label>
       <div class="grid2"><label class="s13 sub" style="display:flex;flex-direction:column;gap:6px">Price per ${imp()?'gallon':'litre'}<input class="field" inputmode="decimal" placeholder="${cur()}" data-i="fPrice" value="${esc(d.fPrice)}"></label><div class="s13 sub" style="display:flex;flex-direction:column;gap:6px">Total<div id="fTotal" style="min-height:46px;display:flex;align-items:center;font-size:18px;color:var(--text)">${l>0&&p>0?money(l*p):'—'}</div></div></div>
-      <button class="row" style="background:var(--track);border-radius:16px;padding:12px 14px" data-a="fFull"><span><span class="rt">Tank is full now</span><span class="rh">${d.fFull?'Fuel aboard is set to the tank size':'The litres are added to what is aboard'}</span></span>${tg(d.fFull)}</button>
-      <div class="s13 sub">${!can?'Enter the litres you added.':d.fFull?'EngineLink compares the pump litres with what it counted and fine-tunes the fuel figures.':''}</div>
+      <div class="s13 sub">How full is the tank now?</div>
+      <div class="stack" style="gap:8px">${FILLQ.map(([q,t1,t2])=>`<button class="row" style="background:var(--track);border-radius:16px;padding:12px 14px;border:2px solid ${d.fQ===q?'var(--teal)':'transparent'}" data-a="fQ" data-v="${q}"><span><span class="rt">${t1}</span><span class="rh">${t2}</span></span><span style="width:22px;height:22px;border-radius:50%;flex:none;border:2px solid ${d.fQ===q?'var(--teal)':'var(--off)'};display:flex;align-items:center;justify-content:center">${d.fQ===q?'<i style="width:10px;height:10px;border-radius:50%;background:var(--teal)"></i>':''}</span></button>`).join('')}</div>
+      <div class="s13 sub">${!can?'Enter the litres you added.':d.fQ===2?'Best for calibration: EngineLink compares the pump litres with what it counted, and this fill-up counts a lot.':d.fQ===1?'EngineLink compares the pump litres with what it counted. A clicked-off nozzle can leave a few litres of room, so this counts a little.':''}</div>
       <div style="display:grid;grid-template-columns:1fr 2fr;gap:10px"><button class="btn" data-a="close">Cancel</button><button class="btn ${can?'pri':''}" ${can?'':'disabled'} data-a="fuelSave">Save</button></div>`;
   }else if(k.startsWith('notes:')){
     const id=+k.slice(6),t=S.trips.trips.find(x=>x.id===id);
@@ -1175,9 +1282,14 @@ const A={
   fWhen:()=>{S.d.fPick=!S.d.fPick;renderSheet();},
   fNow:()=>{S.d.fWhen=null;S.d.fPick=false;renderSheet();},
   fOther:()=>{S.d.fWhen=S.d.fWhen||Date.now();renderSheet();},
-  fFull:()=>{S.d.fFull=!S.d.fFull;renderSheet();},
+  fQ:v=>{S.d.fQ=+v;renderSheet();},
+  gearRec:()=>gearRecord(),
+  gearAgain:()=>{S.gear=null;renderSheet();},
+  gearSave:async()=>{const r=S.gear.res,f=x=>x?x[0]+':'+x[1]:'';const ok=await cfgSet({gearF:f(r.f),gearR:f(r.r)});if(ok.ok){S.gear=null;history.back();toast('Gear learned');render(true);}},
+  fuelQ:async v=>{const [i,q]=v.split(':');await act('/api/fuel/edit',{i,q});load('fuel');},
+  fuelUse:async v=>{const [i,u]=v.split(':');await act('/api/fuel/edit',{i,use:u});load('fuel');},
   fuelSave:async()=>{const d=S.d,l=parseFloat(String(d.fLitres).replace(',','.'))||0,p=parseFloat(String(d.fPrice).replace(',','.'))||0;
-    const r=await act('/api/fuel/add',{litres:imp()?l/0.264172:l,price:imp()?p*0.264172:p,full:d.fFull?1:0,utc:d.fWhen?Math.round(d.fWhen/1000):0});
+    const r=await act('/api/fuel/add',{litres:imp()?l/0.264172:l,price:imp()?p*0.264172:p,q:d.fQ,utc:d.fWhen?Math.round(d.fWhen/1000):0});
     if(r.ok){history.back();load('fuel');}},
   // History
   selMode:v=>{S.selMode=v||null;S.sel=[];S.quick=null;S.open=null;render(true);},
@@ -1185,8 +1297,11 @@ const A={
   tripTap:v=>{const k=+v;if(S.selMode){S.sel=S.sel.includes(k)?S.sel.filter(x=>x!==k):S.sel.concat([k]);}else S.open=S.open===k?null:k;render(true);},
   rawToggle:()=>{S.raw=!S.raw;renderBar();},
   export:()=>{const us=units().filter(u=>S.sel.includes(u.key)),ids=us.flatMap(u=>u.ids).join(',');if(!ids)return;
-    download('/api/export/trips.csv?ids='+ids);if(S.raw)setTimeout(()=>download('/api/export/raw.csv?ids='+ids),1500);
+    download('/api/export/trips.csv?ids='+ids);
+    // Phones allow one download per tap, so the raw data gets its own button.
+    if(S.raw){S.rawReady=ids;toast('Trips downloaded. Tap "Download raw engine data" for the second file');render(true);return;}
     toast('Downloading '+us.length+' trip'+(us.length>1?'s':''));S.selMode=null;S.sel=[];render(true);},
+  rawGo:()=>{download('/api/export/raw.csv?ids='+S.rawReady);S.rawReady=null;S.selMode=null;S.sel=[];render(true);},
   dlTrips:v=>download('/api/export/trips.csv?ids='+v),
   combine:async()=>{const us=units().filter(u=>S.sel.includes(u.key)),ids=us.flatMap(u=>u.ids).join(',');const r=await act('/api/trip/combine',{ids});if(r.ok){S.selMode=null;S.sel=[];load('trips');}},
   split:async v=>{await act('/api/trip/split',{group:v});S.open=null;load('trips');},
@@ -1215,7 +1330,7 @@ const I={
   wipe:v=>{S.d.wipe=v;const ok=v.trim().toUpperCase()==='WIPE',b=document.querySelector('[data-a="wipeDo"]');if(b){b.disabled=!ok;b.className='btn '+(ok?'red':'');}const i=document.querySelector('[data-i="wipe"]');if(i)i.style.borderColor=ok?'var(--red)':'transparent';}
 };
 function updTotal(){const d=S.d,l=parseFloat(String(d.fLitres).replace(',','.')),p=parseFloat(String(d.fPrice).replace(',','.'));const t=$('#fTotal');if(t)t.textContent=l>0&&p>0?money(l*p):'—';
-  const can=l>0||d.fFull,b=document.querySelector('[data-a="fuelSave"]');if(b){b.disabled=!can;b.className='btn '+(can?'pri':'');}}
+  const can=l>0||d.fQ>0,b=document.querySelector('[data-a="fuelSave"]');if(b){b.disabled=!can;b.className='btn '+(can?'pri':'');}}
 async function fwPoll(){for(let i=0;i<400;i++){await load('fw');const s=S.fw?S.fw.state:0;if(s===2||s===9||s===0||s===4)break;await new Promise(r=>setTimeout(r,1000));}}
 async function diagPoll(){for(let i=0;i<40;i++){await load('diag');if(!S.diag||!S.diag.t.some(t=>t.running))break;await new Promise(r=>setTimeout(r,1000));}load('diag');}
 function uploadFw(file){
@@ -1266,7 +1381,9 @@ addEventListener('popstate',()=>{if(S.sheet){closeSheet();return;}if(S.page)goBa
 addEventListener('beforeinstallprompt',e=>{e.preventDefault();window._bip=e;});
 (async function init(){
   renderNav();render(true);
-  try{const p=await get('/api/prefs',4000);if(p&&typeof p==='object'){for(const k of Object.keys(P))if(p[k]!==undefined)P[k]=typeof P[k]==='object'&&!Array.isArray(P[k])?Object.assign({},P[k],p[k]):p[k];}prefsLoaded=true;}catch(e){}
+  try{const p=await get('/api/prefs',4000);if(p&&typeof p==='object'){for(const k of Object.keys(P))if(p[k]!==undefined)P[k]=typeof P[k]==='object'&&!Array.isArray(P[k])?Object.assign({},P[k],p[k]):p[k];}prefsLoaded=true;
+    // 0.6: "Load" (KAD 288) is not confirmed; it read 80-90 % at idle. Off unless chosen again.
+    if((P.pv||0)<6){P.vals.load=0;P.pv=6;savePrefs();}}catch(e){}
   applyTheme();
   const first=P.start||'trip';S.tab='';
   goTab(first);

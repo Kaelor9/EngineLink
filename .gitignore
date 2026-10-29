@@ -12,3 +12,5 @@ build/
 __pycache__/
 # Future approved release binaries are explicitly committed to site/
 !site/firmware.bin
+# built by tools/build_demo.py in the Pages workflow
+site/demo/

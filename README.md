@@ -13,7 +13,7 @@
   <img src="https://img.shields.io/badge/Engines-2%C3%97%20J1708%20isolated-success" alt="2 × isolated J1708">
   <img src="https://img.shields.io/badge/Volvo%20Penta-KAD300%20%2F%20EDC%20I-0b5394" alt="Volvo Penta KAD300 / EDC I">
   <img src="https://img.shields.io/badge/NMEA%202000-listen--only-informational" alt="NMEA 2000 listen-only">
-  <img src="https://img.shields.io/badge/Firmware-0.5.5-orange" alt="Firmware 0.5.5">
+  <img src="https://img.shields.io/badge/Firmware-0.6.0-orange" alt="Firmware 0.6.0">
 </p>
 
 <p align="center">
@@ -53,10 +53,12 @@ EngineLink combines both on one board:
 - 📱 **Phone app "Engine Link":** Trip, Economy, Tank, History and Engines, add it to the home screen. Light, dark and night themes, metric or imperial, any currency
 - ⛽ **Live fuel flow:** per engine and combined L/h (KAD index 289 or J1587 PID 183)
 - 🛥 **Automatic trips** with notes (people, sea, wind), combine/split and CSV export
-- 🛢 **Fuel log and tank:** fuel aboard, range at the current speed, and a fuel factor that fine-tunes itself on every full fill-up
+- 🛢 **Fuel log and tank:** fuel aboard with an honest ±, range at the current speed
+- 🎯 **Self-calibrating fuel figures:** weighted fit over all fill-ups (topped up / clicked off), separate correction for idle, part load and cruise, odd fill-ups caught, every trip recalculated
 - 📊 **Economy:** best cruising speed, trip planner, season statistics per RPM band, engine health trend
 - 🔧 **Volvo Penta KAD / EDC I:** VODIA scaling, passive decoding of an EDC display, or opt-in read-only polling
-- ⚖️ **Calibration tools:** voltage check against a multimeter, tank-to-tank fuel factor and per-engine correction
+- ⚖️ **Calibration tools:** voltage check against a multimeter, fuel scale check, gear learned at the dock
+- 🧹 **Checked engine data:** physical limits and jump confirmation on every answer, short gaps bridged, faster reading while the throttle moves
 - 🧭 **Fuel economy:** L/nm when NMEA 2000 GPS speed is available
 - 🧾 **Lifetime totals** with engine hours that survive restarts and recalculate after calibration
 - 🔎 **Bus discovery:** every parameter your ECUs actually answer or send, with raw bytes
@@ -117,6 +119,8 @@ The app source is [`firmware/ui/app.html`](firmware/ui/app.html); `tools/build_u
 
 ## Getting Started
 
+Want to see the app first? **[Try it in your browser](https://kaelor9.github.io/EngineLink/demo/)** against a simulated boat.
+
 1. Open the **[web installer](https://kaelor9.github.io/EngineLink/)** in Chrome or Edge on a computer.
 2. Connect the board with a USB-C data cable, tick the safety confirmation and click **Install**.
 3. On your phone, join the Wi-Fi **EngineLink** (password `12345678`) and open **http://192.168.4.1**.
@@ -155,7 +159,7 @@ See [KAD300 / EDC I](docs/KAD300_EDC1.md), [alpha status and safety](docs/PRODUC
 
 | Hardware | Firmware | Engine validation |
 |----------|----------|-------------------|
-| ✅ Revision 1 assembled | 🚧 0.5.5 | ⏳ Pending first KAD300 test |
+| ✅ Revision 1 assembled | 🚧 0.6.0 | ⏳ Pending first KAD300 test |
 
 | Area | Status |
 |------|--------|
