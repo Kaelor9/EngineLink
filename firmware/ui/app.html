@@ -104,6 +104,41 @@ nav svg{width:26px;height:26px}
 .list>*+*{border-top:1px solid var(--line)}
 .tbl{display:grid;grid-template-columns:60px 46px 46px 1fr;gap:6px;align-items:center;padding:8px 20px}
 a.dl{display:none}
+.exopt{width:100%;display:flex;align-items:center;gap:14px;text-align:left;padding:16px;border-radius:20px;background:var(--teal);color:var(--onteal)}
+.exopt b{display:block;font-size:17px}.exopt span span{display:block;font-size:13px;opacity:.85;margin-top:2px;line-height:1.3}
+.exopt .exic{width:44px;height:44px;flex:none;border-radius:14px;background:rgba(0,0,0,.14);display:flex;align-items:center;justify-content:center}
+/* Report: a document opened in its own window (?report=...), to save as PDF or send. */
+html.rpt,html.rpt body{height:auto;overflow:visible;background:var(--bg)}
+html.rpt #app,html.rpt #banner,html.rpt #toast,html.rpt #sheetwrap{display:none}
+#report{max-width:820px;margin:0 auto;padding:max(16px,env(safe-area-inset-top)) max(18px,env(safe-area-inset-right)) 48px max(18px,env(safe-area-inset-left));color:var(--text);font-size:14px;line-height:1.4}
+#report button:not(.rtool){display:none}
+.r-tools{position:sticky;top:0;z-index:5;display:flex;gap:8px;justify-content:flex-end;padding:10px 0;background:var(--bg)}
+.r-tools .rtool{min-height:40px;padding:0 16px;border-radius:99px;background:var(--track);font-size:14px;font-weight:600;display:flex;align-items:center;gap:6px}
+.r-tools .rtool.pri{background:var(--teal);color:var(--onteal)}
+.r-brand{display:flex;align-items:center;gap:8px;font-weight:600;color:var(--teal);font-size:14px;margin-top:6px}
+#report h1{font-size:30px;line-height:1.1;margin:10px 0 4px;letter-spacing:-.3px}
+#report h2{font-size:19px;margin:0 0 2px}
+#report h3{font-size:13px;text-transform:uppercase;letter-spacing:.6px;color:var(--sub);margin:18px 0 8px}
+.r-sub{color:var(--sub);font-size:13.5px}
+.r-sec{border-top:1px solid var(--line);padding:22px 0 6px;margin-top:22px}
+.r-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(118px,1fr));gap:10px;margin-top:14px}
+.r-kpis>div{border:1px solid var(--line);border-radius:14px;padding:10px 12px}
+.r-kpis .k{font-size:12px;color:var(--sub)}.r-kpis .v{font-size:20px;font-weight:700;margin-top:2px}.r-kpis .v small{font-size:12px;font-weight:500;color:var(--sub)}
+.r-charts{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px}
+.r-chart{border:1px solid var(--line);border-radius:14px;padding:10px 12px 8px;break-inside:avoid}
+.r-chart .ct{font-size:13px;font-weight:600;margin-bottom:4px}
+.r-ev{display:flex;gap:10px;padding:10px 0;border-top:1px solid var(--line);break-inside:avoid}.r-ev:first-child{border-top:0}
+.r-ev i{width:9px;height:9px;border-radius:50%;flex:none;margin-top:6px}
+.r-foot{margin-top:28px;padding-top:12px;border-top:1px solid var(--line);color:var(--sub);font-size:12px}
+html.rpt .card,html.rpt .sec{background:none;box-shadow:none;border:1px solid var(--line);border-radius:14px;break-inside:avoid}
+html.rpt .card{padding:14px 16px;margin-top:12px}
+@media print{
+  .r-tools,.r-noprint{display:none!important}
+  #report{max-width:none;padding:0;font-size:12px}
+  @page{margin:14mm}
+  html.rpt,html.rpt body{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .r-sec{break-inside:auto}
+}
 #bar{display:none;flex:none;padding:10px max(16px,env(safe-area-inset-right)) 12px max(16px,env(safe-area-inset-left));background:var(--sheet)}
 </style>
 </head>
@@ -171,6 +206,7 @@ const IC={
   bulb:'M9 18h6M10 21h4M12 3a6 6 0 0 0-4 10.5c.8.8 1 1.5 1 2.5h6c0-1 .2-1.7 1-2.5A6 6 0 0 0 12 3z',
   chart:'M4 19V5M4 19h16M8 15l3-4 3 2 4-6',
   down:'M12 4v11M7 10l5 5 5-5M5 20h14',
+  doc:'M7 3h7l5 5v13H7zM14 3v5h5M10 13h6M10 17h6',
   pen:'M4 20h4L19 9l-4-4L4 16zM13.5 6.5l4 4',
   back:'M15 5l-7 7 7 7',
   x:'M6 6l12 12M18 6L6 18',
@@ -276,6 +312,15 @@ function download(url){
   }
   clickLink(BASE+url);
 }
+// The report is the app itself in report mode, opened in its own window.
+function reportUrl(q){return (BASE?BASE+'/':location.pathname)+'?report='+q;}
+function openWin(url){
+  const w=window.open(url,'_blank');
+  if(!w){S.file={url};openSheet('file');return;}
+  if(IOS_APP())toast('Opens in Safari. Tap Done there to come back');
+}
+const kb=k=>k>=1024?NF(k/1024,k>=10240?0:1)+' MB':NF(Math.max(1,k),0)+' KB';
+function openExport(kind,ids){S.ex={kind,ids:ids||[]};openSheet('export');}
 function saveFile(name,text,type='application/json'){
   if(IOS_APP()){S.file={name,text};openSheet('file');return;}
   const u=URL.createObjectURL(new Blob([text],{type}));clickLink(u,name);setTimeout(()=>URL.revokeObjectURL(u),5000);
@@ -776,7 +821,7 @@ function vHistory(){
         ${crosses?`<div style="padding:0 18px 12px"><span class="chip" style="background:var(--osoft);color:var(--orange);font-size:12px">Ended ${dayLabel(u.e)}</span></div>`:''}
         ${open?`<div style="padding:0 18px 14px" class="stack">
           <div class="grid3" style="gap:8px;font-size:13px"><div><span style="color:var(--port);font-weight:600">${pi<0?'J7':'Port'}</span><br><b style="font-size:16px">${L(u.l[port],1)} ${U.vu()}</b></div><div><span style="color:var(--stbd);font-weight:600">${pi<0?'J6':'Starboard'}</span><br><b style="font-size:16px">${L(u.l[stbd],1)} ${U.vu()}</b></div><div><span class="sub" style="font-weight:600">Cost</span><br><b style="font-size:16px">${price>0?money(u.fuel*price):'—'}</b></div></div>
-          <div class="grid2" style="gap:8px"><button class="btn" data-a="sheet" data-v="notes:${u.note.id}">${svg(IC.pen,15)}${nl?'Edit notes':'Add notes'}</button><button class="btn" data-a="tripView" data-v="${u.ids.join(',')}">${svg(IC.chart,15)}Timeline</button><button class="btn" data-a="dlTrips" data-v="${u.ids.join(',')}">${svg(IC.down,15)}Download</button></div>
+          <div class="grid2" style="gap:8px"><button class="btn" data-a="sheet" data-v="notes:${u.note.id}">${svg(IC.pen,15)}${nl?'Edit notes':'Add notes'}</button><button class="btn" data-a="tripView" data-v="${u.ids.join(',')}">${svg(IC.chart,15)}Timeline</button><button class="btn" data-a="exTrips" data-v="${u.ids.join(',')}">${svg(IC.down,15)}Export</button></div>
           ${u.combined?u.parts.map(p=>`<div class="cth s13 sub"><span>${hm(p.s)} – ${hm(p.e)}</span><span>${L((p.l[0]||0)+(p.l[1]||0),1)} ${U.vu()} · ${dur(p.run)}</span></div>`).join('')+`<button class="btn" style="background:var(--osoft);color:var(--orange);font-weight:600" data-a="split" data-v="${u.group}">Split into separate trips</button>`:''}
         </div>`:''}</div>`;
     });
@@ -794,11 +839,7 @@ function renderBar(){
     const contiguous=idx.length>=2&&idx[idx.length-1]-idx[0]+1===idx.length;
     b.innerHTML=`<button class="btn ${contiguous?'pri':''}" style="width:100%" data-a="combine" ${contiguous?'':'disabled'}>${idx.length>=2?(contiguous?'Combine '+idx.length+' trips':'Pick trips next to each other'):'Select two or more trips'}</button>`;
   }else{
-    const sec=us.filter(u=>S.sel.includes(u.key)).reduce((a,u)=>a+u.run,0);
-    const mb=S.raw?sec/60*0.42:0.02+sec/60*0.004;
-    if(S.rawReady){b.innerHTML=`<button class="btn pri" style="width:100%" data-a="rawGo">Download raw engine data</button>`;return;}
-    b.innerHTML=`<button class="row" data-a="rawToggle" style="padding:0 0 10px"><span><span class="rt s14">Include raw engine data</span><span class="rh">Every message from both engines, for analysis</span></span><span class="tog ${S.raw?'on':''}"></span></button>
-      <button class="btn ${n?'pri':''}" style="width:100%" data-a="export" ${n?'':'disabled'}>${n?'Download '+n+' trip'+(n>1?'s':'')+' · about '+(mb>=1?NF(mb,1)+' MB':NF(mb*1024,0)+' KB'):'Select trips to export'}</button>`;
+    b.innerHTML=`<button class="btn ${n?'pri':''}" style="width:100%" data-a="export" ${n?'':'disabled'}>${n?'Export '+n+' trip'+(n>1?'s':''):'Select trips to export'}</button>`;
   }
 }
 
@@ -942,7 +983,7 @@ function vSettings(){
   // SD card
   const sd=S.sd;
   h+=`<div class="hd">SD card</div><div class="sec"><div class="rowx"><div class="cth"><span class="rt">Storage</span><span class="sub">${sd&&sd.ok?NF(sd.usedMB/1024,1)+' of '+NF(sd.totalMB/1024,1)+' GB used':sd&&sd.inserted?'Card not readable':'No card'}</span></div>${sd&&sd.ok?`<div class="bar" style="height:6px;margin-top:8px"><i style="width:${clamp(sd.usedMB/Math.max(1,sd.totalMB)*100,1,100)}%;background:var(--teal)"></i></div>`:''}</div>
-    ${row('exportGo','','Export data','Trips as CSV files',rv('Choose trips'))}
+    ${row('exportGo','','Export data','Trips as a report or a spreadsheet',rv('Choose trips'))}
     ${row('cycle','rawKeep','Keep raw engine data','Trip summaries are always kept',rv(c.rawKeep?c.rawKeep>=365?NF(c.rawKeep/365,0)+' year'+(c.rawKeep>=730?'s':''):c.rawKeep+' days':'Forever'))}
     <button class="row" data-a="sheet" data-v="wipe"><span><span class="rt" style="color:var(--red)">Wipe SD card</span><span class="rh">Deletes all trips and logs on the card</span></span></button></div>`;
   // Display
@@ -1020,13 +1061,17 @@ function chartSvg(sr,m,mark){
   const vals=[0,1].map(c=>(sr[m]||[[],[]])[c].map(v=>chartVal(m,v)));
   const all=vals.flat().filter(v=>v!=null);
   if(!all.length)return '<div class="empty">This value was not read during the recording.</div>';
-  let lo=Math.min(...all),hi=Math.max(...all);if(hi-lo<1e-6){hi+=1;lo-=1;}const pad=(hi-lo)*0.08;lo-=pad;hi+=pad;
+  let lo=Math.min(...all),hi=Math.max(...all);
+  // A smallest span per value, so noise at a steady idle does not fill the chart.
+  const span=chartVal(m,{rpm:300,req:300,lph:6,cool:10,air:10,boost:20,volt:1}[m]||1)-(m==='cool'||m==='air'?chartVal(m,0):0);
+  if(hi-lo<span){const c=(hi+lo)/2;lo=c-span/2;hi=c+span/2;if(lo<0&&Math.min(...all)>=0){hi-=lo;lo=0;}}
+  const pad=(hi-lo)*0.08;lo-=pad;hi+=pad;if(lo<0&&Math.min(...all)>=0)lo=0;
   const X=s=>P[0]+(s-t0)/Math.max(1,t1-t0)*(W-P[0]-P[1]),Y=v=>P[2]+(hi-v)/(hi-lo)*(H-P[2]-P[3]);
   const line=c=>{let d='',on=false;vals[c].forEach((v,i)=>{if(v==null){on=false;return;}d+=(on?'L':'M')+X(t[i]).toFixed(1)+' '+Y(v).toFixed(1);on=true;});return d;};
   const dec=m==='volt'?1:m==='boost'&&!imp()?2:0;
   const tick=s=>{if(mark!=null){const d=s-mark;return (d<0?'−':'+')+Math.floor(Math.abs(d)/60)+':'+String(Math.round(Math.abs(d))%60).padStart(2,'0');}return sr.start?hm(sr.start+s):dur(s);};
   return `<svg viewBox="0 0 ${W} ${H}" width="100%" style="display:block" role="img" aria-label="${chartUnit(m)} over time">
-    ${[0,0.5,1].map(f=>{const v=lo+(hi-lo)*f,y=Y(v);return `<line x1="${P[0]}" x2="${W-P[1]}" y1="${y}" y2="${y}" stroke="var(--line)"/><text x="${P[0]-4}" y="${y+3.5}" text-anchor="end" font-size="9.5" fill="var(--sub)">${NF(v,dec)}</text>`;}).join('')}
+    ${[0,0.5,1].map(f=>{const v=lo+(hi-lo)*f,y=Y(v);return `<line x1="${P[0]}" x2="${W-P[1]}" y1="${y}" y2="${y}" stroke="var(--line)"/><text x="${P[0]-4}" y="${y+3.5}" text-anchor="end" font-size="9.5" fill="var(--sub)">${NF(+v.toFixed(dec)||0,dec)}</text>`;}).join('')}
     ${mark!=null?`<line x1="${X(mark)}" x2="${X(mark)}" y1="${P[2]}" y2="${H-P[3]}" stroke="var(--orange)" stroke-dasharray="3 3"/>`:''}
     ${[0,1].map(c=>`<path d="${line(c)}" fill="none" stroke="${engCol(c)}" stroke-width="1.8" stroke-linejoin="round"/>`).join('')}
     <text x="${P[0]}" y="${H-6}" font-size="9.5" fill="var(--sub)">${tick(t0)}</text><text x="${W-P[1]}" y="${H-6}" font-size="9.5" fill="var(--sub)" text-anchor="end">${tick(t1)}</text></svg>
@@ -1084,7 +1129,7 @@ function tripTimelineView(){
   if(ids.length>1)h+=`<div class="seg" style="grid-template-columns:repeat(${Math.min(ids.length,4)},minmax(0,1fr));margin-bottom:12px">${ids.map((id,i)=>`<button class="${tv.id===id?'on':''}" data-a="tripPart" data-v="${id}">Part ${i+1}</button>`).join('')}</div>`;
   const sr=S.tripSeries[tv.id];
   h+=`<div class="card">${sr===undefined?'<div class="empty">Loading…</div>':sr===null?'<div class="empty">No timeline for this trip. Trips are recorded second by second from version 0.7.0, on the SD card.</div>':chartBlock('trip',sr)}</div>`;
-  if(sr)h+=`<button class="btn" style="width:100%;margin-top:12px" data-a="dlSeries" data-v="${ids.join(',')}">${svg(IC.down,15)}Download as spreadsheet (CSV)</button><div class="s12 sub" style="text-align:center;padding:8px 20px 0">One row per second with every value of both engines. Opens in Excel or Numbers.</div>`;
+  h+=`<button class="btn" style="width:100%;margin-top:12px" data-a="exTrips" data-v="${ids.join(',')}">${svg(IC.down,15)}Export this trip</button><div class="s12 sub" style="text-align:center;padding:8px 20px 0">A report to save as PDF or send, or a spreadsheet with one row per second.</div>`;
   return h;
 }
 // The rhythm in words: "green steady", "green, dark for a moment every 2 s", "red long, blue short".
@@ -1225,7 +1270,7 @@ const PAGE_VIEWS={
     // Advanced
     h+=`<button class="btn" style="width:100%;justify-content:space-between;background:var(--card);padding:0 18px;min-height:56px;margin-bottom:${S.advOpen?14:20}px" data-a="adv"><span style="text-align:left"><span class="rt">Advanced</span><span class="rh">Reading, motor test, bus monitor, raw values</span></span><span class="sub">${S.advOpen?'⌃':'⌄'}</span></button>`;
     if(S.advOpen)h+=advanced(d,c,es);
-    h+=`<button class="btn" style="width:100%" data-a="report">Download diagnostics report</button><div class="s12 sub" style="text-align:center;padding:8px 20px 0">One file with settings, test results and recent raw data. Handy if you ask for help.</div>`;
+    h+=`<button class="btn" style="width:100%" data-a="exDiag">${svg(IC.doc,16)}Engine report and files</button><div class="s12 sub" style="text-align:center;padding:8px 20px 0">A clear report to save as PDF or send to a mechanic, plus the files for a spreadsheet or for help.</div>`;
     return h;
   }
 };
@@ -1292,7 +1337,33 @@ function renderSheet(){
   const k=S.sheet;if(!k)return;
   const sh=$('#sheet'),grab='<div class="grab"></div>';
   let h='';
-  if(k==='file'){
+  if(k==='export'){
+    const x=S.ex||{kind:'diag',ids:[]},ios=IOS_APP();
+    const rowF=(url,title,hint)=>`<button class="row" data-a="exFile" data-v="${esc(url)}"><span><span class="rt">${title}</span><span class="rh">${hint}</span></span>${svg(IC.down,18,'var(--sub)',2)}</button>`;
+    let what='',rep='',files='';
+    if(x.kind==='trips'){
+      const ts=(S.trips?S.trips.trips:[]).filter(r=>x.ids.includes(r.id)),sec=ts.reduce((a,r)=>a+(r.run||0),0),ids=x.ids.join(',');
+      const days=[...new Set(ts.map(r=>dayKey(r.s)))];
+      what=(ts.length===1?'1 trip':ts.length+' trips')+(ts.length?' · '+(days.length===1?dayLabel(ts[0].s):dayLabel(Math.min(...ts.map(r=>r.s)))+' – '+dayLabel(Math.max(...ts.map(r=>r.s)))):'')+' · '+dur(sec);
+      rep=`<button class="exopt" data-a="exReport" data-v="trips&ids=${ids}"><span class="exic">${svg(IC.doc,24,'currentColor',2)}</span><span><b>Trip report</b><span>Fuel, curves and events in a clear document. Save it as a PDF, print it or send it.</span></span></button>`;
+      files=rowF('/api/export/trips.csv?ids='+ids,'Trip summary','One row per trip · about '+kb(0.4*ts.length+0.5))
+        +rowF('/api/export/series.csv?ids='+ids,'Second by second','Every value of both engines, one row per second · about '+kb(sec*0.11))
+        +rowF('/api/export/raw.csv?ids='+ids,'Raw engine messages','Every message from both engines, for analysis · about '+kb(sec/60*430));
+    }else{
+      const st=S.state,tst=st&&st.test;
+      what='Engines, events and EngineLink itself';
+      rep=`<button class="exopt" data-a="exReport" data-v="engines"><span class="exic">${svg(IC.doc,24,'currentColor',2)}</span><span><b>Engine report</b><span>Events, port against starboard, each engine's life story and calibration. Good to send to a mechanic.</span></span></button>`;
+      files=rowF('/api/segments.csv','Engine runs','Each start to stop of each engine')
+        +(tst&&tst.available?rowF('/api/test/download','Last motor test','The recorded steps'):'')
+        +rowF('/api/log','Raw log','Every request and answer since EngineLink started')
+        +(ios?'':`<button class="row" data-a="report"><span><span class="rt">Technical file</span><span class="rh">Settings and recent data as JSON, if you ask for help</span></span>${svg(IC.down,18,'var(--sub)',2)}</button>`);
+    }
+    h=`${grab}<div><div style="font-size:22px;font-weight:600">Export</div><div class="s14 sub" style="margin-top:2px">${esc(what)}</div></div>
+      ${rep}
+      <div><div class="hd" style="padding-top:4px">For a spreadsheet</div><div class="sec" style="margin-bottom:0;background:var(--card)">${files}</div>
+      <div class="s12 sub" style="padding:10px 6px 0">CSV files open in Excel, Numbers or Google Sheets.${ios?' Files open in Safari: save them with the share button and tap Done to come back.':''}${ios&&x.kind!=='trips'?' The technical file for help is at the end of the engine report.':''}</div></div>
+      <button class="btn" data-a="close">Done</button>`;
+  }else if(k==='file'){
     const f=S.file||{};
     h=f.url?`${grab}<div style="font-size:22px;font-weight:600">Open the file</div>
         <div class="s14 sub">The file opens in a Safari window. Save it with the share button (Save to Files) or send it, then tap Done to come back here.</div>
@@ -1478,6 +1549,12 @@ const A={
   testStop:async()=>{await act('/api/test/stop',{});load('state');},
   busRefresh:()=>load('state'),
   dl:v=>download(v),
+  exFile:v=>{download(v);if(!IOS_APP())toast('Downloading');},
+  exReport:v=>openWin(reportUrl(v)),
+  exTrips:v=>openExport('trips',String(v).split(',').map(Number)),
+  exDiag:()=>{load('state');openExport('diag');},
+  rClose:()=>{window.close();setTimeout(()=>toast('Close this window to go back to the app'),300);},
+  rPrint:()=>window.print(),
   fileCopy:()=>{const ta=$('#filetext');if(!ta)return;ta.focus();ta.setSelectionRange(0,ta.value.length);let ok=false;try{ok=document.execCommand('copy');}catch(e){}toast(ok?'Copied':'Select all and copy');},
   report:async()=>{const out={app:'EngineLink',made:new Date().toISOString()};
     for(const [k,u] of [['live','/api/live'],['state','/api/state'],['diag','/api/diag'],['fuel','/api/fuel'],['economy','/api/economy'],['trips','/api/trips'],['pids','/api/pids']]){try{out[k]=await get(u,8000);}catch(e){out[k]='unavailable';}}
@@ -1507,15 +1584,7 @@ const A={
   selMode:v=>{S.selMode=v||null;S.sel=[];S.quick=null;S.open=null;render(true);},
   quick:v=>{const us=units(),now=Date.now()/1000;S.quick=+v;S.sel=us.filter(u=>+v===0?u.s&&dayKey(u.s)===dayKey(now):+v===1?u.s>now-7*86400:true).map(u=>u.key);render(true);},
   tripTap:v=>{const k=+v;if(S.selMode){S.sel=S.sel.includes(k)?S.sel.filter(x=>x!==k):S.sel.concat([k]);}else S.open=S.open===k?null:k;render(true);},
-  rawToggle:()=>{S.raw=!S.raw;renderBar();},
-  export:()=>{const us=units().filter(u=>S.sel.includes(u.key)),ids=us.flatMap(u=>u.ids).join(',');if(!ids)return;
-    download('/api/export/trips.csv?ids='+ids);
-    // Phones allow one download per tap, so the raw data gets its own button.
-    if(S.raw){S.rawReady=ids;toast('Trips downloaded. Tap "Download raw engine data" for the second file');render(true);return;}
-    toast('Downloading '+us.length+' trip'+(us.length>1?'s':''));S.selMode=null;S.sel=[];render(true);},
-  rawGo:()=>{download('/api/export/raw.csv?ids='+S.rawReady);S.rawReady=null;S.selMode=null;S.sel=[];render(true);},
-  dlTrips:v=>download('/api/export/trips.csv?ids='+v),
-  dlSeries:v=>download('/api/export/series.csv?ids='+v),
+  export:()=>{const ids=units().filter(u=>S.sel.includes(u.key)).flatMap(u=>u.ids);if(ids.length)openExport('trips',ids);},
   tripView:v=>{const ids=v.split(',').map(Number);S.tripView={ids,id:ids[0]};goPage('trip','history');loadTripSeries(ids[0]);},
   tripPart:v=>{S.tripView.id=+v;render(true);loadTripSeries(+v);},
   chartM:v=>{const [k,m]=v.split(':');S.chartM[k]=m;render(true);},
@@ -1588,6 +1657,90 @@ async function wake(){
   try{await $('#nosleep').play();}catch(e){}
 }
 
+// ---------- Report ----------
+// The app opened as ?report=trips&ids=1,2 or ?report=engines shows a document
+// instead: light, printable, to save as a PDF or send. It reads the same API.
+const RQ=new URLSearchParams(location.search);
+const kpi=(k,v,u)=>`<div><div class="k">${k}</div><div class="v">${v}${u?` <small>${u}</small>`:''}</div></div>`;
+function rEvents(list){
+  if(!list.length)return '<div class="r-sub">Nothing noticed.</div>';
+  return list.map(e=>{const d=EVT[e.t];return `<div class="r-ev"><i style="background:${SEVC[e.sev]||SEVC[0]}"></i><div><b>${esc(evTitle(e))}</b><div class="r-sub">${evWhen(e)}${e.sev===2?' · alarm':e.sev===1?' · warning':''}</div>${d?`<div style="margin-top:3px">${esc(d[1](e))}</div>`:''}</div></div>`;}).join('');
+}
+// Joins the logs of a combined trip, with a break between the parts.
+function rJoin(list){
+  const ok=list.filter(Boolean);if(!ok.length)return null;
+  const out={start:ok[0].start,t:[]},cols=['rpm','req','lph','cool','air','boost','volt'];cols.forEach(c=>out[c]=[[],[]]);
+  ok.forEach((sr,i)=>{const off=sr.start&&ok[0].start?sr.start-ok[0].start:(out.t.length?out.t[out.t.length-1]+60:0);
+    if(i){out.t.push(off-1);cols.forEach(c=>{out[c][0].push(null);out[c][1].push(null);});}
+    sr.t.forEach((s,k)=>{out.t.push(off+s);cols.forEach(c=>{for(let e=0;e<2;e++)out[c][e].push(sr[c]&&sr[c][e]?sr[c][e][k]:null);});});});
+  return out;
+}
+function rCharts(sr){
+  if(!sr)return '<div class="r-sub">No second-by-second log for this trip. EngineLink records one on the SD card from version 0.7.0.</div>';
+  return `<div class="r-charts">${[['rpm','Engine speed'],['lph','Fuel'],['cool','Coolant'],['boost','Boost']].map(([m,n])=>`<div class="r-chart"><div class="ct">${n}</div>${chartSvg(sr,m)}</div>`).join('')}</div>`;
+}
+function rAccuracy(){
+  const c=S.fuel&&S.fuel.cal;
+  if(!c||!c.n)return 'Fuel figures are not calibrated with fill-ups yet, so they can be off by 15 % or more.';
+  return `Fuel figures within about ±${NF(Math.max(c.sig,0.005)*200,1)} %, calibrated from ${c.n} fill-up${c.n>1?'s':''}.`;
+}
+function rTools(){return `<div class="r-tools"><button class="rtool" data-a="rClose">Close</button><button class="rtool pri" data-a="rPrint">${svg(IC.doc,16,'currentColor',2)}Save as PDF or print</button></div>`;}
+function rHead(title,sub){
+  const now=new Date();
+  return `<div class="r-brand">${svg(IC.engines,18,'var(--teal)',2)}EngineLink<span class="r-sub" style="margin-left:auto;font-weight:400">Made ${now.toLocaleDateString(LOC,{day:'numeric',month:'short',year:'numeric'})} ${hm(now.getTime()/1000)}</span></div><h1>${title}</h1><div class="r-sub">${sub}</div>`;
+}
+function rFoot(){
+  const lv=S.live,es=engines();
+  return `<div class="r-foot">${rAccuracy()}<br>EngineLink ${esc(lv?lv.v:'')}${es.length?' · engine hours '+es.map(e=>e.name+' '+(fin(e.hrs)?NF(e.hrs,1)+' h':'—')).join(', '):''}. EngineLink only reads the engines.</div>`;
+}
+async function reportTrips(ids){
+  const us=units().filter(u=>u.ids.some(i=>ids.includes(i))).sort((a,b)=>(a.s||0)-(b.s||0));
+  if(!us.length)return rHead('Trip report','These trips are no longer on EngineLink.');
+  const evs=S.events?S.events.list:[],price=S.live?S.live.price:0,pi=S.live?S.live.port:0,port=pi===1?1:0,stbd=1-port;
+  const pn=pi<0?'J7':'Port',sn=pi<0?'J6':'Starboard';
+  const tot=us.reduce((a,u)=>a+u.fuel,0),run=us.reduce((a,u)=>a+u.run,0),max=Math.max(...us.flatMap(u=>u.parts.map(p=>p.max||0)));
+  const first=us[0].s,last=us[us.length-1].s,dfmt=s=>new Date(s*1000).toLocaleDateString(LOC,{weekday:'short',day:'numeric',month:'long',year:'numeric'});
+  document.title='EngineLink trip report '+new Date(first*1000).toLocaleDateString(LOC,{day:'numeric',month:'short',year:'numeric'});
+  let h=rHead('Trip report',(dayKey(first)===dayKey(last)?dfmt(first):dfmt(first)+' – '+dfmt(last))+' · '+us.length+' trip'+(us.length>1?'s':''));
+  if(us.length>1)h+=`<div class="r-kpis">${kpi('Running',dur(run))}${kpi('Fuel',L(tot,1),U.vu())}${kpi('Average',run>60?L(tot/(run/3600),1):'—',U.ru())}${kpi('Highest rpm',max?NF(max,0):'—')}${price>0?kpi('Cost',money(tot*price)):''}</div>`;
+  const series=await Promise.all(us.map(u=>Promise.all(u.parts.map(p=>get('/api/trip/series?id='+p.id,15000).catch(()=>null)))));
+  us.forEach((u,i)=>{
+    const sr=rJoin(series[i]),mx=Math.max(...u.parts.map(p=>p.max||0)),nl=noteLine(u.note);
+    const diff=u.l[port]>0.5?(u.l[stbd]/u.l[port]-1)*100:null;
+    const mine=evs.filter(e=>e.utc&&e.utc>=u.s-30&&e.utc<=(u.e||u.s)+60).sort((a,b)=>a.utc-b.utc);
+    h+=`<div class="r-sec"><h2>${new Date(u.s*1000).toLocaleDateString(LOC,{weekday:'long',day:'numeric',month:'short'})} · ${hm(u.s)} – ${hm(u.e)}</h2><div class="r-sub">${dur(u.run)} running${u.combined?' · '+u.parts.length+' trips combined':''}${nl?' · '+esc(nl):''}</div>
+      <div class="r-kpis">${kpi('Fuel',L(u.fuel,1),U.vu())}${kpi(pn,L(u.l[port],1),U.vu())}${kpi(sn,L(u.l[stbd],1),U.vu())}${kpi('Average',u.run>60?L(u.fuel/(u.run/3600),1):'—',U.ru())}${kpi('Highest rpm',mx?NF(mx,0):'—')}${price>0?kpi('Cost',money(u.fuel*price)):''}</div>
+      ${diff!=null&&Math.abs(diff)>=8?`<div class="r-sub" style="margin-top:8px;color:var(--orange)">${sn} used ${NF(Math.abs(diff),0)} % ${diff>0?'more':'less'} fuel than ${pn.toLowerCase()} on this trip.</div>`:''}
+      <h3>Curves</h3>${rCharts(sr)}
+      <h3>What EngineLink noticed</h3>${rEvents(mine)}</div>`;
+  });
+  return h;
+}
+function reportEngines(){
+  const es=engines(),ev=S.events?S.events.list.slice().sort((a,b)=>(b.utc||0)-(a.utc||0)):[];
+  document.title='EngineLink engine report '+new Date().toLocaleDateString(LOC,{day:'numeric',month:'short',year:'numeric'});
+  let h=rHead('Engine report',es.map(e=>e.name).join(' and ')+' · what EngineLink has learned about the engines');
+  h+=`<div class="r-kpis">${es.map(e=>kpi(e.name+' hours',fin(e.hrs)?NF(e.hrs,1):'—','h')).join('')}${kpi('Events',ev.length)}${kpi('Not seen yet',S.events?S.events.n:'—')}</div>`;
+  h+=`<div class="r-sec"><h2>Events</h2><div class="r-sub">What EngineLink noticed, newest first, with what it usually means.</div><div style="margin-top:6px">${rEvents(ev.slice(0,40))}</div></div>`;
+  const bal=balanceCard(es),life=lifeCard(es);
+  if(bal)h+=`<div class="r-sec">${bal}</div>`;
+  if(life)h+=`<div class="r-sec">${life}</div>`;
+  if(S.diag&&S.diag.reading)h+=`<div class="r-sec">${readingBlock(S.diag,es)}</div>`;
+  h+=`<div class="r-sec r-noprint"><h2>For help</h2><div class="r-sub">A technical file with the settings and recent data, if someone helps you with EngineLink.</div><button class="rtool" style="margin-top:10px;min-height:44px;padding:0 16px;border-radius:99px;background:var(--track);font-weight:600" data-a="report">${svg(IC.down,16)}Download technical file (JSON)</button></div>`;
+  return h;
+}
+async function renderReport(kind){
+  const de=document.documentElement;de.classList.add('rpt');de.dataset.theme='light';
+  const r=document.createElement('div');r.id='report';r.innerHTML='<div class="empty" style="padding-top:40px">Making the report…</div>';document.body.appendChild(r);
+  await loadPrefs();de.dataset.theme='light';
+  const g=(u,ms)=>get(u,ms).catch(()=>null);
+  [S.live,S.trips,S.fuel,S.events]=await Promise.all([g('/api/live',5000),g('/api/trips',6000),g('/api/fuel',6000),g('/api/events',6000)]);
+  if(kind==='engines')[S.life,S.diag,S.state]=await Promise.all([g('/api/life',6000),g('/api/diag',6000),g('/api/state',6000)]);
+  if(!S.live){r.innerHTML=rTools()+rHead('Report','EngineLink could not be reached. Connect to its Wi-Fi and try again.');return;}
+  const body=kind==='engines'?reportEngines():await reportTrips((RQ.get('ids')||'').split(',').map(Number).filter(Boolean));
+  r.innerHTML=rTools()+body+rFoot();
+}
+
 // ---------- Start ----------
 document.addEventListener('click',e=>{
   const b=e.target.closest('[data-a]');
@@ -1600,11 +1753,15 @@ document.addEventListener('input',e=>{const i=e.target.closest('[data-i]');if(i&
 $('#sheetwrap').addEventListener('click',e=>{if(e.target.id==='sheetwrap')history.back();});
 addEventListener('popstate',()=>{if(S.sheet){closeSheet();return;}if(S.page)goBack();});
 addEventListener('beforeinstallprompt',e=>{e.preventDefault();window._bip=e;});
+async function loadPrefs(){
+  try{const p=await get('/api/prefs',4000);if(p&&typeof p==='object'){for(const k of Object.keys(P))if(p[k]!==undefined)P[k]=typeof P[k]==='object'&&!Array.isArray(P[k])?Object.assign({},P[k],p[k]):p[k];}prefsLoaded=true;}catch(e){}
+}
 (async function init(){
+  if(RQ.get('report')){renderReport(RQ.get('report'));return;}
   renderNav();render(true);
-  try{const p=await get('/api/prefs',4000);if(p&&typeof p==='object'){for(const k of Object.keys(P))if(p[k]!==undefined)P[k]=typeof P[k]==='object'&&!Array.isArray(P[k])?Object.assign({},P[k],p[k]):p[k];}prefsLoaded=true;
-    // 0.6: "Load" (KAD 288) is not confirmed; it read 80-90 % at idle. Off unless chosen again.
-    if((P.pv||0)<6){P.vals.load=0;P.pv=6;savePrefs();}}catch(e){}
+  await loadPrefs();
+  // 0.6: "Load" (KAD 288) is not confirmed; it read 80-90 % at idle. Off unless chosen again.
+  if(prefsLoaded&&(P.pv||0)<6){P.vals.load=0;P.pv=6;savePrefs();}
   applyTheme();
   const first=P.start||'trip';S.tab='';
   goTab(first);

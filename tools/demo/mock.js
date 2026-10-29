@@ -131,7 +131,7 @@ window.fetch=function(url,opt){
       return reply(Object.assign(series(id,241,1,s=>s<60?2200:2900,id===3?(s,c)=>c===1&&s>60?0.18:0:null),{up0:ev.up-120,start:ev.utc-120}));}
     if(p==='/api/trip/series'){const id=+u.searchParams.get('id'),tr=trips0.find(x=>x.id===id);if(!tr)return reply({ok:false,message:'Not found'},404);
       const len=tr.e-tr.s,st=Math.max(1,Math.ceil(len/600)),mx=tr.max;
-      return reply(series(id,Math.floor(len/st),st,mx>2000?lever([[180,650],[120,1200],[60,2000],[len-560,2900],[60,1200],[140,650]]):lever([[len,Math.min(mx,1000)]])));}
+      return reply(Object.assign(series(id,Math.floor(len/st),st,mx>2000?lever([[180,650],[120,1200],[60,2000],[len-560,2900],[60,1200],[140,650]]):lever([[len,Math.min(mx,1000)]])),{start:tr.s}));}
     if(p==='/api/wifi/scan')return reply({busy:false,nets:[{s:'Boat router',r:-42,lock:true,ch:1}]});
     return reply({ok:false},404);
   }

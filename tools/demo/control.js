@@ -14,7 +14,8 @@ const scenes={
   engines:async()=>{await reset();goTab('engines');},
   events:async()=>{await reset();goPage('events','more');await wait(500);const b=document.querySelector('[data-a=evOpen]');if(b)b.click();},
   balance:async()=>{await reset();goTab('engines');await wait(700);const c=[...document.querySelectorAll('.ct')].find(x=>x.textContent.trim()==='Port and starboard');if(c)c.scrollIntoView({block:'start'});},
-  led:async()=>{await reset();goPage('led','more');}
+  led:async()=>{await reset();goPage('led','more');},
+  export:async()=>{await reset();goTab('history');await load('trips');openExport('trips',[2]);}
 };
 addEventListener('message',e=>{const s=e.data&&e.data.scene;if(scenes[s])scenes[s]();});
 })();
