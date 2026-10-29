@@ -1,6 +1,11 @@
-# EngineLink application v0.7.7
+# EngineLink application v0.7.8
 
 This is a **working application foundation**, not a validated production release. The former Lab firmware is retained under \`experiments/\`. The application is in \`firmware/EngineLink/\`.
+
+## Changes in 0.7.8: engine task and data read
+
+- **Reading the engines has its own task.** It runs on its own processor core and is no longer held up by the app, Wi-Fi or a download. The rest of EngineLink lets it in whenever it waits for the network, which is exactly when reading used to stop.
+- **Data read, per engine.** Every second an engine runs counts as read when a fresh answer is there. The trip report and the trip timeline show the share for each engine, the number of gaps over 3 seconds and the longest gap; Diagnostics → Reading speed shows it since the last start. A gap only counts when the engine ran on both sides of it, so starting and stopping never count as missing.
 
 ## Changes in 0.7.7: steady engine reading
 
