@@ -45,8 +45,9 @@
 #include "fuelcal.h"
 #include "ledpatterns.h"
 #include "diagrules.h"
+#include "miniz.h"  // the deflate compressor in the chip's ROM
 
-#define EL_VERSION "0.7.5"
+#define EL_VERSION "0.7.6"
 // Releases list published by the Pages workflow; firmware files come from
 // GitHub Releases of the same repository. Nothing else is downloaded.
 #define EL_RELEASES_URL "https://kaelor9.github.io/EngineLink/releases.json"
@@ -539,6 +540,44 @@ struct Decoded {
 };
 
 EngineLinkWebServer web(80);
+struct DlStat {
+  char what[20]="";uint32_t bytes=0,raw=0,ms=0,findMs=0,sdMs=0,netMs=0;bool ap=false,z=false;int16_t rssi=0;bool active=false;
+};
+DlStat dlStat,spStat;  // last export; last speed test
+static tdefl_compressor *zComp=nullptr;
+void downloadBreath();
+struct ChunkOut {
+  char b[8192];size_t n=0;bool z=false;
+  ChunkOut &add(const void *s,size_t len){
+    const char *p=(const char*)s;
+    while(len){
+      if(n==sizeof(b))flush();
+      const size_t k=min(len,sizeof(b)-n);
+      memcpy(b+n,p,k);n+=k;p+=k;len-=k;
+    }
+    return *this;
+  }
+  ChunkOut &add(const char *s){return add(s,strlen(s));}
+  ChunkOut &add(const String &s){return add(s.c_str(),s.length());}
+  void flush(){
+    if(!n)return;
+    dlStat.raw+=n;
+    if(z){
+      tdefl_compress_buffer(zComp,b,n,TDEFL_NO_FLUSH);  // always takes all of it
+    }else send(b,n);
+    n=0;
+  }
+  void finish(){
+    flush();
+    if(z)tdefl_compress_buffer(zComp,nullptr,0,TDEFL_FINISH);
+    web.sendContent("");
+  }
+  void send(const char *s,size_t len){
+    downloadBreath();
+    const uint32_t t0=millis();web.sendContent(s,len);dlStat.netMs+=millis()-t0;dlStat.bytes+=len;
+  }
+};
+static ChunkOut chunkOut;
 Preferences pref;
 Adafruit_NeoPixel led(1, LED_PIN, NEO_GRB+NEO_KHZ800);
 Settings cfg;
@@ -648,6 +687,7 @@ uint32_t staConnectedAt=0;
 volatile uint8_t apLastEvent=0;      // 1 started, 2 stopped
 volatile uint32_t apLastEventMs=0;
 uint32_t apChannelChanges=0;
+int16_t autoChannelNets=-1;     // networks heard when EngineLink chose its channel
 uint8_t apStartedChannel=0;
 bool scanBusy=false; int16_t scanCount=-1; uint32_t scanStartedMs=0;
 // Firmware from GitHub, done by a worker task so the app keeps working.
@@ -956,6 +996,64 @@ void handleCalibrationStop(){
   finishCalibration(true);
   reply(true,"Motor test saved. You can now download the CSV.");
 }
+// ---------- Downloads: large pieces, compressed, engines kept running ----------
+// A download is served in one go, so without care EngineLink does nothing
+// else meanwhile and a weak link makes it slow. Three things help:
+//  * replies go out in 8 kB pieces instead of row by row,
+//  * when the browser accepts it the reply is deflate-compressed (the
+//    compressor is in the chip's ROM): CSV shrinks 5-8 times, so a weak link
+//    carries that much more,
+//  * between pieces the engine work goes on (frames, read requests, trip,
+//    diagnosis, LED), so reading the engines no longer pauses for a download.
+// The last download is timed, so Diagnostics can say whether the SD card or
+// the network took the time.
+// Engine work between pieces of a download (never the web server itself).
+void downloadBreath(){
+  static uint32_t last=0;static bool busy=false;
+  if(busy||(uint32_t)(millis()-last)<40)return;
+  busy=true;last=millis();
+  Frame f;int handled=0;
+  while(framesQueue&&handled<64&&xQueueReceive(framesQueue,&f,0)==pdTRUE){processFrame(f);handled++;}
+  serviceKad();serviceEngines();serviceSD();updateLED();
+  busy=false;
+}
+static uint8_t rawIn[4096];
+static mz_bool zPut(const void *p,int len,void *user){((ChunkOut*)user)->send((const char*)p,(size_t)len);return MZ_TRUE;}
+bool acceptsDeflate(){
+  String a=web.header("Accept-Encoding");a.toLowerCase();
+  return a.indexOf("deflate")>=0;
+}
+// Starts a streamed download. filename may be null (shown in the browser).
+ChunkOut &beginDownload(const char *what,const char *type,const char *filename,bool compress=true){
+  dlStat=DlStat();strlcpy(dlStat.what,what,sizeof(dlStat.what));dlStat.active=true;dlStat.ms=millis();
+  dlStat.ap=web.client().localIP()==WiFi.softAPIP();
+  dlStat.rssi=(!dlStat.ap&&WiFi.status()==WL_CONNECTED)?WiFi.RSSI():0;
+  if(compress&&acceptsDeflate()){
+    if(!zComp)zComp=(tdefl_compressor*)heap_caps_malloc(sizeof(tdefl_compressor),MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);
+    compress=zComp!=nullptr;
+  }else compress=false;
+  if(filename){String d="attachment; filename=";d+=filename;web.sendHeader("Content-Disposition",d);}
+  if(compress){web.sendHeader("Content-Encoding","deflate");web.sendHeader("Vary","Accept-Encoding");}
+  web.sendHeader("Cache-Control","no-store");
+  web.setContentLength(CONTENT_LENGTH_UNKNOWN);
+  web.send(200,type,"");
+  ChunkOut &out=chunkOut;out.n=0;out.z=compress;dlStat.z=compress;
+  // zlib wrapper (what "deflate" means to browsers); greedy parsing with few
+  // probes is fast and still finds the repeats in CSV rows.
+  if(compress)tdefl_init(zComp,zPut,&out,TDEFL_WRITE_ZLIB_HEADER|TDEFL_GREEDY_PARSING_FLAG|24);
+  return out;
+}
+void endDownload(ChunkOut &out){out.finish();dlStat.ms=millis()-dlStat.ms;dlStat.active=false;}
+// A file from the SD card, read in blocks.
+void streamFileOut(File &f,const char *what,const char *filename){
+  ChunkOut &out=beginDownload(what,"text/csv",filename);
+  for(;;){
+    const uint32_t t=millis();const int got=f.read(rawIn,sizeof(rawIn));dlStat.sdMs+=millis()-t;
+    if(got<=0)break;
+    out.add(rawIn,(size_t)got);
+  }
+  endDownload(out);
+}
 void handleCalibrationDownload(){
   if(calActive){web.send(409,"text/plain","Stop the motor test before downloading its CSV");return;}
   if(!sdReady || !calName.length() || !SD.exists(calName)){
@@ -963,8 +1061,7 @@ void handleCalibrationDownload(){
   }
   File f=SD.open(calName,FILE_READ);
   if(!f){web.send(500,"text/plain","Unable to open test log");return;}
-  web.sendHeader("Content-Disposition","attachment; filename=EngineLink-Motor-Test.csv");
-  web.streamFile(f,"text/csv");f.close();
+  streamFileOut(f,"motor test","EngineLink-Motor-Test.csv");f.close();
 }
 
 void queueFrame(Channel *c){
@@ -2128,6 +2225,28 @@ void startNameService(){
     mdnsReady=true;
   }
 }
+// Without a router EngineLink picks its own channel: at start-up, before
+// any phone is connected, it listens on 1, 6 and 11 (the channels that do not
+// overlap) and takes the one with the least other Wi-Fi nearby, weighted by
+// signal strength. A marina has dozens of networks; a busy channel means
+// lost packets and slow, unsteady connections.
+uint8_t quietestChannel(){
+  if(WiFi.softAPgetStationNum()>0)return 0;
+  const wifi_mode_t was=WiFi.getMode();
+  if(!(was&WIFI_MODE_STA))WiFi.mode(WIFI_AP_STA);
+  const int16_t n=WiFi.scanNetworks(false,true,false,120);
+  float load[3]={0,0,0};const uint8_t cand[3]={1,6,11};
+  for(int16_t i=0;i<n;i++){
+    const int ch=WiFi.channel(i);const float w=powf(10.0f,(WiFi.RSSI(i)+100)/20.0f);  // a strong neighbour counts much more
+    for(uint8_t k=0;k<3;k++){const int d=abs(ch-cand[k]);if(d<5)load[k]+=w*(5-d)/5.0f;}
+  }
+  WiFi.scanDelete();
+  if(!(was&WIFI_MODE_STA))WiFi.mode(was);
+  if(n<=0)return 0;
+  uint8_t best=0;for(uint8_t k=1;k<3;k++)if(load[k]<load[best]*0.8f)best=k;  // stay on 1 unless clearly better
+  autoChannelNets=n;
+  return cand[best];
+}
 void applyNetwork(){
   // Only a saved network change rebuilds the interfaces.
   const bool withRouter=routerConfigured();
@@ -2135,6 +2254,11 @@ void applyNetwork(){
   const wifi_mode_t want=withRouter?WIFI_AP_STA:WIFI_AP;
   WiFi.setHostname(cfg.hostName.c_str());
   if(WiFi.getMode()!=want)WiFi.mode(want);
+  // 20 MHz channels: 40 MHz on 2.4 GHz overlaps the neighbours and is the
+  // first thing to fail in a crowded or weak spot.
+  wifi_bandwidth_t bw;
+  if(esp_wifi_get_bandwidth(WIFI_IF_AP,&bw)==ESP_OK&&bw!=WIFI_BW_HT20)esp_wifi_set_bandwidth(WIFI_IF_AP,WIFI_BW_HT20);
+  if(withRouter&&esp_wifi_get_bandwidth(WIFI_IF_STA,&bw)==ESP_OK&&bw!=WIFI_BW_HT20)esp_wifi_set_bandwidth(WIFI_IF_STA,WIFI_BW_HT20);
   radioTuning();
   staConflict=false;staGotConflict=false;
   uint8_t ch=cfg.apChannel;
@@ -2147,6 +2271,7 @@ void applyNetwork(){
     else if(WiFi.status()==WL_CONNECTED&&WiFi.channel())ch=(uint8_t)WiFi.channel();
   }else{
     ntpStarted=false;staBssidKnown=false;
+    if(!apStarted){const uint8_t q=quietestChannel();if(q)ch=q;}
   }
   apChannelNow=ch;
   startAP();
@@ -2480,16 +2605,14 @@ void handleExportSeries(){
   if(!parseIds(web.arg("ids"),ids,n)){web.send(400,"text/plain","No trips selected");return;}
   if(!sdReady||!cardInserted()){web.send(409,"text/plain","No SD card");return;}
   if(tripSeries)tripSeries.flush();
-  web.sendHeader("Content-Disposition","attachment; filename=EngineLink-trip-log.csv");
-  web.setContentLength(CONTENT_LENGTH_UNKNOWN);
-  web.send(200,"text/csv","");
+  ChunkOut &out=beginDownload("second by second","text/csv","EngineLink-trip-log.csv");
   const int pi=portIndex();
   const char *A=pi==1?"stbd":"port",*B=pi==1?"port":"stbd";
   if(pi<0){A="j7";B="j6";}
   String s="trip_id,time_utc,seconds";
   const char *cols[]={"rpm","requested_rpm","fuel_lph","coolant_c","charge_air_c","boost_kpa","battery_v"};
   for(const char *side:{A,B})for(const char *c:cols){s+=',';s+=side;s+='_';s+=c;}
-  s+="\n";web.sendContent(s);s="";
+  s+="\n";out.add(s);s="";
   for(uint8_t j=0;j<n;j++){
     char name[32];snprintf(name,sizeof(name),"/TRIPS/T%06lu.BIN",(unsigned long)ids[j]);
     File f=SD.open(name,FILE_READ);
@@ -2507,11 +2630,12 @@ void handleExportSeries(){
         put(x.rpm[c],1,0);put(x.req[c],1,0);put(x.lph10[c],10,1);put(x.cool10[c],10,1);put(x.air10[c],10,1);put(x.boost10[c],10,1);put(x.volt100[c],100,2);
       }
       s+="\n";
-      if(s.length()>3000){web.sendContent(s);s="";}
+      if(s.length()>3000){out.add(s);s="";}
     }
     f.close();
   }
-  web.sendContent(s);web.sendContent("");
+  out.add(s);
+  endDownload(out);
 }
 void handleLife(){
   String s;s.reserve(2400);
@@ -3054,16 +3178,14 @@ void handleDownload(){
   if(sdLogging)logFile.flush();
   File f=SD.open(sessionName,FILE_READ);
   if(!f){web.send(500,"text/plain","Cannot open log file");return;}
-  web.sendHeader("Content-Disposition","attachment; filename=EngineLink-session.csv");
-  web.streamFile(f,"text/csv");
+  streamFileOut(f,"raw log","EngineLink-session.csv");
   f.close();
 }
 void handleSegmentsDownload(){
   if(!sdReady||!SD.exists("/SEGMENTS.CSV")){web.send(404,"text/plain","No engine-run segments recorded on this SD card yet");return;}
   File f=SD.open("/SEGMENTS.CSV",FILE_READ);
   if(!f){web.send(500,"text/plain","Cannot open segments file");return;}
-  web.sendHeader("Content-Disposition","attachment; filename=EngineLink-engine-runs.csv");
-  web.streamFile(f,"text/csv");
+  streamFileOut(f,"engine runs","EngineLink-engine-runs.csv");
   f.close();
 }
 // Polling is never persisted: after any restart EngineLink only listens.
@@ -3501,12 +3623,6 @@ void handleSeasonReset(){
 }
 
 // ---------- Diagnostics ----------
-// The last big download, timed, so Diagnostics can say whether the SD card
-// or the network is what takes the time.
-struct DlStat {
-  char what[20]="";uint32_t bytes=0,ms=0,findMs=0,sdMs=0,netMs=0;bool ap=false;int16_t rssi=0;bool active=false;
-};
-DlStat dlStat,spStat;  // last export; last speed test
 void handleDiag(){
   const uint64_t now=elapsedMs();
   String s;s.reserve(3000);
@@ -3553,7 +3669,7 @@ void handleDiag(){
     const DlStat &x=k?spStat:dlStat;
     if(!x.what[0])continue;
     s+=k?",\"sp\":":",\"dl\":";
-    s+="{\"what\":";jsonString(s,x.what);s+=",\"bytes\":";s+=x.bytes;s+=",\"ms\":";s+=x.ms;
+    s+="{\"what\":";jsonString(s,x.what);s+=",\"bytes\":";s+=x.bytes;s+=",\"raw\":";s+=x.raw;s+=",\"z\":";s+=x.z?"true":"false";s+=",\"ms\":";s+=x.ms;
     s+=",\"findMs\":";s+=x.findMs;s+=",\"sdMs\":";s+=x.sdMs;s+=",\"netMs\":";s+=x.netMs;
     s+=",\"ap\":";s+=x.ap?"true":"false";s+=",\"rssi\":";s+=x.rssi;s+='}';
   }
@@ -3575,7 +3691,7 @@ void handleDiag(){
   s+=",\"reason\":";s+=(unsigned)apReason;s+=",\"staFails\":";s+=staFails;s+=",\"staDrops\":";s+=(unsigned long)staDisconnects;
   s+=",\"staConnects\":";s+=staConnects;s+=",\"ch\":";s+=apChannelNow;
   s+=",\"conflict\":";s+=staConflict?"true":"false";
-  s+=",\"apStops\":";s+=(unsigned long)apStops;s+=",\"chMoves\":";s+=apChannelChanges;
+  s+=",\"apStops\":";s+=(unsigned long)apStops;s+=",\"chMoves\":";s+=apChannelChanges;s+=",\"autoNets\":";s+=autoChannelNets;s+=",\"bw\":";{wifi_bandwidth_t b=WIFI_BW_HT20;esp_wifi_get_bandwidth(WIFI_IF_AP,&b);s+=b==WIFI_BW_HT40?40:20;}
   s+=",\"httpServed\":";s+=web.served;s+=",\"httpReused\":";s+=web.reused;
   s+=",\"httpEvicted\":";s+=web.evicted;s+=",\"httpSlowMs\":";s+=web.slowestMs;
   s+=",\"httpOpen\":";s+=web.openSockets();s+=",\"loopMaxMs\":";s+=loopMaxMs;
@@ -3749,8 +3865,9 @@ void handleExportTrips(){
     String note=String(r->note);note.replace("\"","'");
     s+='"';s+=note;s+="\"\n";
   }
-  web.sendHeader("Content-Disposition","attachment; filename=EngineLink-trips.csv");
-  web.send(200,"text/csv",s);
+  ChunkOut &out=beginDownload("trip summary","text/csv","EngineLink-trips.csv");
+  out.add(s);
+  endDownload(out);
 }
 // Uptime (ms) of the raw row that starts at or after pos; false at the end.
 bool rowAt(File &f,uint32_t pos,uint64_t &ms,uint32_t &lineStart){
@@ -3767,37 +3884,12 @@ bool rowAt(File &f,uint32_t pos,uint64_t &ms,uint32_t &lineStart){
   return true;
 }
 // Raw engine rows of the chosen trips, streamed from the session files.
-void dlBegin(const char *what){
-  dlStat=DlStat();strlcpy(dlStat.what,what,sizeof(dlStat.what));dlStat.active=true;
-  dlStat.ap=web.client().localIP()==WiFi.softAPIP();
-  dlStat.rssi=(!dlStat.ap&&WiFi.status()==WL_CONNECTED)?WiFi.RSSI():0;
-  dlStat.ms=millis();
-}
-void dlEnd(){dlStat.ms=millis()-dlStat.ms;dlStat.active=false;}
-// Collects a streamed reply into large pieces (static: kept off the stack).
-struct ChunkOut {
-  char b[8192];size_t n=0;
-  ChunkOut &add(const char *s,size_t len){
-    if(n+len>sizeof(b))flush();
-    if(len>sizeof(b)){send(s,len);return *this;}
-    memcpy(b+n,s,len);n+=len;return *this;
-  }
-  ChunkOut &add(const char *s){return add(s,strlen(s));}
-  void flush(){if(n){send(b,n);n=0;}}
-  void send(const char *s,size_t len){const uint32_t t0=millis();web.sendContent(s,len);dlStat.netMs+=millis()-t0;dlStat.bytes+=len;}
-};
-static ChunkOut chunkOut;
-static uint8_t rawIn[4096];
 void handleExportRaw(){
   uint32_t ids[MAX_TRIPS];uint8_t n;
   if(!parseIds(web.arg("ids"),ids,n)){web.send(400,"text/plain","No trips selected");return;}
   if(!sdReady){web.send(409,"text/plain","No SD card");return;}
   if(sdLogging)logFile.flush();
-  web.sendHeader("Content-Disposition","attachment; filename=EngineLink-raw-trips.csv");
-  web.setContentLength(CONTENT_LENGTH_UNKNOWN);
-  web.send(200,"text/csv","");
-  dlBegin("raw engine data");
-  ChunkOut &out=chunkOut;out.n=0;
+  ChunkOut &out=beginDownload("raw engine data","text/csv","EngineLink-raw-trips.csv");
   out.add("trip_id,boot_id,uptime_ms,utc_epoch,channel,mid,checksum,raw_hex,engine,fuel_lph,rpm,direction,kad_index,kad_value\n");
   char line[400];
   for(uint8_t j=0;j<n;j++){
@@ -3842,25 +3934,18 @@ void handleExportRaw(){
     }
     f.close();
   }
-  out.flush();
-  web.sendContent("");
-  dlEnd();
+  endDownload(out);
 }
 // Download speed test: text from memory, no SD card, so it measures only the
 // network between the phone or computer and EngineLink.
 void handleSpeedTest(){
   const uint32_t kb=constrain(web.arg("kb").toInt(),16,4096);
-  web.sendHeader("Cache-Control","no-store");
-  web.setContentLength(CONTENT_LENGTH_UNKNOWN);
-  web.send(200,"text/plain","");
   const DlStat keep=dlStat;
-  dlBegin("speed test");
-  ChunkOut &out=chunkOut;out.n=0;
+  // Not compressed: this measures what the Wi-Fi carries.
+  ChunkOut &out=beginDownload("speed test","text/plain",nullptr,false);
   static const char row[]="EngineLink speed test,0123456789abcdefghijklmnopqrstuvwxyz,0123456789\n";  // 64 bytes
   for(uint32_t i=0;i<kb*16;i++)out.add(row,sizeof(row)-1);
-  out.flush();
-  web.sendContent("");
-  dlEnd();
+  endDownload(out);
   spStat=dlStat;dlStat=keep;
 }
 
@@ -4123,8 +4208,8 @@ void initializeWeb(){
     web.send(200,"application/manifest+json","{\"name\":\"Engine Link\",\"short_name\":\"Engine Link\",\"start_url\":\"/\",\"scope\":\"/\",\"display\":\"standalone\",\"background_color\":\"#0a1420\",\"theme_color\":\"#0a1420\",\"icons\":[{\"src\":\"/icon-192.png\",\"sizes\":\"192x192\",\"type\":\"image/png\"},{\"src\":\"/icon-512.png\",\"sizes\":\"512x512\",\"type\":\"image/png\",\"purpose\":\"any maskable\"}]}");
   });
   web.onNotFound([](){web.send(404,"text/plain","Not found");});
-  const char *keep[]={"If-None-Match","Connection"};
-  web.collectHeaders(keep,2);
+  const char *keep[]={"If-None-Match","Connection","Accept-Encoding"};
+  web.collectHeaders(keep,3);
   web.enableCORS(true); // the app can also reach EngineLink through the boat router
   web.begin();
 }

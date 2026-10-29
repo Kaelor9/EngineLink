@@ -336,8 +336,12 @@ async function tick(){
   if(ticking)return;
   if(document.hidden){schedule(3000);return;}
   ticking=true;
+  const t0=performance.now();
   try{
     const d=await get('/api/live',2500);
+    // Average answer time: on a weak link EngineLink is asked less often, so
+    // the requests that do go out are not queued behind each other.
+    const rt=performance.now()-t0;S.rtt=S.rtt?S.rtt*0.8+rt*0.2:rt;
     S.live=d;S.liveAt=Date.now();S.fails=0;setConn(true);onLive();
   }catch(e){
     S.fails++;S.failTotal=(S.failTotal||0)+1;
@@ -345,7 +349,7 @@ async function tick(){
     // Still nothing: the phone may have moved to another network.
     if(S.fails>=3&&S.fails%3===0){const d=await findHost();if(d){S.live=d;S.liveAt=Date.now();S.fails=0;setConn(true);onLive();}}
   }finally{ticking=false;}
-  schedule(S.fails?Math.min(400*S.fails,2000):500);
+  schedule(S.fails?Math.min(400*S.fails,2000):Math.round(Math.min(2000,Math.max(500,(S.rtt||0)*1.5))));
 }
 function tickNow(){S.fails=Math.min(S.fails,1);schedule(30);}
 document.addEventListener('visibilitychange',()=>{if(!document.hidden){tickNow();wake();}});
@@ -1309,7 +1313,7 @@ function dlBlock(dl,spd){
     const other=Math.max(0,dl.ms-dl.findMs-dl.sdMs-dl.netMs),parts=[['Finding the trip',dl.findMs],['Reading the SD card',dl.sdMs],['Sending',dl.netMs],['Other',other]];
     const top=parts.slice().sort((a,b)=>b[1]-a[1])[0];
     h+=`<div class="rowx"><div class="cth"><span class="rt">Last download · ${esc(dl.what)}</span><span class="rv">${NF(dl.bytes/1024,0)} kB · ${secs(dl.ms)}</span></div>
-      <div class="s12 sub" style="margin-top:3px">${parts.filter(x=>x[1]>0).map(([k,v])=>`${k} ${secs(v)}`).join(' · ')}, ${via(dl)}.</div>
+      <div class="s12 sub" style="margin-top:3px">${parts.filter(x=>x[1]>0).map(([k,v])=>`${k} ${secs(v)}`).join(' · ')}, ${via(dl)}.${dl.z&&dl.raw>dl.bytes?` Compressed from ${NF(dl.raw/1024,0)} kB to ${NF(dl.bytes/1024,0)} kB.`:''}</div>
       ${dl.ms>5000?`<div class="s12" style="margin-top:4px">Most of the time went to <b>${top[0].toLowerCase()}</b>.</div>`:''}</div>`;
   }
   return h;
