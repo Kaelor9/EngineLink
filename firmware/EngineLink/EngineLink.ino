@@ -47,7 +47,7 @@
 #include "diagrules.h"
 #include "miniz.h"  // the deflate compressor in the chip's ROM
 
-#define EL_VERSION "0.7.7"
+#define EL_VERSION "0.7.8"
 // Releases list published by the Pages workflow; firmware files come from
 // GitHub Releases of the same repository. Nothing else is downloaded.
 #define EL_RELEASES_URL "https://kaelor9.github.io/EngineLink/releases.json"
@@ -85,6 +85,19 @@ constexpr uint8_t MAX_PIDS=96;
 constexpr uint8_t HTTP_POOL=8;
 constexpr uint32_t HTTP_IDLE_MS=5000;      // silent sockets are closed after this
 constexpr uint32_t HTTP_IO_TIMEOUT_MS=2000;
+
+// ---------- Engine task and its lock ----------
+// Reading the engines runs in its own task (engineTask, on core 0), so the
+// web server, Wi-Fi and SD work can no longer hold it up. The two share the
+// engine data under one lock: the main loop holds it while it works and
+// lets go whenever it waits for the network (a phone or computer that reads
+// slowly, a request that arrives in pieces), which is exactly when reading
+// used to stop.
+SemaphoreHandle_t engineMx=nullptr;
+bool engineTaskOn=false;
+// Macros, not functions: Arduino puts its prototypes before the first function.
+#define netWaitBegin() do{if(engineTaskOn)xSemaphoreGive(engineMx);}while(0)
+#define netWaitEnd() do{if(engineTaskOn)xSemaphoreTake(engineMx,portMAX_DELAY);}while(0)
 
 class EngineLinkWebServer : public WebServer {
 public:
@@ -125,7 +138,8 @@ private:
     _currentClient.setTimeout(HTTP_IO_TIMEOUT_MS);
     _currentStatus=HC_WAIT_READ;_statusChange=t0;
     wrote=false;keepAlive=false;
-    if(_parseRequest(_currentClient)){
+    netWaitBegin();const bool parsed=_parseRequest(_currentClient);netWaitEnd();
+    if(parsed){
       _contentLength=CONTENT_LENGTH_NOT_SET;_responseCode=0;_clearResponseHeaders();
       // Only HTTP/1.1 frames every response (length or chunks) for reuse.
       keepAlive=_currentVersion==1&&!header("Connection").equalsIgnoreCase("close");
@@ -149,13 +163,14 @@ protected:
     if(rewriteHeader&&l>8&&memcmp(b,"HTTP/1.",7)==0){
       rewriteHeader=false;
       String h(b,(unsigned int)l);
-      if(h.indexOf("\r\nConnection: close\r\n")<0){keepAlive=false;return _currentClient.write(b,l);}
+      if(h.indexOf("\r\nConnection: close\r\n")<0){keepAlive=false;return netWrite(b,l);}
       h.replace("\r\nConnection: close\r\n","\r\nConnection: keep-alive\r\nKeep-Alive: timeout=4\r\n");
-      return _currentClient.write(h.c_str(),h.length())==h.length()?l:0;
+      return netWrite(h.c_str(),h.length())==h.length()?l:0;
     }
-    return _currentClient.write(b,l);
+    return netWrite(b,l);
   }
-  size_t _currentClientWrite_P(PGM_P b,size_t l) override {wrote=true;return _currentClient.write_P(b,l);}
+  size_t _currentClientWrite_P(PGM_P b,size_t l) override {wrote=true;netWaitBegin();const size_t r=_currentClient.write_P(b,l);netWaitEnd();return r;}
+  size_t netWrite(const char *b,size_t l){netWaitBegin();const size_t r=_currentClient.write(b,l);netWaitEnd();return r;}
 };
 
 struct Frame {
@@ -551,6 +566,18 @@ struct DlStat {
   char what[20]="";uint32_t bytes=0,raw=0,ms=0,findMs=0,sdMs=0,netMs=0;bool ap=false,z=false;int16_t rssi=0;bool active=false;
 };
 DlStat dlStat,spStat;  // last export; last speed test
+// How much of the engine data was actually read: every second an engine runs
+// counts as read when a fresh answer (under 2 s old) is there. A gap counts
+// only when the engine ran on both sides of it, so stopping and starting is
+// never counted as missing data.
+struct Coverage {
+  uint32_t magic=0xC0E10001;
+  uint32_t good[2]={},missing[2]={},fuelGood[2]={};
+  uint16_t longest[2]={},gaps[2]={};
+  uint32_t lastGoodSec[2]={};float lastGoodRpm[2]={};
+};
+Coverage tripCov,bootCov;
+const Coverage *seriesCov=nullptr;  // added to the next series reply
 static tdefl_compressor *zComp=nullptr;
 void downloadBreath();
 struct ChunkOut {
@@ -1016,6 +1043,7 @@ void handleCalibrationStop(){
 // the network took the time.
 // Engine work between pieces of a download (never the web server itself).
 void downloadBreath(){
+  if(engineTaskOn)return;  // the engine task runs while a download waits for the network
   static uint32_t last=0;static bool busy=false;
   if(busy||(uint32_t)(millis()-last)<40)return;
   busy=true;last=millis();
@@ -1571,6 +1599,36 @@ void closeSegment(uint8_t c){
   writeSegmentCSV(s);
   saveTotals();
 }
+void coverageAdd(Coverage &v,uint8_t c,uint32_t sec,float rpm,bool fuel){
+  if(v.lastGoodSec[c]&&sec>v.lastGoodSec[c]+1){
+    const uint32_t gap=sec-v.lastGoodSec[c]-1;
+    if(gap<=600&&v.lastGoodRpm[c]>400&&rpm>400){
+      v.missing[c]+=gap;if(gap>v.longest[c])v.longest[c]=(uint16_t)min<uint32_t>(gap,65535);
+      if(gap>=3&&v.gaps[c]<65535)++v.gaps[c];
+    }
+  }
+  if(rpm>=ENGINE_RUN_RPM){++v.good[c];if(fuel)++v.fuelGood[c];}
+  v.lastGoodSec[c]=sec;v.lastGoodRpm[c]=rpm;
+}
+void coverageSecond(){
+  const uint64_t now=elapsedMs();const uint32_t sec=(uint32_t)(now/1000ULL);
+  for(uint8_t c=0;c<2;c++){
+    const Motor &m=motor[c];
+    if(!m.rpmEver||now-m.rpmAt>=2000)continue;
+    const bool fuel=m.fuelEver&&now-m.fuelAt<3000;
+    coverageAdd(bootCov,c,sec,m.rpm,fuel);
+    if(tripSeriesId)coverageAdd(tripCov,c,sec,m.rpm,fuel);
+  }
+}
+void coverageJson(String &s,const Coverage &v){
+  s+="[";
+  for(uint8_t c=0;c<2;c++){
+    if(c)s+=',';
+    s+="{\"good\":";s+=v.good[c];s+=",\"missing\":";s+=v.missing[c];s+=",\"fuel\":";s+=v.fuelGood[c];
+    s+=",\"longest\":";s+=v.longest[c];s+=",\"gaps\":";s+=v.gaps[c];s+='}';
+  }
+  s+="]";
+}
 void serviceEngines(){
   if((uint32_t)(millis()-lastEngineService)<1000)return;
   lastEngineService=millis();
@@ -1597,6 +1655,7 @@ void serviceEngines(){
       if(now-m.lastRunMs>=ENGINE_STOP_DEBOUNCE_MS)closeSegment(c);
     }
   }
+  coverageSecond();
   serviceTripSecond();
   serviceDiagnosis();
   if(totalsDirty&&(uint32_t)(millis()-lastTotalsSave)>=TOTALS_SAVE_MS)saveTotals();
@@ -2221,7 +2280,7 @@ void startAP(){
 }
 // Blocking scan for the saved router. Only used when the network is set up.
 bool findRouter(){
-  const int16_t n=WiFi.scanNetworks(false,true,false,150);
+  netWaitBegin();const int16_t n=WiFi.scanNetworks(false,true,false,150);netWaitEnd();  // a scan takes seconds
   int best=-1;int32_t bestRssi=-200;
   for(int16_t i=0;i<n;i++){
     if(WiFi.SSID(i)==cfg.ssid&&WiFi.RSSI(i)>bestRssi){best=i;bestRssi=WiFi.RSSI(i);}
@@ -2436,10 +2495,15 @@ void tripSeriesOpen(){
   SeriesHead h={SERIES_MAGIC,totals.nextTripId,bootId,(uint32_t)(elapsedMs()/1000ULL),totals.tripStartUtc,(int8_t)portIndex(),{0,0,0}};
   tripSeries.write((const uint8_t*)&h,sizeof(h));
   tripSeriesId=totals.nextTripId;
+  tripCov=Coverage();
 }
 void tripSeriesClose(bool keep){
   if(!tripSeries)return;
   tripSeries.close();
+  if(keep&&sdReady&&cardInserted()){
+    char name[32];snprintf(name,sizeof(name),"/TRIPS/T%06lu.COV",(unsigned long)tripSeriesId);
+    File f=SD.open(name,FILE_WRITE);if(f){f.write((const uint8_t*)&tripCov,sizeof(tripCov));f.close();}
+  }
   if(!keep&&sdReady&&cardInserted()){char name[32];snprintf(name,sizeof(name),"/TRIPS/T%06lu.BIN",(unsigned long)tripSeriesId);SD.remove(name);}
   tripSeriesId=0;
 }
@@ -2541,6 +2605,7 @@ void sendSeries(const Sample *buf,uint32_t n,const SeriesHead &h,uint16_t step){
     s+="]";
   };
   col("rpm",0);col("req",1);col("lph",2);col("cool",3);col("air",4);col("boost",5);col("volt",6);
+  if(seriesCov&&seriesCov->magic==0xC0E10001){s+=",\"cov\":";coverageJson(s,*seriesCov);}
   s+="}";
   web.sendContent(s);web.sendContent("");
 }
@@ -2610,8 +2675,18 @@ void handleEventSeries(){
   free(buf);
 }
 void handleTripSeries(){
-  char name[32];snprintf(name,sizeof(name),"/TRIPS/T%06lu.BIN",(unsigned long)web.arg("id").toInt());
+  const uint32_t id=web.arg("id").toInt();
+  char name[32];snprintf(name,sizeof(name),"/TRIPS/T%06lu.BIN",(unsigned long)id);
+  static Coverage saved;
+  seriesCov=nullptr;
+  if(id&&id==tripSeriesId)seriesCov=&tripCov;  // the trip running now
+  else if(sdReady&&cardInserted()){
+    char cn[32];snprintf(cn,sizeof(cn),"/TRIPS/T%06lu.COV",(unsigned long)id);
+    File f=SD.open(cn,FILE_READ);
+    if(f){if(f.read((uint8_t*)&saved,sizeof(saved))==sizeof(saved)&&saved.magic==0xC0E10001)seriesCov=&saved;f.close();}
+  }
   sendSeriesFile(name);
+  seriesCov=nullptr;
 }
 // The last minutes from the ring, for the live charts.
 void handleRecentSeries(){
@@ -3701,6 +3776,8 @@ void handleDiag(){
     s+=",\"findMs\":";s+=x.findMs;s+=",\"sdMs\":";s+=x.sdMs;s+=",\"netMs\":";s+=x.netMs;
     s+=",\"ap\":";s+=x.ap?"true":"false";s+=",\"rssi\":";s+=x.rssi;s+='}';
   }
+  s+=",\"cov\":";coverageJson(s,bootCov);
+  s+=",\"engineTask\":";s+=engineTaskOn?"true":"false";
   s+=",\"reading\":[";
   for(uint8_t c=0;c<2;c++){
     const KadLink &k=kad[c];
@@ -4250,6 +4327,22 @@ void serialStatus(){
     (unsigned long)(ctr.rxDropped[0]+ctr.rxDropped[1]),(unsigned)ESP.getFreeHeap(),
     (unsigned)WiFi.softAPgetStationNum(),sdMessage.c_str());
 }
+// Reads the engines: frames from both receivers, our read requests, and the
+// once-a-second engine, trip and diagnosis work.
+void engineTask(void *){
+  for(;;){
+    Frame f;
+    xQueuePeek(framesQueue,&f,pdMS_TO_TICKS(5));  // wake as soon as a frame is in, or every 5 ms
+    xSemaphoreTake(engineMx,portMAX_DELAY);
+    int handled=0;
+    while(handled<128&&xQueueReceive(framesQueue,&f,0)==pdTRUE){processFrame(f);handled++;}
+    serviceKad();
+    serviceAutoPoll();
+    serviceEngines();
+    xSemaphoreGive(engineMx);
+    vTaskDelay(1);  // leave time for the idle task on this core
+  }
+}
 void setup(){
   pinMode(LED_PIN,OUTPUT);digitalWrite(LED_PIN,LOW);
   led.begin();led.setBrightness(ledBrightness);led.clear();led.show();
@@ -4308,21 +4401,28 @@ void setup(){
   // NTP time sync callback is non-blocking.
   sntp_set_time_sync_notification_cb(ntpCallback);
   xTaskCreatePinnedToCore(fwWorker,"fw",12288,nullptr,1,nullptr,0);
+  engineMx=xSemaphoreCreateMutex();
+  if(engineMx&&framesQueue){
+    xSemaphoreTake(engineMx,portMAX_DELAY);  // the loop holds it while it works
+    engineTaskOn=xTaskCreatePinnedToCore(engineTask,"engines",16384,nullptr,3,nullptr,0)==pdPASS;
+    if(!engineTaskOn)xSemaphoreGive(engineMx);
+  }
   Serial.printf("SoftAP EngineLink at http://%s (http://enginelink.local) ; passive J1708 only\n",WiFi.softAPIP().toString().c_str());
 }
 void loop(){
   const uint32_t loopStart=millis();
-  // Give the UART data priority over serving the user interface.
-  Frame f;
-  int handled=0;
-  while(framesQueue&&handled<32&&xQueueReceive(framesQueue,&f,0)==pdTRUE){processFrame(f);handled++;}
+  if(!engineTaskOn){
+    // Fallback without the engine task: the loop reads the engines itself.
+    Frame f;
+    int handled=0;
+    while(framesQueue&&handled<32&&xQueueReceive(framesQueue,&f,0)==pdTRUE){processFrame(f);handled++;}
+  }
   serviceCAN();
   web.handleClient();
   serviceSD();
-  serviceKad();
-  serviceAutoPoll();
+  if(!engineTaskOn){serviceKad();serviceAutoPoll();}
   serviceDiag();
-  serviceEngines();
+  if(!engineTaskOn)serviceEngines();
   serviceRawCleanup();
   serviceHistory();
   serviceNetwork();
@@ -4332,5 +4432,5 @@ void loop(){
   if(fwState==4&&!restartAt){prepareRestart();restartAt=millis()+2000;}
   if(restartAt&&(int32_t)(millis()-restartAt)>=0){delay(100);ESP.restart();}
   const uint32_t took=millis()-loopStart;if(took>loopMaxMs)loopMaxMs=took;
-  delay(1);
+  netWaitBegin();delay(1);netWaitEnd();  // the engine task gets its turn
 }

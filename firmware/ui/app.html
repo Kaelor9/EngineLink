@@ -1142,7 +1142,7 @@ function tripTimelineView(){
   const ids=tv.ids;
   if(ids.length>1)h+=`<div class="seg" style="grid-template-columns:repeat(${Math.min(ids.length,4)},minmax(0,1fr));margin-bottom:12px">${ids.map((id,i)=>`<button class="${tv.id===id?'on':''}" data-a="tripPart" data-v="${id}">Part ${i+1}</button>`).join('')}</div>`;
   const sr=S.tripSeries[tv.id];
-  h+=`<div class="card">${sr===undefined?'<div class="empty">Loading…</div>':sr===null?'<div class="empty">No timeline for this trip. Trips are recorded second by second from version 0.7.0, on the SD card.</div>':chartBlock('trip',sr)}</div>`;
+  h+=`<div class="card">${sr===undefined?'<div class="empty">Loading…</div>':sr===null?'<div class="empty">No timeline for this trip. Trips are recorded second by second from version 0.7.0, on the SD card.</div>':chartBlock('trip',sr)}${sr&&sr.cov?`<div class="s12 sub" style="margin-top:10px">${covNote(sr.cov,engines().map(e=>[e.name,e.ch]))}</div>`:''}</div>`;
   h+=`<button class="btn" style="width:100%;margin-top:12px" data-a="exTrips" data-v="${ids.join(',')}">${svg(IC.down,15)}Export this trip</button><div class="s12 sub" style="text-align:center;padding:8px 20px 0">A report to save as PDF or send, or a spreadsheet with one row per second.</div>`;
   return h;
 }
@@ -1296,6 +1296,7 @@ function readingBlock(d,es){
     const found=(ds.found||[]).map(k=>`<span style="display:inline-block;padding:2px 8px;border-radius:99px;background:var(--line);margin:0 4px 4px 0">${k}${PNAMES[k]?' · '+esc(PNAMES[k]):''}</span>`).join('');
     return `<div class="rowx"><div class="cth"><span class="rt">${esc(e.name)}</span><span class="rv">${r.polling?NF(r.rate,1)+' requests/s':'Not reading'}</span></div>
       <div class="s12 sub" style="margin-top:3px">${r.polling?`A request every ${NF(r.interval,0)} ms${fin(r.answered)?' · '+NF(r.answered*100,0)+' % answered':''}`:'Turn on reading the engines to see the speed.'}${r.skip&&r.skip.length?' · skipped (no answer): '+r.skip.join(', '):''}</div>
+      ${d.cov&&d.cov[e.ch]&&d.cov[e.ch].good+d.cov[e.ch].missing>0?`<div class="s12" style="margin-top:4px">Read since start: <b style="color:${covPct(d.cov[e.ch])<97?'var(--orange)':'var(--text)'}">${covText(d.cov[e.ch])}</b> of the running time${d.cov[e.ch].gaps?` · ${d.cov[e.ch].gaps} gap${d.cov[e.ch].gaps>1?'s':''}, longest ${dur2(d.cov[e.ch].longest)}`:' · no gaps'}</div>`:''}
       ${ds.active?`<div class="s12" style="margin-top:8px">Looking for more values · at ${256+ds.pos} of 256–319${(ds.found||[]).length?' · found so far:':''}</div><div class="s12" style="margin-top:6px">${found}</div>`
         :ds.done?`<div class="s12" style="margin-top:8px">${(ds.found||[]).length?'This engine answers:':'No values found.'}</div><div class="s12" style="margin-top:6px">${found}</div>`:''}
       ${r.polling&&!ds.active?`<button class="btn" style="width:100%;margin-top:10px" data-a="discover" data-v="${e.ch}">Discover more values</button>`:''}</div>`;}).join('');
@@ -1715,6 +1716,20 @@ function rJoin(list){
     sr.t.forEach((s,k)=>{out.t.push(off+s);cols.forEach(c=>{for(let e=0;e<2;e++)out[c][e].push(sr[c]&&sr[c][e]?sr[c][e][k]:null);});});});
   return out;
 }
+// Share of the running seconds with fresh engine data, from the board's count.
+function covSum(list){
+  const out=[0,1].map(()=>({good:0,missing:0,fuel:0,longest:0,gaps:0}));let any=false;
+  for(const sr of list)if(sr&&sr.cov){any=true;sr.cov.forEach((c,i)=>{const o=out[i];o.good+=c.good;o.missing+=c.missing;o.fuel+=c.fuel;o.longest=Math.max(o.longest,c.longest);o.gaps+=c.gaps;});}
+  return any?out:null;
+}
+const covPct=c=>c&&c.good+c.missing>0?c.good/(c.good+c.missing)*100:null;
+function covText(c){const p=covPct(c);if(p==null)return '—';return NF(Math.floor(p*10)/10,p>=99.95?0:1)+' %';}
+function covNote(cov,names){
+  if(!cov)return '';
+  return names.map(([n,i])=>{const c=cov[i];if(!c||c.good+c.missing===0)return '';const fp=c.good+c.missing?c.fuel/(c.good+c.missing)*100:0;
+    return `${n}: ${covText(c)} of the running time read${c.gaps?`, ${c.gaps} gap${c.gaps>1?'s':''} over 3 s, the longest ${dur2(c.longest)}`:', no gaps'}${fp<98?`, fuel answers ${NF(fp,0)} %`:''}.`;}).filter(Boolean).join(' ');
+}
+const dur2=s=>s<90?NF(s,0)+' s':dur(s);
 function rCharts(sr){
   if(!sr)return '<div class="r-sub">No second-by-second log for this trip. EngineLink records one on the SD card from version 0.7.0.</div>';
   return `<div class="r-charts">${[['rpm','Engine speed'],['lph','Fuel'],['cool','Coolant'],['boost','Boost']].map(([m,n])=>`<div class="r-chart"><div class="ct">${n}</div>${chartSvg(sr,m)}</div>`).join('')}</div>`;
@@ -1745,11 +1760,12 @@ async function reportTrips(ids){
   if(us.length>1)h+=`<div class="r-kpis">${kpi('Running',dur(run))}${kpi('Fuel',L(tot,1),U.vu())}${kpi('Average',run>60?L(tot/(run/3600),1):'—',U.ru())}${kpi('Highest rpm',max?NF(max,0):'—')}${price>0?kpi('Cost',money(tot*price)):''}</div>`;
   const series=await Promise.all(us.map(u=>Promise.all(u.parts.map(p=>get('/api/trip/series?id='+p.id,15000).catch(()=>null)))));
   us.forEach((u,i)=>{
-    const sr=rJoin(series[i]),mx=Math.max(...u.parts.map(p=>p.max||0)),nl=noteLine(u.note);
+    const sr=rJoin(series[i]),mx=Math.max(...u.parts.map(p=>p.max||0)),nl=noteLine(u.note),cov=covSum(series[i]);
     const diff=u.l[port]>0.5?(u.l[stbd]/u.l[port]-1)*100:null;
     const mine=evs.filter(e=>e.utc&&e.utc>=u.s-30&&e.utc<=(u.e||u.s)+60).sort((a,b)=>a.utc-b.utc);
     h+=`<div class="r-sec"><h2>${new Date(u.s*1000).toLocaleDateString(LOC,{weekday:'long',day:'numeric',month:'short'})} · ${hm(u.s)} – ${hm(u.e)}</h2><div class="r-sub">${dur(u.run)} running${u.combined?' · '+u.parts.length+' trips combined':''}${nl?' · '+esc(nl):''}</div>
       <div class="r-kpis">${kpi('Fuel',L(u.fuel,1),U.vu())}${kpi(pn,L(u.l[port],1),U.vu())}${kpi(sn,L(u.l[stbd],1),U.vu())}${kpi('Average',u.run>60?L(u.fuel/(u.run/3600),1):'—',U.ru())}${kpi('Highest rpm',mx?NF(mx,0):'—')}${price>0?kpi('Cost',money(u.fuel*price)):''}</div>
+      ${cov?`<div class="r-kpis">${[[pn,port],[sn,stbd]].map(([n,c])=>{const pc=covPct(cov[c]);return kpi(n+' data read',`<span style="color:${pc!=null&&pc<97?'var(--orange)':'inherit'}">${covText(cov[c])}</span>`);}).join('')}</div><div class="r-sub" style="margin-top:6px">${covNote(cov,[[pn,port],[sn,stbd]])}</div>`:''}
       ${diff!=null&&Math.abs(diff)>=8?`<div class="r-sub" style="margin-top:8px;color:var(--orange)">${sn} used ${NF(Math.abs(diff),0)} % ${diff>0?'more':'less'} fuel than ${pn.toLowerCase()} on this trip.</div>`:''}
       <h3>Curves</h3>${rCharts(sr)}
       <h3>What EngineLink noticed</h3>${rEvents(mine)}</div>`;
