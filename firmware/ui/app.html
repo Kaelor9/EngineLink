@@ -76,7 +76,7 @@ main::-webkit-scrollbar{display:none}
 .tog.on{background:var(--teal)}.tog.on::after{left:23px}
 .field{min-height:46px;border-radius:12px;background:var(--track);padding:0 14px;font-size:16px;width:100%}
 .dim{opacity:.45;pointer-events:none}
-nav{flex:none;display:grid;grid-template-columns:repeat(5,minmax(0,1fr));background:var(--nav);border-top:1px solid var(--line);padding:0 env(safe-area-inset-right) max(8px,env(safe-area-inset-bottom),var(--home-bar,0px)) env(safe-area-inset-left);min-height:72px}
+nav{flex:none;display:grid;grid-template-columns:repeat(5,minmax(0,1fr));background:var(--nav);border-top:1px solid var(--line);padding:0 max(6px,env(safe-area-inset-right)) max(8px,env(safe-area-inset-bottom),var(--home-bar,0px)) max(6px,env(safe-area-inset-left));min-height:72px}
 nav button{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;color:var(--sub);font-size:10.5px;font-weight:550;padding-top:8px}
 nav button.on{color:var(--teal)}
 nav svg{width:26px;height:26px}
@@ -168,13 +168,14 @@ function fitScreen(){
   // bar, 20 pt on iPhones with a home button and on iPads. A correct page is
   // short by one status bar, the bug by two.
   const minBar=safeBottom()>=30&&tall<1000?44:20;
-  if(IOS&&standalone&&!landscape&&missing>=minBar*1.5&&missing<=130){
-    // The page now reaches the bottom edge, but iOS reports no inset there
-    // because it thinks the page ends above it: keep the menu clear of the
-    // home bar ourselves (34 pt on iPhones without a home button, 20 on iPads).
-    de.style.setProperty('--app-h',(innerHeight+missing/2)+'px');de.classList.add('fill');
-    de.style.setProperty('--home-bar',(tall>=812&&tall<1000?34:tall>=1000?20:0)+'px');
-  }else{de.classList.remove('fill');de.style.removeProperty('--home-bar');}
+  if(IOS&&standalone&&!landscape&&missing>=minBar*1.5&&missing<=130){de.style.setProperty('--app-h',(innerHeight+missing/2)+'px');de.classList.add('fill');}
+  else de.classList.remove('fill');
+  // Home-screen app: iOS often reports no inset at the bottom even though the
+  // page reaches the home bar, so the menu sat under it and in the rounded
+  // corners. Keep Apple's own room for it on every iPhone without a home
+  // button (34 pt, 21 pt sideways) and on iPads with a home bar (20 pt).
+  const homeBar=tall>=1000?20:tall>=812?(landscape?21:34):0;
+  if(IOS&&standalone&&homeBar)de.style.setProperty('--home-bar',homeBar+'px');else de.style.removeProperty('--home-bar');
 }
 fitScreen();addEventListener('resize',fitScreen);addEventListener('orientationchange',()=>setTimeout(fitScreen,300));
 'use strict';
