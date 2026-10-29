@@ -43,8 +43,10 @@
 #include "ui.h"
 #include "icons.h"
 #include "fuelcal.h"
+#include "ledpatterns.h"
+#include "diagrules.h"
 
-#define EL_VERSION "0.6.0"
+#define EL_VERSION "0.7.0"
 // Releases list published by the Pages workflow; firmware files come from
 // GitHub Releases of the same repository. Nothing else is downloaded.
 #define EL_RELEASES_URL "https://kaelor9.github.io/EngineLink/releases.json"
@@ -367,6 +369,28 @@ struct Health {
   float balance=0;                      // starboard vs port fuel at same rpm (fraction)
   int64_t updatedUtc=0;
 };
+// ---- 0.7.0: diagnosis, black box, trip log ----
+// One second of both engines (physical channels J7, J6). NA16 = not known.
+constexpr int16_t NA16=INT16_MIN;
+struct Sample {
+  uint32_t up=0;                 // seconds since EngineLink started
+  int16_t rpm[2]={NA16,NA16},req[2]={NA16,NA16},lph10[2]={NA16,NA16};
+  int16_t cool10[2]={NA16,NA16},air10[2]={NA16,NA16},boost10[2]={NA16,NA16},volt100[2]={NA16,NA16};
+  uint16_t st263[2]={0xFFFF,0xFFFF},st264[2]={0xFFFF,0xFFFF};
+};
+constexpr uint16_t RING_N=3600;   // the last hour, in PSRAM
+struct EventRec {
+  uint32_t id=0;
+  int64_t utc=0;
+  uint32_t boot=0,up=0;
+  uint8_t type=0,eng=0,sev=0,box=0; // box: 0 none, 1 saving, 2 saved on the SD card, 3 not saved
+  float value=0,ref=0;
+  uint8_t ack=0,pad[3]={};
+};
+constexpr uint8_t MAX_EVENTS=100;
+// Header of a trip log or black box file: Sample records follow.
+struct SeriesHead { uint32_t magic; uint32_t id,boot,startUp; int64_t startUtc; int8_t port; uint8_t pad[3]; };
+constexpr uint32_t SERIES_MAGIC=0x31535245; // "ERS1"
 struct Segment {
   uint32_t boot=0;
   uint64_t startMs=0,endMs=0;
@@ -456,7 +480,10 @@ constexpr KadParam KAD_PARAMS[]={
 };
 // RPM and fuel are asked for twice as often as the rest.
 constexpr uint16_t KAD_POLL_FAST[]={256,289};
-constexpr uint16_t KAD_POLL_SLOW[]={293,259,258,265,260,261,288,291,264,266,295,263};
+constexpr uint16_t KAD_POLL_SLOW[]={293,259,258,265,260,261,288,291,264,266,295,263,296,267};
+constexpr uint8_t KAD_SLOW_N=sizeof(KAD_POLL_SLOW)/sizeof(KAD_POLL_SLOW[0]);
+constexpr uint32_t KAD_MIN_POLL_MS=80;    // fastest pace: about 12 requests a second
+constexpr uint16_t KAD_DISC_FIRST=256,KAD_DISC_LAST=319;
 constexpr uint32_t KAD_POLL_MS=220;       // <= ~4.5 requests/s per channel
 constexpr uint32_t KAD_REPLY_MS=300;      // reply must follow its request
 constexpr uint32_t KAD_BUS_IDLE_MS=20;    // never start a request on a busy bus
@@ -483,6 +510,16 @@ struct KadLink {
   uint32_t replyCount=0;
   bool byAuto=false,byTest=false;
   uint32_t lastAutoTry=0;
+  // 0.7.0: pace follows the engine's answers (see serviceKad).
+  uint16_t intervalMs=220;
+  uint16_t winReq=0,winRep=0;
+  float answered=NAN;  // share of requests answered in the last full window
+  uint8_t miss[16]={};          // unanswered in a row, per slow value, while others answer
+  uint16_t skip=0;              // slow values this engine does not answer (bits)
+  bool discActive=false;        // "Discover more values" running
+  uint16_t discPos=0;
+  uint64_t discFound=0;         // answered indices KAD_DISC_FIRST.. (bits)
+  bool discDone=false;
 };
 struct SdCounts { uint32_t files=0; uint64_t rawBytes=0; uint32_t rawFiles=0; uint32_t exports=0; };
 // Result of the 30 s connection test per connector, kept in NVS.
@@ -536,8 +573,6 @@ uint8_t recentIndex=0,recentCount=0;
 uint32_t bootId=0,lastFlush=0,lastWifiRetry=0,lastLed=0,ledPrev=0xFFFFFFFF;
 uint32_t ledTestStartedMs=0;
 uint8_t ledBrightness=42;
-enum LedState : uint8_t { LS_BOOT, LS_SETUP, LS_READY, LS_ROUTER, LS_NO_SD, LS_WRITE_ERROR, LS_RX_ERROR, LS_TEST, LS_UPDATE };
-LedState currentLED=LS_BOOT;
 bool sdFaultLatched=false;
 bool uartReady[2]={false,false};
 bool sdReady=false,sdLogging=false,canReady=false,pendingNetwork=false,mdnsReady=false;
@@ -573,6 +608,23 @@ TripRec trips[MAX_TRIPS];
 uint8_t tripCount=0;            // trips[0] is the newest
 FuelRec fuelLog[MAX_FUEL];
 uint8_t fuelCount=0;            // fuelLog[0] is the newest
+diag::Rules diagRules;
+diag::Life life;
+bool lifeDirty=false;
+EventRec events[MAX_EVENTS];
+uint8_t eventCount=0;           // events[0] is the newest
+uint32_t nextEventId=1;
+Sample *ring=nullptr;
+uint16_t ringHead=0,ringCount=0;
+File tripSeries;
+uint32_t tripSeriesId=0,tripSeriesFlush=0;
+uint32_t markLedUntil=0;
+uint32_t pendingBox[8];
+uint8_t pendingBoxN=0;
+bool lifeWasRunning[2]={false,false};
+uint32_t lifeStartAt[2]={0,0};
+bool lifeColdChecked[2]={false,false};
+float lifeStartMinV[2]={99,99},lifeTripMax[2]={0,0};
 Health health;
 bool healthDirty=false;
 // Per-trip sums for the health comparison: [engine][bucket][metric] and samples.
@@ -688,7 +740,9 @@ void loadTotals(){
   }
   pref.end();
 }
+void saveLife();
 void saveTotals(){
+  if(lifeDirty)saveLife();
   pref.begin("totals",false);
   pref.putBytes("t",&totals,sizeof(totals));
   pref.end();
@@ -1177,7 +1231,9 @@ void decodeKad(const Frame &f,Decoded &d){
   const uint16_t index=k.pendingIndex;
   k.pending=false;
   if(k.ownPending){
-    k.ownPending=false;++k.replies;k.unanswered=0;
+    k.ownPending=false;++k.replies;k.unanswered=0;++k.winRep;
+    for(uint8_t i=0;i<KAD_SLOW_N;i++)if(KAD_POLL_SLOW[i]==k.pendingIndex)k.miss[i]=0;
+    if(k.pendingIndex>=KAD_DISC_FIRST&&k.pendingIndex<=KAD_DISC_LAST)k.discFound|=1ULL<<(k.pendingIndex-KAD_DISC_FIRST);
     if(f.bootMs>=k.pendingAt){k.replyMsSum+=f.bootMs-k.pendingAt;++k.replyCount;}
   }
   k.lastReplyAt=f.bootMs;
@@ -1285,6 +1341,7 @@ bool startPolling(uint8_t ch,String &why){
   if(k.foreignRequests&&elapsedMs()-k.lastForeignAt<60000){why="Another device is polling this engine. Listening is enough";return false;}
   if(uart_set_pin(portFor(ch),txPinFor(ch),UART_PIN_NO_CHANGE,UART_PIN_NO_CHANGE,UART_PIN_NO_CHANGE)!=ESP_OK){why="Could not attach the TX pin";return false;}
   k.txAttached=true;k.polling=true;k.stopReason="";k.unanswered=0;k.ownPending=false;
+  memset(k.miss,0,sizeof(k.miss));k.skip=0;k.winReq=k.winRep=0;k.answered=NAN;
   k.startedMs=millis();k.lastPollMs=0;
   return true;
 }
@@ -1306,12 +1363,27 @@ void serviceKad(){
     if(k.ownPending){
       if(now-k.pendingAt<=KAD_REPLY_MS)continue;
       k.ownPending=false;++k.unanswered;
+      // A value the engine never answers while it answers others is skipped.
+      if(k.lastReplyAt&&now-k.lastReplyAt<2000)
+        for(uint8_t i=0;i<KAD_SLOW_N;i++)if(KAD_POLL_SLOW[i]==k.pendingIndex&&++k.miss[i]>=5)k.skip|=1u<<i;
       if(k.unanswered>=KAD_MAX_UNANSWERED){
         stopPolling(ch,"No answer to "+String(KAD_MAX_UNANSWERED)+" requests. Check ignition, the J1708 cable and that the TX jumper for this connector is closed");
         continue;
       }
     }
-    if((uint32_t)(millis()-k.lastPollMs)<KAD_POLL_MS)continue;
+    // Pace: the next request goes as soon as the answer is in and the bus is
+    // quiet, no faster than the interval. Every 40 requests the interval
+    // shrinks while (almost) everything is answered, and grows at once if
+    // answers go missing, so EngineLink settles at what the engine handles.
+    if(k.winReq>=40){
+      const uint32_t avgReply=k.replyCount?(uint32_t)(k.replyMsSum/k.replyCount):60;
+      const uint32_t floorMs=max<uint32_t>(KAD_MIN_POLL_MS,avgReply+40);
+      if(k.winRep*100>=k.winReq*97)k.intervalMs=(uint16_t)max<uint32_t>(floorMs,k.intervalMs>20?k.intervalMs-20:floorMs);
+      else if(k.winRep*100<k.winReq*90)k.intervalMs=(uint16_t)min<uint32_t>(KAD_POLL_MS,k.intervalMs*3/2);
+      k.answered=(float)k.winRep/k.winReq;
+      k.winReq=k.winRep=0;
+    }
+    if((uint32_t)(millis()-k.lastPollMs)<k.intervalMs)continue;
     if((uint32_t)(millis()-lastRxActivityMs[ch])<KAD_BUS_IDLE_MS)continue; // bus busy
     // Steady: rpm, fuel, one slow value. Throttle moving: fuel, rpm, fuel,
     // slow value, so the fuel integral follows the change closely. A value
@@ -1322,7 +1394,14 @@ void serviceKad(){
     const bool slowSlot=moving?slot==3:slot==2;
     if(!slowSlot)index=moving?(slot==1?256:289):KAD_POLL_FAST[slot];
     else if(kadFocusIndex&&(int32_t)(kadFocusUntil-millis())>0)index=kadFocusIndex;
-    else{index=KAD_POLL_SLOW[k.slowPos];k.slowPos=(k.slowPos+1)%(sizeof(KAD_POLL_SLOW)/sizeof(KAD_POLL_SLOW[0]));}
+    else if(k.discActive){
+      index=KAD_DISC_FIRST+k.discPos;
+      if(++k.discPos>KAD_DISC_LAST-KAD_DISC_FIRST){k.discActive=false;k.discDone=true;}
+    }else{
+      index=KAD_POLL_SLOW[k.slowPos];
+      for(uint8_t tries=0;tries<KAD_SLOW_N&&(k.skip>>k.slowPos&1);tries++){k.slowPos=(k.slowPos+1)%KAD_SLOW_N;index=KAD_POLL_SLOW[k.slowPos];}
+      k.slowPos=(k.slowPos+1)%KAD_SLOW_N;
+    }
     ++k.seq;
     uint8_t req[6]={0x01,0x43,0x21,(uint8_t)(index>>8),(uint8_t)(index&0xFF),0};
     uint8_t sum=0;for(uint8_t i=0;i<5;i++)sum=(uint8_t)(sum+req[i]);
@@ -1333,7 +1412,7 @@ void serviceKad(){
       if(k.txErrors>=5)stopPolling(ch,"UART transmit error");
       continue;
     }
-    ++k.requests;
+    ++k.requests;++k.winReq;
     k.ownPending=true;k.pending=true;k.pendingIndex=index;k.pendingAt=elapsedMs();
     writeTxRecord(ch,req,index);
   }
@@ -1394,6 +1473,7 @@ void serviceEngines(){
     }
   }
   serviceTripSecond();
+  serviceDiagnosis();
   if(totalsDirty&&(uint32_t)(millis()-lastTotalsSave)>=TOTALS_SAVE_MS)saveTotals();
 }
 
@@ -1786,6 +1866,8 @@ void startTrip(){
   totals.tripAnySec=0;totals.tripMaxRpm=0;++totals.tripResets;
   if(!totals.seasonStartUtc&&validWall())totals.seasonStartUtc=time(nullptr);
   resetTripHealth();
+  tripSeriesOpen();
+  for(uint8_t c=0;c<2;c++)lifeTripMax[c]=0;
   saveTotals();
 }
 void backfillTripTime(){
@@ -1826,7 +1908,10 @@ void endTrip(){
     saveTrips();
     writeTripCSV(r);
     if(totals.tripBoot==bootId)finishTripHealth();
-  }
+    tripSeriesClose(true);
+    for(uint8_t c=0;c<2;c++)if(lifeTripMax[c]>0){life.wotRpm[c]=lifeTripMax[c];if(lifeTripMax[c]>life.wotRpmBest[c])life.wotRpmBest[c]=lifeTripMax[c];}
+    lifeDirty=true;
+  }else tripSeriesClose(false);
   saveTotals();
 }
 TripRec *tripById(uint32_t id){for(uint8_t i=0;i<tripCount;i++)if(trips[i].id==id)return &trips[i];return nullptr;}
@@ -2128,64 +2213,390 @@ void serviceNetwork(){
     if(r>=0||r==WIFI_SCAN_FAILED||(uint32_t)(millis()-scanStartedMs)>15000){scanBusy=false;scanCount=r;}
   }
 }
-const char *ledStateName(LedState st){
-  switch(st){
-    case LS_BOOT:return "Starting";
-    case LS_SETUP:return "Setup: blue pulse";
-    case LS_READY:return "Normal: green";
-    case LS_ROUTER:return "Router reconnect: amber pulse";
-    case LS_NO_SD:return "SD unavailable: amber double flash";
-    case LS_WRITE_ERROR:return "SD error: red rapid flash";
-    case LS_RX_ERROR:return "J1708 overflow: red double flash";
-    case LS_TEST:return "Motor test recording: cyan pulse";
-    case LS_UPDATE:return "Firmware update: white pulse";
+// ---------- Diagnosis: rules, events, black box, trip log, life story ----------
+int16_t to16(float v,float k){if(isnan(v))return NA16;const float x=v*k;return (int16_t)constrain(lroundf(x),-32767L,32767L);}
+float from16(int16_t v,float k){return v==NA16?NAN:(float)v/k;}
+float valueOr(uint8_t ch,uint16_t idx,uint32_t age){float v;return engineValueAge(ch,idx,v,age)?v:NAN;}
+void saveEvents(){fsWriteRecords("/events.bin",0x31545645,events,sizeof(EventRec),eventCount);}
+void loadEvents(){
+  size_t n;uint8_t *buf=fsSlurp("/events.bin",n,sizeof(FileHead)+sizeof(events)+64);
+  eventCount=0;
+  if(!buf)return;
+  FileHead h;memcpy(&h,buf,min(n,sizeof(h)));
+  if(n>=sizeof(h)&&h.magic==0x31545645&&h.recSize==sizeof(EventRec)&&n==sizeof(h)+(size_t)h.count*sizeof(EventRec)){
+    eventCount=min<uint16_t>(h.count,MAX_EVENTS);memcpy(events,buf+sizeof(h),sizeof(EventRec)*eventCount);
   }
-  return "Unknown";
-}
-bool ledTestRunning(){return ledTestStartedMs && (uint32_t)(millis()-ledTestStartedMs)<16000UL;}
-LedState ledFor(bool includeDemo){
-  if(otaActive)return LS_UPDATE;
-  if(includeDemo&&ledTestRunning()){
-    constexpr LedState demo[]={LS_SETUP,LS_READY,LS_ROUTER,LS_NO_SD,LS_WRITE_ERROR,LS_RX_ERROR,LS_TEST};
-    return demo[((millis()-ledTestStartedMs)/2200UL)%7];
+  free(buf);
+  for(uint8_t i=0;i<eventCount;i++){
+    if(events[i].id>=nextEventId)nextEventId=events[i].id+1;
+    if(events[i].box==1)events[i].box=3; // EngineLink restarted before the black box was written
   }
-  if(sdFaultLatched)return LS_WRITE_ERROR;
-  if(lastUARTFaultMs && (uint32_t)(millis()-lastUARTFaultMs)<30000UL)return LS_RX_ERROR;
-  if(calActive)return LS_TEST;
-  if(!cfg.completed)return LS_SETUP;
-  if(cfg.router&&cfg.ssid.length()&&WiFi.status()!=WL_CONNECTED)return LS_ROUTER;
-  if(!sdReady)return LS_NO_SD;
-  return LS_READY;
 }
-LedState selectedLED(){return ledFor(true);}
+void saveLife(){fsWrite("/life.bin",&life,sizeof(life));lifeDirty=false;}
+void loadLife(){diag::Life l;if(fsRead("/life.bin",&l,sizeof(l),sizeof(l))==sizeof(l)&&l.magic==life.magic)life=l;}
+uint8_t unackedEvents(){uint8_t n=0;for(uint8_t i=0;i<eventCount;i++)if(!events[i].ack&&events[i].sev>=diag::WARN)n++;return n;}
+// What both engines report this second.
+void sampleNow(Sample &s,diag::Input &in){
+  const uint64_t now=elapsedMs();
+  s=Sample();s.up=(uint32_t)(now/1000ULL);
+  in=diag::Input();in.t=s.up;in.gearMask=cfg.gearMaskF|cfg.gearMaskR;
+  for(uint8_t c=0;c<2;c++){
+    diag::Eng &e=in.e[c];
+    e.running=motor[c].running;e.polled=kad[c].polling;
+    e.rpm=rpmFresh(c,now)?motor[c].rpm:NAN;
+    e.lph=fuelFresh(c,now)?motor[c].fuelLph:NAN;
+    e.req=valueOr(c,291,12000);e.cool=valueOr(c,259,12000);e.air=valueOr(c,261,12000);
+    e.boost=valueOr(c,265,12000);e.volt=valueOr(c,293,15000);
+    const float a=valueOr(c,263,15000),b=valueOr(c,264,15000);
+    e.st263=isnan(a)?-1:(int32_t)a&0xFFFF;e.st264=isnan(b)?-1:(int32_t)b&0xFFFF;
+    const int bk=isnan(e.rpm)?-1:bucketFor(e.rpm);
+    if(bk>=0&&health.baseTrips[c][bk]>=3){
+      const float *base=health.base[c][bk];
+      e.baseCool=base[0];e.baseBoost=base[1];e.baseAir=base[2];e.baseLph=base[3];
+    }
+    s.rpm[c]=to16(e.rpm,1);s.req[c]=to16(e.req,1);s.lph10[c]=to16(e.lph,10);
+    s.cool10[c]=to16(e.cool,10);s.air10[c]=to16(e.air,10);s.boost10[c]=to16(e.boost,10);s.volt100[c]=to16(e.volt,100);
+    s.st263[c]=e.st263<0?0xFFFF:(uint16_t)e.st263;s.st264[c]=e.st264<0?0xFFFF:(uint16_t)e.st264;
+  }
+}
+void ringPush(const Sample &s){
+  if(!ring)return;
+  ring[ringHead]=s;ringHead=(ringHead+1)%RING_N;if(ringCount<RING_N)ringCount++;
+}
+// Samples from the last hour between two uptimes, oldest first.
+uint16_t ringCopy(uint32_t from,uint32_t to,Sample *out,uint16_t max){
+  uint16_t n=0;
+  for(uint16_t i=0;i<ringCount&&n<max;i++){
+    const Sample &s=ring[(ringHead+RING_N-ringCount+i)%RING_N];
+    if(s.up>=from&&s.up<=to)out[n++]=s;
+  }
+  return n;
+}
+bool ensureDir(const char *d){return SD.exists(d)||SD.mkdir(d);}
+void tripSeriesOpen(){
+  if(tripSeries)tripSeries.close();
+  if(!sdReady||!cardInserted()||!ensureDir("/TRIPS"))return;
+  char name[32];snprintf(name,sizeof(name),"/TRIPS/T%06lu.BIN",(unsigned long)totals.nextTripId);
+  SD.remove(name);
+  tripSeries=SD.open(name,FILE_WRITE);
+  if(!tripSeries)return;
+  SeriesHead h={SERIES_MAGIC,totals.nextTripId,bootId,(uint32_t)(elapsedMs()/1000ULL),totals.tripStartUtc,(int8_t)portIndex(),{0,0,0}};
+  tripSeries.write((const uint8_t*)&h,sizeof(h));
+  tripSeriesId=totals.nextTripId;
+}
+void tripSeriesClose(bool keep){
+  if(!tripSeries)return;
+  tripSeries.close();
+  if(!keep&&sdReady&&cardInserted()){char name[32];snprintf(name,sizeof(name),"/TRIPS/T%06lu.BIN",(unsigned long)tripSeriesId);SD.remove(name);}
+  tripSeriesId=0;
+}
+// The black box of an event: two minutes before and after it, from the ring.
+void writeBlackBox(EventRec &e){
+  if(!ring||!sdReady||!cardInserted()||!ensureDir("/EVENTS")){e.box=3;return;}
+  Sample *buf=(Sample*)ps_malloc(sizeof(Sample)*250);
+  if(!buf){e.box=3;return;}
+  const uint16_t n=ringCopy(e.up>120?e.up-120:0,e.up+120,buf,250);
+  char name[32];snprintf(name,sizeof(name),"/EVENTS/E%06lu.BIN",(unsigned long)e.id);
+  File f=SD.open(name,FILE_WRITE);
+  if(f){
+    SeriesHead h={SERIES_MAGIC,e.id,e.boot,n?buf[0].up:e.up,e.utc?e.utc-(int64_t)(e.up-(n?buf[0].up:e.up)):0,(int8_t)portIndex(),{0,0,0}};
+    f.write((const uint8_t*)&h,sizeof(h));f.write((const uint8_t*)buf,sizeof(Sample)*n);f.close();
+    e.box=2;
+  }else e.box=3;
+  free(buf);
+}
+void addEvent(const diag::Event &d,uint32_t up){
+  EventRec r;
+  r.id=nextEventId++;r.utc=validWall()?(int64_t)time(nullptr):0;r.boot=bootId;r.up=up;
+  r.type=d.type;r.eng=d.eng;r.sev=d.sev;r.value=d.value;r.ref=d.ref;r.box=ring?1:3;
+  if(eventCount==MAX_EVENTS)--eventCount;
+  memmove(&events[1],&events[0],sizeof(EventRec)*eventCount);
+  events[0]=r;++eventCount;
+  if(r.box==1&&pendingBoxN<8)pendingBox[pendingBoxN++]=r.id;else if(r.box==1)events[0].box=3;
+  if(d.type<diag::T_COUNT)++life.eventsBy[d.type];
+  if(d.type==diag::T_LONG_IDLE&&d.eng<2)++life.longIdles[d.eng];
+  lifeDirty=true;
+  saveEvents();
+}
+void serviceBlackBoxes(uint32_t up){
+  for(uint8_t k=0;k<pendingBoxN;){
+    EventRec *e=nullptr;
+    for(uint8_t i=0;i<eventCount;i++)if(events[i].id==pendingBox[k]){e=&events[i];break;}
+    if(!e){pendingBox[k]=pendingBox[--pendingBoxN];continue;}
+    if(up>=e->up+120){writeBlackBox(*e);saveEvents();pendingBox[k]=pendingBox[--pendingBoxN];continue;}
+    k++;
+  }
+}
+void updateLife(const diag::Input &in,uint32_t up){
+  for(uint8_t c=0;c<2;c++){
+    const diag::Eng &e=in.e[c];
+    if(e.running&&!lifeWasRunning[c]){++life.starts[c];lifeStartAt[c]=up;lifeColdChecked[c]=false;lifeStartMinV[c]=99;}
+    lifeWasRunning[c]=e.running;
+    if(!e.running)continue;
+    const float rpm=isnan(e.rpm)?0:e.rpm;
+    ++life.sec[c][diag::lifeBucket(rpm)];
+    if(!isnan(e.cool)){
+      if(e.cool>95)++life.hotSec[c];
+      if(rpm>2800&&e.cool<50)++life.coldLoadSec[c];
+      if(!lifeColdChecked[c]&&up-lifeStartAt[c]<=20){lifeColdChecked[c]=true;if(e.cool<30)++life.coldStarts[c];}
+    }
+    if(rpm>4000)++life.overSec[c];
+    if(rpm>lifeTripMax[c])lifeTripMax[c]=rpm;
+    if(up-lifeStartAt[c]<=20&&!isnan(e.volt))lifeStartMinV[c]=min(lifeStartMinV[c],e.volt);
+    if(up-lifeStartAt[c]==21&&lifeStartMinV[c]<90)life.lowStartVolt[c]=lifeStartMinV[c];
+    lifeDirty=true;
+  }
+}
+void serviceDiagnosis(){
+  Sample s;diag::Input in;
+  sampleNow(s,in);
+  ringPush(s);
+  diag::Event ev[6];
+  const int n=diagRules.step(in,ev,6);
+  for(int i=0;i<n;i++)addEvent(ev[i],s.up);
+  updateLife(in,s.up);
+  if(totals.tripActive&&tripSeries){
+    tripSeries.write((const uint8_t*)&s,sizeof(s));
+    if((uint32_t)(millis()-tripSeriesFlush)>30000){tripSeries.flush();tripSeriesFlush=millis();}
+  }
+  serviceBlackBoxes(s.up);
+}
+// Series as JSON columns, at most maxPts points evenly spread.
+void sendSeries(const Sample *buf,uint32_t n,const SeriesHead &h,uint16_t step){
+  web.setContentLength(CONTENT_LENGTH_UNKNOWN);
+  web.send(200,"application/json","");
+  String s;s.reserve(4200);
+  s="{\"id\":";s+=h.id;s+=",\"start\":";s+=(long long)h.startUtc;s+=",\"up0\":";s+=h.startUp;s+=",\"port\":";s+=h.port;s+=",\"step\":";s+=step;
+  s+=",\"t\":[";
+  for(uint32_t i=0;i<n;i++){if(i)s+=',';s+=(long)buf[i].up-(long)h.startUp;if(s.length()>4000){web.sendContent(s);s="";}}
+  s+="]";
+  auto col=[&](const char *name,int k){
+    s+=",\"";s+=name;s+="\":[";
+    for(uint8_t c=0;c<2;c++){
+      s+=c?",[":"[";
+      for(uint32_t i=0;i<n;i++){
+        if(i)s+=',';
+        const Sample &x=buf[i];
+        float v=NAN;
+        switch(k){case 0:v=from16(x.rpm[c],1);break;case 1:v=from16(x.req[c],1);break;case 2:v=from16(x.lph10[c],10);break;
+          case 3:v=from16(x.cool10[c],10);break;case 4:v=from16(x.air10[c],10);break;case 5:v=from16(x.boost10[c],10);break;case 6:v=from16(x.volt100[c],100);break;}
+        if(isnan(v))s+="null";else s+=String(v,k==6?2:k==2?1:k>=3?1:0);
+        if(s.length()>4000){web.sendContent(s);s="";}
+      }
+      s+="]";
+    }
+    s+="]";
+  };
+  col("rpm",0);col("req",1);col("lph",2);col("cool",3);col("air",4);col("boost",5);col("volt",6);
+  s+="}";
+  web.sendContent(s);web.sendContent("");
+}
+// Reads a series file, picking at most 600 evenly spaced seconds.
+void sendSeriesFile(const char *path){
+  if(!sdReady||!cardInserted()||!SD.exists(path)){reply(false,"No recording for this",404);return;}
+  if(tripSeries&&tripSeriesId)tripSeries.flush();
+  File f=SD.open(path,FILE_READ);
+  if(!f){reply(false,"Cannot open the recording",500);return;}
+  SeriesHead h;
+  if(f.read((uint8_t*)&h,sizeof(h))!=sizeof(h)||h.magic!=SERIES_MAGIC){f.close();reply(false,"Unknown recording",500);return;}
+  const uint32_t total=(f.size()-sizeof(h))/sizeof(Sample);
+  const uint16_t step=total>600?(uint16_t)((total+599)/600):1;
+  const uint32_t n=(total+step-1)/step;
+  Sample *buf=(Sample*)ps_malloc(sizeof(Sample)*(n?n:1));
+  if(!buf){f.close();reply(false,"Out of memory",500);return;}
+  uint32_t got=0;
+  for(uint32_t i=0;i<total&&got<n;i+=step){
+    f.seek(sizeof(h)+i*sizeof(Sample));
+    if(f.read((uint8_t*)&buf[got],sizeof(Sample))!=sizeof(Sample))break;
+    ++got;
+  }
+  f.close();
+  sendSeries(buf,got,h,step);
+  free(buf);
+}
+void handleEvents(){
+  String s;s.reserve(160*eventCount+200);
+  s+="{\"n\":";s+=unackedEvents();s+=",\"alarm\":";s+=diagRules.alarm()?"true":"false";s+=",\"warn\":";s+=diagRules.warning()?"true":"false";
+  s+=",\"boot\":";s+=bootId;s+=",\"up\":";s+=(unsigned long)(elapsedMs()/1000ULL);
+  s+=",\"list\":[";
+  for(uint8_t i=0;i<eventCount;i++){
+    const EventRec &e=events[i];
+    if(i)s+=',';
+    s+="{\"id\":";s+=e.id;s+=",\"utc\":";s+=(long long)e.utc;s+=",\"boot\":";s+=e.boot;s+=",\"up\":";s+=e.up;
+    s+=",\"t\":\"";s+=e.type<diag::T_COUNT?diag::TYPE_ID[e.type]:"";s+="\",\"eng\":";s+=e.eng;s+=",\"sev\":";s+=e.sev;
+    s+=",\"v\":";jnum(s,e.value,2);s+=",\"ref\":";jnum(s,e.ref,2);s+=",\"box\":";s+=e.box;s+=",\"ack\":";s+=e.ack;s+='}';
+  }
+  s+="]}";
+  sendJSON(200,s);
+}
+void handleEventsAck(){
+  const String v=web.arg("id");
+  for(uint8_t i=0;i<eventCount;i++)if(v=="all"||(uint32_t)v.toInt()==events[i].id)events[i].ack=1;
+  diagRules.acknowledge();
+  saveEvents();
+  reply(true,"Marked as seen");
+}
+void handleMark(){
+  diagRules.mark();
+  markLedUntil=millis()+1600;
+  reply(true,"Marked. The two minutes before and after are saved");
+}
+void handleEventSeries(){
+  const uint32_t id=web.arg("id").toInt();
+  EventRec *e=nullptr;
+  for(uint8_t i=0;i<eventCount;i++)if(events[i].id==id){e=&events[i];break;}
+  if(!e){reply(false,"Event not found",404);return;}
+  if(e->box==2){char name[32];snprintf(name,sizeof(name),"/EVENTS/E%06lu.BIN",(unsigned long)id);sendSeriesFile(name);return;}
+  // Not on the card (yet): from the last hour, if it is still there.
+  if(!ring||e->boot!=bootId){reply(false,"This recording was not saved",404);return;}
+  Sample *buf=(Sample*)ps_malloc(sizeof(Sample)*250);
+  if(!buf){reply(false,"Out of memory",500);return;}
+  const uint16_t n=ringCopy(e->up>120?e->up-120:0,e->up+120,buf,250);
+  SeriesHead h={SERIES_MAGIC,id,bootId,n?buf[0].up:e->up,e->utc?e->utc-(int64_t)(e->up-(n?buf[0].up:e->up)):0,(int8_t)portIndex(),{0,0,0}};
+  sendSeries(buf,n,h,1);
+  free(buf);
+}
+void handleTripSeries(){
+  char name[32];snprintf(name,sizeof(name),"/TRIPS/T%06lu.BIN",(unsigned long)web.arg("id").toInt());
+  sendSeriesFile(name);
+}
+// The last minutes from the ring, for the live charts.
+void handleRecentSeries(){
+  if(!ring){reply(false,"No recording",404);return;}
+  const uint32_t secs=constrain(web.arg("secs").toInt(),60,3600),up=(uint32_t)(elapsedMs()/1000ULL);
+  const uint16_t step=secs>600?(uint16_t)(secs/600):1,want=secs/step+1;
+  Sample *all=(Sample*)ps_malloc(sizeof(Sample)*min<uint32_t>(secs+1,RING_N));
+  if(!all){reply(false,"Out of memory",500);return;}
+  const uint16_t got=ringCopy(up>secs?up-secs:0,up,all,min<uint32_t>(secs+1,RING_N));
+  uint16_t n=0;for(uint16_t i=0;i<got&&n<want;i+=step)all[n++]=all[i];
+  const int64_t nowUtc=validWall()?(int64_t)time(nullptr):0;
+  SeriesHead h={SERIES_MAGIC,0,bootId,n?all[0].up:up,nowUtc&&n?nowUtc-(int64_t)(up-all[0].up):0,(int8_t)portIndex(),{0,0,0}};
+  sendSeries(all,n,h,step);
+  free(all);
+}
+// Trip logs as one CSV for a spreadsheet: one row per second.
+void handleExportSeries(){
+  uint32_t ids[MAX_TRIPS];uint8_t n;
+  if(!parseIds(web.arg("ids"),ids,n)){web.send(400,"text/plain","No trips selected");return;}
+  if(!sdReady||!cardInserted()){web.send(409,"text/plain","No SD card");return;}
+  if(tripSeries)tripSeries.flush();
+  web.sendHeader("Content-Disposition","attachment; filename=EngineLink-trip-log.csv");
+  web.setContentLength(CONTENT_LENGTH_UNKNOWN);
+  web.send(200,"text/csv","");
+  const int pi=portIndex();
+  const char *A=pi==1?"stbd":"port",*B=pi==1?"port":"stbd";
+  if(pi<0){A="j7";B="j6";}
+  String s="trip_id,time_utc,seconds";
+  const char *cols[]={"rpm","requested_rpm","fuel_lph","coolant_c","charge_air_c","boost_kpa","battery_v"};
+  for(const char *side:{A,B})for(const char *c:cols){s+=',';s+=side;s+='_';s+=c;}
+  s+="\n";web.sendContent(s);s="";
+  for(uint8_t j=0;j<n;j++){
+    char name[32];snprintf(name,sizeof(name),"/TRIPS/T%06lu.BIN",(unsigned long)ids[j]);
+    File f=SD.open(name,FILE_READ);
+    if(!f)continue;
+    SeriesHead h;
+    if(f.read((uint8_t*)&h,sizeof(h))!=sizeof(h)||h.magic!=SERIES_MAGIC){f.close();continue;}
+    Sample x;
+    while(f.read((uint8_t*)&x,sizeof(x))==sizeof(x)){
+      const long sec=(long)x.up-(long)h.startUp;
+      s+=ids[j];s+=',';
+      if(h.startUtc){char b[24];time_t u=(time_t)(h.startUtc+sec);struct tm tmv;gmtime_r(&u,&tmv);strftime(b,sizeof(b),"%Y-%m-%d %H:%M:%S",&tmv);s+=b;}
+      s+=',';s+=sec;
+      for(uint8_t c:{(uint8_t)0,(uint8_t)1}){
+        auto put=[&](int16_t v,float k,int d){s+=',';if(v!=NA16)s+=String((float)v/k,d);};
+        put(x.rpm[c],1,0);put(x.req[c],1,0);put(x.lph10[c],10,1);put(x.cool10[c],10,1);put(x.air10[c],10,1);put(x.boost10[c],10,1);put(x.volt100[c],100,2);
+      }
+      s+="\n";
+      if(s.length()>3000){web.sendContent(s);s="";}
+    }
+    f.close();
+  }
+  web.sendContent(s);web.sendContent("");
+}
+void handleLife(){
+  String s;s.reserve(2400);
+  s+="{\"port\":";s+=portIndex();
+  for(uint8_t c=0;c<2;c++){
+    s+=c?",":",\"e\":[";
+    s+="{\"sec\":[";for(uint8_t b=0;b<diag::LIFE_BUCKETS;b++){if(b)s+=',';s+=life.sec[c][b];}
+    s+="],\"starts\":";s+=life.starts[c];s+=",\"coldStarts\":";s+=life.coldStarts[c];
+    s+=",\"hotSec\":";s+=life.hotSec[c];s+=",\"coldLoadSec\":";s+=life.coldLoadSec[c];s+=",\"overSec\":";s+=life.overSec[c];
+    s+=",\"longIdles\":";s+=life.longIdles[c];
+    s+=",\"startVolt\":";if(life.lowStartVolt[c]>0)jnum(s,life.lowStartVolt[c],2);else s+="null";
+    s+=",\"wot\":";jnum(s,life.wotRpm[c],0);s+=",\"wotBest\":";jnum(s,life.wotRpmBest[c],0);
+    s+=",\"hours\":";jnum(s,totals.lastEcuHours[c],1);
+    s+=",\"base\":[";
+    for(uint8_t b=0;b<RPM_BUCKETS;b++){
+      if(b)s+=',';
+      if(health.baseTrips[c][b]<3){s+="null";continue;}
+      s+='[';for(uint8_t m=0;m<HEALTH_METRICS;m++){if(m)s+=',';jnum(s,health.base[c][b][m],2);}s+=']';
+    }
+    s+="]}";
+  }
+  s+="],\"events\":{";
+  bool first=true;
+  for(uint8_t k=1;k<diag::T_COUNT;k++)if(life.eventsBy[k]){if(!first)s+=',';first=false;s+='"';s+=diag::TYPE_ID[k];s+="\":";s+=life.eventsBy[k];}
+  s+="}}";
+  sendJSON(200,s);
+}
+// ---------- Status LED ----------
+ledlang::State ledStateNow(){
+  using namespace ledlang;
+  if(otaActive||fwState==3)return S_UPDATE;
+  if(millis()<3000)return S_BOOT;
+  if(diagRules.alarm())return S_ALARM;
+  if(sdFaultLatched)return S_SD_ERROR;
+  if(lastUARTFaultMs&&(uint32_t)(millis()-lastUARTFaultMs)<30000UL)return S_RX_ERROR;
+  if(diagRules.warning())return S_WARNING;
+  if(!sdReady)return S_NO_SD;
+  if(calActive)return S_TEST;
+  if(!cfg.completed)return S_SETUP;
+  if(cfg.router&&cfg.ssid.length()&&WiFi.status()!=WL_CONNECTED)return S_ROUTER;
+  const uint64_t now=elapsedMs();
+  for(uint8_t c=0;c<2;c++)if(kad[c].polling&&rpmFresh(c,now))return S_LIVE;
+  if(cfg.protocol!=PROTO_KAD&&(rpmFresh(0,now)||rpmFresh(1,now)))return S_LIVE;
+  return S_READY;
+}
+constexpr uint32_t LED_DEMO_STEP_MS=3000;
+bool ledTestRunning(){return ledTestStartedMs&&(uint32_t)(millis()-ledTestStartedMs)<LED_DEMO_STEP_MS*ledlang::S_COUNT;}
 void updateLED(){
-  if((uint32_t)(millis()-lastLed)<75)return;
+  if((uint32_t)(millis()-lastLed)<40)return;
   lastLed=millis();
-  currentLED=selectedLED();
-  const uint32_t t=millis();
-  const uint32_t beat=t%1800;
-  bool on=true;
-  uint8_t level=ledBrightness;
-  uint32_t color=0x13A880;
-  switch(currentLED){
-    case LS_SETUP: color=0x1C6EED;level=10+(uint8_t)(32.0f*(0.5f+0.5f*sinf((t%2000)*0.00314159f)));break;
-    case LS_ROUTER: color=0xE59A21;on=(t%1200)<450;break;
-    case LS_NO_SD: color=0xDF9D30;on=beat<120||((beat>250)&&(beat<380));break;
-    case LS_WRITE_ERROR: color=0xE92E35;on=(t%360)<180;break;
-    case LS_RX_ERROR: color=0xDF4150;on=beat<160||(beat>320&&beat<480);break;
-    case LS_TEST: color=0x16C7CD;on=(t%1100)<200;break;
-    case LS_UPDATE: color=0xD8E4EA;on=(t%600)<300;break;
-    case LS_BOOT: color=0x1C6EED;break;
-    case LS_READY: color=0x17A77E;level=27;break;
-  }
-  if(!on)level=0;
-  uint32_t rgb=level?color:0;
-  uint32_t fingerprint=(rgb<<8)|level;
+  const ledlang::Pattern *p;
+  uint32_t t=millis();
+  if(ledTestRunning()){
+    const uint32_t k=(t-ledTestStartedMs)/LED_DEMO_STEP_MS;
+    p=&ledlang::PATTERNS[k];t=(t-ledTestStartedMs)%LED_DEMO_STEP_MS;
+  }else if((int32_t)(markLedUntil-t)>0){p=&ledlang::MARK;t=t-(markLedUntil-1600);}
+  else p=&ledlang::PATTERNS[ledStateNow()];
+  uint32_t rgb;uint8_t level;
+  ledlang::at(*p,t,rgb,level);
+  const uint32_t fingerprint=(rgb<<8)|level;
   if(fingerprint==ledPrev)return;
   led.setBrightness(level);
   led.setPixelColor(0,led.Color((rgb>>16)&255,(rgb>>8)&255,rgb&255));
   led.show();
   ledPrev=fingerprint;
+}
+// The LED language for the app's legend.
+void handleLed(){
+  String s;s.reserve(3200);
+  s+="{\"now\":\"";s+=ledlang::PATTERNS[ledStateNow()].id;s+="\",\"demo\":";
+  if(ledTestRunning()){s+=(millis()-ledTestStartedMs)/LED_DEMO_STEP_MS;}else s+="null";
+  s+=",\"stepMs\":";s+=LED_DEMO_STEP_MS;
+  s+=",\"colours\":{";
+  for(uint8_t c=1;c<7;c++){if(c>1)s+=',';s+='"';s+=ledlang::COLOUR_NAME[c];s+="\":\"#";char b[8];snprintf(b,sizeof(b),"%06lX",(unsigned long)ledlang::RGB[c]);s+=b;s+='"';}
+  s+="},\"patterns\":[";
+  for(uint8_t i=0;i<=ledlang::S_COUNT;i++){
+    const ledlang::Pattern &p=i<ledlang::S_COUNT?ledlang::PATTERNS[i]:ledlang::MARK;
+    if(i)s+=',';
+    s+="{\"id\":\"";s+=p.id;s+="\",\"name\":";jsonString(s,p.name);s+=",\"meaning\":";jsonString(s,p.meaning);
+    s+=",\"breathe\":";s+=p.breathe?"true":"false";s+=",\"steps\":[";
+    for(uint8_t k=0;k<p.n;k++){if(k)s+=',';s+="[\"";s+=ledlang::COLOUR_NAME[p.s[k].c];s+="\",";s+=p.s[k].ms;s+=']';}
+    s+="]}";
+  }
+  s+="]}";
+  sendJSON(200,s);
 }
 void saveSettings(){
   pref.begin("enginelink",false);
@@ -2430,8 +2841,8 @@ void handleState(){
   s+=",\"available\":";s+=(sdReady&&!calActive&&testFileAvailable)?"true":"false";
   // Report the real system state even while the LED demo sequence runs, so a
   // test never hides an active fault in the UI.
-  s+="},\"led\":{\"name\":";jsonString(s,ledStateName(ledFor(false)));
-  s+=",\"status\":";s+=(unsigned)ledFor(false);
+  s+="},\"led\":{\"name\":";jsonString(s,ledlang::PATTERNS[ledStateNow()].name);
+  s+=",\"status\":";s+=(unsigned)ledStateNow();
   s+=",\"testing\":";s+=ledTestRunning()?"true":"false";
   s+="},\"hardware\":{\"heap\":";
   s+=ESP.getFreeHeap();
@@ -2636,7 +3047,7 @@ void handleTime(){
 }
 void handleLEDTest(){
   ledTestStartedMs=millis();ledPrev=0xFFFFFFFF;
-  reply(true,"LED status sequence started (16 seconds).");
+  reply(true,"Showing every LED pattern, 3 seconds each");
 }
 void handleDownload(){
   if(!sdReady||!sessionName.length()||!SD.exists(sessionName)){web.send(404,"text/plain","No session file");return;}
@@ -2667,7 +3078,7 @@ void handleKadPoll(){
   String why;
   if(!kad[ch].polling&&!startPolling(ch,why)){reply(false,why,409);return;}
   kad[ch].byAuto=false;kad[ch].byTest=false;
-  reply(true,String("Polling ")+(ch==0?"J7":"J6")+": reading parameters about 4 times per second. It stops after a restart.");
+  reply(true,String("Polling ")+(ch==0?"J7":"J6")+": reading as fast as the engine answers. It stops after a restart.");
 }
 void applyProtocol(){
   for(uint8_t c=0;c<2;c++){
@@ -2781,6 +3192,13 @@ void handleLive(){
   s+="},\"test\":";s+=calActive?"true":"false";
   s+=",\"rb\":";s+=rollbackPending?"true":"false";
   s+=",\"fw\":";s+=(unsigned)fwState;
+  s+=",\"led\":\"";s+=ledlang::PATTERNS[ledStateNow()].id;s+='"';
+  s+=",\"ev\":{\"n\":";s+=unackedEvents();s+=",\"alarm\":";s+=diagRules.alarm()?"true":"false";s+=",\"warn\":";s+=diagRules.warning()?"true":"false";
+  s+=",\"last\":";
+  if(eventCount){const EventRec &e=events[0];s+="{\"id\":";s+=e.id;s+=",\"t\":\"";s+=diag::TYPE_ID[e.type<diag::T_COUNT?e.type:0];s+="\",\"eng\":";s+=e.eng;s+=",\"sev\":";s+=e.sev;
+    s+=",\"v\":";jnum(s,e.value,2);s+=",\"ref\":";jnum(s,e.ref,2);s+=",\"utc\":";s+=(long long)e.utc;s+=",\"ack\":";s+=e.ack;s+='}';}
+  else s+="null";
+  s+='}';
   s+='}';
   sendJSON(200,s);
 }
@@ -3124,6 +3542,20 @@ void handleDiag(){
   s+="],\"gaps\":[";s+=motor[0].gaps;s+=',';s+=motor[1].gaps;
   s+="],\"focus\":";s+=(kadFocusIndex&&(int32_t)(kadFocusUntil-millis())>0)?kadFocusIndex:0;
   s+="}";
+  s+=",\"reading\":[";
+  for(uint8_t c=0;c<2;c++){
+    const KadLink &k=kad[c];
+    if(c)s+=',';
+    s+="{\"polling\":";s+=k.polling?"true":"false";
+    s+=",\"interval\":";s+=k.intervalMs;s+=",\"rate\":";jnum(s,k.polling?1000.0f/k.intervalMs:0,1);
+    s+=",\"answered\":";jnum(s,k.answered,2);
+    s+=",\"skip\":[";bool f=true;for(uint8_t i=0;i<KAD_SLOW_N;i++)if(k.skip>>i&1){if(!f)s+=',';f=false;s+=KAD_POLL_SLOW[i];}
+    s+="],\"disc\":{\"active\":";s+=k.discActive?"true":"false";s+=",\"done\":";s+=k.discDone?"true":"false";
+    s+=",\"pos\":";s+=k.discPos;s+=",\"found\":[";f=true;
+    for(uint8_t i=0;i<64;i++)if(k.discFound>>i&1){if(!f)s+=',';f=false;s+=KAD_DISC_FIRST+i;}
+    s+="]}}";
+  }
+  s+="]";
   s+=",\"wifi\":{\"apRestarts\":";s+=apRestarts;s+=",\"joins\":";s+=(unsigned long)apJoins;s+=",\"leaves\":";s+=(unsigned long)apLeaves;
   s+=",\"reason\":";s+=(unsigned)apReason;s+=",\"staFails\":";s+=staFails;s+=",\"staDrops\":";s+=(unsigned long)staDisconnects;
   s+=",\"staConnects\":";s+=staConnects;s+=",\"ch\":";s+=apChannelNow;
@@ -3140,6 +3572,16 @@ void handleDiag(){
 }
 // 30 s read test on one connector. Polls (read requests only) unless the
 // connector is already being polled, then counts the answers.
+// "Discover more values": asks once for every index from 256 to 319 with the
+// same read request, in the slow slot, and lists the ones that are answered.
+void handleKadDiscover(){
+  const int ch=web.arg("ch").toInt();
+  if(ch<0||ch>1){reply(false,"Choose an engine",400);return;}
+  KadLink &k=kad[ch];
+  if(!k.polling){reply(false,"Start reading this engine first",409);return;}
+  k.discActive=true;k.discPos=0;k.discFound=0;k.discDone=false;
+  reply(true,"Asking for 64 values, about a minute");
+}
 // The app studies one value closely (learning the gear bits): ask for it in
 // every slow slot for up to 90 seconds.
 void handleDiagFocus(){
@@ -3249,7 +3691,9 @@ void handleSdWipe(){
   if(calActive)finishCalibration(false);
   const bool wasLogging=sdLogging;
   if(sdLogging)stopLog();
+  if(tripSeries)tripSeries.close();
   const uint32_t n=removeTree("/");
+  if(totals.tripActive)tripSeriesOpen();
   refreshTestAvailable();
   if(wasLogging)initSD();
   reply(true,String("SD card wiped: ")+n+" files deleted");
@@ -3582,6 +4026,16 @@ void initializeWeb(){
   web.on("/api/diag",HTTP_GET,handleDiag);
   web.on("/api/diag/test",HTTP_POST,handleDiagTest);
   web.on("/api/diag/focus",HTTP_POST,handleDiagFocus);
+  web.on("/api/kad/discover",HTTP_POST,handleKadDiscover);
+  web.on("/api/events",HTTP_GET,handleEvents);
+  web.on("/api/events/ack",HTTP_POST,handleEventsAck);
+  web.on("/api/mark",HTTP_POST,handleMark);
+  web.on("/api/event/series",HTTP_GET,handleEventSeries);
+  web.on("/api/trip/series",HTTP_GET,handleTripSeries);
+  web.on("/api/series/recent",HTTP_GET,handleRecentSeries);
+  web.on("/api/export/series.csv",HTTP_GET,handleExportSeries);
+  web.on("/api/life",HTTP_GET,handleLife);
+  web.on("/api/led",HTTP_GET,handleLed);
   web.on("/api/sd/info",HTTP_GET,handleSdInfo);
   web.on("/api/sd/wipe",HTTP_POST,handleSdWipe);
   web.on("/api/export/trips.csv",HTTP_GET,handleExportTrips);
@@ -3637,6 +4091,9 @@ void setup(){
   loadFuel();
   recalibrate();
   loadHealth();
+  loadEvents();
+  loadLife();
+  ring=(Sample*)ps_malloc(sizeof(Sample)*RING_N);
   loadDiag();
   lastEngineOnMs=millis();
   // A trip that was still open when power went is closed with its last values.

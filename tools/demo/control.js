@@ -11,7 +11,10 @@ const scenes={
   diag:async()=>{await reset();__demo.setOdd(false);goPage('diag','more');await wait(500);render(true);await wait(60);scrollToHd('Calibration');},
   quality:async()=>{await reset();goPage('diag','more');await wait(500);render(true);await wait(60);scrollToHd('Engine data');},
   gear:async()=>{await reset();__demo.resetGear();goPage('diag','more');await wait(400);openSheet('gear');},
-  engines:async()=>{await reset();goTab('engines');}
+  engines:async()=>{await reset();goTab('engines');},
+  events:async()=>{await reset();goPage('events','more');await wait(500);const b=document.querySelector('[data-a=evOpen]');if(b)b.click();},
+  balance:async()=>{await reset();goTab('engines');await wait(700);const c=[...document.querySelectorAll('.ct')].find(x=>x.textContent.trim()==='Port and starboard');if(c)c.scrollIntoView({block:'start'});},
+  led:async()=>{await reset();goPage('led','more');}
 };
 addEventListener('message',e=>{const s=e.data&&e.data.scene;if(scenes[s])scenes[s]();});
 })();

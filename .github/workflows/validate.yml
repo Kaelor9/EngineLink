@@ -40,5 +40,13 @@ jobs:
         run: |
           g++ -O2 -std=c++17 -Wall -I firmware/EngineLink tools/test_fuelcal.cpp -o /tmp/test_fuelcal
           /tmp/test_fuelcal
+      - name: Test the status light language
+        run: |
+          g++ -O2 -std=c++17 -Wall -I firmware/EngineLink tools/test_ledpatterns.cpp -o /tmp/test_ledpatterns
+          /tmp/test_ledpatterns
+      - name: Test the diagnosis rules on simulated trips
+        run: |
+          g++ -O2 -std=c++17 -Wall -I firmware/EngineLink tools/test_diagrules.cpp -o /tmp/test_diagrules
+          /tmp/test_diagrules
       - name: Check version is defined once in firmware
         run: grep -E '^#define EL_VERSION "[0-9]+\.[0-9]+\.[0-9]+(-[a-z]+)?"' firmware/EngineLink/EngineLink.ino
