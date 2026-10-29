@@ -1,6 +1,15 @@
-# EngineLink application v0.8.0
+# EngineLink application v0.8.1
 
 This is a **working application foundation**, not a validated production release. The former Lab firmware is retained under \`experiments/\`. The application is in \`firmware/EngineLink/\`.
+
+## Changes in 0.8.1: boat router
+
+- **The boat router connection comes back by itself, quickly.** After a drop EngineLink tried again after 15 s, then waited longer each time, up to 5 minutes, so one drop could leave it off the router for a long time. Now it tries after 8 s, 16 s and then every 30 s (on the router's own channel, which does not disturb the phones).
+- **A router that changed channel is found again.** Routers move channels by themselves; EngineLink only searched for the router again when no phone was on the EngineLink Wi-Fi, so with a phone joined it never found it. It now searches after a few failed tries, at most every 5 minutes while phones are joined.
+- **Keep-alive to the router** every 25 seconds, for routers that drop quiet clients.
+- **Why it dropped**: Diagnostics → Wi-Fi shows the last router drop in plain words (for example "the router was not heard for a while") and how long it has been off.
+- The status light shows "boat router not reached" only after 15 seconds without it, not for every short drop.
+- The Range card says why there are no nautical miles: they need the boat speed from GPS (Settings › Speed source).
 
 ## Changes in 0.8.0: robustness
 

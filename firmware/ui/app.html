@@ -260,6 +260,8 @@ const dayLabel=t=>{
 const dur=s=>{s=Math.max(0,Math.round(s/60));const h=Math.floor(s/60),m=s%60;return h?h+' h '+String(m).padStart(2,'0')+' m':m+' min';};
 const durShort=s=>{s=Math.max(0,Math.round(s/60));const h=Math.floor(s/60),m=s%60;return h?h+' h '+String(m).padStart(2,'0'):m+' min';};
 
+// Why the connection to the boat router dropped (Wi-Fi reason codes).
+const STAR={2:'the router ended the login',3:'the router ended the connection',4:'the router dropped it for being quiet',8:'EngineLink left (reconnecting)',15:'wrong password?',200:'the router was not heard for a while (weak or blocked signal)',201:'the router was not found on its channel',202:'the router refused the password',203:'the router refused the connection',204:'the login timed out (password?)',205:'the connection failed',206:'the router restarted',207:'moved to a stronger access point',209:'the router stopped answering',210:'the router uses a security EngineLink does not support',211:'the router uses a security EngineLink does not support'};
 const RESET={1:'power on',2:'reset button',3:'software or update',4:'crash',5:'watchdog',6:'watchdog',7:'watchdog',8:'deep sleep',9:'brownout (low voltage)',10:'SDIO',11:'USB (flashing or serial monitor)',12:'JTAG',14:'power glitch',15:'CPU lockup'};
 // Why a phone left the EngineLink network (Wi-Fi reason codes).
 const LEAVE={1:'unknown',2:'its login expired',3:'it left',4:'it was silent for 10 minutes',5:'too many phones',6:'not logged in',7:'not connected',8:'the phone left by itself (it may have switched to another Wi-Fi)',15:'password handshake timed out',16:'password handshake timed out',23:'login failed',200:'signal lost',201:'network not found',202:'wrong password',204:'password handshake timed out',205:'connection timed out'};
@@ -567,7 +569,7 @@ function rangeCard(){
   const nm=hours!=null&&fin(lv.sog)&&lv.sog>2?hours*lv.sog:null;
   return `<button class="card" data-a="tab" data-v="tank" style="text-align:left;width:100%;display:flex;justify-content:space-between;align-items:center"><div><span class="lbl" style="color:var(--blue)">${svg(IC.pin,16,'var(--blue)',2.2)}Range</span>
     <div style="font-size:30px;font-weight:700;margin-top:6px">${nm!=null?NF(nm,0)+' <span class="unit">nm</span> <span style="font-size:18px;font-weight:600" class="sub">· '+dur(hours*3600)+'</span>':hours!=null?dur(hours*3600):L(usable,0)+' <span class="unit">'+U.vu()+' usable</span>'}</div>
-    <div class="s13 sub" style="margin-top:2px">${hours!=null?(nm!=null?'at '+NF(lv.sog,1)+' kn, ':'at '+L(tot,1)+' '+U.ru()+', ')+(tk.reserve?'keeping '+tk.reserve+' % reserve':'until the tank is empty')+(fin(tk.pm)&&tk.pm>0?' · ± '+dur(tk.pm/tot*3600):''):'Shown in time once an engine runs'}</div></div><span class="sub">›</span></button>`;
+    <div class="s13 sub" style="margin-top:2px">${hours!=null?(nm!=null?'at '+NF(lv.sog,1)+' kn, ':'at '+L(tot,1)+' '+U.ru()+', ')+(tk.reserve?'keeping '+tk.reserve+' % reserve':'until the tank is empty')+(fin(tk.pm)&&tk.pm>0?' · ± '+dur(tk.pm/tot*3600):''):'Shown in time once an engine runs'}${nm==null?`<div class="s12 sub" style="margin-top:4px">${lv.sog==null?'Nautical miles need the boat speed from GPS: Settings › Speed source.':'Nautical miles show while the boat moves.'}</div>`:''}</div></div><span class="sub">›</span></button>`;
 }
 
 // ---------- Economy ----------
@@ -1266,6 +1268,7 @@ const PAGE_VIEWS={
     const w=d.wifi||{};
     h+=`<div class="hd">Wi-Fi</div><div class="sec"><div class="rowx"><div class="grid3" style="gap:8px">${[['Phones',lv.net.cl],['Channel',w.ch||lv.net.ch],['Network restarts',w.apRestarts??'—'],['Requests',w.httpServed??'—'],['Reused',w.httpServed?Math.round(w.httpReused/w.httpServed*100)+' %':'—'],['Slowest',w.httpSlowMs!=null?w.httpSlowMs+' ms':'—'],['Phone joins',w.joins??'—'],['Phone drops',w.leaves??'—'],['Missed here',S.failTotal||0],['Channel changes',w.chMoves??'—'],['Router drops',lv.net.rt?(w.staDrops??'—'):'—'],['Slow loop',w.loopMaxMs!=null?w.loopMaxMs+' ms':'—']].map(([k,v])=>`<div style="background:var(--track);border-radius:12px;padding:8px 10px"><div class="s12 sub">${k}</div><div style="font-weight:600;margin-top:2px">${v}</div></div>`).join('')}</div>
       ${w.leaves?`<div class="s12" style="margin-top:8px">Last phone drop: <b>${LEAVE[w.reason]||'code '+w.reason}</b></div>`:''}
+      ${lv.net.rt&&w.staDropAgo!=null?`<div class="s12" style="margin-top:6px">Last router drop ${dur(w.staDropAgo)} ago: <b>${STAR[w.staReason]||'code '+w.staReason}</b>${w.staDown!=null?` · not connected for ${dur(w.staDown)}`:''}</div>`:''}
       </div>${dlBlock(d.dl,d.sp)}<div class="rowx">
       <div class="s12 sub">"Missed here" counts the live updates this phone did not get since the app was opened. Up for ${dur(d.up||0)}${d.reset!=null?' · last restart: '+(RESET[d.reset]||'code '+d.reset):''}.</div></div></div>`;
     h+=restartsBlock(d);
