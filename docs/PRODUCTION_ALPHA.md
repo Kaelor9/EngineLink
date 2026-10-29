@@ -1,6 +1,10 @@
-# EngineLink application v0.7.3
+# EngineLink application v0.7.4
 
 This is a **working application foundation**, not a validated production release. The former Lab firmware is retained under \`experiments/\`. The application is in \`firmware/EngineLink/\`.
+
+## Changes in 0.7.4: fast raw download
+
+- **Raw engine data downloads quickly.** The raw export sent every row as three tiny pieces, each its own network packet, so it ran at about 1 kB a second and browsers gave up on a long trip ("Download failed"). It now reads the SD card in 4 kB blocks and sends 8 kB at a time, a few hundred times fewer packets. While an export runs EngineLink does nothing else, so a fast export also means a shorter pause in reading the engines.
 
 ## Changes in 0.7.3: protocol safety
 
