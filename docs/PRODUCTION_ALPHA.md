@@ -1,6 +1,11 @@
-# EngineLink application v0.7.6
+# EngineLink application v0.7.7
 
 This is a **working application foundation**, not a validated production release. The former Lab firmware is retained under \`experiments/\`. The application is in \`firmware/EngineLink/\`.
+
+## Changes in 0.7.7: steady engine reading
+
+- **Starboard (or port) no longer stops being read for no reason.** When EngineLink was busy for a moment (a download, a report, a page), it judged its request unanswered before it had looked at the answer that was already waiting, and sent the next one. The echo of the earlier request then looked like a request from another device, so reading stopped with "Another device already polls this engine", and a late answer could be stored under the wrong value. Now EngineLink reads what has arrived before it decides, always recognises its own requests, only accepts an answer after its own request was seen on the cable, and only steps back for another device that keeps asking (three requests within 10 seconds).
+- Run "Discover more values" again: the earlier list (every number answered) came from this mix-up.
 
 ## Changes in 0.7.6: connection
 
