@@ -76,7 +76,7 @@ main::-webkit-scrollbar{display:none}
 .tog.on{background:var(--teal)}.tog.on::after{left:23px}
 .field{min-height:46px;border-radius:12px;background:var(--track);padding:0 14px;font-size:16px;width:100%}
 .dim{opacity:.45;pointer-events:none}
-nav{flex:none;display:grid;grid-template-columns:repeat(5,minmax(0,1fr));background:var(--nav);border-top:1px solid var(--line);padding:0 env(safe-area-inset-right) max(8px,env(safe-area-inset-bottom)) env(safe-area-inset-left);min-height:72px}
+nav{flex:none;display:grid;grid-template-columns:repeat(5,minmax(0,1fr));background:var(--nav);border-top:1px solid var(--line);padding:0 env(safe-area-inset-right) max(8px,env(safe-area-inset-bottom),var(--home-bar,0px)) env(safe-area-inset-left);min-height:72px}
 nav button{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;color:var(--sub);font-size:10.5px;font-weight:550;padding-top:8px}
 nav button.on{color:var(--teal)}
 nav svg{width:26px;height:26px}
@@ -133,8 +133,13 @@ function fitScreen(){
   // bar, 20 pt on iPhones with a home button and on iPads. A correct page is
   // short by one status bar, the bug by two.
   const minBar=safeBottom()>=30&&tall<1000?44:20;
-  if(IOS&&standalone&&!landscape&&missing>=minBar*1.5&&missing<=130){de.style.setProperty('--app-h',(innerHeight+missing/2)+'px');de.classList.add('fill');}
-  else de.classList.remove('fill');
+  if(IOS&&standalone&&!landscape&&missing>=minBar*1.5&&missing<=130){
+    // The page now reaches the bottom edge, but iOS reports no inset there
+    // because it thinks the page ends above it: keep the menu clear of the
+    // home bar ourselves (34 pt on iPhones without a home button, 20 on iPads).
+    de.style.setProperty('--app-h',(innerHeight+missing/2)+'px');de.classList.add('fill');
+    de.style.setProperty('--home-bar',(tall>=812&&tall<1000?34:tall>=1000?20:0)+'px');
+  }else{de.classList.remove('fill');de.style.removeProperty('--home-bar');}
 }
 fitScreen();addEventListener('resize',fitScreen);addEventListener('orientationchange',()=>setTimeout(fitScreen,300));
 'use strict';
@@ -258,8 +263,23 @@ async function post(u,data={},t=10000){
   }catch(e){return {ok:false,message:'No answer from EngineLink. Check the Wi-Fi connection.'};}
   finally{clearTimeout(id);}
 }
-function download(url){const a=document.createElement('a');a.href=BASE+url;a.className='dl';a.setAttribute('download','');document.body.appendChild(a);a.click();setTimeout(()=>a.remove(),1000);}
-function saveFile(name,text,type='application/json'){download(URL.createObjectURL(new Blob([text],{type})));}
+// A home-screen app on iPhone shows a download full screen with no way back,
+// so there the file opens in a Safari window instead (Done returns here).
+const IOS_APP=()=>IOS&&(navigator.standalone===true||matchMedia('(display-mode: standalone)').matches);
+function clickLink(href,name){const a=document.createElement('a');a.href=href;a.className='dl';a.setAttribute('download',name||'');document.body.appendChild(a);a.click();setTimeout(()=>a.remove(),1000);}
+function download(url){
+  if(IOS_APP()){
+    const w=window.open(BASE+url,'_blank');
+    if(w)toast('Opens in Safari: save it with the share button, then tap Done');
+    else{S.file={url:BASE+url};openSheet('file');}
+    return;
+  }
+  clickLink(BASE+url);
+}
+function saveFile(name,text,type='application/json'){
+  if(IOS_APP()){S.file={name,text};openSheet('file');return;}
+  const u=URL.createObjectURL(new Blob([text],{type}));clickLink(u,name);setTimeout(()=>URL.revokeObjectURL(u),5000);
+}
 
 // Live data about twice a second. When EngineLink does not answer, the last
 // values stay on screen (dimmed) and the app keeps trying, faster as soon as
@@ -1272,7 +1292,17 @@ function renderSheet(){
   const k=S.sheet;if(!k)return;
   const sh=$('#sheet'),grab='<div class="grab"></div>';
   let h='';
-  if(k==='gear'){
+  if(k==='file'){
+    const f=S.file||{};
+    h=f.url?`${grab}<div style="font-size:22px;font-weight:600">Open the file</div>
+        <div class="s14 sub">The file opens in a Safari window. Save it with the share button (Save to Files) or send it, then tap Done to come back here.</div>
+        <a class="btn pri" href="${esc(f.url)}" target="_blank" rel="noopener" onclick="setTimeout(()=>history.back(),400)" style="text-decoration:none;display:flex;align-items:center;justify-content:center">Open the file</a>
+        <button class="btn" data-a="close">Cancel</button>`
+      :`${grab}<div style="font-size:22px;font-weight:600">${esc(f.name||'File')}</div>
+        <div class="s14 sub">A home-screen app on iPhone cannot save this file directly. Copy it and paste it into a mail or a note.</div>
+        <textarea id="filetext" class="field" readonly style="height:180px;font:12px/1.35 ui-monospace,Menlo,monospace">${esc(f.text||'')}</textarea>
+        <div class="grid2" style="gap:10px"><button class="btn" data-a="close">Close</button><button class="btn pri" data-a="fileCopy">Copy</button></div>`;
+  }else if(k==='gear'){
     const g=S.gear||(S.gear={step:0,samples:[],busy:false,prog:0,res:null});
     if(g.res){
       const fmt=x=>x?'bits 0x'+x[0].toString(16).toUpperCase()+' = 0x'+x[1].toString(16).toUpperCase():'not found';
@@ -1448,6 +1478,7 @@ const A={
   testStop:async()=>{await act('/api/test/stop',{});load('state');},
   busRefresh:()=>load('state'),
   dl:v=>download(v),
+  fileCopy:()=>{const ta=$('#filetext');if(!ta)return;ta.focus();ta.setSelectionRange(0,ta.value.length);let ok=false;try{ok=document.execCommand('copy');}catch(e){}toast(ok?'Copied':'Select all and copy');},
   report:async()=>{const out={app:'EngineLink',made:new Date().toISOString()};
     for(const [k,u] of [['live','/api/live'],['state','/api/state'],['diag','/api/diag'],['fuel','/api/fuel'],['economy','/api/economy'],['trips','/api/trips'],['pids','/api/pids']]){try{out[k]=await get(u,8000);}catch(e){out[k]='unavailable';}}
     saveFile('EngineLink-diagnostics-'+Date.now()+'.json',JSON.stringify(out,null,1));},

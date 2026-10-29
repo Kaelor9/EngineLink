@@ -1,6 +1,11 @@
-# EngineLink application v0.7.0
+# EngineLink application v0.7.1
 
 This is a **working application foundation**, not a validated production release. The former Lab firmware is retained under \`experiments/\`. The application is in \`firmware/EngineLink/\`.
+
+## Changes in 0.7.1: iPhone menu and exports
+
+- **iPhone home-screen app: the menu is clear of the home bar.** When EngineLink stretches the app to the bottom of the screen (the iOS sizing fault fixed in 0.5.4), iOS reports no room for the home bar, so the menu labels sat under it. The menu now keeps the 34 pt the home bar needs on iPhones without a home button (20 pt on iPads).
+- **Exporting no longer traps the iPhone app.** A home-screen app on iPhone shows a download full screen with no way back, so you had to close the app. Now the file opens in a Safari window: save it with the share button (Save to Files) or send it, and tap Done to come back where you were. The diagnostics report, which is made in the app, is shown in a sheet with a Copy button. Other phones and browsers download as before.
 
 ## Changes in 0.7.0: diagnostics
 
