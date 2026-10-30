@@ -48,7 +48,7 @@
 #include "diagrules.h"
 #include "miniz.h"  // the deflate compressor in the chip's ROM
 
-#define EL_VERSION "0.8.3"
+#define EL_VERSION "0.9.0"
 // Releases list published by the Pages workflow; firmware files come from
 // GitHub Releases of the same repository. Nothing else is downloaded.
 #define EL_RELEASES_URL "https://kaelor9.github.io/EngineLink/releases.json"
@@ -2502,8 +2502,10 @@ void serviceNetwork(){
       // Never during a search for networks (a connect attempt cuts the search
       // short, so it found almost nothing), and give each attempt 20 s: many
       // routers take 5-10 s to let a device in.
-      if(scanBusy&&(int32_t)(staNextTry-millis())<5000)staNextTry=millis()+5000;
-      if((int32_t)(millis()-staNextTry)>=0){
+      if(scanBusy){
+        // Do not compete with an active router scan or count phantom failures.
+        if((int32_t)(staNextTry-millis())<5000)staNextTry=millis()+5000;
+      }else if((int32_t)(millis()-staNextTry)>=0){
         ++staFails;
         // Routers move to another channel by themselves; then reconnecting on
         // the old one never works. Search again after a few tries: right away
@@ -4281,7 +4283,7 @@ void fwWorker(void *){
           fwTotal=len;
           NetworkClient *stream=http.getStreamPtr();
           bool ok=Update.begin(len,U_FLASH);
-          uint8_t buf[2048];bool checked=false;uint32_t idle=millis();
+          uint8_t buf[2048];bool checked=false;uint8_t header[0x30]={};size_t headerBytes=0;uint32_t idle=millis();
           while(ok&&fwBytes<(size_t)len){
             const size_t avail=stream->available();
             if(!avail){
@@ -4292,13 +4294,23 @@ void fwWorker(void *){
             const int got=stream->readBytes(buf,min(avail,sizeof(buf)));
             if(got<=0)continue;
             idle=millis();
+            // The first TCP read need not contain the entire ESP32 header.
             if(!checked){
-              checked=true;
-              if(got<0x30||buf[0]!=0xE9||buf[0x20]!=0x32||buf[0x21]!=0x54||buf[0x22]!=0xCD||buf[0x23]!=0xAB){fwError="Not an EngineLink update file";ok=false;break;}
+              const size_t take=min((size_t)got,sizeof(header)-headerBytes);
+              memcpy(header+headerBytes,buf,take);
+              headerBytes+=take;
+              if(headerBytes==sizeof(header)){
+                checked=true;
+                if(header[0]!=0xE9||header[0x20]!=0x32||header[0x21]!=0x54
+                   ||header[0x22]!=0xCD||header[0x23]!=0xAB){
+                  fwError="Not an EngineLink update file";ok=false;break;
+                }
+              }
             }
             if(Update.write(buf,got)!=(size_t)got){fwError=Update.errorString();ok=false;break;}
             fwBytes+=got;
           }
+          if(ok&&!checked){fwError="Firmware header incomplete";ok=false;}
           if(ok&&!Update.end(true)){fwError=Update.errorString();ok=false;}
           if(!ok){Update.abort();fwState=9;}else fwState=4;
         }
