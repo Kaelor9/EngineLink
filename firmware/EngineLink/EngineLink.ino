@@ -3982,6 +3982,7 @@ void handleWifiScan(){
     scanBusy=true;scanCount=-1;scanStartedMs=millis();
   }
   String s="{\"busy\":";s+=scanBusy?"true":"false";
+  s+=",\"done\":";s+=scanCompletedMs>0?"true":"false";
   s+=",\"error\":";
   jsonString(s,!scanBusy&&scanCount==WIFI_SCAN_FAILED?String("Scan failed. Try again."):String(""));
   s+=",\"nets\":[";
