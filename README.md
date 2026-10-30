@@ -13,7 +13,7 @@
   <img src="https://img.shields.io/badge/Engines-2%C3%97%20J1708%20isolated-success" alt="2 × isolated J1708">
   <img src="https://img.shields.io/badge/Volvo%20Penta-KAD300%20%2F%20EDC%20I-0b5394" alt="Volvo Penta KAD300 / EDC I">
   <img src="https://img.shields.io/badge/NMEA%202000-listen--only-informational" alt="NMEA 2000 listen-only">
-  <img src="https://img.shields.io/badge/Firmware-0.9.5-orange" alt="Firmware 0.9.2">
+  <img src="https://img.shields.io/badge/Firmware-0.9.6-orange" alt="Firmware 0.9.2">
 </p>
 
 <p align="center">
@@ -74,7 +74,7 @@ EngineLink combines both on one board:
 - 🧾 **Lifetime totals** with engine hours that survive restarts and recalculate after calibration
 - 🔎 **Bus discovery:** every parameter your ECUs actually answer or send, with raw bytes
 - 🧪 **Guided engine test:** record steady RPM stages with your own reference readings, export CSV
-- 📶 **Steady Wi-Fi, offline first:** EngineLink Wi-Fi at `192.168.4.1` / `enginelink.local`, optional router. Power saving off, one fixed channel, sleeping phones kept, access point watchdog
+- 📶 **Two exclusive Wi-Fi modes:** EngineLink standalone AP at `192.168.4.1` / `enginelink.local` (factory default), or router-only STA at `enginelink.local`. Router failure restores the rescue AP after 45 seconds.
 - 🔄 **Firmware updates from GitHub** over the boat router, with automatic rollback, or from a file
 - 🩺 **Diagnostics** with a setup check, connection tests and calibration
 
@@ -168,7 +168,7 @@ See [KAD300 / EDC I](docs/KAD300_EDC1.md), [alpha status and safety](docs/PRODUC
 
 | Hardware | Firmware | Engine validation |
 |----------|----------|-------------------|
-| ✅ Revision 1 assembled | 🚧 0.9.5 | ⏳ Pending first KAD300 test |
+| ✅ Revision 1 assembled | 🚧 0.9.6 | ⏳ Pending first KAD300 test |
 
 | Area | Status |
 |------|--------|
@@ -195,7 +195,7 @@ See [KAD300 / EDC I](docs/KAD300_EDC1.md), [alpha status and safety](docs/PRODUC
 - [x] Bus discovery
 - [x] Wi-Fi firmware updates, from GitHub with rollback
 - [x] Phone app with trips, fuel log, economy and engine health
-- [x] Steady Wi-Fi: fixed channel, no power saving, access point watchdog
+- [x] Exclusive AP or STA: standalone Wi-Fi or boat router, 45-second rescue AP fallback
 - [x] Volvo Penta KAD / EDC I decoding and opt-in polling
 - [ ] KAD reply layout confirmed on the wire
 - [ ] Fuel factor and corrections confirmed tank to tank
