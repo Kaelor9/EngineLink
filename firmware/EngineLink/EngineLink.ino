@@ -3867,7 +3867,8 @@ void speedHttpTask(void *){
     const uint32_t begun=millis();
     size_t sent=0;
     while(sent<32768 && c.connected() && (uint32_t)(millis()-begun)<15000UL){
-      const size_t n=c.write(sample,sizeof(sample));
+      const size_t chunk=min((size_t)sizeof(sample),(size_t)(32768-sent));
+      const size_t n=c.write(sample,chunk);
       if(n==0)break;
       sent+=n;
       vTaskDelay(1);  // do not starve the Wi-Fi or engine tasks
