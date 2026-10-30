@@ -272,40 +272,69 @@ const LEAVE={1:'unknown',2:'its login expired',3:'it left',4:'it was silent for 
 let BASE='';
 function rememberIp(ip){if(!ip)return;try{localStorage.setItem('el.ip',ip);}catch(e){}}
 function hostCandidates(){
+  // Probe the currently loaded origin first: enginelink.local can resolve to
+  // the NEW IP after the phone changes from standalone AP to boat router.
+  // Then try the advertised .local name, last known router IP and the AP IP.
   const h=[''],add=x=>{if(x&&x!==location.origin&&!h.includes(x))h.push(x);};
-  add('http://192.168.4.1');
-  try{const ip=localStorage.getItem('el.ip');if(ip)add('http://'+ip);}catch(e){}
   let host='enginelink';try{host=localStorage.getItem('el.host')||host;}catch(e){}
   add('http://'+host+'.local');if(host!=='enginelink')add('http://enginelink.local');
+  try{const ip=localStorage.getItem('el.ip');if(ip)add('http://'+ip);}catch(e){}
+  add('http://192.168.4.1');
   return h;
 }
+let discoveryPending=null;
 async function findHost(){
-  for(const b of hostCandidates()){
-    if(b===BASE)continue;
-    const c=new AbortController(),id=setTimeout(()=>c.abort(),1500);
-    try{const r=await fetch(b+'/api/live',{cache:'no-store',signal:c.signal});if(r.ok){BASE=b;return await r.json();}}catch(e){}
-    finally{clearTimeout(id);}
-  }
-  return null;
+  // Serial probes took 6+ seconds on a disconnected network (4 x 1500ms).
+  // Race them in parallel; the first real EngineLink JSON wins. Keep the
+  // whole recovery bounded by a single 1800ms round.
+  if(discoveryPending)return discoveryPending;
+  discoveryPending=new Promise(resolve=>{
+    const hosts=hostCandidates(),controllers=[],timers=[];
+    let remaining=hosts.length,done=false;
+    const finish=(value,host)=>{
+      if(done)return;done=true;
+      if(host!==undefined)BASE=host;
+      for(const ctrl of controllers)ctrl.abort();
+      for(const id of timers)clearTimeout(id);
+      resolve(value);
+    };
+    for(const host of hosts){
+      const ctrl=new AbortController();controllers.push(ctrl);
+      const id=setTimeout(()=>ctrl.abort(),1800);timers.push(id);
+      (async()=>{
+        try{
+          const r=await fetch(host+'/api/live',{cache:'no-store',signal:ctrl.signal});
+          if(!r.ok)return;
+          const data=await r.json();
+          if(data&&Array.isArray(data.e)&&data.net)finish(data,host);
+        }catch(e){}finally{
+          clearTimeout(id);
+          if(--remaining===0)finish(null);
+        }
+      })();
+    }
+  });
+  try{return await discoveryPending;}finally{discoveryPending=null;}
 }
 // Live samples use a separate read-only HTTP listener (port 81) so a long
 // file download on port 80 cannot starve the dashboard. Fall back to port 80
 // for older firmware, browser demo and transient sidecar failures.
-let liveSidecarRetryAt=0;
+let liveSidecarRetryAt=0,liveSidecarWorked=false;
 async function get(u,t=3000){
   if(u==='/api/live'&&Date.now()>=liveSidecarRetryAt){
     try{
       const url=new URL(BASE||location.origin,location.href);
       if(url.protocol==='http:'){
         url.port='81';
-        const c=new AbortController(),id=setTimeout(()=>c.abort(),Math.min(1200,t));
+        const c=new AbortController(),id=setTimeout(()=>c.abort(),Math.min(liveSidecarWorked?800:350,t));
         try{
           const r=await fetch(url.origin+u,{cache:'no-store',signal:c.signal});
-          if(r.ok)return await r.json();
+          if(r.ok){liveSidecarWorked=true;return await r.json();}
         }finally{clearTimeout(id);}
       }
     }catch(e){}
-    liveSidecarRetryAt=Date.now()+15000;
+    liveSidecarWorked=false;
+    liveSidecarRetryAt=Date.now()+60000;
   }
   const c=new AbortController(),id=setTimeout(()=>c.abort(),t);
   try{const r=await fetch(BASE+u,{cache:'no-store',signal:c.signal});if(!r.ok)throw new Error('HTTP '+r.status);return await r.json();}
@@ -367,7 +396,7 @@ async function tick(){
     S.fails++;S.failTotal=(S.failTotal||0)+1;
     if(S.fails>=2)setConn(false);
     // Still nothing: the phone may have moved to another network.
-    if(S.fails>=3&&S.fails%3===0){const d=await findHost();if(d){S.live=d;S.liveAt=Date.now();S.fails=0;setConn(true);onLive();}}
+    if(S.fails>=2&&S.fails%2===0){const d=await findHost();if(d){S.live=d;S.liveAt=Date.now();S.fails=0;setConn(true);onLive();}}
   }finally{ticking=false;}
   schedule(S.fails?Math.min(400*S.fails,2000):Math.round(Math.min(2000,Math.max(500,(S.rtt||0)*1.5))));
 }
@@ -1632,7 +1661,7 @@ const A={
     setTimeout(()=>poll(0),800);
   },
   wifiPick:v=>{S.wifiPick=S.wifiPick===v?null:v;S.wifiPass='';render(true);},
-  wifiConnect:async v=>{if(!confirm('Switch EngineLink to the router? Its own Wi-Fi will turn off. Connect your phone to the router afterwards.'))return;const net=(S.scan?.nets||[]).find(n=>n.s===v);const r=await act('/api/wifi/connect',{ssid:v,pass:net&&!net.lock?'':S.wifiPass});if(r.ok){S.wifiPick=null;toast('Switch phone to your router, then open http://enginelink.local');setTimeout(()=>load('state'),8000);setTimeout(()=>load('state'),20000);}},
+  wifiConnect:async v=>{if(!confirm('Switch EngineLink to the router? Its own Wi-Fi will turn off. Connect your phone to the router afterwards.'))return;const net=(S.scan?.nets||[]).find(n=>n.s===v);const r=await act('/api/wifi/connect',{ssid:v,pass:net&&!net.lock?'':S.wifiPass});if(r.ok){S.wifiPick=null;toast('EngineLink is joining the router. Switch your phone to that Wi-Fi.');BASE='';liveSidecarWorked=false;liveSidecarRetryAt=Date.now()+3000;}},
   wifiForget:async()=>{if(!confirm('Switch to EngineLink Wi-Fi? The router connection will end.'))return;const r=await act('/api/wifi/forget',{});if(r.ok)toast('Switch phone to EngineLink Wi-Fi and open http://192.168.4.1');},
   // Firmware
   fwBeta:()=>{S.fwBeta=!S.fwBeta;render(true);},
