@@ -1,0 +1,37 @@
+name: Rebuild EngineLink web UI (test branch)
+
+on:
+  push:
+    branches:
+      - fix/wifi-http-stability-2026-10-30
+    paths:
+      - firmware/ui/app.html
+      - .github/workflows/refresh-ui-test.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  refresh-ui:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Regenerate embedded web UI
+        run: |
+          python3 tools/build_ui.py
+          python3 tools/build_ui.py --check
+      - name: Commit generated header
+        run: |
+          if ! git diff --quiet -- firmware/EngineLink/ui.h; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add firmware/EngineLink/ui.h
+            git commit -m "build: refresh embedded web UI from app.html"
+            git push
+          fi
