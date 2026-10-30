@@ -5,6 +5,10 @@ int main(){
   RouterGuard g;
   assert(!g.expired(123));
   g.attempt(1000);
+  // A router must be given several 20-second connection attempts, not
+  // abandoned at the old 45-second threshold.
+  static_assert(RouterGuard::CONNECT_TIMEOUT_MS==120000UL, "Router recovery window changed");
+  assert(!g.expired(1000+45000UL));
   assert(!g.expired(1000+RouterGuard::CONNECT_TIMEOUT_MS-1));
   assert(g.expired(1000+RouterGuard::CONNECT_TIMEOUT_MS));
   g.reset();assert(!g.expired(100000));
