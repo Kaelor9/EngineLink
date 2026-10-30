@@ -3,6 +3,7 @@
 Static contracts complement hardware tests; they cannot prove RF stability.
 """
 from pathlib import Path
+import re
 
 ino = Path("firmware/EngineLink/EngineLink.ino").read_text(encoding="utf-8")
 ui = Path("firmware/ui/app.html").read_text(encoding="utf-8")
@@ -36,14 +37,29 @@ assert "esp_wifi_disconnect()" not in forget
 assert "WiFi.disconnect(" not in forget
 assert "pendingNetwork=true" in forget
 
-# Association attempts are event driven; don't repeatedly cancel a live auth.
+# Use the ESP32 driver's native auto reconnect, matching the working
+# Marine RGB controller's Wi-Fi strategy. No custom WPA retry/disconnect loop.
 assert "!pendingNetwork&&(!routerConfigured()||routerHold)" in network, (
     "AP watchdog must not interrupt HTTP mode-switch acknowledgement"
 )
-assert "staDropEvents!=routerSeenDropEvents" in network
-assert "ROUTER_AUTH_RETRY_DELAY_MS" in network
-assert "routerResetPending" in network
-assert "RouterGuard::CONNECT_TIMEOUT_MS" in Path("firmware/EngineLink/routerguard.h").read_text() or "120000UL" in Path("firmware/EngineLink/routerguard.h").read_text()
+assert "WiFi.setAutoReconnect(true);" in apply_network
+assert "WiFi.setAutoReconnect(false);" in apply_network
+assert "WiFi.mode(WIFI_OFF);" in apply_network, (
+    "Hostname and interface must be configured while Wi-Fi is stopped"
+)
+assert apply_network.index("WiFi.mode(WIFI_OFF);") < apply_network.index("WiFi.setHostname(")
+assert apply_network.index("WiFi.setHostname(") < apply_network.index("WiFi.mode(WIFI_STA);")
+assert not re.search(r"(?m)^\s*(?:WiFi\.begin|WiFi\.disconnect|esp_wifi_disconnect)\(", network), (
+    "The service loop must never restart or disconnect a live STA association"
+)
+assert "WiFi.reconnect()" in network
+assert "ROUTER_LAST_RESORT_RETRY_MS=30000UL" in ino
+assert "routerGuard.expired(" in network and "parkRouter(" in network
+assert "staAssociated" in network, "Last-resort retry must not interrupt an associated STA"
+assert "STA_CONNECTED)staAssociated=true" in ino
+assert "staAssociated=false;" in ino
+assert "staDropEvents" not in ino and "routerResetPending" not in ino
+assert "120000UL" in Path("firmware/EngineLink/routerguard.h").read_text()
 
 # A 32KiB network test previously froze the normal HTTP loop for 33s.
 assert "ChunkOut" not in speed_main and "beginDownload(" not in speed_main
