@@ -4009,7 +4009,10 @@ void handleWifiConnect(){
   cfg.router=true;cfg.ssid=ssid;cfg.wifiPassword=pass;cfg.completed=true;
   saveSettings();
   staBssidKnown=false;
-  for(uint8_t i=0;i<scanEntriesCount;i++){
+  // A saved scan is useful for displaying SSIDs, but a router may change
+  // BSSID/channel at any time. Pin the connection only to fresh results.
+  const bool scanFresh=scanCompletedMs&&(uint32_t)(millis()-scanCompletedMs)<60000UL;
+  for(uint8_t i=0;scanFresh&&i<scanEntriesCount;i++){
     const ScanEntry &entry=scanEntries[i];
     if(entry.ssid==ssid&&entry.channel>=1&&entry.channel<=13){
       staChannel=entry.channel;
