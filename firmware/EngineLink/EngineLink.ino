@@ -2708,7 +2708,9 @@ void serviceNetwork(){
   // AP recovery should never cause a reset loop on transient event timing.
   // Only act on a sustained stopped/missing-interface state. Do not call
   // esp_wifi_start() from here: softAP() establishes the interface itself.
-  if((!routerConfigured()||routerHold)&&(uint32_t)(millis()-lastApCheck)>=15000){
+  // A requested mode switch has a response grace period. The AP watchdog
+  // must not pre-empt it by starting SoftAP as soon as cfg.router changes.
+  if(!pendingNetwork&&(!routerConfigured()||routerHold)&&(uint32_t)(millis()-lastApCheck)>=15000){
     lastApCheck=millis();
     const bool modeOk=(WiFi.getMode()&WIFI_MODE_AP)!=0;
     const bool stopped=apLastEvent==2&&(uint32_t)(millis()-apLastEventMs)>=10000;
