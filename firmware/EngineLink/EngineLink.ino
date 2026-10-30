@@ -50,7 +50,7 @@
 #include "routerguard.h"
 #include "miniz.h"  // the deflate compressor in the chip's ROM
 
-#define EL_VERSION "0.9.9"
+#define EL_VERSION "0.10.0"
 // Releases list published by the Pages workflow; firmware files come from
 // GitHub Releases of the same repository. Nothing else is downloaded.
 #define EL_RELEASES_URL "https://kaelor9.github.io/EngineLink/releases.json"
@@ -751,7 +751,7 @@ bool staBssidKnown=false;
 bool routerHold=false;
 uint32_t routerFallbacks=0;
 RouterGuard routerGuard;
-volatile bool staGotConflict=false; // the router handed out an address in 192.168.4.x
+// AP and STA are mutually exclusive; 192.168.4.x is a valid router subnet.
 bool staConflict=false;
 uint32_t staNextTry=0,staBackoff=20000,staFails=0,staConnects=0,apRestarts=0,lastApCheck=0;
 uint32_t routerAttempts=0,routerLastSuccessMs=0;
@@ -759,6 +759,12 @@ uint32_t staConnectedAt=0;
 // Why the router connection last dropped (Wi-Fi reason code), when, and
 // since when it is down; the last full router search; the keep-alive.
 volatile uint8_t staLastReason=0;volatile uint32_t staLastDropAt=0;
+volatile uint32_t staDropEvents=0;
+uint32_t routerSeenDropEvents=0,routerAttemptStartedAt=0;
+bool routerResetPending=false;
+uint32_t routerImmediateRetries=0,routerStuckRetries=0;
+constexpr uint32_t ROUTER_AUTH_RETRY_DELAY_MS=3000UL;
+constexpr uint32_t ROUTER_ASSOCIATION_WINDOW_MS=18000UL;
 uint32_t staDownSince=0,staLastScan=0,staLastKeepAlive=0;
 // Last access point event. AP_STOP also arrives (late) when the network only
 // changed its settings, so the watchdog acts on "stopped and not started again".
@@ -829,13 +835,17 @@ void onWiFi(WiFiEvent_t e,WiFiEventInfo_t info){
   if(e==ARDUINO_EVENT_WIFI_AP_STOP){++apStops;apLastEvent=2;apLastEventMs=millis();}
   if(e==ARDUINO_EVENT_WIFI_AP_STACONNECTED)++apJoins;
   if(e==ARDUINO_EVENT_WIFI_AP_STADISCONNECTED){++apLeaves;apReason=info.wifi_ap_stadisconnected.reason;}
-  if(e==ARDUINO_EVENT_WIFI_STA_DISCONNECTED){++staDisconnects;staLastReason=info.wifi_sta_disconnected.reason;staLastDropAt=millis();}
+  if(e==ARDUINO_EVENT_WIFI_STA_DISCONNECTED){
+    ++staDisconnects;++staDropEvents;
+    staLastReason=info.wifi_sta_disconnected.reason;
+    staLastDropAt=millis();
+  }
   if(e==ARDUINO_EVENT_WIFI_STA_GOT_IP){
     ++staConnects;staConnectedAt=millis();
     // mDNS must advertise the newly assigned router address as well as AP.
     mdnsNetworkChangedAt=millis();mdnsRefreshPending=true;
-    const uint32_t ip=info.got_ip.ip_info.ip.addr; // first octet in the low byte
-    if((ip&0xFFFFFF)==((4u<<16)|(168u<<8)|192u))staGotConflict=true;
+    // Router DHCP may use ANY private subnet, including 192.168.4.x:
+    // standalone AP is off in STA-only mode, so no interface overlaps.
   }
 }
 bool cardInserted(){return digitalRead(SD_DETECT)==LOW;}
@@ -2563,12 +2573,19 @@ void applyNetwork(){
       esp_wifi_set_bandwidth(WIFI_IF_STA,WIFI_BW_HT20);
     // Start an unrestricted association without an extra blocking scan.
     // The driver owns scan/association in the background.
-    esp_wifi_disconnect();
     routerGuard.reset();
     routerGuard.attempt(millis());
+    routerSeenDropEvents=staDropEvents;
+    routerAttemptStartedAt=millis();
+    routerImmediateRetries=0;routerStuckRetries=0;
+    routerResetPending=false;
     connectRouter();
     routerAttempts=1;
-    staBackoff=20000;staFails=0;staNextTry=millis()+staBackoff;
+    // WiFi.begin starts scanning/authentication asynchronously. Give an
+    // attempt long enough for DHCP; if the driver reports an early failure,
+    // we retry promptly instead of waiting the whole 20-second interval.
+    staBackoff=ROUTER_ASSOCIATION_WINDOW_MS;staFails=0;
+    staNextTry=millis()+ROUTER_ASSOCIATION_WINDOW_MS;
     ntpStarted=false;
   }else{
     // The default and recovery modes are both a pure ESP32 SoftAP.
@@ -2691,7 +2708,9 @@ void serviceNetwork(){
   // AP recovery should never cause a reset loop on transient event timing.
   // Only act on a sustained stopped/missing-interface state. Do not call
   // esp_wifi_start() from here: softAP() establishes the interface itself.
-  if((!routerConfigured()||routerHold)&&(uint32_t)(millis()-lastApCheck)>=15000){
+  // A requested mode switch has a response grace period. The AP watchdog
+  // must not pre-empt it by starting SoftAP as soon as cfg.router changes.
+  if(!pendingNetwork&&(!routerConfigured()||routerHold)&&(uint32_t)(millis()-lastApCheck)>=15000){
     lastApCheck=millis();
     const bool modeOk=(WiFi.getMode()&WIFI_MODE_AP)!=0;
     const bool stopped=apLastEvent==2&&(uint32_t)(millis()-apLastEventMs)>=10000;
@@ -2703,19 +2722,14 @@ void serviceNetwork(){
       startAP();
     }
   }
-  // A router that uses EngineLink's own addresses would swallow the replies to
-  // every phone on the EngineLink network. Leave it and say why in the app.
-  if(staGotConflict){
-    staGotConflict=false;staConflict=true;
-    // A router using 192.168.4.x conflicts with the fixed rescue network.
-    // Leave STA rather than hanging with an unreachable AP.
-    parkRouter("overlapping 192.168.4.x subnet");
-  }
-  if(routerConfigured()&&!routerHold&&!staConflict){
+  // Only one interface is active, so matching AP/router subnet ranges are
+  // safe and MUST NOT prevent a legitimate router connection.
+  if(routerConfigured()&&!routerHold){
     if(WiFi.status()==WL_CONNECTED){
       routerGuard.reset();
       routerLastSuccessMs=millis();
-      staFails=0;staBackoff=20000;staDownSince=0;
+      staFails=0;staBackoff=ROUTER_ASSOCIATION_WINDOW_MS;staDownSince=0;
+      routerSeenDropEvents=staDropEvents;
       const uint8_t ch=(uint8_t)WiFi.channel();
       if(ch){staChannel=ch;apChannelNow=ch;}
       // Keep-alive: a small packet to the router every 25 s. Some routers drop
@@ -2725,7 +2739,15 @@ void serviceNetwork(){
         NetworkUDP u;if(u.beginPacket(WiFi.gatewayIP(),9)){u.write((const uint8_t*)"EL",2);u.endPacket();}
       }
     }else{
-      if(!staDownSince)staDownSince=millis()?millis():1;
+      if(!staDownSince){
+        staDownSince=millis()?millis():1;
+        // The router may have dropped after hours of successful service.
+        // Start a NEW recovery window instead of reusing boot-time deadlines.
+        routerAttemptStartedAt=millis();
+        routerResetPending=false;
+        routerSeenDropEvents=staDropEvents;
+        staNextTry=millis()+ROUTER_AUTH_RETRY_DELAY_MS;
+      }
       if(!routerGuard.disconnectedSince)routerGuard.attempt(millis());
       // A router failure is NOT allowed to leave the board invisible. Stop
       // all STA scans/retries and recreate the standalone AP after 45 seconds.
@@ -2733,22 +2755,38 @@ void serviceNetwork(){
         parkRouter("no router IP after repeated attempts for 120 seconds");
         return;
       }
-      // Never during a search for networks (a connect attempt cuts the search
-      // short, so it found almost nothing), and give each attempt 20 s: many
-      // routers take 5-10 s to let a device in.
-      if(scanBusy){
-        // Do not compete with an active router scan or count phantom failures.
-        if((int32_t)(staNextTry-millis())<5000)staNextTry=millis()+5000;
-      }else if((int32_t)(millis()-staNextTry)>=0){
-        ++staFails;
-        // Association is asynchronous; never run a blocking discovery pass
-        // from the HTTP/main task.
-        // Restart only when a full attempt window elapsed.
-        esp_wifi_disconnect();
-        connectRouter();
-        ++routerAttempts;
-        staBackoff=20000UL;
-        staNextTry=millis()+staBackoff;
+      // React to explicit association failure events instead of waiting 20s
+      // after a wrong password / AP refusal. Do NOT interrupt WiFi.begin
+      // while the radio is still legitimately scanning/authenticating.
+      if(!routerResetPending && staDropEvents!=routerSeenDropEvents){
+        routerSeenDropEvents=staDropEvents;
+        // Ignore a late disconnect event from the previous Wi-Fi mode.
+        if((uint32_t)(millis()-routerAttemptStartedAt)>500UL){
+          const uint32_t sooner=millis()+ROUTER_AUTH_RETRY_DELAY_MS;
+          if((int32_t)(staNextTry-sooner)>0){
+            staNextTry=sooner;
+            ++routerImmediateRetries;
+          }
+        }
+      }
+      if(!scanBusy && (int32_t)(millis()-staNextTry)>=0){
+        if(!routerResetPending &&
+           (uint32_t)(millis()-routerAttemptStartedAt)>=ROUTER_ASSOCIATION_WINDOW_MS){
+          // A genuinely stuck association needs an explicit cancel. Let the
+          // driver finish its disconnect event before calling WiFi.begin again.
+          ++routerStuckRetries;
+          WiFi.disconnect(false,false);
+          routerResetPending=true;
+          staNextTry=millis()+400UL;
+        }else{
+          routerResetPending=false;
+          ++staFails;
+          routerAttemptStartedAt=millis();
+          routerSeenDropEvents=staDropEvents;
+          connectRouter();
+          ++routerAttempts;
+          staNextTry=millis()+ROUTER_ASSOCIATION_WINDOW_MS;
+        }
       }
     }
   }
@@ -3780,6 +3818,8 @@ String makeLiveJson(){
   s+=",\"rssi\":";if(WiFi.status()==WL_CONNECTED)s+=WiFi.RSSI();else s+="null";
   s+=",\"ip\":";if(WiFi.status()==WL_CONNECTED)jsonString(s,WiFi.localIP().toString());else s+="null";
   s+=",\"conflict\":";s+=staConflict?"true":"false";
+  s+=",\"mode\":";jsonString(s,(WiFi.getMode()&WIFI_MODE_AP)?"ap":"sta");
+  s+=",\"rescue\":";s+=routerHold?"true":"false";
   s+="},\"sd\":{\"ok\":";s+=sdReady?"true":"false";
   s+=",\"log\":";s+=sdLogging?"true":"false";
   s+="},\"test\":";s+=calActive?"true":"false";
@@ -3802,6 +3842,37 @@ void handleLive(){sendJSON(200,makeLiveJson());}
 // 81. Its response is built under the existing engine-data mutex; network
 // writes happen AFTER releasing the lock. No J1708 TX is performed here.
 NetworkServer liveServer(81);
+// An independent, low-priority diagnostic endpoint. No engine data or SD
+// access is permitted here. A slow phone can occupy this task but cannot
+// block the main WebServer or the engine monitoring task.
+NetworkServer speedServer(82);
+void speedHttpTask(void *){
+  static const uint8_t sample[256]={
+    'E','n','g','i','n','e','L','i','n','k',' ','W','i','-','F','i',' '
+  };
+  for(;;){
+    NetworkClient c=speedServer.accept();
+    if(!c){vTaskDelay(pdMS_TO_TICKS(15));continue;}
+    c.setNoDelay(true);c.setTimeout(300);
+    const String req=c.readStringUntil('\n');
+    if(!req.startsWith("GET /api/speedtest ") && !req.startsWith("GET /api/speedtest?")){
+      c.print("HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
+      c.stop();continue;
+    }
+    c.print("HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\nCache-Control: no-store\r\nAccess-Control-Allow-Origin: *\r\nContent-Length: 32768\r\nConnection: close\r\n\r\n");
+    const uint32_t begun=millis();
+    size_t sent=0;
+    while(sent<32768 && c.connected() && (uint32_t)(millis()-begun)<15000UL){
+      const size_t chunk=min((size_t)sizeof(sample),(size_t)(32768-sent));
+      const size_t n=c.write(sample,chunk);
+      if(n==0)break;
+      sent+=n;
+      vTaskDelay(1);  // do not starve the Wi-Fi or engine tasks
+    }
+    // No unbounded flush: incomplete responses fail cleanly in the browser.
+    c.stop();
+  }
+}
 void liveHttpTask(void *){
   for(;;){
     NetworkClient c=liveServer.accept();
@@ -4130,7 +4201,8 @@ void handleWifiConnect(){
 void handleWifiForget(){
   routerHold=false;routerGuard.reset();
   cfg.router=false;cfg.ssid="";cfg.wifiPassword="";saveSettings();
-  esp_wifi_disconnect();
+  // Reply on the current router connection BEFORE disabling STA. Otherwise
+  // Safari sees a failed HTTP request even when the mode change succeeded.
   reply(true,"Disconnected from router. EngineLink is switching to its own Wi-Fi at http://192.168.4.1.");
   networkSwitchAt=millis()+1200UL;
   pendingNetwork=true;
@@ -4226,6 +4298,10 @@ void handleDiag(){
   s+=",\"staDown\":";if(staDownSince)s+=(unsigned long)((millis()-staDownSince)/1000);else s+="null";
   s+=",\"staConnects\":";s+=staConnects;
   s+=",\"routerAttempts\":";s+=routerAttempts;
+  s+=",\"routerFastRetries\":";s+=routerImmediateRetries;
+  s+=",\"routerStuckRetries\":";s+=routerStuckRetries;
+  s+=",\"routerLastReason\":";s+=(unsigned)staLastReason;
+  s+=",\"routerAssocMs\":";s+=routerAttemptStartedAt?(unsigned long)(millis()-routerAttemptStartedAt):0;
   s+=",\"routerWaitSec\":";s+=routerGuard.disconnectedSince?(unsigned long)((millis()-routerGuard.disconnectedSince)/1000UL):0;
   s+=",\"ch\":";s+=apChannelNow;
   s+=",\"conflict\":";s+=staConflict?"true":"false";
@@ -4497,19 +4573,11 @@ void handleExportRaw(){
   }
   endDownload(out);
 }
-// Download speed test: text from memory, no SD card. Keep the payload short:
-// the synchronous HTTP server cannot serve live updates during a transfer.
-// On a weak AP, the old 512 kB test blocked every other request for 10+ s.
-// The browser measures the actual received byte count, not the requested size.
+// The ordinary WebServer is single-threaded. Never send a speed-test payload
+// from its request handler: on poor Wi-Fi the old 32 KiB request blocked every
+// other API endpoint for 30+ seconds. Speed tests use port 82 independently.
 void handleSpeedTest(){
-  const uint32_t kb=constrain(web.arg("kb").toInt(),16,32);
-  const DlStat keep=dlStat;
-  // Not compressed: this measures what the Wi-Fi carries.
-  ChunkOut &out=beginDownload("speed test","text/plain",nullptr,false);
-  static const char row[]="EngineLink speed test,0123456789abcdefghijklmnopqrstuvwxyz,0123456789\n";  // 64 bytes
-  for(uint32_t i=0;i<kb*16;i++)out.add(row,sizeof(row)-1);
-  endDownload(out);
-  spStat=dlStat;dlStat=keep;
+  reply(false,"Speed test moved to HTTP port 82; refresh EngineLink's page",409);
 }
 
 // ---------- Backup ----------
@@ -4828,7 +4896,7 @@ void setup(){
   pinMode(LED_PIN,OUTPUT);digitalWrite(LED_PIN,LOW);
   led.begin();led.setBrightness(ledBrightness);led.clear();led.show();
   Serial.begin(115200);
-  delay(1200); // do not block boot for USB Serial Monitor
+  delay(120); // launch Wi-Fi promptly; USB serial can attach later
   Serial.println("\nEngineLink " EL_VERSION " - engine monitoring, listen-only at boot unless automatic reading is on");
   {
     esp_ota_img_states_t st;
@@ -4841,6 +4909,12 @@ void setup(){
   pinMode(SD_DETECT,INPUT);
   pinMode(OPTO_PIN,INPUT);
   loadSettings();
+  // Bring up the selected Wi-Fi mode as soon as configuration is read.
+  // Filesystem recovery and SD mounting can take several seconds; the
+  // router association or standalone AP beaconing now proceeds in parallel.
+  WiFi.onEvent(onWiFi);
+  applyNetwork();
+  initializeWeb();
   loadTotals();
   // Formatting an existing data partition after a transient mount failure
   // would permanently destroy history. Permit auto-format only before the
@@ -4887,9 +4961,6 @@ void setup(){
   cardWasInserted=cardInserted();
   initSD();
   refreshTestAvailable();
-  WiFi.onEvent(onWiFi);
-  applyNetwork();
-  initializeWeb();
   if(cfg.canListen && !startCAN())Serial.println("CAN listen-only init failed");
   // NTP time sync callback is non-blocking.
   sntp_set_time_sync_notification_cb(ntpCallback);
@@ -4908,7 +4979,11 @@ void setup(){
         Serial.println("Independent live server task could not start");
     }
   }
-  Serial.printf("SoftAP EngineLink at http://%s (http://enginelink.local) ; passive J1708 only\n",WiFi.softAPIP().toString().c_str());
+  speedServer.begin();
+  if(xTaskCreatePinnedToCore(speedHttpTask,"speed-http",4096,nullptr,1,nullptr,0)!=pdPASS)
+    Serial.println("Independent speed test listener could not start");
+  Serial.printf("EngineLink HTTP ready: %s (port 80 UI, 81 live, 82 speed test)\n",
+    routerConfigured()&&!routerHold?"router":"standalone");
 }
 void loop(){
   const uint32_t loopStart=millis();

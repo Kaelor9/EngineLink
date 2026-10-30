@@ -261,7 +261,7 @@ const dur=s=>{s=Math.max(0,Math.round(s/60));const h=Math.floor(s/60),m=s%60;ret
 const durShort=s=>{s=Math.max(0,Math.round(s/60));const h=Math.floor(s/60),m=s%60;return h?h+' h '+String(m).padStart(2,'0'):m+' min';};
 
 // Why the connection to the boat router dropped (Wi-Fi reason codes).
-const STAR={2:'the router ended the login',3:'the router ended the connection',4:'the router dropped it for being quiet',8:'EngineLink left (reconnecting)',15:'wrong password?',200:'the router was not heard for a while (weak or blocked signal)',201:'the router was not found on its channel',202:'the router refused the password',203:'the router refused the connection',204:'the login timed out (password?)',205:'the connection failed',206:'the router restarted',207:'moved to a stronger access point',209:'the router stopped answering',210:'the router uses a security EngineLink does not support',211:'the router uses a security EngineLink does not support'};
+const STAR={2:'the router ended the login',3:'the router ended the connection',4:'the router dropped it for being quiet',8:'EngineLink left (reconnecting)',15:'wrong password?',36:'EngineLink station left the router (mode change or retry)',200:'the router was not heard for a while (weak or blocked signal)',201:'the router was not found on its channel',202:'the router refused the password',203:'the router refused the connection',204:'the login timed out (password?)',205:'the connection failed',206:'the router restarted',207:'moved to a stronger access point',209:'the router stopped answering',210:'the router uses a security EngineLink does not support',211:'the router uses a security EngineLink does not support'};
 const RESET={1:'power on',2:'reset button',3:'software or update',4:'crash',5:'watchdog',6:'watchdog',7:'watchdog',8:'deep sleep',9:'brownout (low voltage)',10:'SDIO',11:'USB (flashing or serial monitor)',12:'JTAG',14:'power glitch',15:'CPU lockup'};
 // Why a phone left the EngineLink network (Wi-Fi reason codes).
 const LEAVE={1:'unknown',2:'its login expired',3:'it left',4:'it was silent for 10 minutes',5:'too many phones',6:'not logged in',7:'not connected',8:'the phone left by itself (it may have switched to another Wi-Fi)',15:'password handshake timed out',16:'password handshake timed out',23:'login failed',200:'signal lost',201:'network not found',202:'wrong password',204:'password handshake timed out',205:'connection timed out'};
@@ -272,40 +272,69 @@ const LEAVE={1:'unknown',2:'its login expired',3:'it left',4:'it was silent for 
 let BASE='';
 function rememberIp(ip){if(!ip)return;try{localStorage.setItem('el.ip',ip);}catch(e){}}
 function hostCandidates(){
+  // Probe the currently loaded origin first: enginelink.local can resolve to
+  // the NEW IP after the phone changes from standalone AP to boat router.
+  // Then try the advertised .local name, last known router IP and the AP IP.
   const h=[''],add=x=>{if(x&&x!==location.origin&&!h.includes(x))h.push(x);};
-  add('http://192.168.4.1');
-  try{const ip=localStorage.getItem('el.ip');if(ip)add('http://'+ip);}catch(e){}
   let host='enginelink';try{host=localStorage.getItem('el.host')||host;}catch(e){}
   add('http://'+host+'.local');if(host!=='enginelink')add('http://enginelink.local');
+  try{const ip=localStorage.getItem('el.ip');if(ip)add('http://'+ip);}catch(e){}
+  add('http://192.168.4.1');
   return h;
 }
+let discoveryPending=null;
 async function findHost(){
-  for(const b of hostCandidates()){
-    if(b===BASE)continue;
-    const c=new AbortController(),id=setTimeout(()=>c.abort(),1500);
-    try{const r=await fetch(b+'/api/live',{cache:'no-store',signal:c.signal});if(r.ok){BASE=b;return await r.json();}}catch(e){}
-    finally{clearTimeout(id);}
-  }
-  return null;
+  // Serial probes took 6+ seconds on a disconnected network (4 x 1500ms).
+  // Race them in parallel; the first real EngineLink JSON wins. Keep the
+  // whole recovery bounded by a single 1800ms round.
+  if(discoveryPending)return discoveryPending;
+  discoveryPending=new Promise(resolve=>{
+    const hosts=hostCandidates(),controllers=[],timers=[];
+    let remaining=hosts.length,done=false;
+    const finish=(value,host)=>{
+      if(done)return;done=true;
+      if(host!==undefined)BASE=host;
+      for(const ctrl of controllers)ctrl.abort();
+      for(const id of timers)clearTimeout(id);
+      resolve(value);
+    };
+    for(const host of hosts){
+      const ctrl=new AbortController();controllers.push(ctrl);
+      const id=setTimeout(()=>ctrl.abort(),1800);timers.push(id);
+      (async()=>{
+        try{
+          const r=await fetch(host+'/api/live',{cache:'no-store',signal:ctrl.signal});
+          if(!r.ok)return;
+          const data=await r.json();
+          if(data&&Array.isArray(data.e)&&data.net)finish(data,host);
+        }catch(e){}finally{
+          clearTimeout(id);
+          if(--remaining===0)finish(null);
+        }
+      })();
+    }
+  });
+  try{return await discoveryPending;}finally{discoveryPending=null;}
 }
 // Live samples use a separate read-only HTTP listener (port 81) so a long
 // file download on port 80 cannot starve the dashboard. Fall back to port 80
 // for older firmware, browser demo and transient sidecar failures.
-let liveSidecarRetryAt=0;
+let liveSidecarRetryAt=0,liveSidecarWorked=false;
 async function get(u,t=3000){
   if(u==='/api/live'&&Date.now()>=liveSidecarRetryAt){
     try{
       const url=new URL(BASE||location.origin,location.href);
       if(url.protocol==='http:'){
         url.port='81';
-        const c=new AbortController(),id=setTimeout(()=>c.abort(),Math.min(1200,t));
+        const c=new AbortController(),id=setTimeout(()=>c.abort(),Math.min(liveSidecarWorked?800:350,t));
         try{
           const r=await fetch(url.origin+u,{cache:'no-store',signal:c.signal});
-          if(r.ok)return await r.json();
+          if(r.ok){liveSidecarWorked=true;return await r.json();}
         }finally{clearTimeout(id);}
       }
     }catch(e){}
-    liveSidecarRetryAt=Date.now()+15000;
+    liveSidecarWorked=false;
+    liveSidecarRetryAt=Date.now()+60000;
   }
   const c=new AbortController(),id=setTimeout(()=>c.abort(),t);
   try{const r=await fetch(BASE+u,{cache:'no-store',signal:c.signal});if(!r.ok)throw new Error('HTTP '+r.status);return await r.json();}
@@ -367,7 +396,7 @@ async function tick(){
     S.fails++;S.failTotal=(S.failTotal||0)+1;
     if(S.fails>=2)setConn(false);
     // Still nothing: the phone may have moved to another network.
-    if(S.fails>=3&&S.fails%3===0){const d=await findHost();if(d){S.live=d;S.liveAt=Date.now();S.fails=0;setConn(true);onLive();}}
+    if(S.fails>=2&&S.fails%2===0){const d=await findHost();if(d){S.live=d;S.liveAt=Date.now();S.fails=0;setConn(true);onLive();}}
   }finally{ticking=false;}
   schedule(S.fails?Math.min(400*S.fails,2000):Math.round(Math.min(2000,Math.max(500,(S.rtt||0)*1.5))));
 }
@@ -1229,13 +1258,12 @@ const PAGE_VIEWS={
   router(){
     const lv=S.live,c=cfgv();if(!lv||!c)return backPill()+waiting();
     let h=backPill();
-    if(lv.net.conflict){
-      h+=`<div class="card s13" style="margin-bottom:14px;border:1px solid var(--orange)"><b style="color:var(--orange)">This router uses the same addresses as EngineLink (192.168.4.x).</b><br>EngineLink left it so your phone keeps working. Change the router's address range in its settings (for example to 192.168.1.x), then connect again. <button data-a="wifiForget" style="color:var(--teal)">Forget</button></div>`;
-    }
+    // Standalone and router use separate Wi-Fi interfaces, never concurrently.
+    // Router LAN addresses can legitimately be 192.168.4.x too.
     if(lv.net.sta){
       h+=`<div class="sec"><div class="row"><span><span class="rt">${esc(lv.net.ssid)}</span><span class="rh" style="color:var(--green)">Connected · ${lv.net.rssi>-60?'strong':lv.net.rssi>-72?'good':'weak'} signal (${lv.net.rssi} dBm)</span></span><button class="btn sm" data-a="wifiForget">Disconnect</button></div>
         <div class="rowx s13 sub">On the router's Wi-Fi, EngineLink is at <b style="color:var(--text)">http://${esc(lv.net.ip||'')}</b> or <b style="color:var(--text)">http://${esc(lv.net.host||'enginelink')}.local</b>. The app finds it there by itself.</div></div>`;
-    }else if(!lv.net.conflict){
+    }else{
       if(c.router)h+=`<div class="card s13" style="margin-bottom:14px">Saved: <b>${esc(c.ssid)}</b> · not reachable right now. EngineLink uses its own Wi-Fi as recovery until you choose Connect again. <button data-a="wifiForget" style="color:var(--teal)">Forget</button></div>`;
       const sc=S.scan;
       h+=`<div class="sec">${sc&&sc.nets&&sc.nets.length?sc.nets.map(n=>{const pick=S.wifiPick===n.s;return `<div><button class="row" data-a="wifiPick" data-v="${esc(n.s)}"><span><span class="rt">${esc(n.s)}</span><span class="rh">${n.lock?'Password':'Open'} · channel ${n.ch}</span></span><span style="color:var(--teal);letter-spacing:1px">${n.r>-60?'▂▄▆':n.r>-72?'▂▄':'▂'}</span></button>
@@ -1285,7 +1313,7 @@ const PAGE_VIEWS={
       <div class="rowx s12 sub">A test asks the engine for its values for 30 seconds. Only read requests are sent, never commands.</div></div>`;
     // Wi-Fi
     const w=d.wifi||{};
-    h+=`<div class="hd">Wi-Fi</div><div class="sec"><div class="rowx"><div class="grid3" style="gap:8px">${[['Phones',lv.net.cl],['Channel',w.ch||lv.net.ch],['Network restarts',w.apRestarts??'—'],['Networks found',w.scanNets??'—'],['Scan errors',w.scanFailures??'—'],['Scan duration',w.scanDurationMs!=null?w.scanDurationMs+' ms':'—'],['mDNS',w.mdns?'Responder on':'Retrying'],['mDNS retries',w.mdnsFailures??'—'],['Requests',w.httpServed??'—'],['Reused',w.httpServed?Math.round(w.httpReused/w.httpServed*100)+' %':'—'],['Slowest UI',w.httpInteractiveSlowMs!=null?w.httpInteractiveSlowMs+' ms':w.httpSlowMs!=null?w.httpSlowMs+' ms':'—'],['Request parse',w.httpParseSlowMs!=null?w.httpParseSlowMs+' ms':'—'],['Request handler',w.httpHandleSlowMs!=null?w.httpHandleSlowMs+' ms':'—'],['Slowest transfer',w.httpTransferSlowMs!=null?w.httpTransferSlowMs+' ms':'—'],['Phone joins',w.joins??'—'],['Phone drops',w.leaves??'—'],['Missed here',S.failTotal||0],['Channel changes',w.chMoves??'—'],['Router drops',lv.net.rt?(w.staDrops??'—'):'—'],['Router attempts',w.routerAttempts??'—'],['Slow loop',w.loopMaxMs!=null?w.loopMaxMs+' ms':'—']].map(([k,v])=>`<div style="background:var(--track);border-radius:12px;padding:8px 10px"><div class="s12 sub">${k}</div><div style="font-weight:600;margin-top:2px">${v}</div></div>`).join('')}</div>
+    h+=`<div class="hd">Wi-Fi</div><div class="sec"><div class="rowx"><div class="grid3" style="gap:8px">${[['Mode',lv.net.mode==='sta'?'Router':lv.net.rescue?'Recovery AP':'Standalone'],['Phones',lv.net.mode==='sta'?'—':lv.net.cl],['Router status',lv.net.mode==='sta'?(lv.net.sta?'Connected':'Connecting'):'—'],['Channel',w.ch||lv.net.ch],['Network restarts',w.apRestarts??'—'],['Networks found',w.scanNets??'—'],['Scan errors',w.scanFailures??'—'],['Scan duration',w.scanDurationMs!=null?w.scanDurationMs+' ms':'—'],['mDNS',w.mdns?'Responder on':'Retrying'],['mDNS retries',w.mdnsFailures??'—'],['Requests',w.httpServed??'—'],['Reused',w.httpServed?Math.round(w.httpReused/w.httpServed*100)+' %':'—'],['Slowest UI',w.httpInteractiveSlowMs!=null?w.httpInteractiveSlowMs+' ms':w.httpSlowMs!=null?w.httpSlowMs+' ms':'—'],['Request parse',w.httpParseSlowMs!=null?w.httpParseSlowMs+' ms':'—'],['Request handler',w.httpHandleSlowMs!=null?w.httpHandleSlowMs+' ms':'—'],['Slowest transfer',w.httpTransferSlowMs!=null?w.httpTransferSlowMs+' ms':'—'],['Phone joins',w.joins??'—'],['Phone drops',w.leaves??'—'],['Missed here',S.failTotal||0],['Channel changes',w.chMoves??'—'],['Router drops',lv.net.rt?(w.staDrops??'—'):'—'],['Router attempts',w.routerAttempts??'—'],['Fast retries',w.routerFastRetries??'—'],['Stalled attempts',w.routerStuckRetries??'—'],['Slow loop',w.loopMaxMs!=null?w.loopMaxMs+' ms':'—']].map(([k,v])=>`<div style="background:var(--track);border-radius:12px;padding:8px 10px"><div class="s12 sub">${k}</div><div style="font-weight:600;margin-top:2px">${v}</div></div>`).join('')}</div>
       ${w.httpSlowPath?`<div class="s12 sub" style="margin-top:8px">Slow UI endpoint: <b style="color:var(--text)">${esc(w.httpSlowPath)}</b></div>`:''}
       <div class="s12 sub" style="margin-top:8px">Local address: <b style="color:var(--text)">http://${esc(w.mdnsHost||'enginelink')}.local</b> · mDNS status shows the responder, not whether your router forwards Bonjour traffic. On EngineLink Wi-Fi you can always use 192.168.4.1.</div>
       ${w.leaves?`<div class="s12" style="margin-top:8px">Last phone drop: <b>${LEAVE[w.reason]||'code '+w.reason}</b></div>`:''}
@@ -1632,7 +1660,7 @@ const A={
     setTimeout(()=>poll(0),800);
   },
   wifiPick:v=>{S.wifiPick=S.wifiPick===v?null:v;S.wifiPass='';render(true);},
-  wifiConnect:async v=>{if(!confirm('Switch EngineLink to the router? Its own Wi-Fi will turn off. Connect your phone to the router afterwards.'))return;const net=(S.scan?.nets||[]).find(n=>n.s===v);const r=await act('/api/wifi/connect',{ssid:v,pass:net&&!net.lock?'':S.wifiPass});if(r.ok){S.wifiPick=null;toast('Switch phone to your router, then open http://enginelink.local');setTimeout(()=>load('state'),8000);setTimeout(()=>load('state'),20000);}},
+  wifiConnect:async v=>{if(!confirm('Switch EngineLink to the router? Its own Wi-Fi will turn off. Connect your phone to the router afterwards.'))return;const net=(S.scan?.nets||[]).find(n=>n.s===v);const r=await act('/api/wifi/connect',{ssid:v,pass:net&&!net.lock?'':S.wifiPass});if(r.ok){S.wifiPick=null;toast('EngineLink is joining the router. Switch your phone to that Wi-Fi.');BASE='';liveSidecarWorked=false;liveSidecarRetryAt=Date.now()+3000;}},
   wifiForget:async()=>{if(!confirm('Switch to EngineLink Wi-Fi? The router connection will end.'))return;const r=await act('/api/wifi/forget',{});if(r.ok)toast('Switch phone to EngineLink Wi-Fi and open http://192.168.4.1');},
   // Firmware
   fwBeta:()=>{S.fwBeta=!S.fwBeta;render(true);},
@@ -1651,10 +1679,23 @@ const A={
   testStop:async()=>{await act('/api/test/stop',{});load('state');},
   busRefresh:()=>load('state'),
   dl:v=>download(v),
-  speedTest:async()=>{S.speed={busy:true};render(true);const kb=32,t0=performance.now();
-    try{const c=new AbortController(),id=setTimeout(()=>c.abort(),90000);const r=await fetch(BASE+'/api/speedtest?kb='+kb,{cache:'no-store',signal:c.signal});const b=await r.arrayBuffer();clearTimeout(id);
-      const ms=performance.now()-t0;S.speed={kb:b.byteLength/1024,ms,kbs:b.byteLength/1024/(ms/1000)};}catch(e){S.speed={err:true};}
-    await load('diag');render(true);},
+  speedTest:async()=>{
+    S.speed={busy:true};render(true);
+    const t0=performance.now(),url=new URL(BASE||location.origin,location.href);
+    // Run the diagnostic on a separate low-priority HTTP worker. Never send
+    // 32 KiB through the main server: slow links froze every other request.
+    if(url.protocol!=='http:'){S.speed={err:true};render(true);return;}
+    url.port='82';const c=new AbortController(),id=setTimeout(()=>c.abort(),18000);
+    try{
+      const r=await fetch(url.origin+'/api/speedtest',{cache:'no-store',signal:c.signal});
+      if(!r.ok)throw Error('HTTP '+r.status);
+      const data=await r.arrayBuffer();
+      if(data.byteLength!==32768)throw Error('Incomplete transfer');
+      const ms=performance.now()-t0;
+      S.speed={kb:data.byteLength/1024,ms,kbs:data.byteLength/1024/(ms/1000)};
+    }catch(e){S.speed={err:true};}finally{clearTimeout(id);}
+    await load('diag');render(true);
+  },
   protoKad:async()=>{const r=await cfgSet({protocol:'kad'});if(r.ok){toast('Reading Volvo Penta KAD engines');load('diag');}},
   exFile:v=>{download(v);if(!IOS_APP())toast('Downloading');},
   exReport:v=>openWin(reportUrl(v)),
