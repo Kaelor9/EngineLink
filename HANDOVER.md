@@ -1,6 +1,6 @@
 # EngineLink: project handover
 
-> Status as of **30 October 2026**, firmware **0.8.3**. This document is written so that any developer or AI assistant can pick up the work. It replaces the earlier handover from 26 October (version 0.2.0-alpha), which is out of date.
+> Status as of **30 October 2026**, firmware **0.9.0**. This document is written so that any developer or AI assistant can pick up the work. It replaces the earlier handover from 26 October (version 0.2.0-alpha), which is out of date.
 >
 > **Talk to the owner in Danish.** Keep answers short and concrete; the owner prefers a brief summary over long explanations. The app itself is in English.
 >
@@ -56,7 +56,7 @@ Which socket is port or starboard is a setting (on this boat: port J6, starboard
 
 The owner has said **merge PRs without asking** once CI is green.
 
-## 4. How the firmware works (0.8.3)
+## 4. How the firmware works (0.9.0)
 
 **Tasks and cores.** Core 0: Wi-Fi stack, the two J1708 receiver tasks (UART → frame queue in PSRAM, 2048 frames), the **engine task** (`engineTask`: frames, KAD polling, once-a-second engine/trip/diagnosis work), the GitHub update worker. Core 1: Arduino `loop()` (web server, SD, network management, LED). Engine data is shared under one mutex (`engineMx`); the loop releases it whenever it waits on the network (request parsing, every socket write, router scans, its 1 ms pause). Watchdogs: engine task (10 s without a round → save and restart) and loop task (60 s).
 
@@ -69,6 +69,13 @@ The owner has said **merge PRs without asking** once CI is green.
 **Diagnosis.** Events (with a ±2 min black box on SD), life story per engine, port vs starboard. Rules are host-tested on simulated trips.
 
 **App.** Tabs Trip, Economy, Tank, History, Engines; Settings and Diagnostics pages. Export sheet: printable trip/engine reports (the app opened as `?report=trips&ids=…` / `?report=engines`) and CSV files (downloads are deflate-compressed with the ESP32 ROM compressor when the browser accepts it).
+
+## 0.9.0 stabilization pass (software-only)
+
+- Wi-Fi: defer STA reconnect while user-requested async scan is active.
+- OTA: shared packet-fragmented ESP32 header check (`otaheader.h`), exercised by `tools/test_otaheader.cpp` in CI, for both GitHub and file upload.
+- Persistence: record LittleFS write failures and recoveries in the existing diagnostic API; do not mark health/life state clean if a write failed.
+- The UI and motor-command whitelist are unchanged. Still verify motor task lock waits, frame drops, Wi-Fi, downloads, OTA and sudden power loss on hardware before describing the release as production-ready.
 
 ## 5. Wi-Fi: the main open problem
 
