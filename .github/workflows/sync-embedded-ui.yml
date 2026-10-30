@@ -1,0 +1,26 @@
+name: Generate committed UI header for the EngineLink 0.8.3 PR
+on:
+  push:
+    branches:
+      - fix/wifi-live-stability-0.8.3
+    paths:
+      - .github/workflows/sync-embedded-ui.yml
+      - firmware/ui/app.html
+permissions:
+  contents: write
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/wifi-live-stability-0.8.3
+          persist-credentials: true
+      - name: Regenerate ui.h and commit it to PR branch
+        run: |
+          python3 tools/build_ui.py
+          git add firmware/EngineLink/ui.h
+          if ! git diff --cached --quiet; then
+            git -c user.email='41898282+github-actions[bot]@users.noreply.github.com' -c user.name='github-actions[bot]' commit -m 'Regenerate embedded UI for v0.8.3'
+            git push origin HEAD:fix/wifi-live-stability-0.8.3
+          fi
