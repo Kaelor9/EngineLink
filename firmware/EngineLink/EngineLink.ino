@@ -765,7 +765,6 @@ uint32_t staDownSince=0,staLastScan=0,staLastKeepAlive=0;
 volatile uint8_t apLastEvent=0;      // 1 started, 2 stopped
 volatile uint32_t apLastEventMs=0;
 uint32_t apChannelChanges=0;
-int16_t autoChannelNets=-1;     // networks heard when EngineLink chose its channel
 uint8_t apStartedChannel=0;
 // Discovery is a short-lived, explicit commissioning operation. Normal
 // operation remains either AP-only (standalone) or STA-only (router).
@@ -2475,20 +2474,6 @@ void startAP(){
     activeName=cfg.apName;activePassword=cfg.apPassword;
   }
 }
-// Blocking scan for the saved router. Only used when the network is set up.
-bool findRouter(){
-  netWaitBegin();const int16_t n=WiFi.scanNetworks(false,true,false,300);netWaitEnd();  // a scan takes seconds
-  int best=-1;int32_t bestRssi=-200;
-  for(int16_t i=0;i<n;i++){
-    if(WiFi.SSID(i)==cfg.ssid&&WiFi.RSSI(i)>bestRssi){best=i;bestRssi=WiFi.RSSI(i);}
-  }
-  if(best>=0){
-    staChannel=(uint8_t)WiFi.channel(best);
-    memcpy(staBssid,WiFi.BSSID(best),6);
-  }
-  WiFi.scanDelete();
-  return best>=0;
-}
 void connectRouter(){
   // Never pin the connection to a scan-time BSSID/channel: mesh routers,
   // band steering and AP restarts can invalidate that information before
@@ -2525,28 +2510,6 @@ void startNameService(){
   MDNS.end();
   ++mdnsFailures;
   Serial.println("mDNS setup failed; will retry without restarting Wi-Fi");
-}
-// Without a router EngineLink picks its own channel: at start-up, before
-// any phone is connected, it listens on 1, 6 and 11 (the channels that do not
-// overlap) and takes the one with the least other Wi-Fi nearby, weighted by
-// signal strength. A marina has dozens of networks; a busy channel means
-// lost packets and slow, unsteady connections.
-uint8_t quietestChannel(){
-  if(WiFi.softAPgetStationNum()>0)return 0;
-  const wifi_mode_t was=WiFi.getMode();
-  if(!(was&WIFI_MODE_STA))WiFi.mode(WIFI_AP_STA);
-  const int16_t n=WiFi.scanNetworks(false,true,false,120);
-  float load[3]={0,0,0};const uint8_t cand[3]={1,6,11};
-  for(int16_t i=0;i<n;i++){
-    const int ch=WiFi.channel(i);const float w=powf(10.0f,(WiFi.RSSI(i)+100)/20.0f);  // a strong neighbour counts much more
-    for(uint8_t k=0;k<3;k++){const int d=abs(ch-cand[k]);if(d<5)load[k]+=w*(5-d)/5.0f;}
-  }
-  WiFi.scanDelete();
-  if(!(was&WIFI_MODE_STA))WiFi.mode(was);
-  if(n<=0)return 0;
-  uint8_t best=0;for(uint8_t k=1;k<3;k++)if(load[k]<load[best]*0.8f)best=k;  // stay on 1 unless clearly better
-  autoChannelNets=n;
-  return cand[best];
 }
 // Fail open to the device's own Wi-Fi if the boat router cannot be reached.
 // Store the hold in NVS, not in LittleFS or the user's router credentials;
@@ -2778,8 +2741,8 @@ void serviceNetwork(){
         if((int32_t)(staNextTry-millis())<5000)staNextTry=millis()+5000;
       }else if((int32_t)(millis()-staNextTry)>=0){
         ++staFails;
-        // Association is asynchronous and must never block the HTTP loop
-        // with the old 300 ms/channel synchronous findRouter() call.
+        // Association is asynchronous; never run a blocking discovery pass
+        // from the HTTP/main task.
         // Restart only when a full attempt window elapsed.
         esp_wifi_disconnect();
         connectRouter();
@@ -4271,7 +4234,7 @@ void handleDiag(){
   s+=",\"apMode\":";s+=(unsigned)WiFi.getMode();
   s+=",\"apDriverSsid\":";jsonString(s,WiFi.softAPSSID());
   s+=",\"apDriverIp\":";jsonString(s,WiFi.softAPIP().toString());
-  s+=",\"apStops\":";s+=(unsigned long)apStops;s+=",\"chMoves\":";s+=apChannelChanges;s+=",\"autoNets\":";s+=autoChannelNets;s+=",\"bw\":";{wifi_bandwidth_t b=WIFI_BW_HT20;esp_wifi_get_bandwidth(WIFI_IF_AP,&b);s+=b==WIFI_BW_HT40?40:20;}
+  s+=",\"apStops\":";s+=(unsigned long)apStops;s+=",\"chMoves\":";s+=apChannelChanges;s+=",\"bw\":";{wifi_bandwidth_t b=WIFI_BW_HT20;esp_wifi_get_bandwidth(WIFI_IF_AP,&b);s+=b==WIFI_BW_HT40?40:20;}
   s+=",\"httpServed\":";s+=web.served;s+=",\"httpReused\":";s+=web.reused;
   s+=",\"httpEvicted\":";s+=web.evicted;s+=",\"httpSlowMs\":";s+=web.slowestMs;
   s+=",\"httpParseSlowMs\":";s+=web.worstParseMs;
