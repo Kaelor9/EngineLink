@@ -47,9 +47,10 @@
 #include "ledpatterns.h"
 #include "diagrules.h"
 #include "otaheader.h"
+#include "routerguard.h"
 #include "miniz.h"  // the deflate compressor in the chip's ROM
 
-#define EL_VERSION "0.9.1"
+#define EL_VERSION "0.9.2"
 // Releases list published by the Pages workflow; firmware files come from
 // GitHub Releases of the same repository. Nothing else is downloaded.
 #define EL_RELEASES_URL "https://kaelor9.github.io/EngineLink/releases.json"
@@ -722,6 +723,11 @@ uint8_t apChannelNow=6;          // channel the AP actually uses
 uint8_t staChannel=0;            // router channel found by the last scan
 uint8_t staBssid[6]={};
 bool staBssidKnown=false;
+// A failed AP+STA attempt must NEVER permanently remove the rescue SoftAP.
+// Once a router is parked, only choosing Connect in the app resumes it.
+bool routerHold=false;
+uint32_t routerFallbacks=0;
+RouterGuard routerGuard;
 volatile bool staGotConflict=false; // the router handed out an address in 192.168.4.x
 bool staConflict=false;
 uint32_t staNextTry=0,staBackoff=15000,staFails=0,staConnects=0,apRestarts=0,lastApCheck=0;
@@ -2442,9 +2448,37 @@ uint8_t quietestChannel(){
   autoChannelNets=n;
   return cand[best];
 }
+// Fail open to the device's own Wi-Fi if the boat router cannot be reached.
+// Store the hold in NVS, not in LittleFS or the user's router credentials;
+// subsequent reboots immediately start in AP-only until Connect is selected.
+void parkRouter(const char *why){
+  if(routerHold)return;
+  Serial.printf("Router unavailable (%s); restoring standalone EngineLink AP\n",why);
+  routerHold=true;
+  ++routerFallbacks;
+  Preferences p;
+  if(p.begin("enginelink",false)){p.putBool("rhold",true);p.end();}
+  routerGuard.reset();
+  staBssidKnown=false;
+  scanBusy=false;scanCount=-1;
+  WiFi.scanDelete();
+  WiFi.disconnect(false,false);
+  // Leave the radio entirely on the EngineLink channel, not the router's.
+  WiFi.mode(WIFI_AP);
+  // Reset the AP config even if an AP_START event/IP remained cached while
+  // the Wi-Fi hardware was occupied by a failed STA scan.
+  WiFi.softAPdisconnect(false);
+  apStarted=false;apLastEvent=0;
+  apChannelNow=(cfg.apChannel>=1&&cfg.apChannel<=11)?cfg.apChannel:6;
+  startAP();
+  Serial.printf("Rescue AP started=%u IP=%s SSID=%s channel=%u\n",
+    (unsigned)apStarted,WiFi.softAPIP().toString().c_str(),
+    cfg.apName.c_str(),(unsigned)apChannelNow);
+}
 void applyNetwork(){
-  // Only a saved network change rebuilds the interfaces.
-  const bool withRouter=routerConfigured();
+  // A failed router is parked until it is explicitly tried again; the SSID,
+  // password, engine state, fuel counters and logs are not reset.
+  const bool withRouter=routerConfigured()&&!routerHold;
   WiFi.persistent(false);
   const wifi_mode_t want=withRouter?WIFI_AP_STA:WIFI_AP;
   WiFi.setHostname(cfg.hostName.c_str());
@@ -2476,8 +2510,11 @@ void applyNetwork(){
   startAP();
   if(withRouter){
     esp_wifi_disconnect();
+    routerGuard.attempt(millis());
     connectRouter();
     staBackoff=20000;staFails=0;staNextTry=millis()+staBackoff;
+  }else{
+    routerGuard.reset();
   }
   if(!mdnsReady)startNameService();
 }
@@ -2502,10 +2539,13 @@ void serviceNetwork(){
   // every phone on the EngineLink network. Leave it and say why in the app.
   if(staGotConflict){
     staGotConflict=false;staConflict=true;
-    esp_wifi_disconnect();
+    // A router using 192.168.4.x conflicts with the fixed rescue network.
+    // Leave STA rather than hanging with an unreachable AP.
+    parkRouter("overlapping 192.168.4.x subnet");
   }
-  if(routerConfigured()&&!staConflict){
+  if(routerConfigured()&&!routerHold&&!staConflict){
     if(WiFi.status()==WL_CONNECTED){
+      routerGuard.reset();
       staFails=0;staBackoff=20000;staDownSince=0;
       const uint8_t ch=(uint8_t)WiFi.channel();
       if(ch&&ch!=apChannelNow){apChannelNow=ch;staChannel=ch;}
@@ -2517,6 +2557,13 @@ void serviceNetwork(){
       }
     }else{
       if(!staDownSince)staDownSince=millis()?millis():1;
+      if(!routerGuard.disconnectedSince)routerGuard.attempt(millis());
+      // A router failure is NOT allowed to leave the board invisible. Stop
+      // all STA scans/retries and recreate the standalone AP after 45 seconds.
+      if(routerGuard.expired(millis())){
+        parkRouter("no router IP within 45 seconds");
+        return;
+      }
       // Never during a search for networks (a connect attempt cuts the search
       // short, so it found almost nothing), and give each attempt 20 s: many
       // routers take 5-10 s to let a device in.
@@ -2921,7 +2968,8 @@ ledlang::State ledStateNow(){
   if(!sdReady)return S_NO_SD;
   if(calActive)return S_TEST;
   if(!cfg.completed)return S_SETUP;
-  if(cfg.router&&cfg.ssid.length()&&WiFi.status()!=WL_CONNECTED&&staDownSince&&(uint32_t)(millis()-staDownSince)>15000)return S_ROUTER;
+  if(routerConfigured()&&WiFi.status()!=WL_CONNECTED
+     &&(routerHold||(staDownSince&&(uint32_t)(millis()-staDownSince)>15000)))return S_ROUTER;
   const uint64_t now=elapsedMs();
   for(uint8_t c=0;c<2;c++)if(kad[c].polling&&rpmFresh(c,now))return S_LIVE;
   if(cfg.protocol!=PROTO_KAD&&(rpmFresh(0,now)||rpmFresh(1,now)))return S_LIVE;
@@ -2972,6 +3020,7 @@ void saveSettings(){
   pref.begin("enginelink",false);
   pref.putBool("done",cfg.completed);
   pref.putBool("router",cfg.router);
+  pref.putBool("rhold",routerHold);
   pref.putBool("can",cfg.canListen);
   pref.putUChar("port",cfg.portChannel);
   pref.putUChar("apch",cfg.apChannel);
@@ -3016,6 +3065,7 @@ void loadSettings(){
   pref.begin("enginelink",true);
   cfg.completed=pref.getBool("done",false);
   cfg.router=pref.getBool("router",false);
+  routerHold=pref.getBool("rhold",false);
   cfg.canListen=pref.getBool("can",false);
   cfg.portChannel=pref.getUChar("port",1);
   cfg.apChannel=pref.getUChar("apch",6);
@@ -3885,6 +3935,9 @@ void handleWifiConnect(){
   if(!ssid.length()||ssid.length()>32){reply(false,"Choose a network",400);return;}
   const String pass=web.arg("pass");
   if(pass.length()>63){reply(false,"Password too long",400);return;}
+  // The user explicitly requested another router attempt; release rescue
+  // mode, including the persistent latch, without modifying AP credentials.
+  routerHold=false;routerGuard.reset();
   cfg.router=true;cfg.ssid=ssid;cfg.wifiPassword=pass;cfg.completed=true;
   saveSettings();
   staBssidKnown=false;
@@ -3900,6 +3953,7 @@ void handleWifiConnect(){
   pendingNetwork=true;
 }
 void handleWifiForget(){
+  routerHold=false;routerGuard.reset();
   cfg.router=false;cfg.ssid="";cfg.wifiPassword="";saveSettings();
   esp_wifi_disconnect();
   reply(true,"Disconnected from the router");
@@ -3996,6 +4050,11 @@ void handleDiag(){
   s+=",\"staDown\":";if(staDownSince)s+=(unsigned long)((millis()-staDownSince)/1000);else s+="null";
   s+=",\"staConnects\":";s+=staConnects;s+=",\"ch\":";s+=apChannelNow;
   s+=",\"conflict\":";s+=staConflict?"true":"false";
+  s+=",\"routerHold\":";s+=routerHold?"true":"false";
+  s+=",\"routerFallbacks\":";s+=routerFallbacks;
+  s+=",\"apMode\":";s+=(unsigned)WiFi.getMode();
+  s+=",\"apDriverSsid\":";jsonString(s,WiFi.softAPSSID());
+  s+=",\"apDriverIp\":";jsonString(s,WiFi.softAPIP().toString());
   s+=",\"apStops\":";s+=(unsigned long)apStops;s+=",\"chMoves\":";s+=apChannelChanges;s+=",\"autoNets\":";s+=autoChannelNets;s+=",\"bw\":";{wifi_bandwidth_t b=WIFI_BW_HT20;esp_wifi_get_bandwidth(WIFI_IF_AP,&b);s+=b==WIFI_BW_HT40?40:20;}
   s+=",\"httpServed\":";s+=web.served;s+=",\"httpReused\":";s+=web.reused;
   s+=",\"httpEvicted\":";s+=web.evicted;s+=",\"httpSlowMs\":";s+=web.slowestMs;
