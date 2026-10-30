@@ -3822,6 +3822,8 @@ String makeLiveJson(){
   s+=",\"rssi\":";if(WiFi.status()==WL_CONNECTED)s+=WiFi.RSSI();else s+="null";
   s+=",\"ip\":";if(WiFi.status()==WL_CONNECTED)jsonString(s,WiFi.localIP().toString());else s+="null";
   s+=",\"conflict\":";s+=staConflict?"true":"false";
+  s+=",\"mode\":";jsonString(s,(WiFi.getMode()&WIFI_MODE_AP)?"ap":"sta");
+  s+=",\"rescue\":";s+=routerHold?"true":"false";
   s+="},\"sd\":{\"ok\":";s+=sdReady?"true":"false";
   s+=",\"log\":";s+=sdLogging?"true":"false";
   s+="},\"test\":";s+=calActive?"true":"false";
@@ -4302,6 +4304,7 @@ void handleDiag(){
   s+=",\"routerFastRetries\":";s+=routerImmediateRetries;
   s+=",\"routerStuckRetries\":";s+=routerStuckRetries;
   s+=",\"routerLastReason\":";s+=(unsigned)staLastReason;
+  s+=",\"routerAssocMs\":";s+=routerAttemptStartedAt?(unsigned long)(millis()-routerAttemptStartedAt):0;
   s+=",\"routerWaitSec\":";s+=routerGuard.disconnectedSince?(unsigned long)((millis()-routerGuard.disconnectedSince)/1000UL):0;
   s+=",\"ch\":";s+=apChannelNow;
   s+=",\"conflict\":";s+=staConflict?"true":"false";
