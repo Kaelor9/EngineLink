@@ -50,7 +50,7 @@
 #include "routerguard.h"
 #include "miniz.h"  // the deflate compressor in the chip's ROM
 
-#define EL_VERSION "0.9.2"
+#define EL_VERSION "0.9.3"
 // Releases list published by the Pages workflow; firmware files come from
 // GitHub Releases of the same repository. Nothing else is downloaded.
 #define EL_RELEASES_URL "https://kaelor9.github.io/EngineLink/releases.json"
@@ -111,6 +111,7 @@ class EngineLinkWebServer : public WebServer {
 public:
   explicit EngineLinkWebServer(int port):WebServer(port){}
   uint32_t served=0,reused=0,evicted=0,slowestMs=0;
+  uint32_t slowestInteractiveMs=0,slowestTransferMs=0;
   uint8_t openSockets()const{uint8_t n=0;for(const Slot &s:pool)if(s.used)n++;return n;}
   void handleClient() override {
     const uint32_t now=millis();
@@ -146,12 +147,17 @@ private:
     _currentClient.setTimeout(HTTP_IO_TIMEOUT_MS);
     _currentStatus=HC_WAIT_READ;_statusChange=t0;
     wrote=false;keepAlive=false;
+    bool largeTransfer=false;
     netWaitBegin();const bool parsed=_parseRequest(_currentClient);netWaitEnd();
     if(parsed){
       _contentLength=CONTENT_LENGTH_NOT_SET;_responseCode=0;_clearResponseHeaders();
       // Only HTTP/1.1 frames every response (length or chunks) for reuse.
       keepAlive=_currentVersion==1&&!header("Connection").equalsIgnoreCase("close");
       rewriteHeader=keepAlive;
+      // Separate intentional large downloads from ordinary UI latency.
+      // A slow export should not disguise a Wi-Fi/API responsiveness fault.
+      const String &path=uri();
+      largeTransfer=(path=="/api/speedtest"||path=="/api/log"||path=="/api/segments.csv"||path.indexOf("/download")>=0);
       _handleRequest();
       ++served;if(s.requests)++reused;
       if(s.requests<65535)s.requests++;
@@ -161,7 +167,10 @@ private:
     _currentClient=NetworkClient();
     _currentStatus=HC_NONE;_currentUpload.reset();_currentRaw.reset();
     if(keep)s.since=millis();else{s.c.stop();s.used=false;}
-    const uint32_t ms=millis()-t0;if(ms>slowestMs)slowestMs=ms;
+    const uint32_t ms=millis()-t0;
+    if(ms>slowestMs)slowestMs=ms;
+    uint32_t &bucket=largeTransfer?slowestTransferMs:slowestInteractiveMs;
+    if(ms>bucket)bucket=ms;
   }
 protected:
   // The response header is written in one piece. WebServer always says
@@ -744,6 +753,21 @@ uint32_t apChannelChanges=0;
 int16_t autoChannelNets=-1;     // networks heard when EngineLink chose its channel
 uint8_t apStartedChannel=0;
 bool scanBusy=false; int16_t scanCount=-1; uint32_t scanStartedMs=0;
+// Snapshot the scan results into our own storage. Arduino's scan buffer can be
+// deleted by a separate router search or reconnect, while the phone still
+// needs the results. Keep the strongest 30 UNIQUE SSIDs, not the first 30 raw
+// BSSIDs (a busy marina can have many radios advertising the same SSID).
+constexpr uint8_t WIFI_SCAN_MAX_RESULTS=30;
+struct ScanEntry {
+  String ssid;
+  int32_t rssi=-127;
+  uint8_t channel=0;
+  bool locked=true;
+  uint8_t bssid[6]={};
+};
+ScanEntry scanEntries[WIFI_SCAN_MAX_RESULTS];
+uint8_t scanEntriesCount=0;
+uint32_t scanCompletedMs=0;
 // Firmware from GitHub, done by a worker task so the app keeps working.
 enum FwJob : uint8_t { FW_IDLE, FW_LIST, FW_INSTALL };
 volatile uint8_t fwJob=FW_IDLE;
@@ -2341,6 +2365,45 @@ void serviceCAN(){
     }
   }
 }
+void captureWifiScan(int16_t total){
+  scanEntriesCount=0;
+  for(int16_t i=0;i<total;i++){
+    const String ssid=WiFi.SSID(i);
+    if(!ssid.length())continue;
+    const int32_t rssi=WiFi.RSSI(i);
+    int slot=-1;
+    for(uint8_t k=0;k<scanEntriesCount;k++){
+      if(scanEntries[k].ssid==ssid){slot=k;break;}
+    }
+    if(slot>=0 && rssi<=scanEntries[slot].rssi)continue;
+    if(slot<0){
+      if(scanEntriesCount<WIFI_SCAN_MAX_RESULTS)slot=scanEntriesCount++;
+      else{
+        uint8_t weakest=0;
+        for(uint8_t k=1;k<scanEntriesCount;k++)
+          if(scanEntries[k].rssi<scanEntries[weakest].rssi)weakest=k;
+        if(rssi<=scanEntries[weakest].rssi)continue;
+        slot=weakest;
+      }
+    }
+    ScanEntry &entry=scanEntries[slot];
+    entry.ssid=ssid;
+    entry.rssi=rssi;
+    entry.channel=(uint8_t)WiFi.channel(i);
+    entry.locked=WiFi.encryptionType(i)!=WIFI_AUTH_OPEN;
+    const uint8_t *b=WiFi.BSSID(i);
+    if(b)memcpy(entry.bssid,b,sizeof(entry.bssid));
+    else memset(entry.bssid,0,sizeof(entry.bssid));
+  }
+  // Stable strongest-first display regardless of discovery order.
+  for(uint8_t i=0;i<scanEntriesCount;i++)
+    for(uint8_t j=i+1;j<scanEntriesCount;j++)
+      if(scanEntries[j].rssi>scanEntries[i].rssi){
+        ScanEntry tmp=scanEntries[i];scanEntries[i]=scanEntries[j];scanEntries[j]=tmp;
+      }
+  scanCompletedMs=millis();
+  WiFi.scanDelete(); // safe: responses read our cache, not the driver memory
+}
 // ---------- Wi-Fi: built to keep the phone connected ----------
 // Rules that keep the EngineLink network steady:
 //  * The access point is always on and never restarted for router problems.
@@ -2602,10 +2665,16 @@ void serviceNetwork(){
     ntpNotification=false;
     if(allowTime("ntp")&&validWall()){hasTime=true;timeSource="ntp";backfillTripTime();}
   }
-  // A scan the user asked for on the Boat router page.
+  // Copy completed results before any router operation can delete them.
   if(scanBusy){
     const int16_t r=WiFi.scanComplete();
-    if(r>=0||r==WIFI_SCAN_FAILED||(uint32_t)(millis()-scanStartedMs)>15000){scanBusy=false;scanCount=r;}
+    if(r>=0){
+      captureWifiScan(r);
+      scanBusy=false;scanCount=r;
+    }else if(r==WIFI_SCAN_FAILED||(uint32_t)(millis()-scanStartedMs)>10000){
+      scanBusy=false;scanCount=WIFI_SCAN_FAILED;
+      WiFi.scanDelete();
+    }
   }
 }
 // ---------- Diagnosis: rules, events, black box, trip log, life story ----------
@@ -3903,29 +3972,28 @@ void handleWifiScan(){
       staNextTry=millis()+20000UL;
     }
     WiFi.scanDelete();
-    // 300 ms on each channel: with the EngineLink network running the radio
-    // keeps going back to its own channel, and short listens miss routers.
-    if(WiFi.scanNetworks(true,true,false,300)==WIFI_SCAN_FAILED){reply(false,"Scan could not start",409);return;}
+    // 300 ms/channel kept the shared AP radio away for several seconds and
+    // could make Safari drop EngineLink. Active scans at 120 ms/channel still
+    // probe for 2.4 GHz routers but shorten off-channel interruptions.
+    if(WiFi.scanNetworks(true,true,false,120)==WIFI_SCAN_FAILED){
+      scanBusy=false;scanCount=WIFI_SCAN_FAILED;
+      reply(false,"Wi-Fi scan could not start. Try again after reconnecting.",409);return;
+    }
     scanBusy=true;scanCount=-1;scanStartedMs=millis();
   }
   String s="{\"busy\":";s+=scanBusy?"true":"false";
+  s+=",\"done\":";s+=scanCompletedMs>0?"true":"false";
+  s+=",\"error\":";
+  jsonString(s,!scanBusy&&scanCount==WIFI_SCAN_FAILED?String("Scan failed. Try again."):String(""));
   s+=",\"nets\":[";
-  if(!scanBusy&&scanCount>0){
-    bool first=true;
-    for(int16_t i=0;i<scanCount&&i<30;i++){
-      const String id=WiFi.SSID(i);
-      if(!id.length())continue;
-      // One row per network name, the strongest one.
-      bool dup=false;for(int16_t j=0;j<i;j++)if(WiFi.SSID(j)==id&&WiFi.RSSI(j)>=WiFi.RSSI(i)){dup=true;break;}
-      if(dup)continue;
-      if(!first)s+=',';
-      first=false;
-      s+="{\"s\":";jsonString(s,id);
-      s+=",\"r\":";s+=WiFi.RSSI(i);
-      s+=",\"lock\":";s+=WiFi.encryptionType(i)==WIFI_AUTH_OPEN?"false":"true";
-      s+=",\"ch\":";s+=WiFi.channel(i);
-      s+='}';
-    }
+  for(uint8_t i=0;i<scanEntriesCount;i++){
+    const ScanEntry &entry=scanEntries[i];
+    if(i)s+=',';
+    s+="{\"s\":";jsonString(s,entry.ssid);
+    s+=",\"r\":";s+=entry.rssi;
+    s+=",\"lock\":";s+=entry.locked?"true":"false";
+    s+=",\"ch\":";s+=entry.channel;
+    s+='}';
   }
   s+="]}";
   sendJSON(200,s);
@@ -3941,10 +4009,17 @@ void handleWifiConnect(){
   cfg.router=true;cfg.ssid=ssid;cfg.wifiPassword=pass;cfg.completed=true;
   saveSettings();
   staBssidKnown=false;
-  if(!scanBusy&&scanCount>0){
-    int best=-1;
-    for(int16_t i=0;i<scanCount;i++)if(WiFi.SSID(i)==ssid&&(best<0||WiFi.RSSI(i)>WiFi.RSSI(best)))best=i;
-    if(best>=0){staChannel=(uint8_t)WiFi.channel(best);memcpy(staBssid,WiFi.BSSID(best),6);staBssidKnown=true;}
+  // A saved scan is useful for displaying SSIDs, but a router may change
+  // BSSID/channel at any time. Pin the connection only to fresh results.
+  const bool scanFresh=scanCompletedMs&&(uint32_t)(millis()-scanCompletedMs)<60000UL;
+  for(uint8_t i=0;scanFresh&&i<scanEntriesCount;i++){
+    const ScanEntry &entry=scanEntries[i];
+    if(entry.ssid==ssid&&entry.channel>=1&&entry.channel<=13){
+      staChannel=entry.channel;
+      memcpy(staBssid,entry.bssid,sizeof(staBssid));
+      staBssidKnown=true;
+      break;
+    }
   }
   const bool move=staBssidKnown&&staChannel!=apChannelNow;
   String m="Connecting to "+ssid+".";
@@ -4058,7 +4133,12 @@ void handleDiag(){
   s+=",\"apStops\":";s+=(unsigned long)apStops;s+=",\"chMoves\":";s+=apChannelChanges;s+=",\"autoNets\":";s+=autoChannelNets;s+=",\"bw\":";{wifi_bandwidth_t b=WIFI_BW_HT20;esp_wifi_get_bandwidth(WIFI_IF_AP,&b);s+=b==WIFI_BW_HT40?40:20;}
   s+=",\"httpServed\":";s+=web.served;s+=",\"httpReused\":";s+=web.reused;
   s+=",\"httpEvicted\":";s+=web.evicted;s+=",\"httpSlowMs\":";s+=web.slowestMs;
+  s+=",\"httpInteractiveSlowMs\":";s+=web.slowestInteractiveMs;
+  s+=",\"httpTransferSlowMs\":";s+=web.slowestTransferMs;
   s+=",\"httpOpen\":";s+=web.openSockets();s+=",\"loopMaxMs\":";s+=loopMaxMs;
+  s+=",\"scanBusy\":";s+=scanBusy?"true":"false";
+  s+=",\"scanNets\":";s+=scanEntriesCount;
+  s+=",\"scanAge\":";if(scanCompletedMs)s+=(unsigned long)((millis()-scanCompletedMs)/1000);else s+="null";
   s+="},\"heap\":";s+=ESP.getFreeHeap();s+=",\"minHeap\":";s+=ESP.getMinFreeHeap();
   s+=",\"reset\":";s+=(unsigned)esp_reset_reason();
   s+=",\"up\":";s+=(unsigned long)(now/1000ULL);
@@ -4301,10 +4381,12 @@ void handleExportRaw(){
   }
   endDownload(out);
 }
-// Download speed test: text from memory, no SD card, so it measures only the
-// network between the phone or computer and EngineLink.
+// Download speed test: text from memory, no SD card. Keep the payload short:
+// the synchronous HTTP server cannot serve live updates during a transfer.
+// On a weak AP, the old 512 kB test blocked every other request for 10+ s.
+// The browser measures the actual received byte count, not the requested size.
 void handleSpeedTest(){
-  const uint32_t kb=constrain(web.arg("kb").toInt(),16,4096);
+  const uint32_t kb=constrain(web.arg("kb").toInt(),16,32);
   const DlStat keep=dlStat;
   // Not compressed: this measures what the Wi-Fi carries.
   ChunkOut &out=beginDownload("speed test","text/plain",nullptr,false);
