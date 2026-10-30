@@ -776,7 +776,7 @@ constexpr uint32_t SCAN_DWELL_MS=220,SCAN_GAP_MS=110,SCAN_TIMEOUT_MS=24000;
 bool scanBusy=false,scanRequested=false,scanInFlight=false,scanStaTemporary=false;
 int16_t scanCount=-1;
 uint32_t scanStartedMs=0,scanNextAt=0,scanRestoreAt=0,scanDurationMs=0;
-uint8_t scanChannel=0,scanFailures=0,scanStartFailures=0;
+uint8_t scanChannel=0,scanFailures=0,scanStartFailures=0,scanStartRetry=0;
 uint16_t scanRawCount=0;
 // Snapshot the scan results into our own storage. Arduino's scan buffer can be
 // deleted by a separate router search or reconnect, while the phone still
@@ -2625,6 +2625,98 @@ void applyNetwork(){
   }
 }
 
+// Advance discovery without blocking loop() or monopolizing the shared AP
+// radio for a continuous all-channel sweep. Each channel gets a full active
+// dwell time, followed by a gap in which normal AP traffic can be serviced.
+// A scan is only launched by the user's explicit request on the router page.
+void serviceWifiScan(){
+  const uint32_t now=millis();
+  if(scanRequested && (int32_t)(now-scanNextAt)>=0){
+    scanRequested=false;
+    scanChannel=SCAN_CHANNEL_FIRST;
+    scanStartedMs=now;
+    scanInFlight=false;
+    scanRestoreAt=0;
+    scanStartRetry=0;
+    scanStaTemporary=!(WiFi.getMode()&WIFI_MODE_STA);
+    if(scanStaTemporary && !WiFi.mode(WIFI_AP_STA)){
+      scanBusy=false;scanCount=WIFI_SCAN_FAILED;
+      ++scanFailures;
+      Serial.println("Wi-Fi scan: cannot enable temporary station interface");
+      return;
+    }
+    WiFi.scanDelete();
+    scanNextAt=millis()+SCAN_GAP_MS;
+    Serial.println("Wi-Fi discovery: scanning 2.4 GHz channels 1-13");
+  }
+  if(scanBusy && !scanRequested && scanChannel>=SCAN_CHANNEL_FIRST){
+    if((uint32_t)(now-scanStartedMs)>SCAN_TIMEOUT_MS){
+      // Recover even if the driver never reports SCAN_DONE.
+      ++scanFailures;
+      scanInFlight=false;
+      WiFi.scanDelete();
+      scanChannel=SCAN_CHANNEL_LAST+1;
+    }else if(scanChannel<=SCAN_CHANNEL_LAST){
+      if(scanInFlight){
+        const int16_t n=WiFi.scanComplete();
+        if(n!=WIFI_SCAN_RUNNING){
+          scanInFlight=false;
+          if(n>=0){
+            scanRawCount+=(uint16_t)n;
+            captureWifiScan(n);
+          }else{
+            ++scanFailures;
+            WiFi.scanDelete();
+          }
+          ++scanChannel;
+          scanStartRetry=0;
+          scanNextAt=millis()+SCAN_GAP_MS;
+        }
+      }else if((int32_t)(now-scanNextAt)>=0){
+        const int16_t start=WiFi.scanNetworks(true,false,false,SCAN_DWELL_MS,scanChannel);
+        if(start==WIFI_SCAN_RUNNING){
+          scanInFlight=true;
+        }else if(start>=0){
+          scanRawCount+=(uint16_t)start;
+          captureWifiScan(start);
+          ++scanChannel;
+          scanStartRetry=0;
+          scanNextAt=millis()+SCAN_GAP_MS;
+        }else if(++scanStartRetry<3){
+          // A driver scan can be temporarily rejected while changing modes.
+          ++scanStartFailures;
+          scanNextAt=millis()+250;
+        }else{
+          ++scanFailures;
+          ++scanChannel;
+          scanStartRetry=0;
+          scanNextAt=millis()+SCAN_GAP_MS;
+        }
+      }
+    }
+    if(scanChannel>SCAN_CHANNEL_LAST){
+      scanBusy=false;
+      scanCount=scanEntriesCount>0||scanFailures==0?scanEntriesCount:WIFI_SCAN_FAILED;
+      scanCompletedMs=millis();
+      scanDurationMs=(uint32_t)(scanCompletedMs-scanStartedMs);
+      // Leave STA available briefly so Safari can fetch results and the user
+      // can select a router before returning to strictly AP-only operation.
+      scanRestoreAt=millis()+15000UL;
+      Serial.printf("Wi-Fi discovery: %u SSIDs (%u raw), %u failed channels in %lu ms\n",
+        (unsigned)scanEntriesCount,(unsigned)scanRawCount,
+        (unsigned)scanFailures,(unsigned long)scanDurationMs);
+    }
+  }
+  if(scanRestoreAt && !scanBusy && !scanRequested &&
+     (int32_t)(millis()-scanRestoreAt)>=0){
+    scanRestoreAt=0;
+    if(scanStaTemporary && (!routerConfigured()||routerHold)){
+      // The setup scan is finished. Standalone normal mode is AP only.
+      WiFi.mode(WIFI_AP);
+      scanStaTemporary=false;
+    }
+  }
+}
 void serviceNetwork(){
   // Give the HTTP success reply time to reach the phone before turning
   // its current Wi-Fi interface off. All work still runs in the main loop.
@@ -2704,19 +2796,8 @@ void serviceNetwork(){
     ntpNotification=false;
     if(allowTime("ntp")&&validWall()){hasTime=true;timeSource="ntp";backfillTripTime();}
   }
-  // Copy completed results before any router operation can delete them.
-  if(scanBusy){
-    const int16_t r=WiFi.scanComplete();
-    if(r>=0){
-      captureWifiScan(r);
-      scanBusy=false;scanCount=r;
-      if(!routerConfigured()||routerHold)WiFi.mode(WIFI_AP);
-    }else if(r==WIFI_SCAN_FAILED||(uint32_t)(millis()-scanStartedMs)>10000){
-      scanBusy=false;scanCount=WIFI_SCAN_FAILED;
-      WiFi.scanDelete();
-      if(!routerConfigured()||routerHold)WiFi.mode(WIFI_AP);
-    }
-  }
+  // Keep progressing the radio scan while ordinary web requests are served.
+  serviceWifiScan();
   // Refresh Bonjour after AP recreation or router DHCP; retry failed init.
   // Debounce network events and never reset the Wi-Fi interface to fix mDNS.
   // Avoid restarting mDNS in the middle of a radio scan.
