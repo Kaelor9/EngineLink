@@ -20,16 +20,26 @@ assert "WiFi.mode(" not in api and "WiFi.scanNetworks(" not in api, (
 )
 assert "scanNextAt=millis()+600UL" in api, "No response grace before scan starts"
 assert "scanEntriesCount=0" in api, "Scan must clear old results at the start"
-assert "SCAN_CHANNEL_FIRST=1,SCAN_CHANNEL_LAST=13" in ino
+assert "SCAN_CHANNEL_FIRST=1,SCAN_CHANNEL_LAST=13,SCAN_PASSES=2" in ino
+assert "SCAN_PASSIVE_DWELL_MS=300" in ino
+assert "WiFi.setScanActiveMinTime(0)" in service, "Use the full active dwell instead of Arduino's default 100 ms"
+assert "WiFi.setScanActiveMinTime(100)" in service, "Restore scanner defaults after completion"
 assert "SCAN_DWELL_MS=220" in ino, "Avoid tiny per-channel listen windows"
-assert "WiFi.scanNetworks(true,false,false,SCAN_DWELL_MS,scanChannel)" in service
+assert "WiFi.scanNetworks(true,false,passive," in service
+assert "passive?SCAN_PASSIVE_DWELL_MS:SCAN_DWELL_MS,scanChannel" in service
+assert "scanPass==SCAN_PASSES" in service and "advanceScanChannel();" in service
+assert "scanPassOneCount=scanEntriesCount" in ino
 assert "scanNextAt=millis()+SCAN_GAP_MS" in service
 assert "captureWifiScan(n)" in service
 assert "scanEntriesCount=0" not in capture, "Channel results must accumulate"
 assert "WiFi.scanDelete()" in capture
 assert "scanRestoreAt=millis()+15000UL" in service
 assert "scanFailures" in api and "scanDurationMs" in api
-assert "Checking channel " in ui and "n<30" in ui
+assert "Scan ${sc.pass||1}/${sc.passes||2}" in ui and "n<45" in ui
+assert 'data-i="wifiManualSsid"' in ui and 'data-i="wifiManualPass"' in ui
+assert "wifiManualConnect" in ui and "startRouterConnection(ssid,S.wifiManualPass)" in ui
+assert "firstPassNets" in api
+assert "scanFirstPassNets" in ino
 assert not re.search(r"WiFi\.scanNetworks\(false", ino), (
     "A blocking scan has reappeared in the main firmware task"
 )

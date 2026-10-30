@@ -50,7 +50,7 @@
 #include "routerguard.h"
 #include "miniz.h"  // the deflate compressor in the chip's ROM
 
-#define EL_VERSION "0.10.0"
+#define EL_VERSION "0.10.1"
 // Releases list published by the Pages workflow; firmware files come from
 // GitHub Releases of the same repository. Nothing else is downloaded.
 #define EL_RELEASES_URL "https://kaelor9.github.io/EngineLink/releases.json"
@@ -776,12 +776,15 @@ uint8_t apStartedChannel=0;
 // operation remains either AP-only (standalone) or STA-only (router).
 // A channel-by-channel asynchronous scan returns to the AP channel between
 // probes so browser requests can still get through on a shared radio.
-constexpr uint8_t SCAN_CHANNEL_FIRST=1,SCAN_CHANNEL_LAST=13;
-constexpr uint32_t SCAN_DWELL_MS=220,SCAN_GAP_MS=110,SCAN_TIMEOUT_MS=24000;
+constexpr uint8_t SCAN_CHANNEL_FIRST=1,SCAN_CHANNEL_LAST=13,SCAN_PASSES=2;
+// First pass sends active probe requests, the second listens for beacons
+// independently. Two methods reduce missed SSIDs without a blocking scan.
+constexpr uint32_t SCAN_DWELL_MS=220,SCAN_PASSIVE_DWELL_MS=300;
+constexpr uint32_t SCAN_GAP_MS=130,SCAN_TIMEOUT_MS=32000;
 bool scanBusy=false,scanRequested=false,scanInFlight=false,scanStaTemporary=false;
 int16_t scanCount=-1;
 uint32_t scanStartedMs=0,scanNextAt=0,scanRestoreAt=0,scanDurationMs=0;
-uint8_t scanChannel=0,scanFailures=0,scanStartFailures=0,scanStartRetry=0;
+uint8_t scanChannel=0,scanPass=1,scanPassOneCount=0,scanFailures=0,scanStartFailures=0,scanStartRetry=0;
 uint16_t scanRawCount=0;
 // Snapshot the scan results into our own storage. Arduino's scan buffer can be
 // deleted by a separate router search or reconnect, while the phone still
@@ -2607,10 +2610,22 @@ void applyNetwork(){
 // radio for a continuous all-channel sweep. Each channel gets a full active
 // dwell time, followed by a gap in which normal AP traffic can be serviced.
 // A scan is only launched by the user's explicit request on the router page.
+// On each completed channel, advance to the next channel or start the second
+// (passive) survey. Results stay in the cache until both passes are done.
+void advanceScanChannel(){
+  if(scanChannel==SCAN_CHANNEL_LAST && scanPass<SCAN_PASSES){
+    scanPassOneCount=scanEntriesCount;
+    ++scanPass;
+    scanChannel=SCAN_CHANNEL_FIRST;
+  }else{
+    ++scanChannel;
+  }
+}
 void serviceWifiScan(){
   const uint32_t now=millis();
   if(scanRequested && (int32_t)(now-scanNextAt)>=0){
     scanRequested=false;
+    scanPass=1;
     scanChannel=SCAN_CHANNEL_FIRST;
     scanStartedMs=now;
     scanInFlight=false;
@@ -2625,17 +2640,21 @@ void serviceWifiScan(){
       Serial.println("Wi-Fi scan: cannot enable temporary station interface");
       return;
     }
+    // Arduino's default min active dwell is 100 ms, and the radio can leave
+    // a channel after min dwell even when max dwell is set to 220 ms.
+    // Zero min requests the full max dwell per Espressif's scan semantics.
+    WiFi.setScanActiveMinTime(0);
     WiFi.scanDelete();
     scanNextAt=millis()+SCAN_GAP_MS;
-    Serial.println("Wi-Fi discovery: scanning 2.4 GHz channels 1-13");
+    Serial.println("Wi-Fi discovery: two-pass active and passive 2.4 GHz scan");
   }
   if(scanBusy && !scanRequested && scanChannel>=SCAN_CHANNEL_FIRST){
     if((uint32_t)(now-scanStartedMs)>SCAN_TIMEOUT_MS){
-      // Recover even if the driver never reports SCAN_DONE.
       ++scanFailures;
       if(scanInFlight)esp_wifi_scan_stop();
       scanInFlight=false;
       WiFi.scanDelete();
+      scanPass=SCAN_PASSES;
       scanChannel=SCAN_CHANNEL_LAST+1;
     }else if(scanChannel<=SCAN_CHANNEL_LAST){
       if(scanInFlight){
@@ -2649,50 +2668,52 @@ void serviceWifiScan(){
             ++scanFailures;
             WiFi.scanDelete();
           }
-          ++scanChannel;
+          advanceScanChannel();
           scanStartRetry=0;
           scanNextAt=millis()+SCAN_GAP_MS;
         }
       }else if((int32_t)(now-scanNextAt)>=0){
-        const int16_t start=WiFi.scanNetworks(true,false,false,SCAN_DWELL_MS,scanChannel);
+        const bool passive=scanPass==SCAN_PASSES;
+        const int16_t start=WiFi.scanNetworks(true,false,passive,
+          passive?SCAN_PASSIVE_DWELL_MS:SCAN_DWELL_MS,scanChannel);
         if(start==WIFI_SCAN_RUNNING){
           scanInFlight=true;
         }else if(start>=0){
           scanRawCount+=(uint16_t)start;
           captureWifiScan(start);
-          ++scanChannel;
+          advanceScanChannel();
           scanStartRetry=0;
           scanNextAt=millis()+SCAN_GAP_MS;
         }else if(++scanStartRetry<3){
-          // A driver scan can be temporarily rejected while changing modes.
           ++scanStartFailures;
           scanNextAt=millis()+250;
         }else{
           ++scanFailures;
-          ++scanChannel;
+          advanceScanChannel();
           scanStartRetry=0;
           scanNextAt=millis()+SCAN_GAP_MS;
         }
       }
     }
     if(scanChannel>SCAN_CHANNEL_LAST){
+      // Restore Arduino's usual setting for any later scan.
+      WiFi.setScanActiveMinTime(100);
       scanBusy=false;
       scanCount=scanEntriesCount>0||scanFailures==0?scanEntriesCount:WIFI_SCAN_FAILED;
       scanCompletedMs=millis();
       scanDurationMs=(uint32_t)(scanCompletedMs-scanStartedMs);
-      // Leave STA available briefly so Safari can fetch results and the user
-      // can select a router before returning to strictly AP-only operation.
+      // Give Safari time to receive the final network list before returning
+      // from temporary AP+STA discovery to the normal AP-only mode.
       scanRestoreAt=millis()+15000UL;
-      Serial.printf("Wi-Fi discovery: %u SSIDs (%u raw), %u failed channels in %lu ms\n",
+      Serial.printf("Wi-Fi discovery: %u SSIDs (%u raw), %u failed channels over %u passes in %lu ms\n",
         (unsigned)scanEntriesCount,(unsigned)scanRawCount,
-        (unsigned)scanFailures,(unsigned long)scanDurationMs);
+        (unsigned)scanFailures,(unsigned)SCAN_PASSES,(unsigned long)scanDurationMs);
     }
   }
   if(scanRestoreAt && !scanBusy && !scanRequested &&
      (int32_t)(millis()-scanRestoreAt)>=0){
     scanRestoreAt=0;
     if(scanStaTemporary && (!routerConfigured()||routerHold)){
-      // The setup scan is finished. Standalone normal mode is AP only.
       WiFi.mode(WIFI_AP);
       scanStaTemporary=false;
     }
@@ -4145,7 +4166,7 @@ void handleWifiScan(){
       // Acknowledge the HTTP request BEFORE changing radio modes. This
       // prevents the phone losing the response that initiated the scan.
       scanBusy=true;scanRequested=true;scanInFlight=false;
-      scanCount=-1;scanChannel=0;scanEntriesCount=0;
+      scanCount=-1;scanChannel=0;scanPass=1;scanPassOneCount=0;scanEntriesCount=0;
       scanFailures=0;scanStartFailures=0;scanRawCount=0;
       scanStartedMs=0;scanCompletedMs=0;scanDurationMs=0;
       scanRestoreAt=0;scanNextAt=millis()+600UL;
@@ -4154,6 +4175,9 @@ void handleWifiScan(){
   String s="{\"busy\":";s+=scanBusy?"true":"false";
   s+=",\"done\":";s+=scanCompletedMs>0?"true":"false";
   s+=",\"channel\":";s+=scanBusy?(unsigned)scanChannel:0;
+  s+=",\"pass\":";s+=scanPass;
+  s+=",\"firstPassNets\":";s+=scanPassOneCount;
+  s+=",\"passes\":";s+=SCAN_PASSES;
   s+=",\"channels\":";s+=SCAN_CHANNEL_LAST;
   s+=",\"raw\":";s+=scanRawCount;
   s+=",\"failures\":";s+=scanFailures;
@@ -4325,6 +4349,8 @@ void handleDiag(){
   s+=",\"mdnsHost\":";jsonString(s,cfg.hostName);
   s+=",\"scanBusy\":";s+=scanBusy?"true":"false";
   s+=",\"scanChannel\":";s+=scanBusy?(unsigned)scanChannel:0;
+  s+=",\"scanPass\":";s+=scanPass;
+  s+=",\"scanFirstPassNets\":";s+=scanPassOneCount;
   s+=",\"scanFailures\":";s+=scanFailures;
   s+=",\"scanStartFailures\":";s+=scanStartFailures;
   s+=",\"scanRawCount\":";s+=scanRawCount;

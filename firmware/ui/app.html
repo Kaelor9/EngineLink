@@ -222,7 +222,7 @@ const S={tab:'trip',page:null,back:null,backScroll:0,live:null,liveAt:0,fails:0,
   chartM:{},evSeries:{},tripSeries:{},evOpen:null,tripView:null,
   open:null,selMode:null,sel:[],raw:false,quick:null,sheet:null,d:{},info:null,
   warm:{phase:'idle',seen:0,samples:[],startedAt:0},healthOpen:null,svcOpen:null,advOpen:false,editTank:false,tankDraft:'',
-  wifiPick:null,wifiPass:'',newPlace:'',newNm:'',voltMeas:'',timeSentAt:0,fuelOpen:null,firstLive:true};
+  wifiPick:null,wifiPass:'',wifiManualSsid:'',wifiManualPass:'',newPlace:'',newNm:'',voltMeas:'',timeSentAt:0,fuelOpen:null,firstLive:true};
 // App preferences, shared by all phones through EngineLink (/api/prefs).
 const P={theme:'dark',night:'off',units:'metric',cur:'DKK',start:'trip',keepOn:false,planOn:true,
   places:[],route:0,round:true,custom:'30',planIdx:null,sea:'Calm',load:'Normal',
@@ -1267,10 +1267,18 @@ const PAGE_VIEWS={
       if(c.router)h+=`<div class="card s13" style="margin-bottom:14px">Saved: <b>${esc(c.ssid)}</b> · not reachable right now. EngineLink uses its own Wi-Fi as recovery until you choose Connect again. <button data-a="wifiForget" style="color:var(--teal)">Forget</button></div>`;
       const sc=S.scan;
       h+=`<div class="sec">${sc&&sc.nets&&sc.nets.length?sc.nets.map(n=>{const pick=S.wifiPick===n.s;return `<div><button class="row" data-a="wifiPick" data-v="${esc(n.s)}"><span><span class="rt">${esc(n.s)}</span><span class="rh">${n.lock?'Password':'Open'} · channel ${n.ch}</span></span><span style="color:var(--teal);letter-spacing:1px">${n.r>-60?'▂▄▆':n.r>-72?'▂▄':'▂'}</span></button>
-        ${pick?`<div style="display:grid;grid-template-columns:1fr auto;gap:8px;padding:0 0 12px">${n.lock?`<input class="field" type="password" data-i="wifiPass" value="${esc(S.wifiPass)}" placeholder="Router password" aria-label="Router password">`:'<span class="s13 sub" style="align-self:center">Open network</span>'}<button class="btn pri" data-a="wifiConnect" data-v="${esc(n.s)}">Connect</button></div>`:''}</div>`;}).join(''):`<div class="empty">${sc&&sc.error?esc(sc.error):sc&&sc.busy?'Searching for 2.4 GHz networks…':sc&&sc.done?'No 2.4 GHz networks found. Try scanning again closer to your router.':'Scan to find the boat router.'}</div>`}
+        ${pick?`<div style="display:grid;grid-template-columns:1fr auto;gap:8px;padding:0 0 12px">${n.lock?`<input class="field" type="password" data-i="wifiPass" value="${esc(S.wifiPass)}" placeholder="Router password" aria-label="Router password">`:'<span class="s13 sub" style="align-self:center">Open network</span>'}<button class="btn pri" data-a="wifiConnect" data-v="${esc(n.s)}" ${sc&&sc.busy?'disabled':''}>Connect</button></div>`:''}</div>`;}).join(''):`<div class="empty">${sc&&sc.error?esc(sc.error):sc&&sc.busy?'Searching for 2.4 GHz networks…':sc&&sc.done?'No 2.4 GHz networks found. Try scanning again closer to your router.':'Scan to find the boat router.'}</div>`}
         <button class="row" data-a="wifiScan" style="color:var(--teal)" ${sc&&sc.busy?'disabled':''}><span class="rt">${sc&&sc.busy?'Scanning channels…':'Scan for networks'}</span></button>
-        ${sc&&(sc.busy||sc.error)?`<div class="s12 sub" style="padding:8px 16px;${sc.error?'color:var(--orange);':''}">${sc.error?esc(sc.error):`Checking channel ${sc.channel||1} of ${sc.channels||13} · ${sc.nets?.length||0} networks found so far. Previous results remain visible until fresh results arrive.`}</div>`:''}</div>
+        ${sc&&(sc.busy||sc.error)?`<div class="s12 sub" style="padding:8px 16px;${sc.error?'color:var(--orange);':''}">${sc.error?esc(sc.error):`Scan ${sc.pass||1}/${sc.passes||2} ${(sc.pass||1)===1?'(active)':'(beacon)'} · channel ${sc.channel||1} of ${sc.channels||13} · ${sc.nets?.length||0} networks found. Results from both surveys are combined.`}</div>`:''}</div>
         <div class="s12 sub" style="padding:0 8px 16px">Only 2.4 GHz Wi-Fi networks are supported. Scanning may briefly interrupt the EngineLink connection.</div>`;
+      h+=`<div class="hd">Enter router manually</div>
+        <div class="sec" style="padding:14px 18px"><div class="stack" style="gap:10px">
+          <div class="s13 sub">If your router is missing from the scan, enter its exact 2.4 GHz network name and password.</div>
+          <label class="s12 sub">Network name (SSID)<input class="field" style="margin-top:6px" maxlength="32" ${sc&&sc.busy?'disabled':''} data-i="wifiManualSsid" value="${esc(S.wifiManualSsid)}" placeholder="e.g. Zyxel_9D27" autocapitalize="none" spellcheck="false" autocomplete="off"></label>
+          <label class="s12 sub">Wi-Fi password<input class="field" style="margin-top:6px" type="password" maxlength="63" ${sc&&sc.busy?'disabled':''} data-i="wifiManualPass" value="${esc(S.wifiManualPass)}" placeholder="Leave empty for an open network" autocomplete="off"></label>
+          <button class="btn pri" data-a="wifiManualConnect" ${sc&&sc.busy?'disabled':''}>Connect to this router</button>
+          <div class="s12 sub">A 5 GHz-only router cannot connect to EngineLink. Hidden 2.4 GHz networks can be entered here.</div>
+        </div></div>`;
     }
     h+=`<div class="card s13 sub">EngineLink uses exactly one Wi-Fi mode at a time. <b>EngineLink Wi-Fi</b> is the factory default; <b>Connect to a router</b> turns off EngineLink's own network. Switch your phone to the router after connecting. If the router cannot connect after two minutes of repeated attempts, EngineLink restores its own Wi-Fi for recovery.<br><br>Both modes use <b>http://enginelink.local</b> (HTTP, not HTTPS). On standalone Wi-Fi you can also use <b>http://192.168.4.1</b>.</div>`;
     return h;
@@ -1313,7 +1321,7 @@ const PAGE_VIEWS={
       <div class="rowx s12 sub">A test asks the engine for its values for 30 seconds. Only read requests are sent, never commands.</div></div>`;
     // Wi-Fi
     const w=d.wifi||{};
-    h+=`<div class="hd">Wi-Fi</div><div class="sec"><div class="rowx"><div class="grid3" style="gap:8px">${[['Mode',lv.net.mode==='sta'?'Router':lv.net.rescue?'Recovery AP':'Standalone'],['Phones',lv.net.mode==='sta'?'—':lv.net.cl],['Router status',lv.net.mode==='sta'?(lv.net.sta?'Connected':'Connecting'):'—'],['Channel',w.ch||lv.net.ch],['Network restarts',w.apRestarts??'—'],['Networks found',w.scanNets??'—'],['Scan errors',w.scanFailures??'—'],['Scan duration',w.scanDurationMs!=null?w.scanDurationMs+' ms':'—'],['mDNS',w.mdns?'Responder on':'Retrying'],['mDNS retries',w.mdnsFailures??'—'],['Requests',w.httpServed??'—'],['Reused',w.httpServed?Math.round(w.httpReused/w.httpServed*100)+' %':'—'],['Slowest UI',w.httpInteractiveSlowMs!=null?w.httpInteractiveSlowMs+' ms':w.httpSlowMs!=null?w.httpSlowMs+' ms':'—'],['Request parse',w.httpParseSlowMs!=null?w.httpParseSlowMs+' ms':'—'],['Request handler',w.httpHandleSlowMs!=null?w.httpHandleSlowMs+' ms':'—'],['Slowest transfer',w.httpTransferSlowMs!=null?w.httpTransferSlowMs+' ms':'—'],['Phone joins',w.joins??'—'],['Phone drops',w.leaves??'—'],['Missed here',S.failTotal||0],['Channel changes',w.chMoves??'—'],['Router drops',lv.net.rt?(w.staDrops??'—'):'—'],['Router attempts',w.routerAttempts??'—'],['Fast retries',w.routerFastRetries??'—'],['Stalled attempts',w.routerStuckRetries??'—'],['Slow loop',w.loopMaxMs!=null?w.loopMaxMs+' ms':'—']].map(([k,v])=>`<div style="background:var(--track);border-radius:12px;padding:8px 10px"><div class="s12 sub">${k}</div><div style="font-weight:600;margin-top:2px">${v}</div></div>`).join('')}</div>
+    h+=`<div class="hd">Wi-Fi</div><div class="sec"><div class="rowx"><div class="grid3" style="gap:8px">${[['Mode',lv.net.mode==='sta'?'Router':lv.net.rescue?'Recovery AP':'Standalone'],['Phones',lv.net.mode==='sta'?'—':lv.net.cl],['Router status',lv.net.mode==='sta'?(lv.net.sta?'Connected':'Connecting'):'—'],['Channel',w.ch||lv.net.ch],['Network restarts',w.apRestarts??'—'],['Networks found',w.scanNets??'—'],['Found in pass 1',w.scanFirstPassNets??'—'],['Scan errors',w.scanFailures??'—'],['Scan duration',w.scanDurationMs!=null?w.scanDurationMs+' ms':'—'],['mDNS',w.mdns?'Responder on':'Retrying'],['mDNS retries',w.mdnsFailures??'—'],['Requests',w.httpServed??'—'],['Reused',w.httpServed?Math.round(w.httpReused/w.httpServed*100)+' %':'—'],['Slowest UI',w.httpInteractiveSlowMs!=null?w.httpInteractiveSlowMs+' ms':w.httpSlowMs!=null?w.httpSlowMs+' ms':'—'],['Request parse',w.httpParseSlowMs!=null?w.httpParseSlowMs+' ms':'—'],['Request handler',w.httpHandleSlowMs!=null?w.httpHandleSlowMs+' ms':'—'],['Slowest transfer',w.httpTransferSlowMs!=null?w.httpTransferSlowMs+' ms':'—'],['Phone joins',w.joins??'—'],['Phone drops',w.leaves??'—'],['Missed here',S.failTotal||0],['Channel changes',w.chMoves??'—'],['Router drops',lv.net.rt?(w.staDrops??'—'):'—'],['Router attempts',w.routerAttempts??'—'],['Fast retries',w.routerFastRetries??'—'],['Stalled attempts',w.routerStuckRetries??'—'],['Slow loop',w.loopMaxMs!=null?w.loopMaxMs+' ms':'—']].map(([k,v])=>`<div style="background:var(--track);border-radius:12px;padding:8px 10px"><div class="s12 sub">${k}</div><div style="font-weight:600;margin-top:2px">${v}</div></div>`).join('')}</div>
       ${w.httpSlowPath?`<div class="s12 sub" style="margin-top:8px">Slow UI endpoint: <b style="color:var(--text)">${esc(w.httpSlowPath)}</b></div>`:''}
       <div class="s12 sub" style="margin-top:8px">Local address: <b style="color:var(--text)">http://${esc(w.mdnsHost||'enginelink')}.local</b> · mDNS status shows the responder, not whether your router forwards Bonjour traffic. On EngineLink Wi-Fi you can always use 192.168.4.1.</div>
       ${w.leaves?`<div class="s12" style="margin-top:8px">Last phone drop: <b>${LEAVE[w.reason]||'code '+w.reason}</b></div>`:''}
@@ -1573,6 +1581,17 @@ function goTab(t){
   render(true);$('#main').scrollTop=0;
 }
 async function cfgSet(data){const r=await post('/api/cfg',data);if(!r.ok)toast(r.message||'Not saved');await load('state');return r;}
+async function startRouterConnection(ssid,pass){
+  if(!ssid)return toast('Enter the router network name');
+  if(!confirm('Switch EngineLink to '+ssid+'? Its own Wi-Fi will turn off. Connect your phone to the router afterwards.'))return;
+  const r=await act('/api/wifi/connect',{ssid,pass});
+  if(r.ok){
+    S.wifiPick=null;
+    toast('EngineLink is joining the router. Switch your phone to that Wi-Fi.');
+    BASE='';liveSidecarWorked=false;liveSidecarRetryAt=Date.now()+3000;
+  }
+  return r;
+}
 const A={
   tab:v=>goTab(v),
   page:(v,b)=>goPage(v,b.dataset.b),
@@ -1651,16 +1670,19 @@ const A={
         // Never report an old list as a fresh result after a failed scan.
         S.scan=next;
       }catch(e){
-        if(n>=30)S.scan={busy:false,nets:(S.scan&&S.scan.nets)||previous,error:'Network scan timed out. Try again.'};
+        if(n>=45)S.scan={busy:false,nets:(S.scan&&S.scan.nets)||previous,error:'Network scan timed out. Try again.'};
       }
       render(true);
-      if(S.scan&&S.scan.busy&&n<30)setTimeout(()=>poll(n+1),1000);
+      if(S.scan&&S.scan.busy&&n<45)setTimeout(()=>poll(n+1),1000);
       else if(S.scan&&S.scan.busy){S.scan={busy:false,nets:(S.scan&&S.scan.nets)||previous,error:'Network scan timed out. Please scan again.'};render(true);}
     };
     setTimeout(()=>poll(0),800);
   },
   wifiPick:v=>{S.wifiPick=S.wifiPick===v?null:v;S.wifiPass='';render(true);},
-  wifiConnect:async v=>{if(!confirm('Switch EngineLink to the router? Its own Wi-Fi will turn off. Connect your phone to the router afterwards.'))return;const net=(S.scan?.nets||[]).find(n=>n.s===v);const r=await act('/api/wifi/connect',{ssid:v,pass:net&&!net.lock?'':S.wifiPass});if(r.ok){S.wifiPick=null;toast('EngineLink is joining the router. Switch your phone to that Wi-Fi.');BASE='';liveSidecarWorked=false;liveSidecarRetryAt=Date.now()+3000;}},
+  wifiConnect:v=>{const net=(S.scan?.nets||[]).find(n=>n.s===v);return startRouterConnection(v,net&&!net.lock?'':S.wifiPass);},
+  wifiManualConnect:()=>{const ssid=S.wifiManualSsid.trim();if(!ssid||new TextEncoder().encode(ssid).length>32){toast('Enter the exact 2.4 GHz Wi-Fi name (max 32 bytes)');return;}
+    if(S.wifiManualPass.length>0&&S.wifiManualPass.length<8){toast('Wi-Fi password must contain at least 8 characters');return;}
+    return startRouterConnection(ssid,S.wifiManualPass);},
   wifiForget:async()=>{if(!confirm('Switch to EngineLink Wi-Fi? The router connection will end.'))return;const r=await act('/api/wifi/forget',{});if(r.ok)toast('Switch phone to EngineLink Wi-Fi and open http://192.168.4.1');},
   // Firmware
   fwBeta:()=>{S.fwBeta=!S.fwBeta;render(true);},
@@ -1758,7 +1780,7 @@ const I={
   price:v=>{clearTimeout(I._p);I._p=setTimeout(()=>{const p=parseFloat(v.replace(',','.'));if(p>=0)post('/api/cfg',{price:p});},700);},
   ntpServer:v=>{clearTimeout(I._n);I._n=setTimeout(()=>{if(v.trim().length>=3)post('/api/cfg',{ntpServer:v.trim()});},900);},
   newPlace:v=>S.newPlace=v,newNm:v=>S.newNm=v,
-  apName:v=>S.d.apName=v,hostName:v=>S.d.hostName=v,apPass:v=>S.d.apPass=v,wifiPass:v=>S.wifiPass=v,
+  apName:v=>S.d.apName=v,hostName:v=>S.d.hostName=v,apPass:v=>S.d.apPass=v,wifiPass:v=>S.wifiPass=v,wifiManualSsid:v=>S.wifiManualSsid=v,wifiManualPass:v=>S.wifiManualPass=v,
   voltMeas:v=>{S.voltMeas=v;},
   planCustom:v=>{P.custom=v;savePrefs();},
   planSlide:v=>{P.planIdx=+v;savePrefs();render(true);},
