@@ -2547,9 +2547,9 @@ void parkRouter(const char *why){
   WiFi.disconnect(false,false);
   // Recovery uses EngineLink standalone Wi-Fi ONLY.
   WiFi.mode(WIFI_AP);
-  // Reset the AP config even if an AP_START event/IP remained cached while
-  // the Wi-Fi hardware was occupied by a failed STA scan.
-  WiFi.softAPdisconnect(false);
+  // WiFi.mode(WIFI_AP) has already disabled STA and created the AP
+  // interface. Do not call softAPdisconnect(false) here: it clears the
+  // access point configuration we are trying to restore.
   apStarted=false;apLastEvent=0;
   apChannelNow=(cfg.apChannel>=1&&cfg.apChannel<=11)?cfg.apChannel:6;
   startAP();
