@@ -784,7 +784,7 @@ constexpr uint32_t SCAN_GAP_MS=130,SCAN_TIMEOUT_MS=32000;
 bool scanBusy=false,scanRequested=false,scanInFlight=false,scanStaTemporary=false;
 int16_t scanCount=-1;
 uint32_t scanStartedMs=0,scanNextAt=0,scanRestoreAt=0,scanDurationMs=0;
-uint8_t scanChannel=0,scanPass=1,scanFailures=0,scanStartFailures=0,scanStartRetry=0;
+uint8_t scanChannel=0,scanPass=1,scanPassOneCount=0,scanFailures=0,scanStartFailures=0,scanStartRetry=0;
 uint16_t scanRawCount=0;
 // Snapshot the scan results into our own storage. Arduino's scan buffer can be
 // deleted by a separate router search or reconnect, while the phone still
@@ -2614,6 +2614,7 @@ void applyNetwork(){
 // (passive) survey. Results stay in the cache until both passes are done.
 void advanceScanChannel(){
   if(scanChannel==SCAN_CHANNEL_LAST && scanPass<SCAN_PASSES){
+    scanPassOneCount=scanEntriesCount;
     ++scanPass;
     scanChannel=SCAN_CHANNEL_FIRST;
   }else{
@@ -4165,7 +4166,7 @@ void handleWifiScan(){
       // Acknowledge the HTTP request BEFORE changing radio modes. This
       // prevents the phone losing the response that initiated the scan.
       scanBusy=true;scanRequested=true;scanInFlight=false;
-      scanCount=-1;scanChannel=0;scanPass=1;scanEntriesCount=0;
+      scanCount=-1;scanChannel=0;scanPass=1;scanPassOneCount=0;scanEntriesCount=0;
       scanFailures=0;scanStartFailures=0;scanRawCount=0;
       scanStartedMs=0;scanCompletedMs=0;scanDurationMs=0;
       scanRestoreAt=0;scanNextAt=millis()+600UL;
@@ -4175,6 +4176,7 @@ void handleWifiScan(){
   s+=",\"done\":";s+=scanCompletedMs>0?"true":"false";
   s+=",\"channel\":";s+=scanBusy?(unsigned)scanChannel:0;
   s+=",\"pass\":";s+=scanPass;
+  s+=",\"firstPassNets\":";s+=scanPassOneCount;
   s+=",\"passes\":";s+=SCAN_PASSES;
   s+=",\"channels\":";s+=SCAN_CHANNEL_LAST;
   s+=",\"raw\":";s+=scanRawCount;
@@ -4348,6 +4350,7 @@ void handleDiag(){
   s+=",\"scanBusy\":";s+=scanBusy?"true":"false";
   s+=",\"scanChannel\":";s+=scanBusy?(unsigned)scanChannel:0;
   s+=",\"scanPass\":";s+=scanPass;
+  s+=",\"scanFirstPassNets\":";s+=scanPassOneCount;
   s+=",\"scanFailures\":";s+=scanFailures;
   s+=",\"scanStartFailures\":";s+=scanStartFailures;
   s+=",\"scanRawCount\":";s+=scanRawCount;
