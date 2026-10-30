@@ -288,7 +288,25 @@ async function findHost(){
   }
   return null;
 }
+// Live samples use a separate read-only HTTP listener (port 81) so a long
+// file download on port 80 cannot starve the dashboard. Fall back to port 80
+// for older firmware, browser demo and transient sidecar failures.
+let liveSidecarRetryAt=0;
 async function get(u,t=3000){
+  if(u==='/api/live'&&Date.now()>=liveSidecarRetryAt){
+    try{
+      const url=new URL(BASE||location.origin,location.href);
+      if(url.protocol==='http:'){
+        url.port='81';
+        const c=new AbortController(),id=setTimeout(()=>c.abort(),Math.min(1200,t));
+        try{
+          const r=await fetch(url.origin+u,{cache:'no-store',signal:c.signal});
+          if(r.ok)return await r.json();
+        }finally{clearTimeout(id);}
+      }
+    }catch(e){}
+    liveSidecarRetryAt=Date.now()+15000;
+  }
   const c=new AbortController(),id=setTimeout(()=>c.abort(),t);
   try{const r=await fetch(BASE+u,{cache:'no-store',signal:c.signal});if(!r.ok)throw new Error('HTTP '+r.status);return await r.json();}
   finally{clearTimeout(id);}

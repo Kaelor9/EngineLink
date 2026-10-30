@@ -1,6 +1,15 @@
-# EngineLink application v0.8.2
+# EngineLink application v0.8.3
 
 This is a **working application foundation**, not a validated production release. The former Lab firmware is retained under \`experiments/\`. The application is in \`firmware/EngineLink/\`.
+
+## Changes in 0.8.3: Wi-Fi channel recovery, concurrent live transport, storage
+
+- **Router discovery:** unknown channel/BSSID no longer forces the STA to scan only the EngineLink AP channel; repeated failed joins clear stale BSSID/channel pins. Scans avoid overlapping a pending association attempt.
+- **Live data during downloads:** the app prefers a separate read-only HTTP live endpoint on port **81** and falls back to port 80 if unavailable. This removes the port-80 request-queue bottleneck for live polling, not for other UI API calls.
+- **Stronger file replacement:** LittleFS keeps a backup during rename and recovers interrupted writes at boot. Once previously mounted, it is no longer silently formatted on a later mount failure.
+- **Firmware downloads:** distinguish lost router connectivity from stalled GitHub transfer.
+- **Build workflow:** always regenerates `ui.h` from `app.html` before compiling in CI.
+- **Validation pending:** compile/host tests and real ESP32-S3 AP+STA/SD/OTA stress testing; a single radio cannot keep its SoftAP channel fixed when the router moves channel.
 
 ## Changes in 0.8.2: finding the router
 

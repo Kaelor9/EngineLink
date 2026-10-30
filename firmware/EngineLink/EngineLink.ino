@@ -48,7 +48,7 @@
 #include "diagrules.h"
 #include "miniz.h"  // the deflate compressor in the chip's ROM
 
-#define EL_VERSION "0.8.2"
+#define EL_VERSION "0.8.3"
 // Releases list published by the Pages workflow; firmware files come from
 // GitHub Releases of the same repository. Nothing else is downloaded.
 #define EL_RELEASES_URL "https://kaelor9.github.io/EngineLink/releases.json"
@@ -1816,8 +1816,29 @@ bool fsWrite(const char *path,const void *data,size_t len){
   const bool ok=f.write((const uint8_t*)data,len)==len;
   f.close();
   if(!ok){LittleFS.remove(tmp);return false;}
-  LittleFS.remove(path);
-  return LittleFS.rename(tmp,path);
+  // Keep the last good copy until the new file has a durable name. A power
+  // failure between the two renames can be recovered on the next boot.
+  const String bak=String(path)+".bak";
+  const bool hadOld=LittleFS.exists(path);
+  if(hadOld){
+    LittleFS.remove(bak);
+    if(!LittleFS.rename(path,bak)){LittleFS.remove(tmp);return false;}
+  }
+  if(!LittleFS.rename(tmp,path)){
+    if(hadOld)LittleFS.rename(bak,path);
+    return false;
+  }
+  if(hadOld)LittleFS.remove(bak);
+  return true;
+}
+void fsRecover(const char *path){
+  if(!fsReady)return;
+  const String bak=String(path)+".bak",tmp=String(path)+".tmp";
+  if(!LittleFS.exists(path)){
+    if(LittleFS.exists(bak))LittleFS.rename(bak,path);
+    else if(LittleFS.exists(tmp))LittleFS.rename(tmp,path);
+  }
+  if(LittleFS.exists(path)){LittleFS.remove(bak);LittleFS.remove(tmp);}
 }
 // Reads a file of exactly len bytes, or of a whole number of items of size item.
 size_t fsRead(const char *path,void *data,size_t maxLen,size_t item){
@@ -2331,14 +2352,20 @@ void radioTuning(){
   }
 }
 void startAP(){
-  // softAP() leaves a running network alone when nothing changed, so calling
-  // this never drops a phone unless the name, password or channel differ.
+  // Reapplying softAP configuration can interrupt associated phones. Do not
+  // touch a healthy AP when its actual desired settings have not changed.
+  static String activeName,activePassword;
+  if(apStarted&&(WiFi.getMode()&WIFI_MODE_AP)&&apLastEvent==1
+     &&WiFi.softAPIP()==IPAddress(192,168,4,1)
+     &&apStartedChannel==apChannelNow
+     &&activeName==cfg.apName&&activePassword==cfg.apPassword)return;
   if(WiFi.softAPIP()!=IPAddress(192,168,4,1))WiFi.softAPConfig(IPAddress(192,168,4,1),IPAddress(192,168,4,1),IPAddress(255,255,255,0));
   apStarted=WiFi.softAP(cfg.apName.c_str(),cfg.apPassword.c_str(),apChannelNow,false,6);
   esp_wifi_set_inactive_time(WIFI_IF_AP,600);
   if(apStarted){
     if(apStartedChannel&&apStartedChannel!=apChannelNow)++apChannelChanges;
     apStartedChannel=apChannelNow;
+    activeName=cfg.apName;activePassword=cfg.apPassword;
   }
 }
 // Blocking scan for the saved router. Only used when the network is set up.
@@ -2356,8 +2383,12 @@ bool findRouter(){
   return best>=0;
 }
 void connectRouter(){
-  if(staBssidKnown)WiFi.begin(cfg.ssid.c_str(),cfg.wifiPassword.c_str(),staChannel,staBssid,true);
-  else WiFi.begin(cfg.ssid.c_str(),cfg.wifiPassword.c_str(),apChannelNow,nullptr,true);
+  // A known BSSID may speed reconnection, but an unknown router MUST NOT be
+  // locked to our SoftAP channel: otherwise off-channel routers are invisible.
+  if(staBssidKnown&&staChannel>=1&&staChannel<=13)
+    WiFi.begin(cfg.ssid.c_str(),cfg.wifiPassword.c_str(),staChannel,staBssid,true);
+  else
+    WiFi.begin(cfg.ssid.c_str(),cfg.wifiPassword.c_str(),0,nullptr,true);
 }
 // A name for http://<name>.local: letters, digits and hyphens, as DNS allows.
 bool validHostName(const String &n){
@@ -2484,6 +2515,9 @@ void serviceNetwork(){
           staBssidKnown=findRouter();
           if(staBssidKnown&&staChannel!=apChannelNow){apChannelNow=staChannel;startAP();}
         }
+        // If the router has moved or changed BSSID, stop pinning our attempts
+        // to a stale scan result. Do an unrestricted scan by the Wi-Fi driver.
+        if(staFails>=2&&staFails%3!=0&&!scanBusy)staBssidKnown=false;
         esp_wifi_disconnect();
         connectRouter();
         // Reconnecting on the known channel does not disturb the phones, so
@@ -3451,7 +3485,7 @@ void jnum(String &s,double v,uint8_t dec){if(isfinite(v))s+=String(v,(unsigned i
 void jkey(String &s,const char *k){s+='"';s+=k;s+="\":";}
 int portIndex(){return cfg.portChannel==1?0:cfg.portChannel==2?1:-1;}
 // Small, fast summary for the live screens. Polled about twice a second.
-void handleLive(){
+String makeLiveJson(){
   const uint64_t now=elapsedMs();
   String s;s.reserve(2600);
   s+="{\"v\":\"" EL_VERSION "\",\"up\":";s+=(unsigned long)(now/1000ULL);
@@ -3518,8 +3552,43 @@ void handleLive(){
   else s+="null";
   s+='}';
   s+='}';
-  sendJSON(200,s);
+  return s;
 }
+void handleLive(){sendJSON(200,makeLiveJson());}
+
+// Independent, read-only live telemetry listener. Large CSV exports and
+// reports can occupy the regular WebServer for seconds, but cannot block port
+// 81. Its response is built under the existing engine-data mutex; network
+// writes happen AFTER releasing the lock. No J1708 TX is performed here.
+NetworkServer liveServer(81);
+void liveHttpTask(void *){
+  for(;;){
+    NetworkClient c=liveServer.accept();
+    if(!c){vTaskDelay(pdMS_TO_TICKS(10));continue;}
+    c.setNoDelay(true);
+    c.setTimeout(250);
+    const String request=c.readStringUntil('\n');
+    const bool pathOk=request.startsWith("GET /api/live ")||request.startsWith("GET /api/live?");
+    if(!pathOk){
+      c.print("HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
+      c.stop();continue;
+    }
+    String payload;
+    if(engineMx&&xSemaphoreTake(engineMx,pdMS_TO_TICKS(200))==pdTRUE){
+      payload=makeLiveJson();
+      xSemaphoreGive(engineMx);
+    }
+    if(payload.isEmpty()){
+      c.print("HTTP/1.1 503 Service Unavailable\r\nContent-Length: 0\r\nCache-Control: no-store\r\nConnection: close\r\n\r\n");
+    }else{
+      c.printf("HTTP/1.1 200 OK\r\nContent-Type: application/json; charset=utf-8\r\nCache-Control: no-store\r\nAccess-Control-Allow-Origin: *\r\nContent-Length: %u\r\nConnection: close\r\n\r\n",(unsigned)payload.length());
+      c.write((const uint8_t*)payload.c_str(),payload.length());
+    }
+    c.flush();
+    c.stop();
+  }
+}
+
 void appendTrip(String &s,const TripRec &r){
   s+="{\"id\":";s+=r.id;s+=",\"g\":";s+=r.group;
   s+=",\"s\":";s+=(long long)r.startUtc;s+=",\"e\":";s+=(long long)r.endUtc;
@@ -3757,6 +3826,12 @@ void handleApSave(){
 }
 void handleWifiScan(){
   if(web.arg("start")=="1"&&!scanBusy){
+    // A pending association can compete with an active scan. Stop that attempt
+    // first; serviceNetwork will leave the radio alone until the scan ends.
+    if(routerConfigured()&&WiFi.status()!=WL_CONNECTED){
+      WiFi.disconnect(false,false);
+      staNextTry=millis()+20000UL;
+    }
     WiFi.scanDelete();
     // 300 ms on each channel: with the EngineLink network running the radio
     // keeps going back to its own channel, and short listens miss routers.
@@ -4209,7 +4284,11 @@ void fwWorker(void *){
           uint8_t buf[2048];bool checked=false;uint32_t idle=millis();
           while(ok&&fwBytes<(size_t)len){
             const size_t avail=stream->available();
-            if(!avail){if(millis()-idle>20000){fwError="Download stalled";ok=false;break;}vTaskDelay(pdMS_TO_TICKS(5));continue;}
+            if(!avail){
+              if(WiFi.status()!=WL_CONNECTED){fwError="Router disconnected during download";ok=false;break;}
+              if(millis()-idle>20000){fwError="Download stalled (no data for 20 s)";ok=false;break;}
+              vTaskDelay(pdMS_TO_TICKS(5));continue;
+            }
             const int got=stream->readBytes(buf,min(avail,sizeof(buf)));
             if(got<=0)continue;
             idle=millis();
@@ -4471,8 +4550,19 @@ void setup(){
   pinMode(OPTO_PIN,INPUT);
   loadSettings();
   loadTotals();
-  fsReady=LittleFS.begin(true,"/littlefs",8,"spiffs");
-  if(!fsReady)Serial.println("Internal storage (LittleFS) could not start; trips are kept on the SD card only");
+  // Formatting an existing data partition after a transient mount failure
+  // would permanently destroy history. Permit auto-format only before the
+  // first successful mount, remembered independently of factory settings.
+  Preferences storageMeta;
+  storageMeta.begin("el_storage",false);
+  // A configured 0.8.2 installation may have existing files even though it
+  // has not yet written the new NVS marker. Never autoformat such a board.
+  const bool previouslyMounted=cfg.completed||storageMeta.getBool("mounted",false);
+  fsReady=LittleFS.begin(!previouslyMounted,"/littlefs",8,"spiffs");
+  if(fsReady)storageMeta.putBool("mounted",true);
+  storageMeta.end();
+  if(!fsReady)Serial.println("LittleFS mount failed - storage preserved, NOT formatted");
+  for(const char *p:{"/prefs.json","/trips.bin","/fuel.bin","/health.bin","/events.bin","/life.bin","/diag.bin"})fsRecover(p);
   loadPrefs();
   loadTrips();
   loadFuel();
@@ -4520,6 +4610,11 @@ void setup(){
     xSemaphoreTake(engineMx,portMAX_DELAY);  // the loop holds it while it works
     engineTaskOn=xTaskCreatePinnedToCore(engineTask,"engines",16384,nullptr,3,nullptr,0)==pdPASS;
     if(!engineTaskOn)xSemaphoreGive(engineMx);
+    if(engineTaskOn){
+      liveServer.begin();
+      if(xTaskCreatePinnedToCore(liveHttpTask,"live-http",8192,nullptr,1,nullptr,0)!=pdPASS)
+        Serial.println("Independent live server task could not start");
+    }
   }
   Serial.printf("SoftAP EngineLink at http://%s (http://enginelink.local) ; passive J1708 only\n",WiFi.softAPIP().toString().c_str());
 }

@@ -43,6 +43,9 @@ jobs:
           arduino-cli core install esp32:esp32 --additional-urls "$ARDUINO_CORE_URL"
           arduino-cli lib install "Adafruit NeoPixel"
 
+      - name: Generate embedded on-device UI
+        run: python3 tools/build_ui.py
+
       - name: Compile EngineLink application
         run: |
           mkdir -p build
