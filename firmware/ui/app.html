@@ -1239,8 +1239,8 @@ const PAGE_VIEWS={
       if(c.router)h+=`<div class="card s13" style="margin-bottom:14px">Saved: <b>${esc(c.ssid)}</b> · not reachable right now. EngineLink tries again by itself, aimed at the router so your phone is not disturbed. <button data-a="wifiForget" style="color:var(--teal)">Forget</button></div>`;
       const sc=S.scan;
       h+=`<div class="sec">${sc&&sc.nets&&sc.nets.length?sc.nets.map(n=>{const pick=S.wifiPick===n.s;return `<div><button class="row" data-a="wifiPick" data-v="${esc(n.s)}"><span><span class="rt">${esc(n.s)}</span><span class="rh">${n.lock?'Password':'Open'} · channel ${n.ch}</span></span><span style="color:var(--teal);letter-spacing:1px">${n.r>-60?'▂▄▆':n.r>-72?'▂▄':'▂'}</span></button>
-        ${pick?`<div style="display:grid;grid-template-columns:1fr auto;gap:8px;padding:0 0 12px">${n.lock?`<input class="field" type="password" data-i="wifiPass" value="${esc(S.wifiPass)}" placeholder="Router password" aria-label="Router password">`:'<span class="s13 sub" style="align-self:center">Open network</span>'}<button class="btn pri" data-a="wifiConnect" data-v="${esc(n.s)}">Connect</button></div>`:''}</div>`;}).join(''):`<div class="empty">${sc&&sc.busy?'Scanning…':'Scan to find the boat router.'}</div>`}
-        <button class="row" data-a="wifiScan" style="color:var(--teal)"><span class="rt">${sc&&sc.busy?'Scanning…':'Scan for networks'}</span></button></div>
+        ${pick?`<div style="display:grid;grid-template-columns:1fr auto;gap:8px;padding:0 0 12px">${n.lock?`<input class="field" type="password" data-i="wifiPass" value="${esc(S.wifiPass)}" placeholder="Router password" aria-label="Router password">`:'<span class="s13 sub" style="align-self:center">Open network</span>'}<button class="btn pri" data-a="wifiConnect" data-v="${esc(n.s)}">Connect</button></div>`:''}</div>`;}).join(''):`<div class="empty">${sc&&sc.error?esc(sc.error):sc&&sc.busy?'Scanning…':'Scan to find the boat router.'}</div>`}
+        <button class="row" data-a="wifiScan" style="color:var(--teal)" ${sc&&sc.busy?'disabled':''}><span class="rt">${sc&&sc.busy?'Scanning…':'Scan for networks'}</span></button></div>
         <div class="s12 sub" style="padding:0 8px 16px">Scanning makes the EngineLink radio look at other channels, so your phone may pause for a few seconds.</div>`;
     }
     h+=`<div class="card s13 sub">With a router EngineLink gets internet time and can update itself from GitHub. The EngineLink network stays on as well. If your phone joins the boat router instead, the app keeps working through the router.<br><br><b style="color:var(--text)">Tips for a steady connection</b><br>Android: when the phone says the Wi-Fi has no internet, choose "Stay connected" or "Keep", and switch off "Switch to mobile data". iPhone: keep "Auto-Join" on for the EngineLink network.</div>`;
@@ -1284,7 +1284,7 @@ const PAGE_VIEWS={
       <div class="rowx s12 sub">A test asks the engine for its values for 30 seconds. Only read requests are sent, never commands.</div></div>`;
     // Wi-Fi
     const w=d.wifi||{};
-    h+=`<div class="hd">Wi-Fi</div><div class="sec"><div class="rowx"><div class="grid3" style="gap:8px">${[['Phones',lv.net.cl],['Channel',w.ch||lv.net.ch],['Network restarts',w.apRestarts??'—'],['Requests',w.httpServed??'—'],['Reused',w.httpServed?Math.round(w.httpReused/w.httpServed*100)+' %':'—'],['Slowest',w.httpSlowMs!=null?w.httpSlowMs+' ms':'—'],['Phone joins',w.joins??'—'],['Phone drops',w.leaves??'—'],['Missed here',S.failTotal||0],['Channel changes',w.chMoves??'—'],['Router drops',lv.net.rt?(w.staDrops??'—'):'—'],['Slow loop',w.loopMaxMs!=null?w.loopMaxMs+' ms':'—']].map(([k,v])=>`<div style="background:var(--track);border-radius:12px;padding:8px 10px"><div class="s12 sub">${k}</div><div style="font-weight:600;margin-top:2px">${v}</div></div>`).join('')}</div>
+    h+=`<div class="hd">Wi-Fi</div><div class="sec"><div class="rowx"><div class="grid3" style="gap:8px">${[['Phones',lv.net.cl],['Channel',w.ch||lv.net.ch],['Network restarts',w.apRestarts??'—'],['Requests',w.httpServed??'—'],['Reused',w.httpServed?Math.round(w.httpReused/w.httpServed*100)+' %':'—'],['Slowest UI',w.httpInteractiveSlowMs!=null?w.httpInteractiveSlowMs+' ms':w.httpSlowMs!=null?w.httpSlowMs+' ms':'—'],['Slowest transfer',w.httpTransferSlowMs!=null?w.httpTransferSlowMs+' ms':'—'],['Phone joins',w.joins??'—'],['Phone drops',w.leaves??'—'],['Missed here',S.failTotal||0],['Channel changes',w.chMoves??'—'],['Router drops',lv.net.rt?(w.staDrops??'—'):'—'],['Slow loop',w.loopMaxMs!=null?w.loopMaxMs+' ms':'—']].map(([k,v])=>`<div style="background:var(--track);border-radius:12px;padding:8px 10px"><div class="s12 sub">${k}</div><div style="font-weight:600;margin-top:2px">${v}</div></div>`).join('')}</div>
       ${w.leaves?`<div class="s12" style="margin-top:8px">Last phone drop: <b>${LEAVE[w.reason]||'code '+w.reason}</b></div>`:''}
       ${lv.net.rt&&w.staDropAgo!=null?`<div class="s12" style="margin-top:6px">Last router drop ${dur(w.staDropAgo)} ago: <b>${STAR[w.staReason]||'code '+w.staReason}</b>${w.staDown!=null?` · not connected for ${dur(w.staDown)}`:''}</div>`:''}
       </div>${row('cycle','txp','Transmit power','Lower can hold the connection better if it keeps dropping',rv(['Maximum','Medium','Low'][(c&&c.txPower)||0]))}${dlBlock(d.dl,d.sp)}<div class="rowx">
@@ -1345,7 +1345,7 @@ function dlBlock(dl,spd){
   const sp=S.speed,secs=ms=>ms<1000?NF(ms,0)+' ms':ms<60000?NF(ms/1000,ms<10000?1:0)+' s':dur(Math.round(ms/1000));
   const via=x=>x.ap?'over the EngineLink Wi-Fi':'over the boat router'+(x.rssi?` (signal ${x.rssi} dBm, ${x.rssi>-60?'strong':x.rssi>-72?'good':'weak'})`:'');
   let h=`<div class="rowx"><div class="cth"><span class="rt">Download speed</span><span class="rv">${sp?sp.busy?'Testing…':sp.err?'Failed':NF(sp.kbs,0)+' kB/s':''}</span></div>
-    <div class="s12 sub" style="margin-top:3px">${sp&&!sp.busy&&!sp.err?`${NF(sp.kb,0)} kB in ${secs(sp.ms)}${spd?', '+via(spd):''}. ${sp.kbs>=100?'Fast enough for every export.':sp.kbs>=20?'A long trip with raw data takes a few minutes.':'Slow: move closer, or join the EngineLink Wi-Fi directly for big files.'}`:'Sends 512 kB from memory, without the SD card, to measure only the Wi-Fi between this device and EngineLink.'}</div>
+    <div class="s12 sub" style="margin-top:3px">${sp&&!sp.busy&&!sp.err?`${NF(sp.kb,0)} kB in ${secs(sp.ms)}${spd?', '+via(spd):''}. ${sp.kbs>=100?'Fast enough for every export.':sp.kbs>=20?'A long trip with raw data takes a few minutes.':'Slow: move closer, or join the EngineLink Wi-Fi directly for big files.'}`:'Sends a short sample from memory, without the SD card, to test Wi-Fi without freezing live updates.'}</div>
     <button class="btn" style="width:100%;margin-top:10px" data-a="speedTest" ${sp&&sp.busy?'disabled':''}>${sp&&sp.busy?'Testing…':'Test download speed'}</button></div>`;
   if(dl&&dl.ms>0){
     const other=Math.max(0,dl.ms-dl.findMs-dl.sdMs-dl.netMs),parts=[['Finding the trip',dl.findMs],['Reading the SD card',dl.sdMs],['Sending',dl.netMs],['Other',other]];
@@ -1601,8 +1601,33 @@ const A={
     if(!pass&&c.defaultPassword){toast('Choose a password of at least 8 characters');return;}
     if(!confirm('EngineLink restarts its Wi-Fi with the new name and password. Connect your phone to it again afterwards.'))return;
     act('/api/wifi/ap',{name:d.apName,pass:pass||'__keep__'});},
-  wifiScan:async()=>{S.scan={busy:true,nets:[]};render(true);try{await get('/api/wifi/scan?start=1',4000);}catch(e){}
-    const poll=async n=>{try{S.scan=await get('/api/wifi/scan',4000);}catch(e){}render(true);if(S.scan&&S.scan.busy&&n<20)setTimeout(()=>poll(n+1),1000);};setTimeout(()=>poll(0),1500);},
+  wifiScan:async()=>{
+    // Keep the last successful list visible while the radio visits other
+    // channels. Do not turn a temporary HTTP failure into an empty list.
+    const previous=(S.scan&&S.scan.nets)||[];
+    S.scan={busy:true,nets:previous,error:''};render(true);
+    try{
+      const started=await get('/api/wifi/scan?start=1',4000);
+      if(started.error)throw Error(started.error);
+    }catch(e){
+      S.scan={busy:false,nets:previous,error:'Could not start Wi-Fi scan. Try again.'};
+      render(true);return;
+    }
+    const poll=async n=>{
+      try{
+        const next=await get('/api/wifi/scan',4000);
+        if(next.busy&&!next.nets.length)next.nets=(S.scan&&S.scan.nets)||[];
+        if(next.error&&!next.nets.length)next.nets=previous;
+        S.scan=next;
+      }catch(e){
+        if(n>=12)S.scan={busy:false,nets:(S.scan&&S.scan.nets)||previous,error:'Network scan timed out. Try again.'};
+      }
+      render(true);
+      if(S.scan&&S.scan.busy&&n<12)setTimeout(()=>poll(n+1),1000);
+      else if(S.scan&&S.scan.busy){S.scan={busy:false,nets:(S.scan&&S.scan.nets)||previous,error:'Network scan timed out.'};render(true);}
+    };
+    setTimeout(()=>poll(0),800);
+  },
   wifiPick:v=>{S.wifiPick=S.wifiPick===v?null:v;S.wifiPass='';render(true);},
   wifiConnect:async v=>{const r=await act('/api/wifi/connect',{ssid:v,pass:S.wifiPass});if(r.ok){S.wifiPick=null;setTimeout(()=>load('state'),8000);setTimeout(()=>load('state'),20000);}},
   wifiForget:async()=>{if(!confirm('Disconnect EngineLink from the router?'))return;await act('/api/wifi/forget',{});load('state');},
@@ -1623,7 +1648,7 @@ const A={
   testStop:async()=>{await act('/api/test/stop',{});load('state');},
   busRefresh:()=>load('state'),
   dl:v=>download(v),
-  speedTest:async()=>{S.speed={busy:true};render(true);const kb=512,t0=performance.now();
+  speedTest:async()=>{S.speed={busy:true};render(true);const kb=32,t0=performance.now();
     try{const c=new AbortController(),id=setTimeout(()=>c.abort(),90000);const r=await fetch(BASE+'/api/speedtest?kb='+kb,{cache:'no-store',signal:c.signal});const b=await r.arrayBuffer();clearTimeout(id);
       const ms=performance.now()-t0;S.speed={kb:b.byteLength/1024,ms,kbs:b.byteLength/1024/(ms/1000)};}catch(e){S.speed={err:true};}
     await load('diag');render(true);},
