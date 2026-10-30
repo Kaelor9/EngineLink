@@ -2352,14 +2352,20 @@ void radioTuning(){
   }
 }
 void startAP(){
-  // softAP() leaves a running network alone when nothing changed, so calling
-  // this never drops a phone unless the name, password or channel differ.
+  // Reapplying softAP configuration can interrupt associated phones. Do not
+  // touch a healthy AP when its actual desired settings have not changed.
+  static String activeName,activePassword;
+  if(apStarted&&(WiFi.getMode()&WIFI_MODE_AP)&&apLastEvent!=2
+     &&WiFi.softAPIP()==IPAddress(192,168,4,1)
+     &&apStartedChannel==apChannelNow
+     &&activeName==cfg.apName&&activePassword==cfg.apPassword)return;
   if(WiFi.softAPIP()!=IPAddress(192,168,4,1))WiFi.softAPConfig(IPAddress(192,168,4,1),IPAddress(192,168,4,1),IPAddress(255,255,255,0));
   apStarted=WiFi.softAP(cfg.apName.c_str(),cfg.apPassword.c_str(),apChannelNow,false,6);
   esp_wifi_set_inactive_time(WIFI_IF_AP,600);
   if(apStarted){
     if(apStartedChannel&&apStartedChannel!=apChannelNow)++apChannelChanges;
     apStartedChannel=apChannelNow;
+    activeName=cfg.apName;activePassword=cfg.apPassword;
   }
 }
 // Blocking scan for the saved router. Only used when the network is set up.
@@ -4549,9 +4555,11 @@ void setup(){
   // first successful mount, remembered independently of factory settings.
   Preferences storageMeta;
   storageMeta.begin("el_storage",false);
-  const bool previouslyMounted=storageMeta.getBool("mounted",false);
+  // A configured 0.8.2 installation may have existing files even though it
+  // has not yet written the new NVS marker. Never autoformat such a board.
+  const bool previouslyMounted=cfg.completed||storageMeta.getBool("mounted",false);
   fsReady=LittleFS.begin(!previouslyMounted,"/littlefs",8,"spiffs");
-  if(fsReady&&!previouslyMounted)storageMeta.putBool("mounted",true);
+  if(fsReady)storageMeta.putBool("mounted",true);
   storageMeta.end();
   if(!fsReady)Serial.println("LittleFS mount failed - storage preserved, NOT formatted");
   for(const char *p:{"/prefs.json","/trips.bin","/fuel.bin","/health.bin","/events.bin","/life.bin","/diag.bin"})fsRecover(p);
