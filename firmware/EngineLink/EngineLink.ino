@@ -50,7 +50,7 @@
 #include "routerguard.h"
 #include "miniz.h"  // the deflate compressor in the chip's ROM
 
-#define EL_VERSION "0.9.8"
+#define EL_VERSION "0.9.9"
 // Releases list published by the Pages workflow; firmware files come from
 // GitHub Releases of the same repository. Nothing else is downloaded.
 #define EL_RELEASES_URL "https://kaelor9.github.io/EngineLink/releases.json"
@@ -767,7 +767,17 @@ volatile uint32_t apLastEventMs=0;
 uint32_t apChannelChanges=0;
 int16_t autoChannelNets=-1;     // networks heard when EngineLink chose its channel
 uint8_t apStartedChannel=0;
-bool scanBusy=false; int16_t scanCount=-1; uint32_t scanStartedMs=0;
+// Discovery is a short-lived, explicit commissioning operation. Normal
+// operation remains either AP-only (standalone) or STA-only (router).
+// A channel-by-channel asynchronous scan returns to the AP channel between
+// probes so browser requests can still get through on a shared radio.
+constexpr uint8_t SCAN_CHANNEL_FIRST=1,SCAN_CHANNEL_LAST=13;
+constexpr uint32_t SCAN_DWELL_MS=220,SCAN_GAP_MS=110,SCAN_TIMEOUT_MS=24000;
+bool scanBusy=false,scanRequested=false,scanInFlight=false,scanStaTemporary=false;
+int16_t scanCount=-1;
+uint32_t scanStartedMs=0,scanNextAt=0,scanRestoreAt=0,scanDurationMs=0;
+uint8_t scanChannel=0,scanFailures=0,scanStartFailures=0;
+uint16_t scanRawCount=0;
 // Snapshot the scan results into our own storage. Arduino's scan buffer can be
 // deleted by a separate router search or reconnect, while the phone still
 // needs the results. Keep the strongest 30 UNIQUE SSIDs, not the first 30 raw
@@ -2386,7 +2396,8 @@ void serviceCAN(){
   }
 }
 void captureWifiScan(int16_t total){
-  scanEntriesCount=0;
+  // Merge a channel's results into the running unique-SSID list.
+  // Clear the list once at the beginning of a full scan, not on each channel.
   for(int16_t i=0;i<total;i++){
     const String ssid=WiFi.SSID(i);
     if(!ssid.length())continue;
@@ -2421,8 +2432,7 @@ void captureWifiScan(int16_t total){
       if(scanEntries[j].rssi>scanEntries[i].rssi){
         ScanEntry tmp=scanEntries[i];scanEntries[i]=scanEntries[j];scanEntries[j]=tmp;
       }
-  scanCompletedMs=millis();
-  WiFi.scanDelete(); // safe: responses read our cache, not the driver memory
+  WiFi.scanDelete(); // channel records are copied to our own stable cache
 }
 // ---------- Wi-Fi: built to keep the phone connected ----------
 // Rules that keep the EngineLink network steady:
