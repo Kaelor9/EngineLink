@@ -4896,7 +4896,7 @@ void setup(){
   pinMode(LED_PIN,OUTPUT);digitalWrite(LED_PIN,LOW);
   led.begin();led.setBrightness(ledBrightness);led.clear();led.show();
   Serial.begin(115200);
-  delay(1200); // do not block boot for USB Serial Monitor
+  delay(120); // launch Wi-Fi promptly; USB serial can attach later
   Serial.println("\nEngineLink " EL_VERSION " - engine monitoring, listen-only at boot unless automatic reading is on");
   {
     esp_ota_img_states_t st;
@@ -4909,6 +4909,12 @@ void setup(){
   pinMode(SD_DETECT,INPUT);
   pinMode(OPTO_PIN,INPUT);
   loadSettings();
+  // Bring up the selected Wi-Fi mode as soon as configuration is read.
+  // Filesystem recovery and SD mounting can take several seconds; the
+  // router association or standalone AP beaconing now proceeds in parallel.
+  WiFi.onEvent(onWiFi);
+  applyNetwork();
+  initializeWeb();
   loadTotals();
   // Formatting an existing data partition after a transient mount failure
   // would permanently destroy history. Permit auto-format only before the
@@ -4955,9 +4961,6 @@ void setup(){
   cardWasInserted=cardInserted();
   initSD();
   refreshTestAvailable();
-  WiFi.onEvent(onWiFi);
-  applyNetwork();
-  initializeWeb();
   if(cfg.canListen && !startCAN())Serial.println("CAN listen-only init failed");
   // NTP time sync callback is non-blocking.
   sntp_set_time_sync_notification_cb(ntpCallback);
