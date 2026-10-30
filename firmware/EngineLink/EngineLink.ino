@@ -761,6 +761,7 @@ uint32_t staConnectedAt=0;
 volatile uint8_t staLastReason=0;volatile uint32_t staLastDropAt=0;
 volatile uint32_t staDropEvents=0;
 uint32_t routerSeenDropEvents=0,routerAttemptStartedAt=0;
+bool routerResetPending=false;
 uint32_t routerImmediateRetries=0,routerStuckRetries=0;
 constexpr uint32_t ROUTER_AUTH_RETRY_DELAY_MS=3000UL;
 constexpr uint32_t ROUTER_ASSOCIATION_WINDOW_MS=18000UL;
@@ -2577,6 +2578,7 @@ void applyNetwork(){
     routerSeenDropEvents=staDropEvents;
     routerAttemptStartedAt=millis();
     routerImmediateRetries=0;routerStuckRetries=0;
+    routerResetPending=false;
     connectRouter();
     routerAttempts=1;
     // WiFi.begin starts scanning/authentication asynchronously. Give an
@@ -2752,7 +2754,7 @@ void serviceNetwork(){
       // React to explicit association failure events instead of waiting 20s
       // after a wrong password / AP refusal. Do NOT interrupt WiFi.begin
       // while the radio is still legitimately scanning/authenticating.
-      if(staDropEvents!=routerSeenDropEvents){
+      if(!routerResetPending && staDropEvents!=routerSeenDropEvents){
         routerSeenDropEvents=staDropEvents;
         // Ignore a late disconnect event from the previous Wi-Fi mode.
         if((uint32_t)(millis()-routerAttemptStartedAt)>500UL){
@@ -2764,19 +2766,23 @@ void serviceNetwork(){
         }
       }
       if(!scanBusy && (int32_t)(millis()-staNextTry)>=0){
-        ++staFails;
-        // Only cancel when an association has genuinely stalled. If a
-        // DISCONNECTED event arrived the driver is already idle, so do not
-        // inject a second disconnect event that causes false failures.
-        if((uint32_t)(millis()-routerAttemptStartedAt)>=ROUTER_ASSOCIATION_WINDOW_MS){
+        if(!routerResetPending &&
+           (uint32_t)(millis()-routerAttemptStartedAt)>=ROUTER_ASSOCIATION_WINDOW_MS){
+          // A genuinely stuck association needs an explicit cancel. Let the
+          // driver finish its disconnect event before calling WiFi.begin again.
           ++routerStuckRetries;
           WiFi.disconnect(false,false);
+          routerResetPending=true;
+          staNextTry=millis()+400UL;
+        }else{
+          routerResetPending=false;
+          ++staFails;
+          routerAttemptStartedAt=millis();
+          routerSeenDropEvents=staDropEvents;
+          connectRouter();
+          ++routerAttempts;
+          staNextTry=millis()+ROUTER_ASSOCIATION_WINDOW_MS;
         }
-        routerAttemptStartedAt=millis();
-        routerSeenDropEvents=staDropEvents;
-        connectRouter();
-        ++routerAttempts;
-        staNextTry=millis()+ROUTER_ASSOCIATION_WINDOW_MS;
       }
     }
   }
