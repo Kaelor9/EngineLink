@@ -1,5 +1,5 @@
 /*
- * EngineLink 0.5.0 — application firmware
+ * EngineLink — application firmware
  * ESP32-S3-WROOM-1-N8R8, 8 MB flash / 8 MB PSRAM.
  *
  * Captures actual J1708 RX bytes on J7 and J6. Engines are decoded either as
@@ -4300,6 +4300,7 @@ void fwWorker(void *){
           fwTotal=len;
           NetworkClient *stream=http.getStreamPtr();
           bool ok=Update.begin(len,U_FLASH);
+          if(!ok)fwError=Update.errorString();
           uint8_t buf[2048];OtaImageHeader imageHeader;bool checked=false;uint32_t idle=millis();
           while(ok&&fwBytes<(size_t)len){
             const size_t avail=stream->available();
@@ -4408,7 +4409,7 @@ void handleUpdateUpload(){
   }else if(u.status==UPLOAD_FILE_END){
     if(otaError.length()||!otaActive)return;
     if(!otaChecked){otaError="Firmware header incomplete";Update.abort();otaActive=false;return;}
-    if(!Update.end(true))otaError=Update.errorString();
+    if(!Update.end(true)){otaError=Update.errorString();otaActive=false;}
   }else if(u.status==UPLOAD_FILE_ABORTED){
     if(otaActive)Update.abort();
     otaError="Upload interrupted";
