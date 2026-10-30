@@ -1,6 +1,14 @@
-# EngineLink application v0.9.1
+# EngineLink application v0.9.2
 
 This is a **working application foundation**, not a validated production release. The former Lab firmware is retained under \`experiments/\`. The application is in \`firmware/EngineLink/\`.
+
+## Changes in 0.9.2: router lockout recovery
+
+- If AP+STA cannot connect to the router within 45 seconds, disable STA and recreate the standalone AP. A successful STA connection resets the deadline; an extended later outage also triggers fallback.
+- Save the standby state as the NVS flag `rhold`: future reboots start AP-only until the user deliberately retries the router in the existing settings page. No lost saved router credentials, calibration, SD or fuel history.
+- Additional diagnostic API fields: routerHold, routerFallbacks, apMode, apDriverSsid and apDriverIp. CI tests verify 45 s guard logic.
+- This fixes the absence of an escape route, not necessarily the root cause of failed radio associations. The owner's PCB still requires actual AP+STA and iPhone tests.
+- If locked out on older firmware, flash by USB **without Erase Flash / NVS wipe**.
 
 ## Changes in 0.9.1: standalone AP reliability
 
