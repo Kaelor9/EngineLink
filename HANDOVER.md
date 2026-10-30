@@ -1,6 +1,6 @@
 # EngineLink: project handover
 
-> Status as of **30 October 2026**, firmware **0.8.2**. This document is written so that any developer or AI assistant can pick up the work. It replaces the earlier handover from 26 October (version 0.2.0-alpha), which is out of date.
+> Status as of **30 October 2026**, firmware **0.8.3**. This document is written so that any developer or AI assistant can pick up the work. It replaces the earlier handover from 26 October (version 0.2.0-alpha), which is out of date.
 >
 > **Talk to the owner in Danish.** Keep answers short and concrete; the owner prefers a brief summary over long explanations. The app itself is in English.
 >
@@ -56,7 +56,7 @@ Which socket is port or starboard is a setting (on this boat: port J6, starboard
 
 The owner has said **merge PRs without asking** once CI is green.
 
-## 4. How the firmware works (0.8.2)
+## 4. How the firmware works (0.8.3)
 
 **Tasks and cores.** Core 0: Wi-Fi stack, the two J1708 receiver tasks (UART → frame queue in PSRAM, 2048 frames), the **engine task** (`engineTask`: frames, KAD polling, once-a-second engine/trip/diagnosis work), the GitHub update worker. Core 1: Arduino `loop()` (web server, SD, network management, LED). Engine data is shared under one mutex (`engineMx`); the loop releases it whenever it waits on the network (request parsing, every socket write, router scans, its 1 ms pause). Watchdogs: engine task (10 s without a round → save and restart) and loop task (60 s).
 
@@ -71,6 +71,8 @@ The owner has said **merge PRs without asking** once CI is green.
 **App.** Tabs Trip, Economy, Tank, History, Engines; Settings and Diagnostics pages. Export sheet: printable trip/engine reports (the app opened as `?report=trips&ids=…` / `?report=engines`) and CSV files (downloads are deflate-compressed with the ESP32 ROM compressor when the browser accepts it).
 
 ## 5. Wi-Fi: the main open problem
+
+**0.8.3 software changes:** unknown-channel STA association now scans freely (channel 0) instead of incorrectly restricting attempts to the SoftAP channel; stale BSSID pins are dropped after repeated failures. The app uses an independent read-only live endpoint on TCP port 81 to keep `/api/live` available while large port-80 downloads are running. LittleFS now retains recovery copies during writes. OTA distinguishes no Wi-Fi from no download bytes. These changes are **not verified on real hardware**. Build CI regenerates `ui.h` from the app source, but local developers must run `python3 tools/build_ui.py` after editing `app.html`.
 
 The owner reports the Wi-Fi as **very unreliable**: the board barely finds routers when scanning, and the router connection keeps dropping even with a good signal (around −63 dBm). On the boat the board also runs its own access point (SSID EngineLink, 192.168.4.1). **This is not solved and has not been verified on the board.**
 
