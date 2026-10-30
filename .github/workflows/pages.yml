@@ -113,10 +113,13 @@ jobs:
             gh release create "$TAG" site/enginelink-update.bin site/firmware.bin \
               --target "$GITHUB_SHA" --title "EngineLink $VERSION" --notes "$NOTES" $PRE
           fi
-          gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" --jq '.[]' > /tmp/releases.jsonl
+          # Read valid JSON as an array; GitHub CLI's pretty-printed --jq
+          # output is not JSON Lines and cannot be parsed one line at a time.
+          gh api "repos/$GITHUB_REPOSITORY/releases?per_page=100" > /tmp/releases.json
           python3 - <<'PY2'
           import json, os
-          rels = [json.loads(l) for l in open("/tmp/releases.jsonl") if l.strip()]
+          with open("/tmp/releases.json") as fh:
+              rels = json.load(fh)
           repo = os.environ["GITHUB_REPOSITORY"]
           out = []
           for r in rels:
