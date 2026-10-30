@@ -2434,17 +2434,11 @@ void captureWifiScan(int16_t total){
       }
   WiFi.scanDelete(); // channel records are copied to our own stable cache
 }
-// ---------- Wi-Fi: built to keep the phone connected ----------
-// Rules that keep the EngineLink network steady:
-//  * The access point is always on and never restarted for router problems.
-//  * Power saving is off, transmit power is at maximum, phones that sleep
-//    are kept for 10 minutes instead of being dropped.
-//  * The radio has one channel. With a router, the AP starts on the router's
-//    channel (found once at setup), and reconnects are aimed at the router's
-//    own channel and address, so the radio never hops away from the phone.
-//  * A full router scan (which hops channels) only runs when no phone is
-//    connected, or when the user asks for one on the Boat router page.
-//  * A watchdog restarts only the AP if it ever stops.
+// ---------- Wi-Fi: exclusive normal operating modes ----------
+// Standalone uses only the EngineLink SoftAP; router operation uses only STA.
+// During explicit router discovery only, STA is temporarily enabled alongside
+// the AP to scan 2.4 GHz channels and is disabled after the results are served.
+// No connection to an external router occurs before the user presses Connect.
 bool routerConfigured(){return cfg.router&&cfg.ssid.length();}
 void radioTuning(){
   WiFi.setSleep(false);
@@ -2566,6 +2560,7 @@ void parkRouter(const char *why){
   if(p.begin("enginelink",false)){p.putBool("rhold",true);p.end();}
   routerGuard.reset();
   staBssidKnown=false;
+  if(scanInFlight)esp_wifi_scan_stop();
   scanBusy=false;scanRequested=false;scanInFlight=false;
   scanRestoreAt=0;scanCount=-1;
   WiFi.scanDelete();
@@ -2589,6 +2584,7 @@ void applyNetwork(){
   WiFi.persistent(false);
   WiFi.setAutoReconnect(false);
   WiFi.setHostname(cfg.hostName.c_str());
+  if(scanInFlight)esp_wifi_scan_stop();
   scanBusy=false;scanRequested=false;scanInFlight=false;
   scanRestoreAt=0;scanStaTemporary=false;
   WiFi.scanDelete();
@@ -2640,7 +2636,9 @@ void serviceWifiScan(){
     scanInFlight=false;
     scanRestoreAt=0;
     scanStartRetry=0;
-    scanStaTemporary=!(WiFi.getMode()&WIFI_MODE_STA);
+    // A second scan during the discovery window must not forget that STA
+    // was enabled temporarily by an earlier scan.
+    scanStaTemporary=scanStaTemporary || !(WiFi.getMode()&WIFI_MODE_STA);
     if(scanStaTemporary && !WiFi.mode(WIFI_AP_STA)){
       scanBusy=false;scanCount=WIFI_SCAN_FAILED;
       ++scanFailures;
@@ -2655,6 +2653,7 @@ void serviceWifiScan(){
     if((uint32_t)(now-scanStartedMs)>SCAN_TIMEOUT_MS){
       // Recover even if the driver never reports SCAN_DONE.
       ++scanFailures;
+      if(scanInFlight)esp_wifi_scan_stop();
       scanInFlight=false;
       WiFi.scanDelete();
       scanChannel=SCAN_CHANNEL_LAST+1;
@@ -4286,6 +4285,11 @@ void handleDiag(){
   s+=",\"mdnsFailures\":";s+=mdnsFailures;
   s+=",\"mdnsHost\":";jsonString(s,cfg.hostName);
   s+=",\"scanBusy\":";s+=scanBusy?"true":"false";
+  s+=",\"scanChannel\":";s+=scanBusy?(unsigned)scanChannel:0;
+  s+=",\"scanFailures\":";s+=scanFailures;
+  s+=",\"scanStartFailures\":";s+=scanStartFailures;
+  s+=",\"scanRawCount\":";s+=scanRawCount;
+  s+=",\"scanDurationMs\":";s+=scanDurationMs;
   s+=",\"scanNets\":";s+=scanEntriesCount;
   s+=",\"scanAge\":";if(scanCompletedMs)s+=(unsigned long)((millis()-scanCompletedMs)/1000);else s+="null";
   s+="},\"heap\":";s+=ESP.getFreeHeap();s+=",\"minHeap\":";s+=ESP.getMinFreeHeap();
