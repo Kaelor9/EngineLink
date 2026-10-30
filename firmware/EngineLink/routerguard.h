@@ -4,7 +4,8 @@
 // Pure C++ so the timing logic can be regression tested without hardware.
 #include <stdint.h>
 struct RouterGuard {
-  static constexpr uint32_t CONNECT_TIMEOUT_MS=45000UL;
+  // Allow six 20-second association windows before entering rescue mode.
+  static constexpr uint32_t CONNECT_TIMEOUT_MS=120000UL;
   uint32_t disconnectedSince=0;
   void reset(){disconnectedSince=0;}
   void attempt(uint32_t now){disconnectedSince=now?now:1;}
