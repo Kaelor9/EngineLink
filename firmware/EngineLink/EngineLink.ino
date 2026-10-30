@@ -50,7 +50,7 @@
 #include "routerguard.h"
 #include "miniz.h"  // the deflate compressor in the chip's ROM
 
-#define EL_VERSION "0.9.5"
+#define EL_VERSION "0.9.6"
 // Releases list published by the Pages workflow; firmware files come from
 // GitHub Releases of the same repository. Nothing else is downloaded.
 #define EL_RELEASES_URL "https://kaelor9.github.io/EngineLink/releases.json"
@@ -2550,9 +2550,8 @@ void parkRouter(const char *why){
   scanBusy=false;scanCount=-1;
   WiFi.scanDelete();
   WiFi.disconnect(false,false);
-  // Stay AP+STA so the scan button works in rescue mode without changing
-  // radio mode (which would otherwise interrupt every attached phone).
-  WiFi.mode(WIFI_AP_STA);
+  // Recovery uses EngineLink standalone Wi-Fi ONLY.
+  WiFi.mode(WIFI_AP);
   // Reset the AP config even if an AP_START event/IP remained cached while
   // the Wi-Fi hardware was occupied by a failed STA scan.
   WiFi.softAPdisconnect(false);
@@ -2564,63 +2563,54 @@ void parkRouter(const char *why){
     cfg.apName.c_str(),(unsigned)apChannelNow);
 }
 void applyNetwork(){
-  // A failed router is parked until it is explicitly tried again; the SSID,
-  // password, engine state, fuel counters and logs are not reset.
+  // Exactly one operating mode: AP for standalone/recovery, STA for router.
+  // A mode switch intentionally disconnects clients from the old network.
   const bool withRouter=routerConfigured()&&!routerHold;
   WiFi.persistent(false);
-  // ESP32 scanning uses the STA interface. Keep it initialized even when
-  // the device operates as a standalone access point. Switching WIFI_AP to
-  // WIFI_AP_STA on each scan can stop/restart SoftAP and lose the iPhone.
-  const wifi_mode_t want=WIFI_AP_STA;
+  WiFi.setAutoReconnect(false);
   WiFi.setHostname(cfg.hostName.c_str());
-  if(WiFi.getMode()!=want)WiFi.mode(want);
-  // 20 MHz channels: 40 MHz on 2.4 GHz overlaps the neighbours and is the
-  // first thing to fail in a crowded or weak spot.
-  wifi_bandwidth_t bw;
-  if(esp_wifi_get_bandwidth(WIFI_IF_AP,&bw)==ESP_OK&&bw!=WIFI_BW_HT20)esp_wifi_set_bandwidth(WIFI_IF_AP,WIFI_BW_HT20);
-  if(esp_wifi_get_bandwidth(WIFI_IF_STA,&bw)==ESP_OK&&bw!=WIFI_BW_HT20)esp_wifi_set_bandwidth(WIFI_IF_STA,WIFI_BW_HT20);
-  radioTuning();
-  staConflict=false;staGotConflict=false;
-  uint8_t ch=cfg.apChannel;
+  scanBusy=false;
+  WiFi.scanDelete();
+  if(mdnsReady){MDNS.end();mdnsReady=false;}
+  mdnsRefreshPending=false;
+  apStarted=false;
   if(withRouter){
-    WiFi.setAutoReconnect(false);
-    // The scan the user picked the router from already gave its channel. A new
-    // scan hops across channels, so it only runs while no phone is connected.
-    if(!staBssidKnown&&WiFi.softAPgetStationNum()==0)staBssidKnown=findRouter();
-    if(staBssidKnown)ch=staChannel;
-    else if(WiFi.status()==WL_CONNECTED&&WiFi.channel())ch=(uint8_t)WiFi.channel();
-  }else{
-    ntpStarted=false;staBssidKnown=false;
-    // Leave STA enabled but disconnected: it is used only for explicit scans.
-    // Keeping AP+STA avoids radio-mode changes when the phone presses Scan.
-    WiFi.setAutoReconnect(false);
+    // No hidden EngineLink access point while the router is selected.
+    WiFi.mode(WIFI_STA);
+    radioTuning();
+    wifi_bandwidth_t bw;
+    if(esp_wifi_get_bandwidth(WIFI_IF_STA,&bw)==ESP_OK&&bw!=WIFI_BW_HT20)
+      esp_wifi_set_bandwidth(WIFI_IF_STA,WIFI_BW_HT20);
+    // Try the saved router without an extra blocking scan at boot.
+    // The explicit setup scan already cached channel/BSSID if available.
     esp_wifi_disconnect();
-    if(ch<1||ch>11)ch=6;
-  }
-  apChannelNow=ch;
-  startAP();
-  if(withRouter){
-    esp_wifi_disconnect();
+    routerGuard.reset();
     routerGuard.attempt(millis());
     connectRouter();
     staBackoff=20000;staFails=0;staNextTry=millis()+staBackoff;
+    ntpStarted=false;
   }else{
+    // The default and recovery modes are both a pure ESP32 SoftAP.
+    WiFi.mode(WIFI_AP);
+    radioTuning();
+    wifi_bandwidth_t bw;
+    if(esp_wifi_get_bandwidth(WIFI_IF_AP,&bw)==ESP_OK&&bw!=WIFI_BW_HT20)
+      esp_wifi_set_bandwidth(WIFI_IF_AP,WIFI_BW_HT20);
+    apChannelNow=(cfg.apChannel>=1&&cfg.apChannel<=11)?cfg.apChannel:6;
+    startAP();
     routerGuard.reset();
-  }
-  if(!mdnsReady)startNameService();
-  else {
-    // Network configuration can change the advertised AP instance name even
-    // when the Wi-Fi driver does not emit a fresh AP_START event.
-    mdnsNetworkChangedAt=millis();
-    mdnsRefreshPending=true;
+    staBssidKnown=false;
+    ntpStarted=false;
+    startNameService();
   }
 }
+
 void serviceNetwork(){
   if(pendingNetwork){pendingNetwork=false;applyNetwork();}
   // AP recovery should never cause a reset loop on transient event timing.
   // Only act on a sustained stopped/missing-interface state. Do not call
   // esp_wifi_start() from here: softAP() establishes the interface itself.
-  if((uint32_t)(millis()-lastApCheck)>=15000){
+  if((!routerConfigured()||routerHold)&&(uint32_t)(millis()-lastApCheck)>=15000){
     lastApCheck=millis();
     const bool modeOk=(WiFi.getMode()&WIFI_MODE_AP)!=0;
     const bool stopped=apLastEvent==2&&(uint32_t)(millis()-apLastEventMs)>=10000;
@@ -2628,7 +2618,7 @@ void serviceNetwork(){
     if(!modeOk||stopped||missingIp){
       ++apRestarts;
       apStarted=false;
-      if(!modeOk)WiFi.mode(WIFI_AP_STA);
+      if(!modeOk)WiFi.mode(WIFI_AP);
       startAP();
     }
   }
@@ -2645,7 +2635,7 @@ void serviceNetwork(){
       routerGuard.reset();
       staFails=0;staBackoff=20000;staDownSince=0;
       const uint8_t ch=(uint8_t)WiFi.channel();
-      if(ch&&ch!=apChannelNow){apChannelNow=ch;staChannel=ch;}
+      if(ch){staChannel=ch;apChannelNow=ch;}
       // Keep-alive: a small packet to the router every 25 s. Some routers drop
       // clients that stay quiet, and keep the way to EngineLink fresh this way.
       if((uint32_t)(millis()-staLastKeepAlive)>=25000){
@@ -2673,11 +2663,10 @@ void serviceNetwork(){
         // the old one never works. Search again after a few tries: right away
         // with no phone on the EngineLink network, otherwise at most every 5
         // minutes (a search briefly leaves the channel, phones stay joined).
-        const bool phones=WiFi.softAPgetStationNum()>0;
-        if(staFails%3==0&&!scanBusy&&(!phones||!staLastScan||(uint32_t)(millis()-staLastScan)>=300000UL)){
+        // Router mode is STA-only, so no connected AP clients can be disrupted.
+        if(staFails%3==0&&!scanBusy){
           staLastScan=millis();
           staBssidKnown=findRouter();
-          if(staBssidKnown&&staChannel!=apChannelNow){apChannelNow=staChannel;startAP();}
         }
         // If the router has moved or changed BSSID, stop pinning our attempts
         // to a stale scan result. Do an unrestricted scan by the Wi-Fi driver.
@@ -2714,8 +2703,12 @@ void serviceNetwork(){
   // Debounce network events and never reset the Wi-Fi interface to fix mDNS.
   // Avoid restarting mDNS in the middle of a radio scan.
   const uint32_t mdnsNow=millis();
-  if(!scanBusy && (WiFi.getMode()&WIFI_MODE_AP) &&
-     WiFi.softAPIP()==IPAddress(192,168,4,1)){
+  const bool mdnsInterfaceReady=
+    (routerConfigured()&&!routerHold)
+      ? (WiFi.status()==WL_CONNECTED && (WiFi.getMode()&WIFI_MODE_STA))
+      : ((WiFi.getMode()&WIFI_MODE_AP) &&
+         WiFi.softAPIP()==IPAddress(192,168,4,1));
+  if(!scanBusy && mdnsInterfaceReady){
     const bool retry=!mdnsReady && (uint32_t)(mdnsNow-mdnsLastAttemptAt)>=15000UL;
     const bool refresh=mdnsRefreshPending &&
       (uint32_t)(mdnsNow-mdnsNetworkChangedAt)>=2000UL &&
@@ -4066,9 +4059,7 @@ void handleWifiConnect(){
       break;
     }
   }
-  const bool move=staBssidKnown&&staChannel!=apChannelNow;
-  String m="Connecting to "+ssid+".";
-  if(move)m+=" EngineLink Wi-Fi moves to channel "+String(staChannel)+" to match the router, so your phone drops for a few seconds and joins again.";
+  String m="Connecting to "+ssid+". EngineLink will stop its own Wi-Fi; reconnect your phone to the router to continue at http://enginelink.local or its router IP. If joining fails, EngineLink returns to its own Wi-Fi.";
   reply(true,m);
   pendingNetwork=true;
 }
@@ -4076,7 +4067,7 @@ void handleWifiForget(){
   routerHold=false;routerGuard.reset();
   cfg.router=false;cfg.ssid="";cfg.wifiPassword="";saveSettings();
   esp_wifi_disconnect();
-  reply(true,"Disconnected from the router");
+  reply(true,"Disconnected from router. EngineLink is switching to its own Wi-Fi at http://192.168.4.1.");
   pendingNetwork=true;
 }
 void handleSeasonReset(){
@@ -4870,7 +4861,7 @@ void loop(){
     Serial.println("Engine task stalled: restarting");
     prepareRestart();restartAt=millis()+200;
   }
-  if(rollbackPending&&millis()>60000&&apStarted){esp_ota_mark_app_valid_cancel_rollback();rollbackPending=false;}
+  if(rollbackPending&&millis()>60000&&(apStarted||WiFi.status()==WL_CONNECTED)){esp_ota_mark_app_valid_cancel_rollback();rollbackPending=false;}
   if(fwState==4&&!restartAt){prepareRestart();restartAt=millis()+2000;}
   if(restartAt&&(int32_t)(millis()-restartAt)>=0){delay(100);ESP.restart();}
   const uint32_t took=millis()-loopStart;if(took>loopMaxMs)loopMaxMs=took;
