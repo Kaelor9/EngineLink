@@ -50,7 +50,7 @@
 #include "routerguard.h"
 #include "miniz.h"  // the deflate compressor in the chip's ROM
 
-#define EL_VERSION "0.9.9"
+#define EL_VERSION "0.10.0"
 // Releases list published by the Pages workflow; firmware files come from
 // GitHub Releases of the same repository. Nothing else is downloaded.
 #define EL_RELEASES_URL "https://kaelor9.github.io/EngineLink/releases.json"
@@ -3802,6 +3802,36 @@ void handleLive(){sendJSON(200,makeLiveJson());}
 // 81. Its response is built under the existing engine-data mutex; network
 // writes happen AFTER releasing the lock. No J1708 TX is performed here.
 NetworkServer liveServer(81);
+// An independent, low-priority diagnostic endpoint. No engine data or SD
+// access is permitted here. A slow phone can occupy this task but cannot
+// block the main WebServer or the engine monitoring task.
+NetworkServer speedServer(82);
+void speedHttpTask(void *){
+  static const uint8_t sample[256]={
+    'E','n','g','i','n','e','L','i','n','k',' ','W','i','-','F','i',' '
+  };
+  for(;;){
+    NetworkClient c=speedServer.accept();
+    if(!c){vTaskDelay(pdMS_TO_TICKS(15));continue;}
+    c.setNoDelay(true);c.setTimeout(300);
+    const String req=c.readStringUntil('\n');
+    if(!req.startsWith("GET /api/speedtest ") && !req.startsWith("GET /api/speedtest?")){
+      c.print("HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
+      c.stop();continue;
+    }
+    c.print("HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\nCache-Control: no-store\r\nAccess-Control-Allow-Origin: *\r\nContent-Length: 32768\r\nConnection: close\r\n\r\n");
+    const uint32_t begun=millis();
+    size_t sent=0;
+    while(sent<32768 && c.connected() && (uint32_t)(millis()-begun)<15000UL){
+      const size_t n=c.write(sample,sizeof(sample));
+      if(n==0)break;
+      sent+=n;
+      vTaskDelay(1);  // do not starve the Wi-Fi or engine tasks
+    }
+    // No unbounded flush: incomplete responses fail cleanly in the browser.
+    c.stop();
+  }
+}
 void liveHttpTask(void *){
   for(;;){
     NetworkClient c=liveServer.accept();
@@ -4497,19 +4527,11 @@ void handleExportRaw(){
   }
   endDownload(out);
 }
-// Download speed test: text from memory, no SD card. Keep the payload short:
-// the synchronous HTTP server cannot serve live updates during a transfer.
-// On a weak AP, the old 512 kB test blocked every other request for 10+ s.
-// The browser measures the actual received byte count, not the requested size.
+// The ordinary WebServer is single-threaded. Never send a speed-test payload
+// from its request handler: on poor Wi-Fi the old 32 KiB request blocked every
+// other API endpoint for 30+ seconds. Speed tests use port 82 independently.
 void handleSpeedTest(){
-  const uint32_t kb=constrain(web.arg("kb").toInt(),16,32);
-  const DlStat keep=dlStat;
-  // Not compressed: this measures what the Wi-Fi carries.
-  ChunkOut &out=beginDownload("speed test","text/plain",nullptr,false);
-  static const char row[]="EngineLink speed test,0123456789abcdefghijklmnopqrstuvwxyz,0123456789\n";  // 64 bytes
-  for(uint32_t i=0;i<kb*16;i++)out.add(row,sizeof(row)-1);
-  endDownload(out);
-  spStat=dlStat;dlStat=keep;
+  reply(false,"Speed test moved to HTTP port 82; refresh EngineLink's page",409);
 }
 
 // ---------- Backup ----------
@@ -4908,7 +4930,11 @@ void setup(){
         Serial.println("Independent live server task could not start");
     }
   }
-  Serial.printf("SoftAP EngineLink at http://%s (http://enginelink.local) ; passive J1708 only\n",WiFi.softAPIP().toString().c_str());
+  speedServer.begin();
+  if(xTaskCreatePinnedToCore(speedHttpTask,"speed-http",4096,nullptr,1,nullptr,0)!=pdPASS)
+    Serial.println("Independent speed test listener could not start");
+  Serial.printf("EngineLink HTTP ready: %s (port 80 UI, 81 live, 82 speed test)\n",
+    routerConfigured()&&!routerHold?"router":"standalone");
 }
 void loop(){
   const uint32_t loopStart=millis();
