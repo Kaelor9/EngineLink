@@ -1809,25 +1809,33 @@ double latestPrice(){
 // Every file is written to a temporary name first and then renamed, so a
 // power cut never leaves a half-written file.
 bool fsReady=false;
+uint32_t fsWriteErrors=0,fsRecoveredFiles=0;
+char fsLastFailure[48]={};
+bool fsError(const char *path,const char *reason){
+  ++fsWriteErrors;
+  snprintf(fsLastFailure,sizeof(fsLastFailure),"%s: %s",path,reason);
+  Serial.printf("LittleFS write failed: %s\n",fsLastFailure);
+  return false;
+}
 bool fsWrite(const char *path,const void *data,size_t len){
-  if(!fsReady)return false;
+  if(!fsReady)return fsError(path,"not mounted");
   String tmp=String(path)+".tmp";
   File f=LittleFS.open(tmp,"w");
-  if(!f)return false;
+  if(!f)return fsError(path,"open temporary file");
   const bool ok=f.write((const uint8_t*)data,len)==len;
   f.close();
-  if(!ok){LittleFS.remove(tmp);return false;}
+  if(!ok){LittleFS.remove(tmp);return fsError(path,"short write");}
   // Keep the last good copy until the new file has a durable name. A power
   // failure between the two renames can be recovered on the next boot.
   const String bak=String(path)+".bak";
   const bool hadOld=LittleFS.exists(path);
   if(hadOld){
     LittleFS.remove(bak);
-    if(!LittleFS.rename(path,bak)){LittleFS.remove(tmp);return false;}
+    if(!LittleFS.rename(path,bak)){LittleFS.remove(tmp);return fsError(path,"backup rename");}
   }
   if(!LittleFS.rename(tmp,path)){
     if(hadOld)LittleFS.rename(bak,path);
-    return false;
+    return fsError(path,"commit rename");
   }
   if(hadOld)LittleFS.remove(bak);
   return true;
@@ -1836,8 +1844,13 @@ void fsRecover(const char *path){
   if(!fsReady)return;
   const String bak=String(path)+".bak",tmp=String(path)+".tmp";
   if(!LittleFS.exists(path)){
-    if(LittleFS.exists(bak))LittleFS.rename(bak,path);
-    else if(LittleFS.exists(tmp))LittleFS.rename(tmp,path);
+    if(LittleFS.exists(bak)){
+      if(LittleFS.rename(bak,path))++fsRecoveredFiles;
+      else fsError(path,"recover backup");
+    }else if(LittleFS.exists(tmp)){
+      if(LittleFS.rename(tmp,path))++fsRecoveredFiles;
+      else fsError(path,"recover temporary file");
+    }
   }
   if(LittleFS.exists(path)){LittleFS.remove(bak);LittleFS.remove(tmp);}
 }
@@ -3954,6 +3967,9 @@ void handleDiag(){
   {bool f=true;for(uint8_t i=0;i<RESTART_LOG_N;i++){const RestartRec &r=restartLog[i];if(!r.ver[0])continue;if(!f)s+=',';f=false;
     s+="{\"r\":";s+=r.reason;s+=",\"up\":";s+=r.upBefore;s+=",\"utc\":";s+=r.utc;s+=",\"v\":";jsonString(s,r.ver);s+='}';}}
   s+="],\"sdRecoveries\":";s+=sdRecoveries;
+  s+=",\"fsWriteErrors\":";s+=fsWriteErrors;
+  s+=",\"fsRecoveredFiles\":";s+=fsRecoveredFiles;
+  s+=",\"fsLastFailure\":";jsonString(s,fsLastFailure);
   s+=",\"engineTask\":";s+=engineTaskOn?"true":"false";
   s+=",\"engineWait\":{\"max\":";s+=engineMaxWaitMs;s+=",\"slow\":";s+=engineSlowWaits;s+='}';
   s+=",\"reading\":[";
