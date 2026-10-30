@@ -2566,7 +2566,8 @@ void parkRouter(const char *why){
   if(p.begin("enginelink",false)){p.putBool("rhold",true);p.end();}
   routerGuard.reset();
   staBssidKnown=false;
-  scanBusy=false;scanCount=-1;
+  scanBusy=false;scanRequested=false;scanInFlight=false;
+  scanRestoreAt=0;scanCount=-1;
   WiFi.scanDelete();
   WiFi.disconnect(false,false);
   // Recovery uses EngineLink standalone Wi-Fi ONLY.
@@ -2588,7 +2589,8 @@ void applyNetwork(){
   WiFi.persistent(false);
   WiFi.setAutoReconnect(false);
   WiFi.setHostname(cfg.hostName.c_str());
-  scanBusy=false;
+  scanBusy=false;scanRequested=false;scanInFlight=false;
+  scanRestoreAt=0;scanStaTemporary=false;
   WiFi.scanDelete();
   if(mdnsReady){MDNS.end();mdnsReady=false;}
   mdnsRefreshPending=false;
@@ -4102,29 +4104,34 @@ void handleApSave(){
   if(change)pendingNetwork=true;
 }
 void handleWifiScan(){
-  if(web.arg("start")=="1"&&!scanBusy){
-    // A pending association can compete with an active scan. Stop that attempt
-    // first; serviceNetwork will leave the radio alone until the scan ends.
-    if(routerConfigured()&&WiFi.status()!=WL_CONNECTED){
-      WiFi.disconnect(false,false);
-      staNextTry=millis()+20000UL;
+  if(web.arg("start")=="1"){
+    if(!(WiFi.getMode()&WIFI_MODE_AP)||pendingNetwork||routerConfigured()&&!routerHold){
+      reply(false,"Connect to EngineLink Wi-Fi before scanning for a router",409);return;
     }
-    WiFi.scanDelete();
-    // Only temporarily enable station hardware to scan from standalone AP.
-    const bool scanFromAP=!(WiFi.getMode()&WIFI_MODE_STA);
-    if(scanFromAP)WiFi.mode(WIFI_AP_STA);
-    // Minimize time away from the active AP channel.
-    if(WiFi.scanNetworks(true,true,false,110)==WIFI_SCAN_FAILED){
-      scanBusy=false;scanCount=WIFI_SCAN_FAILED;
-      if(scanFromAP)WiFi.mode(WIFI_AP);
-      reply(false,"Wi-Fi scan could not start. Try again after reconnecting.",409);return;
+    if(!scanBusy&&!scanRequested){
+      // Acknowledge the HTTP request BEFORE changing radio modes. This
+      // prevents the phone losing the response that initiated the scan.
+      scanBusy=true;scanRequested=true;scanInFlight=false;
+      scanCount=-1;scanChannel=0;scanEntriesCount=0;
+      scanFailures=0;scanStartFailures=0;scanRawCount=0;
+      scanStartedMs=0;scanCompletedMs=0;scanDurationMs=0;
+      scanRestoreAt=0;scanNextAt=millis()+600UL;
     }
-    scanBusy=true;scanCount=-1;scanStartedMs=millis();
   }
   String s="{\"busy\":";s+=scanBusy?"true":"false";
   s+=",\"done\":";s+=scanCompletedMs>0?"true":"false";
+  s+=",\"channel\":";s+=scanBusy?(unsigned)scanChannel:0;
+  s+=",\"channels\":";s+=SCAN_CHANNEL_LAST;
+  s+=",\"raw\":";s+=scanRawCount;
+  s+=",\"failures\":";s+=scanFailures;
+  s+=",\"durationMs\":";s+=scanDurationMs;
   s+=",\"error\":";
-  jsonString(s,!scanBusy&&scanCount==WIFI_SCAN_FAILED?String("Scan failed. Try again."):String(""));
+  String err="";
+  if(!scanBusy){
+    if(scanCount==WIFI_SCAN_FAILED)err="Wi-Fi scan could not complete. Try again.";
+    else if(scanFailures>0)err="Some channels could not be scanned; refresh to try again.";
+  }
+  jsonString(s,err);
   s+=",\"nets\":[";
   for(uint8_t i=0;i<scanEntriesCount;i++){
     const ScanEntry &entry=scanEntries[i];
