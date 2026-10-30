@@ -1680,10 +1680,23 @@ const A={
   testStop:async()=>{await act('/api/test/stop',{});load('state');},
   busRefresh:()=>load('state'),
   dl:v=>download(v),
-  speedTest:async()=>{S.speed={busy:true};render(true);const kb=32,t0=performance.now();
-    try{const c=new AbortController(),id=setTimeout(()=>c.abort(),90000);const r=await fetch(BASE+'/api/speedtest?kb='+kb,{cache:'no-store',signal:c.signal});const b=await r.arrayBuffer();clearTimeout(id);
-      const ms=performance.now()-t0;S.speed={kb:b.byteLength/1024,ms,kbs:b.byteLength/1024/(ms/1000)};}catch(e){S.speed={err:true};}
-    await load('diag');render(true);},
+  speedTest:async()=>{
+    S.speed={busy:true};render(true);
+    const t0=performance.now(),url=new URL(BASE||location.origin,location.href);
+    // Run the diagnostic on a separate low-priority HTTP worker. Never send
+    // 32 KiB through the main server: slow links froze every other request.
+    if(url.protocol!=='http:'){S.speed={err:true};render(true);return;}
+    url.port='82';const c=new AbortController(),id=setTimeout(()=>c.abort(),18000);
+    try{
+      const r=await fetch(url.origin+'/api/speedtest',{cache:'no-store',signal:c.signal});
+      if(!r.ok)throw Error('HTTP '+r.status);
+      const data=await r.arrayBuffer();
+      if(data.byteLength!==32768)throw Error('Incomplete transfer');
+      const ms=performance.now()-t0;
+      S.speed={kb:data.byteLength/1024,ms,kbs:data.byteLength/1024/(ms/1000)};
+    }catch(e){S.speed={err:true};}finally{clearTimeout(id);}
+    await load('diag');render(true);
+  },
   protoKad:async()=>{const r=await cfgSet({protocol:'kad'});if(r.ok){toast('Reading Volvo Penta KAD engines');load('diag');}},
   exFile:v=>{download(v);if(!IOS_APP())toast('Downloading');},
   exReport:v=>openWin(reportUrl(v)),
