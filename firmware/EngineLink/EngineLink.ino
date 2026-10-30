@@ -48,7 +48,7 @@
 #include "diagrules.h"
 #include "miniz.h"  // the deflate compressor in the chip's ROM
 
-#define EL_VERSION "0.8.1"
+#define EL_VERSION "0.8.2"
 // Releases list published by the Pages workflow; firmware files come from
 // GitHub Releases of the same repository. Nothing else is downloaded.
 #define EL_RELEASES_URL "https://kaelor9.github.io/EngineLink/releases.json"
@@ -432,6 +432,7 @@ struct Settings {
   bool canListen=false;
   uint8_t portChannel=1; // 1=J7 port, 2=J6 port, 0=unassigned
   uint8_t apChannel=6;
+  uint8_t txPower=0;          // 0 max (19.5 dBm), 1 medium (15 dBm), 2 low (11 dBm)
   String apPassword="12345678";
   String ssid="";
   String wifiPassword="";
@@ -2314,7 +2315,13 @@ bool routerConfigured(){return cfg.router&&cfg.ssid.length();}
 void radioTuning(){
   WiFi.setSleep(false);
   esp_wifi_set_ps(WIFI_PS_NONE);
-  WiFi.setTxPower(WIFI_POWER_19_5dBm);
+  // Full power reaches furthest, but its current peaks can upset the radio on
+  // a board with a weak supply or a chip antenna; a lower setting can then
+  // hold the connection better (Diagnostics → Wi-Fi → Transmit power).
+  WiFi.setTxPower(cfg.txPower==2?WIFI_POWER_11dBm:cfg.txPower==1?WIFI_POWER_15dBm:WIFI_POWER_19_5dBm);
+  // Ride out a few seconds of not hearing the router (default 6 s) instead of
+  // dropping and logging in again on a weak or busy link.
+  esp_wifi_set_inactive_time(WIFI_IF_STA,20);
   // Setting the country again on a running network makes it start over and
   // drops every phone, so it is only set when it is not already right.
   wifi_country_t cur={};
@@ -2336,7 +2343,7 @@ void startAP(){
 }
 // Blocking scan for the saved router. Only used when the network is set up.
 bool findRouter(){
-  netWaitBegin();const int16_t n=WiFi.scanNetworks(false,true,false,150);netWaitEnd();  // a scan takes seconds
+  netWaitBegin();const int16_t n=WiFi.scanNetworks(false,true,false,300);netWaitEnd();  // a scan takes seconds
   int best=-1;int32_t bestRssi=-200;
   for(int16_t i=0;i<n;i++){
     if(WiFi.SSID(i)==cfg.ssid&&WiFi.RSSI(i)>bestRssi){best=i;bestRssi=WiFi.RSSI(i);}
@@ -2421,7 +2428,7 @@ void applyNetwork(){
   if(withRouter){
     esp_wifi_disconnect();
     connectRouter();
-    staBackoff=8000;staFails=0;staNextTry=millis()+staBackoff;
+    staBackoff=20000;staFails=0;staNextTry=millis()+staBackoff;
   }
   if(!mdnsReady)startNameService();
 }
@@ -2450,7 +2457,7 @@ void serviceNetwork(){
   }
   if(routerConfigured()&&!staConflict){
     if(WiFi.status()==WL_CONNECTED){
-      staFails=0;staBackoff=8000;staDownSince=0;
+      staFails=0;staBackoff=20000;staDownSince=0;
       const uint8_t ch=(uint8_t)WiFi.channel();
       if(ch&&ch!=apChannelNow){apChannelNow=ch;staChannel=ch;}
       // Keep-alive: a small packet to the router every 25 s. Some routers drop
@@ -2461,6 +2468,10 @@ void serviceNetwork(){
       }
     }else{
       if(!staDownSince)staDownSince=millis()?millis():1;
+      // Never during a search for networks (a connect attempt cuts the search
+      // short, so it found almost nothing), and give each attempt 20 s: many
+      // routers take 5-10 s to let a device in.
+      if(scanBusy&&(int32_t)(staNextTry-millis())<5000)staNextTry=millis()+5000;
       if((int32_t)(millis()-staNextTry)>=0){
         ++staFails;
         // Routers move to another channel by themselves; then reconnecting on
@@ -2477,7 +2488,7 @@ void serviceNetwork(){
         connectRouter();
         // Reconnecting on the known channel does not disturb the phones, so
         // it is tried often: 8 s, 16 s, then every 30 s.
-        staBackoff=min<uint32_t>(staBackoff*2,30000UL);
+        staBackoff=max<uint32_t>(20000UL,min<uint32_t>(staBackoff*2,30000UL));
         staNextTry=millis()+staBackoff;
       }
     }
@@ -2910,6 +2921,7 @@ void saveSettings(){
   pref.putBool("can",cfg.canListen);
   pref.putUChar("port",cfg.portChannel);
   pref.putUChar("apch",cfg.apChannel);
+  pref.putUChar("txp",cfg.txPower);
   pref.putString("appass",cfg.apPassword);
   pref.putString("ssid",cfg.ssid);
   pref.putString("wpass",cfg.wifiPassword);
@@ -2953,6 +2965,7 @@ void loadSettings(){
   cfg.canListen=pref.getBool("can",false);
   cfg.portChannel=pref.getUChar("port",1);
   cfg.apChannel=pref.getUChar("apch",6);
+  cfg.txPower=pref.getUChar("txp",0);
   cfg.apPassword=pref.getString("appass","12345678");
   cfg.ssid=pref.getString("ssid","");
   cfg.wifiPassword=pref.getString("wpass","");
@@ -2996,6 +3009,7 @@ void loadSettings(){
   if(cfg.apPassword.length()<8)cfg.apPassword="12345678";
   if(cfg.portChannel>2)cfg.portChannel=0;
   if(cfg.apChannel<1||cfg.apChannel>13)cfg.apChannel=6;
+  if(cfg.txPower>2)cfg.txPower=0;
 }
 void jsonString(String &out,const String &v){
   out+='"';
@@ -3105,7 +3119,7 @@ void handleState(){
   s+=",\"protocol\":";s+=cfg.protocol==PROTO_KAD?"\"kad\"":"\"j1587\"";
   s+=",\"kadBigEndian\":";s+=cfg.kadBigEndian?"true":"false";
   s+=",\"kadFuelDiv\":";s+=cfg.kadFuelDiv;
-  s+=",\"kadVolt\":";s+=cfg.kadVolt;
+  s+=",\"kadVolt\":";s+=cfg.kadVolt;s+=",\"txPower\":";s+=cfg.txPower;
   s+=",\"fuelCorr\":[";s+=String(cfg.fuelCorr[0],4);s+=',';s+=String(cfg.fuelCorr[1],4);s+=']';
   s+=",\"apName\":";jsonString(s,cfg.apName);
   s+=",\"host\":";jsonString(s,cfg.hostName);
@@ -3699,6 +3713,7 @@ void handleCfg(){
     }
     if(g){cfg.gearMaskR=m;cfg.gearValR=val;}else{cfg.gearMaskF=m;cfg.gearValF=val;}
   }
+  if(web.hasArg("txp")){const int v=web.arg("txp").toInt();if(v<0||v>2){reply(false,"Invalid transmit power",400);return;}cfg.txPower=v;radioTuning();}
   if(web.hasArg("host")){
     String v=web.arg("host");v.trim();v.toLowerCase();v.replace(' ','-');
     if(v.endsWith(".local"))v.remove(v.length()-6);
@@ -3743,7 +3758,9 @@ void handleApSave(){
 void handleWifiScan(){
   if(web.arg("start")=="1"&&!scanBusy){
     WiFi.scanDelete();
-    if(WiFi.scanNetworks(true,false,false,120)==WIFI_SCAN_FAILED){reply(false,"Scan could not start",409);return;}
+    // 300 ms on each channel: with the EngineLink network running the radio
+    // keeps going back to its own channel, and short listens miss routers.
+    if(WiFi.scanNetworks(true,true,false,300)==WIFI_SCAN_FAILED){reply(false,"Scan could not start",409);return;}
     scanBusy=true;scanCount=-1;scanStartedMs=millis();
   }
   String s="{\"busy\":";s+=scanBusy?"true":"false";
