@@ -35,7 +35,7 @@ def partition_entries(raw: bytes):
             break
         if magic != 0x50AA:
             continue
-        name = label.split(b"\\0", 1)[0].decode("ascii", "replace")
+        name = label.split(b"\0", 1)[0].decode("ascii", "replace")
         found[name] = (offset, size)
     return found
 
@@ -62,7 +62,7 @@ def verify_app(app: Path):
         )
     with app.open("rb") as f:
         header = f.read(0x30)
-    if len(header) < 0x30 or header[0] != 0xE9 or header[0x20:0x24] != b"\\x32\\x54\\xCD\\xAB":
+    if len(header) < 0x30 or header[0] != 0xE9 or header[0x20:0x24] != b"\x32\x54\xCD\xAB":
         raise RuntimeError("Not an ESP32 application image; refusing to flash.")
 
 
