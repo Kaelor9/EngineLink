@@ -2355,7 +2355,7 @@ void startAP(){
   // Reapplying softAP configuration can interrupt associated phones. Do not
   // touch a healthy AP when its actual desired settings have not changed.
   static String activeName,activePassword;
-  if(apStarted&&(WiFi.getMode()&WIFI_MODE_AP)&&apLastEvent!=2
+  if(apStarted&&(WiFi.getMode()&WIFI_MODE_AP)&&apLastEvent==1
      &&WiFi.softAPIP()==IPAddress(192,168,4,1)
      &&apStartedChannel==apChannelNow
      &&activeName==cfg.apName&&activePassword==cfg.apPassword)return;
