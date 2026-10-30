@@ -759,6 +759,11 @@ uint32_t staConnectedAt=0;
 // Why the router connection last dropped (Wi-Fi reason code), when, and
 // since when it is down; the last full router search; the keep-alive.
 volatile uint8_t staLastReason=0;volatile uint32_t staLastDropAt=0;
+volatile uint32_t staDropEvents=0;
+uint32_t routerSeenDropEvents=0,routerAttemptStartedAt=0;
+uint32_t routerImmediateRetries=0,routerStuckRetries=0;
+constexpr uint32_t ROUTER_AUTH_RETRY_DELAY_MS=3000UL;
+constexpr uint32_t ROUTER_ASSOCIATION_WINDOW_MS=18000UL;
 uint32_t staDownSince=0,staLastScan=0,staLastKeepAlive=0;
 // Last access point event. AP_STOP also arrives (late) when the network only
 // changed its settings, so the watchdog acts on "stopped and not started again".
@@ -829,7 +834,11 @@ void onWiFi(WiFiEvent_t e,WiFiEventInfo_t info){
   if(e==ARDUINO_EVENT_WIFI_AP_STOP){++apStops;apLastEvent=2;apLastEventMs=millis();}
   if(e==ARDUINO_EVENT_WIFI_AP_STACONNECTED)++apJoins;
   if(e==ARDUINO_EVENT_WIFI_AP_STADISCONNECTED){++apLeaves;apReason=info.wifi_ap_stadisconnected.reason;}
-  if(e==ARDUINO_EVENT_WIFI_STA_DISCONNECTED){++staDisconnects;staLastReason=info.wifi_sta_disconnected.reason;staLastDropAt=millis();}
+  if(e==ARDUINO_EVENT_WIFI_STA_DISCONNECTED){
+    ++staDisconnects;++staDropEvents;
+    staLastReason=info.wifi_sta_disconnected.reason;
+    staLastDropAt=millis();
+  }
   if(e==ARDUINO_EVENT_WIFI_STA_GOT_IP){
     ++staConnects;staConnectedAt=millis();
     // mDNS must advertise the newly assigned router address as well as AP.
@@ -2563,12 +2572,18 @@ void applyNetwork(){
       esp_wifi_set_bandwidth(WIFI_IF_STA,WIFI_BW_HT20);
     // Start an unrestricted association without an extra blocking scan.
     // The driver owns scan/association in the background.
-    esp_wifi_disconnect();
     routerGuard.reset();
     routerGuard.attempt(millis());
+    routerSeenDropEvents=staDropEvents;
+    routerAttemptStartedAt=millis();
+    routerImmediateRetries=0;routerStuckRetries=0;
     connectRouter();
     routerAttempts=1;
-    staBackoff=20000;staFails=0;staNextTry=millis()+staBackoff;
+    // WiFi.begin starts scanning/authentication asynchronously. Give an
+    // attempt long enough for DHCP; if the driver reports an early failure,
+    // we retry promptly instead of waiting the whole 20-second interval.
+    staBackoff=ROUTER_ASSOCIATION_WINDOW_MS;staFails=0;
+    staNextTry=millis()+ROUTER_ASSOCIATION_WINDOW_MS;
     ntpStarted=false;
   }else{
     // The default and recovery modes are both a pure ESP32 SoftAP.
@@ -2715,7 +2730,8 @@ void serviceNetwork(){
     if(WiFi.status()==WL_CONNECTED){
       routerGuard.reset();
       routerLastSuccessMs=millis();
-      staFails=0;staBackoff=20000;staDownSince=0;
+      staFails=0;staBackoff=ROUTER_ASSOCIATION_WINDOW_MS;staDownSince=0;
+      routerSeenDropEvents=staDropEvents;
       const uint8_t ch=(uint8_t)WiFi.channel();
       if(ch){staChannel=ch;apChannelNow=ch;}
       // Keep-alive: a small packet to the router every 25 s. Some routers drop
@@ -2733,22 +2749,34 @@ void serviceNetwork(){
         parkRouter("no router IP after repeated attempts for 120 seconds");
         return;
       }
-      // Never during a search for networks (a connect attempt cuts the search
-      // short, so it found almost nothing), and give each attempt 20 s: many
-      // routers take 5-10 s to let a device in.
-      if(scanBusy){
-        // Do not compete with an active router scan or count phantom failures.
-        if((int32_t)(staNextTry-millis())<5000)staNextTry=millis()+5000;
-      }else if((int32_t)(millis()-staNextTry)>=0){
+      // React to explicit association failure events instead of waiting 20s
+      // after a wrong password / AP refusal. Do NOT interrupt WiFi.begin
+      // while the radio is still legitimately scanning/authenticating.
+      if(staDropEvents!=routerSeenDropEvents){
+        routerSeenDropEvents=staDropEvents;
+        // Ignore a late disconnect event from the previous Wi-Fi mode.
+        if((uint32_t)(millis()-routerAttemptStartedAt)>500UL){
+          const uint32_t sooner=millis()+ROUTER_AUTH_RETRY_DELAY_MS;
+          if((int32_t)(staNextTry-sooner)>0){
+            staNextTry=sooner;
+            ++routerImmediateRetries;
+          }
+        }
+      }
+      if(!scanBusy && (int32_t)(millis()-staNextTry)>=0){
         ++staFails;
-        // Association is asynchronous; never run a blocking discovery pass
-        // from the HTTP/main task.
-        // Restart only when a full attempt window elapsed.
-        esp_wifi_disconnect();
+        // Only cancel when an association has genuinely stalled. If a
+        // DISCONNECTED event arrived the driver is already idle, so do not
+        // inject a second disconnect event that causes false failures.
+        if((uint32_t)(millis()-routerAttemptStartedAt)>=ROUTER_ASSOCIATION_WINDOW_MS){
+          ++routerStuckRetries;
+          WiFi.disconnect(false,false);
+        }
+        routerAttemptStartedAt=millis();
+        routerSeenDropEvents=staDropEvents;
         connectRouter();
         ++routerAttempts;
-        staBackoff=20000UL;
-        staNextTry=millis()+staBackoff;
+        staNextTry=millis()+ROUTER_ASSOCIATION_WINDOW_MS;
       }
     }
   }
@@ -4160,7 +4188,8 @@ void handleWifiConnect(){
 void handleWifiForget(){
   routerHold=false;routerGuard.reset();
   cfg.router=false;cfg.ssid="";cfg.wifiPassword="";saveSettings();
-  esp_wifi_disconnect();
+  // Reply on the current router connection BEFORE disabling STA. Otherwise
+  // Safari sees a failed HTTP request even when the mode change succeeded.
   reply(true,"Disconnected from router. EngineLink is switching to its own Wi-Fi at http://192.168.4.1.");
   networkSwitchAt=millis()+1200UL;
   pendingNetwork=true;
@@ -4256,6 +4285,9 @@ void handleDiag(){
   s+=",\"staDown\":";if(staDownSince)s+=(unsigned long)((millis()-staDownSince)/1000);else s+="null";
   s+=",\"staConnects\":";s+=staConnects;
   s+=",\"routerAttempts\":";s+=routerAttempts;
+  s+=",\"routerFastRetries\":";s+=routerImmediateRetries;
+  s+=",\"routerStuckRetries\":";s+=routerStuckRetries;
+  s+=",\"routerLastReason\":";s+=(unsigned)staLastReason;
   s+=",\"routerWaitSec\":";s+=routerGuard.disconnectedSince?(unsigned long)((millis()-routerGuard.disconnectedSince)/1000UL):0;
   s+=",\"ch\":";s+=apChannelNow;
   s+=",\"conflict\":";s+=staConflict?"true":"false";
