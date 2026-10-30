@@ -46,6 +46,7 @@
 #include "fuelcal.h"
 #include "ledpatterns.h"
 #include "diagrules.h"
+#include "otaheader.h"
 #include "miniz.h"  // the deflate compressor in the chip's ROM
 
 #define EL_VERSION "0.9.0"
@@ -1921,7 +1922,7 @@ void loadFuel(){
   }
   free(buf);
 }
-void saveHealth(){fsWrite("/health.bin",&health,sizeof(health));healthDirty=false;}
+void saveHealth(){if(fsWrite("/health.bin",&health,sizeof(health)))healthDirty=false;}
 void loadHealth(){
   Health h;
   if(fsRead("/health.bin",&h,sizeof(h),sizeof(h))==sizeof(h)&&h.magic==health.magic)health=h;
@@ -2562,7 +2563,7 @@ void loadEvents(){
     if(events[i].box==1)events[i].box=3; // EngineLink restarted before the black box was written
   }
 }
-void saveLife(){fsWrite("/life.bin",&life,sizeof(life));lifeDirty=false;}
+void saveLife(){if(fsWrite("/life.bin",&life,sizeof(life)))lifeDirty=false;}
 void loadLife(){diag::Life l;if(fsRead("/life.bin",&l,sizeof(l),sizeof(l))==sizeof(l)&&l.magic==life.magic)life=l;}
 uint8_t unackedEvents(){uint8_t n=0;for(uint8_t i=0;i<eventCount;i++)if(!events[i].ack&&events[i].sev>=diag::WARN)n++;return n;}
 // What both engines report this second.
@@ -4283,7 +4284,7 @@ void fwWorker(void *){
           fwTotal=len;
           NetworkClient *stream=http.getStreamPtr();
           bool ok=Update.begin(len,U_FLASH);
-          uint8_t buf[2048];bool checked=false;uint8_t header[0x30]={};size_t headerBytes=0;uint32_t idle=millis();
+          uint8_t buf[2048];OtaImageHeader imageHeader;bool checked=false;uint32_t idle=millis();
           while(ok&&fwBytes<(size_t)len){
             const size_t avail=stream->available();
             if(!avail){
@@ -4296,15 +4297,10 @@ void fwWorker(void *){
             idle=millis();
             // The first TCP read need not contain the entire ESP32 header.
             if(!checked){
-              const size_t take=min((size_t)got,sizeof(header)-headerBytes);
-              memcpy(header+headerBytes,buf,take);
-              headerBytes+=take;
-              if(headerBytes==sizeof(header)){
+              imageHeader.feed(buf,(size_t)got);
+              if(imageHeader.complete()){
                 checked=true;
-                if(header[0]!=0xE9||header[0x20]!=0x32||header[0x21]!=0x54
-                   ||header[0x22]!=0xCD||header[0x23]!=0xAB){
-                  fwError="Not an EngineLink update file";ok=false;break;
-                }
+                if(!imageHeader.valid()){fwError="Not an EngineLink update file";ok=false;break;}
               }
             }
             if(Update.write(buf,got)!=(size_t)got){fwError=Update.errorString();ok=false;break;}
@@ -4367,7 +4363,9 @@ void prepareRestart(){
 // ---------- Wi-Fi firmware update (application image only) ----------
 void handleUpdateUpload(){
   HTTPUpload &u=web.upload();
+  static OtaImageHeader uploadHeader;
   if(u.status==UPLOAD_FILE_START){
+    uploadHeader.reset();
     otaError="";otaBytes=0;otaChecked=false;
     if(calActive){otaError="Stop the motor test first";return;}
     for(uint8_t c=0;c<2;c++)if(kad[c].polling)stopPolling(c,"Firmware update");
@@ -4380,9 +4378,12 @@ void handleUpdateUpload(){
     if(otaError.length()||!otaActive)return;
     // An ESP32 application image carries its app descriptor magic at 0x20.
     if(!otaChecked){
-      otaChecked=true;
-      if(u.currentSize<0x30||u.buf[0]!=0xE9||u.buf[0x20]!=0x32||u.buf[0x21]!=0x54||u.buf[0x22]!=0xCD||u.buf[0x23]!=0xAB){
-        otaError="Not an ESP32 application image";Update.abort();otaActive=false;return;
+      uploadHeader.feed(u.buf,u.currentSize);
+      if(uploadHeader.complete()){
+        otaChecked=true;
+        if(!uploadHeader.valid()){
+          otaError="Not an ESP32 application image";Update.abort();otaActive=false;return;
+        }
       }
     }
     feedLoopWDT();
@@ -4390,6 +4391,7 @@ void handleUpdateUpload(){
     otaBytes+=u.currentSize;
   }else if(u.status==UPLOAD_FILE_END){
     if(otaError.length()||!otaActive)return;
+    if(!otaChecked){otaError="Firmware header incomplete";Update.abort();otaActive=false;return;}
     if(!Update.end(true))otaError=Update.errorString();
   }else if(u.status==UPLOAD_FILE_ABORTED){
     if(otaActive)Update.abort();
