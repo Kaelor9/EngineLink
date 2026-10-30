@@ -1,6 +1,13 @@
-# EngineLink application v0.9.0
+# EngineLink application v0.9.1
 
 This is a **working application foundation**, not a validated production release. The former Lab firmware is retained under \`experiments/\`. The application is in \`firmware/EngineLink/\`.
+
+## Changes in 0.9.1: standalone AP reliability
+
+- Disable automatic channel scouting (STA-mode scan) on AP-only boot; keep a stable configured channel without mode switching or scans.
+- AP watchdog now retries only every 15 seconds after sustained failure; no raw esp_wifi_start() restart loop. Unchanged AP settings are not repeatedly applied based on AP_START callback timing.
+- No UI, new passwords, hardware buttons or engine protocol changes.
+- **Still unverified on board:** actual RF behaviour, phone disconnect causes, supply under Wi-Fi peak power and sustained operation with/without router.
 
 ## Changes in 0.9.0: stability without UI changes
 
