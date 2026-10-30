@@ -1,6 +1,6 @@
 # EngineLink: project handover
 
-> Status as of **30 October 2026**, firmware **0.9.1**. This document is written so that any developer or AI assistant can pick up the work. It replaces the earlier handover from 26 October (version 0.2.0-alpha), which is out of date.
+> Status as of **30 October 2026**, firmware **0.9.2**. This document is written so that any developer or AI assistant can pick up the work. It replaces the earlier handover from 26 October (version 0.2.0-alpha), which is out of date.
 >
 > **Talk to the owner in Danish.** Keep answers short and concrete; the owner prefers a brief summary over long explanations. The app itself is in English.
 >
@@ -56,7 +56,7 @@ Which socket is port or starboard is a setting (on this boat: port J6, starboard
 
 The owner has said **merge PRs without asking** once CI is green.
 
-## 4. How the firmware works (0.9.1)
+## 4. How the firmware works (0.9.2)
 
 **Tasks and cores.** Core 0: Wi-Fi stack, the two J1708 receiver tasks (UART → frame queue in PSRAM, 2048 frames), the **engine task** (`engineTask`: frames, KAD polling, once-a-second engine/trip/diagnosis work), the GitHub update worker. Core 1: Arduino `loop()` (web server, SD, network management, LED). Engine data is shared under one mutex (`engineMx`); the loop releases it whenever it waits on the network (request parsing, every socket write, router scans, its 1 ms pause). Watchdogs: engine task (10 s without a round → save and restart) and loop task (60 s).
 
@@ -69,6 +69,14 @@ The owner has said **merge PRs without asking** once CI is green.
 **Diagnosis.** Events (with a ±2 min black box on SD), life story per engine, port vs starboard. Rules are host-tested on simulated trips.
 
 **App.** Tabs Trip, Economy, Tank, History, Engines; Settings and Diagnostics pages. Export sheet: printable trip/engine reports (the app opened as `?report=trips&ids=…` / `?report=engines`) and CSV files (downloads are deflate-compressed with the ESP32 ROM compressor when the browser accepts it).
+
+## 0.9.2 — rescue AP after failed router association
+
+- User report: long green + short blue LED (Router unreachable), while EngineLink SSID invisible and router access unavailable after switching from standalone.
+- P0 change: AP+STA unavailable for 45 seconds -> shut down STA, recreate standalone AP, and save `enginelink/rhold=true` in NVS. The board starts AP-only on subsequent boots until the user explicitly presses Connect to a router through existing Settings. No added UI or passwords. Retains all router credentials/data.
+- Diagnostic API exposes routerHold, routerFallbacks, apMode, apDriverSsid and apDriverIp; `tools/test_routerguard.cpp` tests the deadline.
+- Hardware proof is STILL outstanding. User may need non-erasing USB flash if already locked out, then validate AP broadcast and access on iPhone.
+- Tradeoff: no automatic background reconnect after 45-second timeout; user must retry deliberately to avoid recurrent lockouts.
 
 ## 0.9.1 AP-only stability
 
