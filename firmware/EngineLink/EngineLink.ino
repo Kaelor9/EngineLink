@@ -50,7 +50,7 @@
 #include "routerguard.h"
 #include "miniz.h"  // the deflate compressor in the chip's ROM
 
-#define EL_VERSION "0.10.1"
+#define EL_VERSION "0.11.0"
 // Releases list published by the Pages workflow; firmware files come from
 // GitHub Releases of the same repository. Nothing else is downloaded.
 #define EL_RELEASES_URL "https://kaelor9.github.io/EngineLink/releases.json"
@@ -753,19 +753,16 @@ uint32_t routerFallbacks=0;
 RouterGuard routerGuard;
 // AP and STA are mutually exclusive; 192.168.4.x is a valid router subnet.
 bool staConflict=false;
-uint32_t staNextTry=0,staBackoff=20000,staFails=0,staConnects=0,apRestarts=0,lastApCheck=0;
-uint32_t routerAttempts=0,routerLastSuccessMs=0;
-uint32_t staConnectedAt=0;
-// Why the router connection last dropped (Wi-Fi reason code), when, and
-// since when it is down; the last full router search; the keep-alive.
-volatile uint8_t staLastReason=0;volatile uint32_t staLastDropAt=0;
-volatile uint32_t staDropEvents=0;
-uint32_t routerSeenDropEvents=0,routerAttemptStartedAt=0;
-bool routerResetPending=false;
-uint32_t routerImmediateRetries=0,routerStuckRetries=0;
-constexpr uint32_t ROUTER_AUTH_RETRY_DELAY_MS=3000UL;
-constexpr uint32_t ROUTER_ASSOCIATION_WINDOW_MS=18000UL;
-uint32_t staDownSince=0,staLastScan=0,staLastKeepAlive=0;
+// The driver owns association and automatic re-association. The application
+// must not repeatedly call begin()/disconnect() while authentication runs.
+uint32_t staFails=0,staConnects=0,apRestarts=0,lastApCheck=0;
+uint32_t routerAttempts=0,routerLastSuccessMs=0,staConnectedAt=0;
+volatile uint8_t staLastReason=0;
+volatile uint32_t staLastDropAt=0;
+volatile bool staAssociated=false;
+uint32_t staDownSince=0,routerLastRecoveryAttempt=0;
+uint32_t routerForcedReconnects=0;
+constexpr uint32_t ROUTER_LAST_RESORT_RETRY_MS=30000UL;
 // Last access point event. AP_STOP also arrives (late) when the network only
 // changed its settings, so the watchdog acts on "stopped and not started again".
 volatile uint8_t apLastEvent=0;      // 1 started, 2 stopped
@@ -838,8 +835,10 @@ void onWiFi(WiFiEvent_t e,WiFiEventInfo_t info){
   if(e==ARDUINO_EVENT_WIFI_AP_STOP){++apStops;apLastEvent=2;apLastEventMs=millis();}
   if(e==ARDUINO_EVENT_WIFI_AP_STACONNECTED)++apJoins;
   if(e==ARDUINO_EVENT_WIFI_AP_STADISCONNECTED){++apLeaves;apReason=info.wifi_ap_stadisconnected.reason;}
+  if(e==ARDUINO_EVENT_WIFI_STA_CONNECTED)staAssociated=true;
   if(e==ARDUINO_EVENT_WIFI_STA_DISCONNECTED){
-    ++staDisconnects;++staDropEvents;
+    staAssociated=false;
+    ++staDisconnects;
     staLastReason=info.wifi_sta_disconnected.reason;
     staLastDropAt=millis();
   }
@@ -2488,11 +2487,15 @@ void startAP(){
   }
 }
 void connectRouter(){
-  // Never pin the connection to a scan-time BSSID/channel: mesh routers,
-  // band steering and AP restarts can invalidate that information before
-  // association. Let the driver find the SSID across all 2.4 GHz channels.
+  // The standard ESP32 STA path, as used by the working Marine RGB
+  // controller. Configure credentials once and let Arduino's built-in
+  // reconnect logic handle router dropouts without application interference.
   staBssidKnown=false;
-  WiFi.begin(cfg.ssid.c_str(),cfg.wifiPassword.c_str(),0,nullptr,true);
+  const wl_status_t result=WiFi.begin(cfg.ssid.c_str(),
+    cfg.wifiPassword.length()?cfg.wifiPassword.c_str():nullptr);
+  routerAttempts++;
+  Serial.printf("Router association started: SSID=%s, initial status=%d\n",
+    cfg.ssid.c_str(),(int)result);
 }
 // A name for http://<name>.local: letters, digits and hyphens, as DNS allows.
 bool validHostName(const String &n){
@@ -2540,6 +2543,7 @@ void parkRouter(const char *why){
   scanBusy=false;scanRequested=false;scanInFlight=false;
   scanRestoreAt=0;scanCount=-1;
   WiFi.scanDelete();
+  WiFi.setAutoReconnect(false); // stop driver retrying while entering rescue
   WiFi.disconnect(false,false);
   // Recovery uses EngineLink standalone Wi-Fi ONLY.
   WiFi.mode(WIFI_AP);
@@ -2554,45 +2558,47 @@ void parkRouter(const char *why){
     cfg.apName.c_str(),(unsigned)apChannelNow);
 }
 void applyNetwork(){
-  // Exactly one operating mode: AP for standalone/recovery, STA for router.
-  // A mode switch intentionally disconnects clients from the old network.
+  // The only NORMAL operating modes:
+  //   AP  = EngineLink standalone, local dashboard with no router.
+  //   STA = boat router, EngineLink SoftAP is completely disabled.
+  // Scan provisioning may temporarily enable AP+STA; no router association
+  // occurs until the user explicitly selects it.
   const bool withRouter=routerConfigured()&&!routerHold;
-  WiFi.persistent(false);
-  WiFi.setAutoReconnect(false);
-  WiFi.setHostname(cfg.hostName.c_str());
   if(scanInFlight)esp_wifi_scan_stop();
   scanBusy=false;scanRequested=false;scanInFlight=false;
   scanRestoreAt=0;scanStaTemporary=false;
   WiFi.scanDelete();
   if(mdnsReady){MDNS.end();mdnsReady=false;}
   mdnsRefreshPending=false;
+  // Hostname must be assigned before Wi-Fi is started (ESP32 requirement).
+  // A real mode change may drop old clients, but it must never happen in
+  // normal operating loops or between two reconnect attempts.
+  WiFi.mode(WIFI_OFF);
+  WiFi.persistent(false);
+  WiFi.setHostname(cfg.hostName.c_str());
   apStarted=false;
+  staAssociated=false;
+  ntpStarted=false;
   if(withRouter){
-    // No hidden EngineLink access point while the router is selected.
-    WiFi.mode(WIFI_STA);
+    WiFi.mode(WIFI_STA);         // never broadcast EngineLink in router mode
+    WiFi.setAutoReconnect(true);
     radioTuning();
+    // Keep stock fast-scan and strongest-AP selection, like the RGB controller.
+    // Do not pin to a possibly stale BSSID or scan-time channel.
     wifi_bandwidth_t bw;
     if(esp_wifi_get_bandwidth(WIFI_IF_STA,&bw)==ESP_OK&&bw!=WIFI_BW_HT20)
       esp_wifi_set_bandwidth(WIFI_IF_STA,WIFI_BW_HT20);
-    // Start an unrestricted association without an extra blocking scan.
-    // The driver owns scan/association in the background.
     routerGuard.reset();
     routerGuard.attempt(millis());
-    routerSeenDropEvents=staDropEvents;
-    routerAttemptStartedAt=millis();
-    routerImmediateRetries=0;routerStuckRetries=0;
-    routerResetPending=false;
-    connectRouter();
-    routerAttempts=1;
-    // WiFi.begin starts scanning/authentication asynchronously. Give an
-    // attempt long enough for DHCP; if the driver reports an early failure,
-    // we retry promptly instead of waiting the whole 20-second interval.
-    staBackoff=ROUTER_ASSOCIATION_WINDOW_MS;staFails=0;
-    staNextTry=millis()+ROUTER_ASSOCIATION_WINDOW_MS;
-    ntpStarted=false;
+    staDownSince=millis()?millis():1;
+    routerLastRecoveryAttempt=millis();
+    routerAttempts=0;
+    routerForcedReconnects=0;
+    staFails=0;
+    connectRouter();            // only one begin() per selected network
   }else{
-    // The default and recovery modes are both a pure ESP32 SoftAP.
-    WiFi.mode(WIFI_AP);
+    WiFi.setAutoReconnect(false);
+    WiFi.mode(WIFI_AP);         // always pure SoftAP in standalone/rescue
     radioTuning();
     wifi_bandwidth_t bw;
     if(esp_wifi_get_bandwidth(WIFI_IF_AP,&bw)==ESP_OK&&bw!=WIFI_BW_HT20)
@@ -2600,8 +2606,8 @@ void applyNetwork(){
     apChannelNow=(cfg.apChannel>=1&&cfg.apChannel<=11)?cfg.apChannel:6;
     startAP();
     routerGuard.reset();
+    staDownSince=0;
     staBssidKnown=false;
-    ntpStarted=false;
     startNameService();
   }
 }
@@ -2743,70 +2749,41 @@ void serviceNetwork(){
       startAP();
     }
   }
-  // Only one interface is active, so matching AP/router subnet ranges are
-  // safe and MUST NOT prevent a legitimate router connection.
+  // The driver, not EngineLink, reconnects to the selected router. This
+  // avoids resetting in-flight WPA handshakes and DHCP exchanges.
+  // EngineLink only guards against indefinite invisibility, and supplies a
+  // very infrequent last-resort reconnect if the STA becomes stuck idle.
   if(routerConfigured()&&!routerHold){
-    if(WiFi.status()==WL_CONNECTED){
+    const uint32_t now=millis();
+    const bool hasIp=WiFi.status()==WL_CONNECTED &&
+                     WiFi.localIP()!=IPAddress(0,0,0,0);
+    if(hasIp){
+      if(staDownSince)Serial.printf("Router ready: %s RSSI=%d dBm\n",
+        WiFi.localIP().toString().c_str(),WiFi.RSSI());
       routerGuard.reset();
-      routerLastSuccessMs=millis();
-      staFails=0;staBackoff=ROUTER_ASSOCIATION_WINDOW_MS;staDownSince=0;
-      routerSeenDropEvents=staDropEvents;
+      routerLastSuccessMs=now;
+      staDownSince=0;
       const uint8_t ch=(uint8_t)WiFi.channel();
       if(ch){staChannel=ch;apChannelNow=ch;}
-      // Keep-alive: a small packet to the router every 25 s. Some routers drop
-      // clients that stay quiet, and keep the way to EngineLink fresh this way.
-      if((uint32_t)(millis()-staLastKeepAlive)>=25000){
-        staLastKeepAlive=millis();
-        NetworkUDP u;if(u.beginPacket(WiFi.gatewayIP(),9)){u.write((const uint8_t*)"EL",2);u.endPacket();}
-      }
     }else{
-      if(!staDownSince){
-        staDownSince=millis()?millis():1;
-        // The router may have dropped after hours of successful service.
-        // Start a NEW recovery window instead of reusing boot-time deadlines.
-        routerAttemptStartedAt=millis();
-        routerResetPending=false;
-        routerSeenDropEvents=staDropEvents;
-        staNextTry=millis()+ROUTER_AUTH_RETRY_DELAY_MS;
-      }
-      if(!routerGuard.disconnectedSince)routerGuard.attempt(millis());
-      // A router failure is NOT allowed to leave the board invisible. Stop
-      // all STA scans/retries and recreate the standalone AP after 45 seconds.
-      if(routerGuard.expired(millis())){
-        parkRouter("no router IP after repeated attempts for 120 seconds");
+      if(!staDownSince)staDownSince=now?now:1;
+      if(!routerGuard.disconnectedSince)routerGuard.attempt(now);
+      if(routerGuard.expired(now)){
+        // User-visible recovery, not a reboot loop.
+        parkRouter("no router DHCP address after 120 seconds");
         return;
       }
-      // React to explicit association failure events instead of waiting 20s
-      // after a wrong password / AP refusal. Do NOT interrupt WiFi.begin
-      // while the radio is still legitimately scanning/authenticating.
-      if(!routerResetPending && staDropEvents!=routerSeenDropEvents){
-        routerSeenDropEvents=staDropEvents;
-        // Ignore a late disconnect event from the previous Wi-Fi mode.
-        if((uint32_t)(millis()-routerAttemptStartedAt)>500UL){
-          const uint32_t sooner=millis()+ROUTER_AUTH_RETRY_DELAY_MS;
-          if((int32_t)(staNextTry-sooner)>0){
-            staNextTry=sooner;
-            ++routerImmediateRetries;
-          }
-        }
-      }
-      if(!scanBusy && (int32_t)(millis()-staNextTry)>=0){
-        if(!routerResetPending &&
-           (uint32_t)(millis()-routerAttemptStartedAt)>=ROUTER_ASSOCIATION_WINDOW_MS){
-          // A genuinely stuck association needs an explicit cancel. Let the
-          // driver finish its disconnect event before calling WiFi.begin again.
-          ++routerStuckRetries;
-          WiFi.disconnect(false,false);
-          routerResetPending=true;
-          staNextTry=millis()+400UL;
-        }else{
-          routerResetPending=false;
-          ++staFails;
-          routerAttemptStartedAt=millis();
-          routerSeenDropEvents=staDropEvents;
-          connectRouter();
+      // The native auto-reconnect normally handles all recoverable failures.
+      // If the radio has remained genuinely unassociated for 30 seconds,
+      // nudge it once with reconnect() (never another WiFi.begin()).
+      if(!staAssociated &&
+         (uint32_t)(now-routerLastRecoveryAttempt)>=ROUTER_LAST_RESORT_RETRY_MS){
+        routerLastRecoveryAttempt=now;
+        if(WiFi.reconnect()){
+          ++routerForcedReconnects;
           ++routerAttempts;
-          staNextTry=millis()+ROUTER_ASSOCIATION_WINDOW_MS;
+        }else{
+          ++staFails;
         }
       }
     }
@@ -4322,10 +4299,10 @@ void handleDiag(){
   s+=",\"staDown\":";if(staDownSince)s+=(unsigned long)((millis()-staDownSince)/1000);else s+="null";
   s+=",\"staConnects\":";s+=staConnects;
   s+=",\"routerAttempts\":";s+=routerAttempts;
-  s+=",\"routerFastRetries\":";s+=routerImmediateRetries;
-  s+=",\"routerStuckRetries\":";s+=routerStuckRetries;
+  s+=",\"routerNativeAutoReconnect\":";s+=(WiFi.getAutoReconnect()?"true":"false");
+  s+=",\"routerDriverNudges\":";s+=routerForcedReconnects;
+  s+=",\"routerAssociated\":";s+=staAssociated?"true":"false";
   s+=",\"routerLastReason\":";s+=(unsigned)staLastReason;
-  s+=",\"routerAssocMs\":";s+=routerAttemptStartedAt?(unsigned long)(millis()-routerAttemptStartedAt):0;
   s+=",\"routerWaitSec\":";s+=routerGuard.disconnectedSince?(unsigned long)((millis()-routerGuard.disconnectedSince)/1000UL):0;
   s+=",\"ch\":";s+=apChannelNow;
   s+=",\"conflict\":";s+=staConflict?"true":"false";
