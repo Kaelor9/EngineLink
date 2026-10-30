@@ -1,5 +1,5 @@
 /*
- * EngineLink 0.5.0 — application firmware
+ * EngineLink — application firmware
  * ESP32-S3-WROOM-1-N8R8, 8 MB flash / 8 MB PSRAM.
  *
  * Captures actual J1708 RX bytes on J7 and J6. Engines are decoded either as
@@ -46,9 +46,10 @@
 #include "fuelcal.h"
 #include "ledpatterns.h"
 #include "diagrules.h"
+#include "otaheader.h"
 #include "miniz.h"  // the deflate compressor in the chip's ROM
 
-#define EL_VERSION "0.8.3"
+#define EL_VERSION "0.9.0"
 // Releases list published by the Pages workflow; firmware files come from
 // GitHub Releases of the same repository. Nothing else is downloaded.
 #define EL_RELEASES_URL "https://kaelor9.github.io/EngineLink/releases.json"
@@ -1808,25 +1809,33 @@ double latestPrice(){
 // Every file is written to a temporary name first and then renamed, so a
 // power cut never leaves a half-written file.
 bool fsReady=false;
+uint32_t fsWriteErrors=0,fsRecoveredFiles=0;
+char fsLastFailure[48]={};
+bool fsError(const char *path,const char *reason){
+  ++fsWriteErrors;
+  snprintf(fsLastFailure,sizeof(fsLastFailure),"%s: %s",path,reason);
+  Serial.printf("LittleFS write failed: %s\n",fsLastFailure);
+  return false;
+}
 bool fsWrite(const char *path,const void *data,size_t len){
-  if(!fsReady)return false;
+  if(!fsReady)return fsError(path,"not mounted");
   String tmp=String(path)+".tmp";
   File f=LittleFS.open(tmp,"w");
-  if(!f)return false;
+  if(!f)return fsError(path,"open temporary file");
   const bool ok=f.write((const uint8_t*)data,len)==len;
   f.close();
-  if(!ok){LittleFS.remove(tmp);return false;}
+  if(!ok){LittleFS.remove(tmp);return fsError(path,"short write");}
   // Keep the last good copy until the new file has a durable name. A power
   // failure between the two renames can be recovered on the next boot.
   const String bak=String(path)+".bak";
   const bool hadOld=LittleFS.exists(path);
   if(hadOld){
     LittleFS.remove(bak);
-    if(!LittleFS.rename(path,bak)){LittleFS.remove(tmp);return false;}
+    if(!LittleFS.rename(path,bak)){LittleFS.remove(tmp);return fsError(path,"backup rename");}
   }
   if(!LittleFS.rename(tmp,path)){
     if(hadOld)LittleFS.rename(bak,path);
-    return false;
+    return fsError(path,"commit rename");
   }
   if(hadOld)LittleFS.remove(bak);
   return true;
@@ -1835,8 +1844,13 @@ void fsRecover(const char *path){
   if(!fsReady)return;
   const String bak=String(path)+".bak",tmp=String(path)+".tmp";
   if(!LittleFS.exists(path)){
-    if(LittleFS.exists(bak))LittleFS.rename(bak,path);
-    else if(LittleFS.exists(tmp))LittleFS.rename(tmp,path);
+    if(LittleFS.exists(bak)){
+      if(LittleFS.rename(bak,path))++fsRecoveredFiles;
+      else fsError(path,"recover backup");
+    }else if(LittleFS.exists(tmp)){
+      if(LittleFS.rename(tmp,path))++fsRecoveredFiles;
+      else fsError(path,"recover temporary file");
+    }
   }
   if(LittleFS.exists(path)){LittleFS.remove(bak);LittleFS.remove(tmp);}
 }
@@ -1921,7 +1935,7 @@ void loadFuel(){
   }
   free(buf);
 }
-void saveHealth(){fsWrite("/health.bin",&health,sizeof(health));healthDirty=false;}
+void saveHealth(){if(fsWrite("/health.bin",&health,sizeof(health)))healthDirty=false;}
 void loadHealth(){
   Health h;
   if(fsRead("/health.bin",&h,sizeof(h),sizeof(h))==sizeof(h)&&h.magic==health.magic)health=h;
@@ -2502,8 +2516,10 @@ void serviceNetwork(){
       // Never during a search for networks (a connect attempt cuts the search
       // short, so it found almost nothing), and give each attempt 20 s: many
       // routers take 5-10 s to let a device in.
-      if(scanBusy&&(int32_t)(staNextTry-millis())<5000)staNextTry=millis()+5000;
-      if((int32_t)(millis()-staNextTry)>=0){
+      if(scanBusy){
+        // Do not compete with an active router scan or count phantom failures.
+        if((int32_t)(staNextTry-millis())<5000)staNextTry=millis()+5000;
+      }else if((int32_t)(millis()-staNextTry)>=0){
         ++staFails;
         // Routers move to another channel by themselves; then reconnecting on
         // the old one never works. Search again after a few tries: right away
@@ -2560,7 +2576,7 @@ void loadEvents(){
     if(events[i].box==1)events[i].box=3; // EngineLink restarted before the black box was written
   }
 }
-void saveLife(){fsWrite("/life.bin",&life,sizeof(life));lifeDirty=false;}
+void saveLife(){if(fsWrite("/life.bin",&life,sizeof(life)))lifeDirty=false;}
 void loadLife(){diag::Life l;if(fsRead("/life.bin",&l,sizeof(l),sizeof(l))==sizeof(l)&&l.magic==life.magic)life=l;}
 uint8_t unackedEvents(){uint8_t n=0;for(uint8_t i=0;i<eventCount;i++)if(!events[i].ack&&events[i].sev>=diag::WARN)n++;return n;}
 // What both engines report this second.
@@ -3951,6 +3967,9 @@ void handleDiag(){
   {bool f=true;for(uint8_t i=0;i<RESTART_LOG_N;i++){const RestartRec &r=restartLog[i];if(!r.ver[0])continue;if(!f)s+=',';f=false;
     s+="{\"r\":";s+=r.reason;s+=",\"up\":";s+=r.upBefore;s+=",\"utc\":";s+=r.utc;s+=",\"v\":";jsonString(s,r.ver);s+='}';}}
   s+="],\"sdRecoveries\":";s+=sdRecoveries;
+  s+=",\"fsWriteErrors\":";s+=fsWriteErrors;
+  s+=",\"fsRecoveredFiles\":";s+=fsRecoveredFiles;
+  s+=",\"fsLastFailure\":";jsonString(s,fsLastFailure);
   s+=",\"engineTask\":";s+=engineTaskOn?"true":"false";
   s+=",\"engineWait\":{\"max\":";s+=engineMaxWaitMs;s+=",\"slow\":";s+=engineSlowWaits;s+='}';
   s+=",\"reading\":[";
@@ -4281,7 +4300,8 @@ void fwWorker(void *){
           fwTotal=len;
           NetworkClient *stream=http.getStreamPtr();
           bool ok=Update.begin(len,U_FLASH);
-          uint8_t buf[2048];bool checked=false;uint32_t idle=millis();
+          if(!ok)fwError=Update.errorString();
+          uint8_t buf[2048];OtaImageHeader imageHeader;bool checked=false;uint32_t idle=millis();
           while(ok&&fwBytes<(size_t)len){
             const size_t avail=stream->available();
             if(!avail){
@@ -4292,13 +4312,18 @@ void fwWorker(void *){
             const int got=stream->readBytes(buf,min(avail,sizeof(buf)));
             if(got<=0)continue;
             idle=millis();
+            // The first TCP read need not contain the entire ESP32 header.
             if(!checked){
-              checked=true;
-              if(got<0x30||buf[0]!=0xE9||buf[0x20]!=0x32||buf[0x21]!=0x54||buf[0x22]!=0xCD||buf[0x23]!=0xAB){fwError="Not an EngineLink update file";ok=false;break;}
+              imageHeader.feed(buf,(size_t)got);
+              if(imageHeader.complete()){
+                checked=true;
+                if(!imageHeader.valid()){fwError="Not an EngineLink update file";ok=false;break;}
+              }
             }
             if(Update.write(buf,got)!=(size_t)got){fwError=Update.errorString();ok=false;break;}
             fwBytes+=got;
           }
+          if(ok&&!checked){fwError="Firmware header incomplete";ok=false;}
           if(ok&&!Update.end(true)){fwError=Update.errorString();ok=false;}
           if(!ok){Update.abort();fwState=9;}else fwState=4;
         }
@@ -4355,7 +4380,9 @@ void prepareRestart(){
 // ---------- Wi-Fi firmware update (application image only) ----------
 void handleUpdateUpload(){
   HTTPUpload &u=web.upload();
+  static OtaImageHeader uploadHeader;
   if(u.status==UPLOAD_FILE_START){
+    uploadHeader.reset();
     otaError="";otaBytes=0;otaChecked=false;
     if(calActive){otaError="Stop the motor test first";return;}
     for(uint8_t c=0;c<2;c++)if(kad[c].polling)stopPolling(c,"Firmware update");
@@ -4368,9 +4395,12 @@ void handleUpdateUpload(){
     if(otaError.length()||!otaActive)return;
     // An ESP32 application image carries its app descriptor magic at 0x20.
     if(!otaChecked){
-      otaChecked=true;
-      if(u.currentSize<0x30||u.buf[0]!=0xE9||u.buf[0x20]!=0x32||u.buf[0x21]!=0x54||u.buf[0x22]!=0xCD||u.buf[0x23]!=0xAB){
-        otaError="Not an ESP32 application image";Update.abort();otaActive=false;return;
+      uploadHeader.feed(u.buf,u.currentSize);
+      if(uploadHeader.complete()){
+        otaChecked=true;
+        if(!uploadHeader.valid()){
+          otaError="Not an ESP32 application image";Update.abort();otaActive=false;return;
+        }
       }
     }
     feedLoopWDT();
@@ -4378,7 +4408,8 @@ void handleUpdateUpload(){
     otaBytes+=u.currentSize;
   }else if(u.status==UPLOAD_FILE_END){
     if(otaError.length()||!otaActive)return;
-    if(!Update.end(true))otaError=Update.errorString();
+    if(!otaChecked){otaError="Firmware header incomplete";Update.abort();otaActive=false;return;}
+    if(!Update.end(true)){otaError=Update.errorString();otaActive=false;}
   }else if(u.status==UPLOAD_FILE_ABORTED){
     if(otaActive)Update.abort();
     otaError="Upload interrupted";

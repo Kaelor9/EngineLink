@@ -1,6 +1,15 @@
-# EngineLink application v0.8.3
+# EngineLink application v0.9.0
 
 This is a **working application foundation**, not a validated production release. The former Lab firmware is retained under \`experiments/\`. The application is in \`firmware/EngineLink/\`.
+
+## Changes in 0.9.0: stability without UI changes
+
+- Router reconnect no longer competes with an active async Wi-Fi scan.
+- OTA over GitHub **and** manual firmware upload now validate the application image descriptor across fragmented TCP/upload chunks, with host regression tests for all header split positions.
+- Flash update startup and finalization errors give more specific feedback.
+- LittleFS write/recovery failures now appear as counters in diagnostics JSON, and health/life dirty flags survive a failed persistence attempt.
+- No app UI/layout/functionality changes, no new passwords, and no changes to allowed J1708 read commands.
+- **Not verified on board:** concurrent downloads/live updates, sustained motor capture under network load, RF performance, OTA over a flaky router, SD faults, and sudden power loss.
 
 ## Changes in 0.8.3: Wi-Fi channel recovery, concurrent live transport, storage
 

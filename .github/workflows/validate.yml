@@ -37,6 +37,10 @@ jobs:
           python3 tools/build_demo.py
           node --check tools/demo/mock.js
           node --check tools/demo/control.js
+      - name: Test packet-fragmented firmware headers
+        run: |
+          g++ -O2 -std=c++17 -Wall -Wextra tools/test_otaheader.cpp -o /tmp/test_otaheader
+          /tmp/test_otaheader
       - name: Test the fuel calibration maths
         run: |
           g++ -O2 -std=c++17 -Wall -I firmware/EngineLink tools/test_fuelcal.cpp -o /tmp/test_fuelcal
