@@ -8,7 +8,7 @@ This is a **working application foundation**, not a validated production release
 - Save the standby state as the NVS flag `rhold`: future reboots start AP-only until the user deliberately retries the router in the existing settings page. No lost saved router credentials, calibration, SD or fuel history.
 - Additional diagnostic API fields: routerHold, routerFallbacks, apMode, apDriverSsid and apDriverIp. CI tests verify 45 s guard logic.
 - This fixes the absence of an escape route, not necessarily the root cause of failed radio associations. The owner's PCB still requires actual AP+STA and iPhone tests.
-- If locked out on older firmware, flash by USB **without Erase Flash / NVS wipe**.
+- If locked out on older firmware, use [the partition-verified USB recovery procedure](USB_RECOVERY.md). The standard full 8 MB merged installer overwrites NVS and LittleFS, even if a separate Erase Flash option is disabled.
 
 ## Changes in 0.9.1: standalone AP reliability
 

@@ -130,7 +130,7 @@ The app source is [`firmware/ui/app.html`](firmware/ui/app.html); `tools/build_u
 
 ## Getting Started
 
-1. Open the **[web installer](https://kaelor9.github.io/EngineLink/)** in Chrome or Edge on a computer.
+1. **New boards only:** Open the **[web installer](https://kaelor9.github.io/EngineLink/)** in Chrome or Edge on a computer.
 2. Connect the board with a USB-C data cable, tick the safety confirmation and click **Install**.
 3. On your phone, join the Wi-Fi **EngineLink** (password `12345678`) and open **http://192.168.4.1**.
 4. Complete the setup, then add **Engine Link** to the home screen (Settings shows how on iPhone and Android).
@@ -143,7 +143,7 @@ You only need the cable once. For later versions:
 - **With a boat router:** connect EngineLink to it under Settings → Boat router, then open **Settings → Firmware** and install the version you want. EngineLink downloads it from GitHub Releases. If the new version does not run properly for its first minute, EngineLink goes back to the previous one by itself.
 - **Without a router:** download **`enginelink-update.bin`** from the [download page](https://kaelor9.github.io/EngineLink/#downloads), join the EngineLink Wi-Fi and choose the file under **Settings → Firmware**.
 
-Settings, trips, the fuel log and fuel totals are kept.
+Settings, trips, the fuel log and fuel totals are kept with Wi-Fi application updates. **The full 8 MB USB installer overwrites NVS and LittleFS**, including stored data, even without a separate Erase Flash selection. If an existing board is locked out of Wi-Fi, use [USB recovery with backups](docs/USB_RECOVERY.md), not the full installer.
 
 ---
 
