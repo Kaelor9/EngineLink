@@ -1258,13 +1258,12 @@ const PAGE_VIEWS={
   router(){
     const lv=S.live,c=cfgv();if(!lv||!c)return backPill()+waiting();
     let h=backPill();
-    if(lv.net.conflict){
-      h+=`<div class="card s13" style="margin-bottom:14px;border:1px solid var(--orange)"><b style="color:var(--orange)">This router uses the same addresses as EngineLink (192.168.4.x).</b><br>EngineLink left it so your phone keeps working. Change the router's address range in its settings (for example to 192.168.1.x), then connect again. <button data-a="wifiForget" style="color:var(--teal)">Forget</button></div>`;
-    }
+    // Standalone and router use separate Wi-Fi interfaces, never concurrently.
+    // Router LAN addresses can legitimately be 192.168.4.x too.
     if(lv.net.sta){
       h+=`<div class="sec"><div class="row"><span><span class="rt">${esc(lv.net.ssid)}</span><span class="rh" style="color:var(--green)">Connected · ${lv.net.rssi>-60?'strong':lv.net.rssi>-72?'good':'weak'} signal (${lv.net.rssi} dBm)</span></span><button class="btn sm" data-a="wifiForget">Disconnect</button></div>
         <div class="rowx s13 sub">On the router's Wi-Fi, EngineLink is at <b style="color:var(--text)">http://${esc(lv.net.ip||'')}</b> or <b style="color:var(--text)">http://${esc(lv.net.host||'enginelink')}.local</b>. The app finds it there by itself.</div></div>`;
-    }else if(!lv.net.conflict){
+    }else{
       if(c.router)h+=`<div class="card s13" style="margin-bottom:14px">Saved: <b>${esc(c.ssid)}</b> · not reachable right now. EngineLink uses its own Wi-Fi as recovery until you choose Connect again. <button data-a="wifiForget" style="color:var(--teal)">Forget</button></div>`;
       const sc=S.scan;
       h+=`<div class="sec">${sc&&sc.nets&&sc.nets.length?sc.nets.map(n=>{const pick=S.wifiPick===n.s;return `<div><button class="row" data-a="wifiPick" data-v="${esc(n.s)}"><span><span class="rt">${esc(n.s)}</span><span class="rh">${n.lock?'Password':'Open'} · channel ${n.ch}</span></span><span style="color:var(--teal);letter-spacing:1px">${n.r>-60?'▂▄▆':n.r>-72?'▂▄':'▂'}</span></button>
