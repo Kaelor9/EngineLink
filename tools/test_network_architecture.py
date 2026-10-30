@@ -37,6 +37,9 @@ assert "WiFi.disconnect(" not in forget
 assert "pendingNetwork=true" in forget
 
 # Association attempts are event driven; don't repeatedly cancel a live auth.
+assert "!pendingNetwork&&(!routerConfigured()||routerHold)" in network, (
+    "AP watchdog must not interrupt HTTP mode-switch acknowledgement"
+)
 assert "staDropEvents!=routerSeenDropEvents" in network
 assert "ROUTER_AUTH_RETRY_DELAY_MS" in network
 assert "routerResetPending" in network
