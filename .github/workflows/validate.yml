@@ -37,6 +37,10 @@ jobs:
           python3 tools/build_demo.py
           node --check tools/demo/mock.js
           node --check tools/demo/control.js
+      - name: Test router AP-rescue deadline and reboot-safe timer
+        run: |
+          g++ -O2 -std=c++17 -Wall -Wextra tools/test_routerguard.cpp -o /tmp/test_routerguard
+          /tmp/test_routerguard
       - name: Test packet-fragmented firmware headers
         run: |
           g++ -O2 -std=c++17 -Wall -Wextra tools/test_otaheader.cpp -o /tmp/test_otaheader
