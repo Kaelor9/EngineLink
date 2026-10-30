@@ -753,6 +753,21 @@ uint32_t apChannelChanges=0;
 int16_t autoChannelNets=-1;     // networks heard when EngineLink chose its channel
 uint8_t apStartedChannel=0;
 bool scanBusy=false; int16_t scanCount=-1; uint32_t scanStartedMs=0;
+// Snapshot the scan results into our own storage. Arduino's scan buffer can be
+// deleted by a separate router search or reconnect, while the phone still
+// needs the results. Keep the strongest 30 UNIQUE SSIDs, not the first 30 raw
+// BSSIDs (a busy marina can have many radios advertising the same SSID).
+constexpr uint8_t WIFI_SCAN_MAX_RESULTS=30;
+struct ScanEntry {
+  String ssid;
+  int32_t rssi=-127;
+  uint8_t channel=0;
+  bool locked=true;
+  uint8_t bssid[6]={};
+};
+ScanEntry scanEntries[WIFI_SCAN_MAX_RESULTS];
+uint8_t scanEntriesCount=0;
+uint32_t scanCompletedMs=0;
 // Firmware from GitHub, done by a worker task so the app keeps working.
 enum FwJob : uint8_t { FW_IDLE, FW_LIST, FW_INSTALL };
 volatile uint8_t fwJob=FW_IDLE;
@@ -2350,6 +2365,45 @@ void serviceCAN(){
     }
   }
 }
+void captureWifiScan(int16_t total){
+  scanEntriesCount=0;
+  for(int16_t i=0;i<total;i++){
+    const String ssid=WiFi.SSID(i);
+    if(!ssid.length())continue;
+    const int32_t rssi=WiFi.RSSI(i);
+    int slot=-1;
+    for(uint8_t k=0;k<scanEntriesCount;k++){
+      if(scanEntries[k].ssid==ssid){slot=k;break;}
+    }
+    if(slot>=0 && rssi<=scanEntries[slot].rssi)continue;
+    if(slot<0){
+      if(scanEntriesCount<WIFI_SCAN_MAX_RESULTS)slot=scanEntriesCount++;
+      else{
+        uint8_t weakest=0;
+        for(uint8_t k=1;k<scanEntriesCount;k++)
+          if(scanEntries[k].rssi<scanEntries[weakest].rssi)weakest=k;
+        if(rssi<=scanEntries[weakest].rssi)continue;
+        slot=weakest;
+      }
+    }
+    ScanEntry &entry=scanEntries[slot];
+    entry.ssid=ssid;
+    entry.rssi=rssi;
+    entry.channel=(uint8_t)WiFi.channel(i);
+    entry.locked=WiFi.encryptionType(i)!=WIFI_AUTH_OPEN;
+    const uint8_t *b=WiFi.BSSID(i);
+    if(b)memcpy(entry.bssid,b,sizeof(entry.bssid));
+    else memset(entry.bssid,0,sizeof(entry.bssid));
+  }
+  // Stable strongest-first display regardless of discovery order.
+  for(uint8_t i=0;i<scanEntriesCount;i++)
+    for(uint8_t j=i+1;j<scanEntriesCount;j++)
+      if(scanEntries[j].rssi>scanEntries[i].rssi){
+        ScanEntry tmp=scanEntries[i];scanEntries[i]=scanEntries[j];scanEntries[j]=tmp;
+      }
+  scanCompletedMs=millis();
+  WiFi.scanDelete(); // safe: responses read our cache, not the driver memory
+}
 // ---------- Wi-Fi: built to keep the phone connected ----------
 // Rules that keep the EngineLink network steady:
 //  * The access point is always on and never restarted for router problems.
@@ -2611,12 +2665,13 @@ void serviceNetwork(){
     ntpNotification=false;
     if(allowTime("ntp")&&validWall()){hasTime=true;timeSource="ntp";backfillTripTime();}
   }
-  // A scan requested from the router page. Never leave the UI stuck in
-  // "Scanning" indefinitely after a Wi-Fi driver failure or timeout.
+  // Copy completed results before any router operation can delete them.
   if(scanBusy){
     const int16_t r=WiFi.scanComplete();
-    if(r>=0||r==WIFI_SCAN_FAILED){scanBusy=false;scanCount=r;}
-    else if((uint32_t)(millis()-scanStartedMs)>10000){
+    if(r>=0){
+      captureWifiScan(r);
+      scanBusy=false;scanCount=r;
+    }else if(r==WIFI_SCAN_FAILED||(uint32_t)(millis()-scanStartedMs)>10000){
       scanBusy=false;scanCount=WIFI_SCAN_FAILED;
       WiFi.scanDelete();
     }
@@ -3930,22 +3985,14 @@ void handleWifiScan(){
   s+=",\"error\":";
   jsonString(s,!scanBusy&&scanCount==WIFI_SCAN_FAILED?String("Scan failed. Try again."):String(""));
   s+=",\"nets\":[";
-  if(!scanBusy&&scanCount>0){
-    bool first=true;
-    for(int16_t i=0;i<scanCount&&i<30;i++){
-      const String id=WiFi.SSID(i);
-      if(!id.length())continue;
-      // One row per network name, the strongest one.
-      bool dup=false;for(int16_t j=0;j<i;j++)if(WiFi.SSID(j)==id&&WiFi.RSSI(j)>=WiFi.RSSI(i)){dup=true;break;}
-      if(dup)continue;
-      if(!first)s+=',';
-      first=false;
-      s+="{\"s\":";jsonString(s,id);
-      s+=",\"r\":";s+=WiFi.RSSI(i);
-      s+=",\"lock\":";s+=WiFi.encryptionType(i)==WIFI_AUTH_OPEN?"false":"true";
-      s+=",\"ch\":";s+=WiFi.channel(i);
-      s+='}';
-    }
+  for(uint8_t i=0;i<scanEntriesCount;i++){
+    const ScanEntry &entry=scanEntries[i];
+    if(i)s+=',';
+    s+="{\"s\":";jsonString(s,entry.ssid);
+    s+=",\"r\":";s+=entry.rssi;
+    s+=",\"lock\":";s+=entry.locked?"true":"false";
+    s+=",\"ch\":";s+=entry.channel;
+    s+='}';
   }
   s+="]}";
   sendJSON(200,s);
@@ -3961,10 +4008,14 @@ void handleWifiConnect(){
   cfg.router=true;cfg.ssid=ssid;cfg.wifiPassword=pass;cfg.completed=true;
   saveSettings();
   staBssidKnown=false;
-  if(!scanBusy&&scanCount>0){
-    int best=-1;
-    for(int16_t i=0;i<scanCount;i++)if(WiFi.SSID(i)==ssid&&(best<0||WiFi.RSSI(i)>WiFi.RSSI(best)))best=i;
-    if(best>=0){staChannel=(uint8_t)WiFi.channel(best);memcpy(staBssid,WiFi.BSSID(best),6);staBssidKnown=true;}
+  for(uint8_t i=0;i<scanEntriesCount;i++){
+    const ScanEntry &entry=scanEntries[i];
+    if(entry.ssid==ssid&&entry.channel>=1&&entry.channel<=13){
+      staChannel=entry.channel;
+      memcpy(staBssid,entry.bssid,sizeof(staBssid));
+      staBssidKnown=true;
+      break;
+    }
   }
   const bool move=staBssidKnown&&staChannel!=apChannelNow;
   String m="Connecting to "+ssid+".";
@@ -4081,6 +4132,9 @@ void handleDiag(){
   s+=",\"httpInteractiveSlowMs\":";s+=web.slowestInteractiveMs;
   s+=",\"httpTransferSlowMs\":";s+=web.slowestTransferMs;
   s+=",\"httpOpen\":";s+=web.openSockets();s+=",\"loopMaxMs\":";s+=loopMaxMs;
+  s+=",\"scanBusy\":";s+=scanBusy?"true":"false";
+  s+=",\"scanNets\":";s+=scanEntriesCount;
+  s+=",\"scanAge\":";if(scanCompletedMs)s+=(unsigned long)((millis()-scanCompletedMs)/1000);else s+="null";
   s+="},\"heap\":";s+=ESP.getFreeHeap();s+=",\"minHeap\":";s+=ESP.getMinFreeHeap();
   s+=",\"reset\":";s+=(unsigned)esp_reset_reason();
   s+=",\"up\":";s+=(unsigned long)(now/1000ULL);
