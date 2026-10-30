@@ -2639,7 +2639,7 @@ void serviceWifiScan(){
     // A second scan during the discovery window must not forget that STA
     // was enabled temporarily by an earlier scan.
     scanStaTemporary=scanStaTemporary || !(WiFi.getMode()&WIFI_MODE_STA);
-    if(scanStaTemporary && !WiFi.mode(WIFI_AP_STA)){
+    if(!(WiFi.getMode()&WIFI_MODE_STA) && !WiFi.mode(WIFI_AP_STA)){
       scanBusy=false;scanCount=WIFI_SCAN_FAILED;
       ++scanFailures;
       Serial.println("Wi-Fi scan: cannot enable temporary station interface");
