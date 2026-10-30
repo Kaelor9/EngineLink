@@ -2694,9 +2694,11 @@ void serviceNetwork(){
     if(r>=0){
       captureWifiScan(r);
       scanBusy=false;scanCount=r;
+      if(!routerConfigured()||routerHold)WiFi.mode(WIFI_AP);
     }else if(r==WIFI_SCAN_FAILED||(uint32_t)(millis()-scanStartedMs)>10000){
       scanBusy=false;scanCount=WIFI_SCAN_FAILED;
       WiFi.scanDelete();
+      if(!routerConfigured()||routerHold)WiFi.mode(WIFI_AP);
     }
   }
   // Refresh Bonjour after AP recreation or router DHCP; retry failed init.
@@ -4011,10 +4013,13 @@ void handleWifiScan(){
       staNextTry=millis()+20000UL;
     }
     WiFi.scanDelete();
-    // STA always exists, including standalone mode. Short dwell reduces
-    // the time AP clients wait while the single radio visits other channels.
+    // Only temporarily enable station hardware to scan from standalone AP.
+    const bool scanFromAP=!(WiFi.getMode()&WIFI_MODE_STA);
+    if(scanFromAP)WiFi.mode(WIFI_AP_STA);
+    // Minimize time away from the active AP channel.
     if(WiFi.scanNetworks(true,true,false,110)==WIFI_SCAN_FAILED){
       scanBusy=false;scanCount=WIFI_SCAN_FAILED;
+      if(scanFromAP)WiFi.mode(WIFI_AP);
       reply(false,"Wi-Fi scan could not start. Try again after reconnecting.",409);return;
     }
     scanBusy=true;scanCount=-1;scanStartedMs=millis();
