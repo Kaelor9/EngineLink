@@ -23,6 +23,8 @@ network_api = section(ino, "void handleWifiScan(){", "\nvoid handleWifiConnect()
 assert "WiFi.mode(WIFI_AP);" in apply_network
 assert "WiFi.mode(WIFI_STA);" in apply_network
 assert "WiFi.mode(WIFI_AP_STA)" not in apply_network
+assert "overlapping 192.168.4.x subnet" not in ino
+assert "staGotConflict" not in ino, "Router-only STA must permit 192.168.4.x DHCP"
 assert "routerConfigured()&&!routerHold" in apply_network
 assert "WiFi.onEvent(onWiFi);" in setup
 assert setup.index("applyNetwork();") < setup.index("LittleFS.begin(")
