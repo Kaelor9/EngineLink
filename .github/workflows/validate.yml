@@ -41,6 +41,8 @@ jobs:
         run: |
           python3 -m py_compile tools/recover_usb.py
           python3 tools/test_usb_recovery.py
+      - name: Check non-blocking Wi-Fi discovery contract
+        run: python3 tools/test_wifi_scan_contract.py
       - name: Test router AP-rescue deadline and reboot-safe timer
         run: |
           g++ -O2 -std=c++17 -Wall -Wextra tools/test_routerguard.cpp -o /tmp/test_routerguard
