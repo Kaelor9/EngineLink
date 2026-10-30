@@ -49,7 +49,7 @@
 #include "otaheader.h"
 #include "miniz.h"  // the deflate compressor in the chip's ROM
 
-#define EL_VERSION "0.9.0"
+#define EL_VERSION "0.9.1"
 // Releases list published by the Pages workflow; firmware files come from
 // GitHub Releases of the same repository. Nothing else is downloaded.
 #define EL_RELEASES_URL "https://kaelor9.github.io/EngineLink/releases.json"
@@ -2369,7 +2369,7 @@ void startAP(){
   // Reapplying softAP configuration can interrupt associated phones. Do not
   // touch a healthy AP when its actual desired settings have not changed.
   static String activeName,activePassword;
-  if(apStarted&&(WiFi.getMode()&WIFI_MODE_AP)&&apLastEvent==1
+  if(apStarted&&(WiFi.getMode()&WIFI_MODE_AP)&&apLastEvent!=2
      &&WiFi.softAPIP()==IPAddress(192,168,4,1)
      &&apStartedChannel==apChannelNow
      &&activeName==cfg.apName&&activePassword==cfg.apPassword)return;
@@ -2466,7 +2466,11 @@ void applyNetwork(){
     else if(WiFi.status()==WL_CONNECTED&&WiFi.channel())ch=(uint8_t)WiFi.channel();
   }else{
     ntpStarted=false;staBssidKnown=false;
-    if(!apStarted){const uint8_t q=quietestChannel();if(q)ch=q;}
+    // Offline-first: pure AP never needs the STA interface or a radio scan.
+    // The old quietestChannel() temporarily enabled STA and hopped channels
+    // at every cold boot, which can disturb startup and is unnecessary.
+    // Keep the owner's configured AP channel fixed until they change it.
+    if(ch<1||ch>11)ch=6;
   }
   apChannelNow=ch;
   startAP();
@@ -2479,19 +2483,19 @@ void applyNetwork(){
 }
 void serviceNetwork(){
   if(pendingNetwork){pendingNetwork=false;applyNetwork();}
-  // Watchdog for the access point.
-  if((uint32_t)(millis()-lastApCheck)>=3000){
+  // AP recovery should never cause a reset loop on transient event timing.
+  // Only act on a sustained stopped/missing-interface state. Do not call
+  // esp_wifi_start() from here: softAP() establishes the interface itself.
+  if((uint32_t)(millis()-lastApCheck)>=15000){
     lastApCheck=millis();
-    // Only a network that is really gone is restarted: a restart itself drops
-    // every phone, so a false alarm here is worse than none.
-    const bool modeOk=WiFi.getMode()&WIFI_MODE_AP;
-    const bool stopped=apLastEvent==2&&(uint32_t)(millis()-apLastEventMs)>=3000;
-    const bool noIp=modeOk&&!stopped&&WiFi.softAPIP()!=IPAddress(192,168,4,1);
-    if(!modeOk||stopped||noIp){
+    const bool modeOk=(WiFi.getMode()&WIFI_MODE_AP)!=0;
+    const bool stopped=apLastEvent==2&&(uint32_t)(millis()-apLastEventMs)>=10000;
+    const bool missingIp=WiFi.softAPIP()!=IPAddress(192,168,4,1);
+    if(!modeOk||stopped||missingIp){
       ++apRestarts;
+      apStarted=false;
       if(!modeOk)WiFi.mode(routerConfigured()?WIFI_AP_STA:WIFI_AP);
-      if(stopped){esp_wifi_start();apLastEvent=0;}
-      radioTuning();startAP();
+      startAP();
     }
   }
   // A router that uses EngineLink's own addresses would swallow the replies to
