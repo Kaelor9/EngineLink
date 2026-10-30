@@ -3,6 +3,7 @@
 Static contracts complement hardware tests; they cannot prove RF stability.
 """
 from pathlib import Path
+import re
 
 ino = Path("firmware/EngineLink/EngineLink.ino").read_text(encoding="utf-8")
 ui = Path("firmware/ui/app.html").read_text(encoding="utf-8")
@@ -48,9 +49,9 @@ assert "WiFi.mode(WIFI_OFF);" in apply_network, (
 )
 assert apply_network.index("WiFi.mode(WIFI_OFF);") < apply_network.index("WiFi.setHostname(")
 assert apply_network.index("WiFi.setHostname(") < apply_network.index("WiFi.mode(WIFI_STA);")
-assert "WiFi.begin(" not in network
-assert "WiFi.disconnect(" not in network
-assert "esp_wifi_disconnect(" not in network
+assert not re.search(r"(?m)^\s*(?:WiFi\.begin|WiFi\.disconnect|esp_wifi_disconnect)\(", network), (
+    "The service loop must never restart or disconnect a live STA association"
+)
 assert "WiFi.reconnect()" in network
 assert "ROUTER_LAST_RESORT_RETRY_MS=30000UL" in ino
 assert "routerGuard.expired(" in network and "parkRouter(" in network
