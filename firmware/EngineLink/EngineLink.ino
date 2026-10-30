@@ -50,7 +50,7 @@
 #include "routerguard.h"
 #include "miniz.h"  // the deflate compressor in the chip's ROM
 
-#define EL_VERSION "0.9.3"
+#define EL_VERSION "0.9.4"
 // Releases list published by the Pages workflow; firmware files come from
 // GitHub Releases of the same repository. Nothing else is downloaded.
 #define EL_RELEASES_URL "https://kaelor9.github.io/EngineLink/releases.json"
@@ -88,7 +88,7 @@ constexpr uint8_t MAX_PIDS=96;
 // a new one each time, which is where a weak link loses most requests.
 constexpr uint8_t HTTP_POOL=8;
 constexpr uint32_t HTTP_IDLE_MS=5000;      // silent sockets are closed after this
-constexpr uint32_t HTTP_IO_TIMEOUT_MS=2000;
+constexpr uint32_t HTTP_IO_TIMEOUT_MS=1000;
 
 // ---------- Engine task and its lock ----------
 // Reading the engines runs in its own task (engineTask, on core 0), so the
@@ -2526,8 +2526,9 @@ void parkRouter(const char *why){
   scanBusy=false;scanCount=-1;
   WiFi.scanDelete();
   WiFi.disconnect(false,false);
-  // Leave the radio entirely on the EngineLink channel, not the router's.
-  WiFi.mode(WIFI_AP);
+  // Stay AP+STA so the scan button works in rescue mode without changing
+  // radio mode (which would otherwise interrupt every attached phone).
+  WiFi.mode(WIFI_AP_STA);
   // Reset the AP config even if an AP_START event/IP remained cached while
   // the Wi-Fi hardware was occupied by a failed STA scan.
   WiFi.softAPdisconnect(false);
@@ -2543,14 +2544,17 @@ void applyNetwork(){
   // password, engine state, fuel counters and logs are not reset.
   const bool withRouter=routerConfigured()&&!routerHold;
   WiFi.persistent(false);
-  const wifi_mode_t want=withRouter?WIFI_AP_STA:WIFI_AP;
+  // ESP32 scanning uses the STA interface. Keep it initialized even when
+  // the device operates as a standalone access point. Switching WIFI_AP to
+  // WIFI_AP_STA on each scan can stop/restart SoftAP and lose the iPhone.
+  const wifi_mode_t want=WIFI_AP_STA;
   WiFi.setHostname(cfg.hostName.c_str());
   if(WiFi.getMode()!=want)WiFi.mode(want);
   // 20 MHz channels: 40 MHz on 2.4 GHz overlaps the neighbours and is the
   // first thing to fail in a crowded or weak spot.
   wifi_bandwidth_t bw;
   if(esp_wifi_get_bandwidth(WIFI_IF_AP,&bw)==ESP_OK&&bw!=WIFI_BW_HT20)esp_wifi_set_bandwidth(WIFI_IF_AP,WIFI_BW_HT20);
-  if(withRouter&&esp_wifi_get_bandwidth(WIFI_IF_STA,&bw)==ESP_OK&&bw!=WIFI_BW_HT20)esp_wifi_set_bandwidth(WIFI_IF_STA,WIFI_BW_HT20);
+  if(esp_wifi_get_bandwidth(WIFI_IF_STA,&bw)==ESP_OK&&bw!=WIFI_BW_HT20)esp_wifi_set_bandwidth(WIFI_IF_STA,WIFI_BW_HT20);
   radioTuning();
   staConflict=false;staGotConflict=false;
   uint8_t ch=cfg.apChannel;
@@ -2563,10 +2567,10 @@ void applyNetwork(){
     else if(WiFi.status()==WL_CONNECTED&&WiFi.channel())ch=(uint8_t)WiFi.channel();
   }else{
     ntpStarted=false;staBssidKnown=false;
-    // Offline-first: pure AP never needs the STA interface or a radio scan.
-    // The old quietestChannel() temporarily enabled STA and hopped channels
-    // at every cold boot, which can disturb startup and is unnecessary.
-    // Keep the owner's configured AP channel fixed until they change it.
+    // Leave STA enabled but disconnected: it is used only for explicit scans.
+    // Keeping AP+STA avoids radio-mode changes when the phone presses Scan.
+    WiFi.setAutoReconnect(false);
+    esp_wifi_disconnect();
     if(ch<1||ch>11)ch=6;
   }
   apChannelNow=ch;
@@ -2594,7 +2598,7 @@ void serviceNetwork(){
     if(!modeOk||stopped||missingIp){
       ++apRestarts;
       apStarted=false;
-      if(!modeOk)WiFi.mode((routerConfigured()&&!routerHold)?WIFI_AP_STA:WIFI_AP);
+      if(!modeOk)WiFi.mode(WIFI_AP_STA);
       startAP();
     }
   }
@@ -3972,10 +3976,9 @@ void handleWifiScan(){
       staNextTry=millis()+20000UL;
     }
     WiFi.scanDelete();
-    // 300 ms/channel kept the shared AP radio away for several seconds and
-    // could make Safari drop EngineLink. Active scans at 120 ms/channel still
-    // probe for 2.4 GHz routers but shorten off-channel interruptions.
-    if(WiFi.scanNetworks(true,true,false,120)==WIFI_SCAN_FAILED){
+    // STA always exists, including standalone mode. Short dwell reduces
+    // the time AP clients wait while the single radio visits other channels.
+    if(WiFi.scanNetworks(true,true,false,110)==WIFI_SCAN_FAILED){
       scanBusy=false;scanCount=WIFI_SCAN_FAILED;
       reply(false,"Wi-Fi scan could not start. Try again after reconnecting.",409);return;
     }
