@@ -2531,7 +2531,7 @@ void serviceNetwork(){
     if(!modeOk||stopped||missingIp){
       ++apRestarts;
       apStarted=false;
-      if(!modeOk)WiFi.mode(routerConfigured()?WIFI_AP_STA:WIFI_AP);
+      if(!modeOk)WiFi.mode((routerConfigured()&&!routerHold)?WIFI_AP_STA:WIFI_AP);
       startAP();
     }
   }
