@@ -1,6 +1,6 @@
 # EngineLink: project handover
 
-> Status as of **30 October 2026**, firmware **0.9.0**. This document is written so that any developer or AI assistant can pick up the work. It replaces the earlier handover from 26 October (version 0.2.0-alpha), which is out of date.
+> Status as of **30 October 2026**, firmware **0.9.1**. This document is written so that any developer or AI assistant can pick up the work. It replaces the earlier handover from 26 October (version 0.2.0-alpha), which is out of date.
 >
 > **Talk to the owner in Danish.** Keep answers short and concrete; the owner prefers a brief summary over long explanations. The app itself is in English.
 >
@@ -56,7 +56,7 @@ Which socket is port or starboard is a setting (on this boat: port J6, starboard
 
 The owner has said **merge PRs without asking** once CI is green.
 
-## 4. How the firmware works (0.9.0)
+## 4. How the firmware works (0.9.1)
 
 **Tasks and cores.** Core 0: Wi-Fi stack, the two J1708 receiver tasks (UART → frame queue in PSRAM, 2048 frames), the **engine task** (`engineTask`: frames, KAD polling, once-a-second engine/trip/diagnosis work), the GitHub update worker. Core 1: Arduino `loop()` (web server, SD, network management, LED). Engine data is shared under one mutex (`engineMx`); the loop releases it whenever it waits on the network (request parsing, every socket write, router scans, its 1 ms pause). Watchdogs: engine task (10 s without a round → save and restart) and loop task (60 s).
 
@@ -69,6 +69,11 @@ The owner has said **merge PRs without asking** once CI is green.
 **Diagnosis.** Events (with a ±2 min black box on SD), life story per engine, port vs starboard. Rules are host-tested on simulated trips.
 
 **App.** Tabs Trip, Economy, Tank, History, Engines; Settings and Diagnostics pages. Export sheet: printable trip/engine reports (the app opened as `?report=trips&ids=…` / `?report=engines`) and CSV files (downloads are deflate-compressed with the ESP32 ROM compressor when the browser accepts it).
+
+## 0.9.1 AP-only stability
+
+- Pure AP no longer performs initial Wi-Fi channel scan or temporarily enables STA; saved AP channel stays fixed. AP watchdog is less aggressive and avoids manual `esp_wifi_start()`.
+- Hardware AP-only testing on the owner's custom PCB **is still pending**. If phone Wi-Fi itself disconnects without a router, review hardware RF, power rail and AP event reason codes.
 
 ## 0.9.0 stabilization pass (software-only)
 
