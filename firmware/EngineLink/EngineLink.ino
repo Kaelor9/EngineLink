@@ -111,6 +111,7 @@ class EngineLinkWebServer : public WebServer {
 public:
   explicit EngineLinkWebServer(int port):WebServer(port){}
   uint32_t served=0,reused=0,evicted=0,slowestMs=0;
+  uint32_t slowestInteractiveMs=0,slowestTransferMs=0;
   uint8_t openSockets()const{uint8_t n=0;for(const Slot &s:pool)if(s.used)n++;return n;}
   void handleClient() override {
     const uint32_t now=millis();
@@ -146,12 +147,17 @@ private:
     _currentClient.setTimeout(HTTP_IO_TIMEOUT_MS);
     _currentStatus=HC_WAIT_READ;_statusChange=t0;
     wrote=false;keepAlive=false;
+    bool largeTransfer=false;
     netWaitBegin();const bool parsed=_parseRequest(_currentClient);netWaitEnd();
     if(parsed){
       _contentLength=CONTENT_LENGTH_NOT_SET;_responseCode=0;_clearResponseHeaders();
       // Only HTTP/1.1 frames every response (length or chunks) for reuse.
       keepAlive=_currentVersion==1&&!header("Connection").equalsIgnoreCase("close");
       rewriteHeader=keepAlive;
+      // Separate intentional large downloads from ordinary UI latency.
+      // A slow export should not disguise a Wi-Fi/API responsiveness fault.
+      const String &path=uri();
+      largeTransfer=(path=="/api/speedtest"||path=="/api/log"||path=="/api/segments.csv"||path.indexOf("/download")>=0);
       _handleRequest();
       ++served;if(s.requests)++reused;
       if(s.requests<65535)s.requests++;
@@ -161,7 +167,10 @@ private:
     _currentClient=NetworkClient();
     _currentStatus=HC_NONE;_currentUpload.reset();_currentRaw.reset();
     if(keep)s.since=millis();else{s.c.stop();s.used=false;}
-    const uint32_t ms=millis()-t0;if(ms>slowestMs)slowestMs=ms;
+    const uint32_t ms=millis()-t0;
+    if(ms>slowestMs)slowestMs=ms;
+    uint32_t &bucket=largeTransfer?slowestTransferMs:slowestInteractiveMs;
+    if(ms>bucket)bucket=ms;
   }
 protected:
   // The response header is written in one piece. WebServer always says
@@ -2602,10 +2611,15 @@ void serviceNetwork(){
     ntpNotification=false;
     if(allowTime("ntp")&&validWall()){hasTime=true;timeSource="ntp";backfillTripTime();}
   }
-  // A scan the user asked for on the Boat router page.
+  // A scan requested from the router page. Never leave the UI stuck in
+  // "Scanning" indefinitely after a Wi-Fi driver failure or timeout.
   if(scanBusy){
     const int16_t r=WiFi.scanComplete();
-    if(r>=0||r==WIFI_SCAN_FAILED||(uint32_t)(millis()-scanStartedMs)>15000){scanBusy=false;scanCount=r;}
+    if(r>=0||r==WIFI_SCAN_FAILED){scanBusy=false;scanCount=r;}
+    else if((uint32_t)(millis()-scanStartedMs)>10000){
+      scanBusy=false;scanCount=WIFI_SCAN_FAILED;
+      WiFi.scanDelete();
+    }
   }
 }
 // ---------- Diagnosis: rules, events, black box, trip log, life story ----------
@@ -3903,12 +3917,18 @@ void handleWifiScan(){
       staNextTry=millis()+20000UL;
     }
     WiFi.scanDelete();
-    // 300 ms on each channel: with the EngineLink network running the radio
-    // keeps going back to its own channel, and short listens miss routers.
-    if(WiFi.scanNetworks(true,true,false,300)==WIFI_SCAN_FAILED){reply(false,"Scan could not start",409);return;}
+    // 300 ms/channel kept the shared AP radio away for several seconds and
+    // could make Safari drop EngineLink. Active scans at 120 ms/channel still
+    // probe for 2.4 GHz routers but shorten off-channel interruptions.
+    if(WiFi.scanNetworks(true,true,false,120)==WIFI_SCAN_FAILED){
+      scanBusy=false;scanCount=WIFI_SCAN_FAILED;
+      reply(false,"Wi-Fi scan could not start. Try again after reconnecting.",409);return;
+    }
     scanBusy=true;scanCount=-1;scanStartedMs=millis();
   }
   String s="{\"busy\":";s+=scanBusy?"true":"false";
+  s+=",\"error\":";
+  jsonString(s,!scanBusy&&scanCount==WIFI_SCAN_FAILED?String("Scan failed. Try again."):String(""));
   s+=",\"nets\":[";
   if(!scanBusy&&scanCount>0){
     bool first=true;
@@ -4058,6 +4078,8 @@ void handleDiag(){
   s+=",\"apStops\":";s+=(unsigned long)apStops;s+=",\"chMoves\":";s+=apChannelChanges;s+=",\"autoNets\":";s+=autoChannelNets;s+=",\"bw\":";{wifi_bandwidth_t b=WIFI_BW_HT20;esp_wifi_get_bandwidth(WIFI_IF_AP,&b);s+=b==WIFI_BW_HT40?40:20;}
   s+=",\"httpServed\":";s+=web.served;s+=",\"httpReused\":";s+=web.reused;
   s+=",\"httpEvicted\":";s+=web.evicted;s+=",\"httpSlowMs\":";s+=web.slowestMs;
+  s+=",\"httpInteractiveSlowMs\":";s+=web.slowestInteractiveMs;
+  s+=",\"httpTransferSlowMs\":";s+=web.slowestTransferMs;
   s+=",\"httpOpen\":";s+=web.openSockets();s+=",\"loopMaxMs\":";s+=loopMaxMs;
   s+="},\"heap\":";s+=ESP.getFreeHeap();s+=",\"minHeap\":";s+=ESP.getMinFreeHeap();
   s+=",\"reset\":";s+=(unsigned)esp_reset_reason();
@@ -4301,10 +4323,12 @@ void handleExportRaw(){
   }
   endDownload(out);
 }
-// Download speed test: text from memory, no SD card, so it measures only the
-// network between the phone or computer and EngineLink.
+// Download speed test: text from memory, no SD card. Keep the payload short:
+// the synchronous HTTP server cannot serve live updates during a transfer.
+// On a weak AP, the old 512 kB test blocked every other request for 10+ s.
+// The browser measures the actual received byte count, not the requested size.
 void handleSpeedTest(){
-  const uint32_t kb=constrain(web.arg("kb").toInt(),16,4096);
+  const uint32_t kb=constrain(web.arg("kb").toInt(),16,32);
   const DlStat keep=dlStat;
   // Not compressed: this measures what the Wi-Fi carries.
   ChunkOut &out=beginDownload("speed test","text/plain",nullptr,false);
