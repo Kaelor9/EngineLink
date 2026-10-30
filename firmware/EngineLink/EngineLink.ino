@@ -2608,6 +2608,12 @@ void applyNetwork(){
     routerGuard.reset();
   }
   if(!mdnsReady)startNameService();
+  else {
+    // Network configuration can change the advertised AP instance name even
+    // when the Wi-Fi driver does not emit a fresh AP_START event.
+    mdnsNetworkChangedAt=millis();
+    mdnsRefreshPending=true;
+  }
 }
 void serviceNetwork(){
   if(pendingNetwork){pendingNetwork=false;applyNetwork();}
