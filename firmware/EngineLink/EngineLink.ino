@@ -1816,8 +1816,29 @@ bool fsWrite(const char *path,const void *data,size_t len){
   const bool ok=f.write((const uint8_t*)data,len)==len;
   f.close();
   if(!ok){LittleFS.remove(tmp);return false;}
-  LittleFS.remove(path);
-  return LittleFS.rename(tmp,path);
+  // Keep the last good copy until the new file has a durable name. A power
+  // failure between the two renames can be recovered on the next boot.
+  const String bak=String(path)+".bak";
+  const bool hadOld=LittleFS.exists(path);
+  if(hadOld){
+    LittleFS.remove(bak);
+    if(!LittleFS.rename(path,bak)){LittleFS.remove(tmp);return false;}
+  }
+  if(!LittleFS.rename(tmp,path)){
+    if(hadOld)LittleFS.rename(bak,path);
+    return false;
+  }
+  if(hadOld)LittleFS.remove(bak);
+  return true;
+}
+void fsRecover(const char *path){
+  if(!fsReady)return;
+  const String bak=String(path)+".bak",tmp=String(path)+".tmp";
+  if(!LittleFS.exists(path)){
+    if(LittleFS.exists(bak))LittleFS.rename(bak,path);
+    else if(LittleFS.exists(tmp))LittleFS.rename(tmp,path);
+  }
+  if(LittleFS.exists(path)){LittleFS.remove(bak);LittleFS.remove(tmp);}
 }
 // Reads a file of exactly len bytes, or of a whole number of items of size item.
 size_t fsRead(const char *path,void *data,size_t maxLen,size_t item){
@@ -2490,7 +2511,7 @@ void serviceNetwork(){
         }
         // If the router has moved or changed BSSID, stop pinning our attempts
         // to a stale scan result. Do an unrestricted scan by the Wi-Fi driver.
-        if(staFails>=2&&!scanBusy)staBssidKnown=false;
+        if(staFails>=2&&staFails%3!=0&&!scanBusy)staBssidKnown=false;
         esp_wifi_disconnect();
         connectRouter();
         // Reconnecting on the known channel does not disturb the phones, so
@@ -4257,7 +4278,11 @@ void fwWorker(void *){
           uint8_t buf[2048];bool checked=false;uint32_t idle=millis();
           while(ok&&fwBytes<(size_t)len){
             const size_t avail=stream->available();
-            if(!avail){if(millis()-idle>20000){fwError="Download stalled";ok=false;break;}vTaskDelay(pdMS_TO_TICKS(5));continue;}
+            if(!avail){
+              if(WiFi.status()!=WL_CONNECTED){fwError="Router disconnected during download";ok=false;break;}
+              if(millis()-idle>20000){fwError="Download stalled (no data for 20 s)";ok=false;break;}
+              vTaskDelay(pdMS_TO_TICKS(5));continue;
+            }
             const int got=stream->readBytes(buf,min(avail,sizeof(buf)));
             if(got<=0)continue;
             idle=millis();
@@ -4519,8 +4544,17 @@ void setup(){
   pinMode(OPTO_PIN,INPUT);
   loadSettings();
   loadTotals();
-  fsReady=LittleFS.begin(true,"/littlefs",8,"spiffs");
-  if(!fsReady)Serial.println("Internal storage (LittleFS) could not start; trips are kept on the SD card only");
+  // Formatting an existing data partition after a transient mount failure
+  // would permanently destroy history. Permit auto-format only before the
+  // first successful mount, remembered independently of factory settings.
+  Preferences storageMeta;
+  storageMeta.begin("el_storage",false);
+  const bool previouslyMounted=storageMeta.getBool("mounted",false);
+  fsReady=LittleFS.begin(!previouslyMounted,"/littlefs",8,"spiffs");
+  if(fsReady&&!previouslyMounted)storageMeta.putBool("mounted",true);
+  storageMeta.end();
+  if(!fsReady)Serial.println("LittleFS mount failed - storage preserved, NOT formatted");
+  for(const char *p:{"/prefs.json","/trips.bin","/fuel.bin","/health.bin","/events.bin","/life.bin","/diag.bin"})fsRecover(p);
   loadPrefs();
   loadTrips();
   loadFuel();
