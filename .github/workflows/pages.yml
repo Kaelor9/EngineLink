@@ -111,10 +111,10 @@ jobs:
             local attempt=1 delay=4
             until "$@"; do
               if (( attempt >= 6 )); then
-                echo "::error::GitHub API failed after 6 attempts: $1"
+                echo "::error::GitHub API failed after 6 attempts: $1" >&2
                 return 1
               fi
-              echo "::warning::GitHub API temporarily failed (attempt ${attempt}/6), retrying in ${delay}s"
+              echo "::warning::GitHub API temporarily failed (attempt ${attempt}/6), retrying in ${delay}s" >&2
               sleep "$delay"
               attempt=$((attempt+1))
               delay=$((delay*2))
