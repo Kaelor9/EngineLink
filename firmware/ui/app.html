@@ -1632,7 +1632,7 @@ const A={
     setTimeout(()=>poll(0),800);
   },
   wifiPick:v=>{S.wifiPick=S.wifiPick===v?null:v;S.wifiPass='';render(true);},
-  wifiConnect:async v=>{if(!confirm('Switch EngineLink to the router? Its own Wi-Fi will turn off. Connect your phone to the router afterwards.'))return;const r=await act('/api/wifi/connect',{ssid:v,pass:S.wifiPass});if(r.ok){S.wifiPick=null;toast('Switch phone to your router, then open http://enginelink.local');setTimeout(()=>load('state'),8000);setTimeout(()=>load('state'),20000);}},
+  wifiConnect:async v=>{if(!confirm('Switch EngineLink to the router? Its own Wi-Fi will turn off. Connect your phone to the router afterwards.'))return;const net=(S.scan?.nets||[]).find(n=>n.s===v);const r=await act('/api/wifi/connect',{ssid:v,pass:net&&!net.lock?'':S.wifiPass});if(r.ok){S.wifiPick=null;toast('Switch phone to your router, then open http://enginelink.local');setTimeout(()=>load('state'),8000);setTimeout(()=>load('state'),20000);}},
   wifiForget:async()=>{if(!confirm('Switch to EngineLink Wi-Fi? The router connection will end.'))return;const r=await act('/api/wifi/forget',{});if(r.ok)toast('Switch phone to EngineLink Wi-Fi and open http://192.168.4.1');},
   // Firmware
   fwBeta:()=>{S.fwBeta=!S.fwBeta;render(true);},
