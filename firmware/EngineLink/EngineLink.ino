@@ -50,7 +50,7 @@
 #include "routerguard.h"
 #include "miniz.h"  // the deflate compressor in the chip's ROM
 
-#define EL_VERSION "0.9.4"
+#define EL_VERSION "0.9.5"
 // Releases list published by the Pages workflow; firmware files come from
 // GitHub Releases of the same repository. Nothing else is downloaded.
 #define EL_RELEASES_URL "https://kaelor9.github.io/EngineLink/releases.json"
@@ -669,6 +669,11 @@ bool sdFaultLatched=false;
 uint32_t lastSdRetry=0,sdRetries=0,sdRecoveries=0;
 bool uartReady[2]={false,false};
 bool sdReady=false,sdLogging=false,canReady=false,pendingNetwork=false,mdnsReady=false;
+// Wi-Fi events run on a separate task. They only request a deferred mDNS
+// refresh; the main loop performs the potentially blocking restart.
+volatile bool mdnsRefreshPending=false;
+volatile uint32_t mdnsNetworkChangedAt=0;
+uint32_t mdnsLastAttemptAt=0,mdnsRestarts=0,mdnsFailures=0;
 bool hasTime=false,ntpStarted=false;
 String timeSource="none",sdMessage="No card",sessionName;
 File logFile,calFile;
@@ -798,13 +803,18 @@ bool allowTime(const String &source){
 }
 void ntpCallback(struct timeval *tv){(void)tv;ntpNotification=true;}
 void onWiFi(WiFiEvent_t e,WiFiEventInfo_t info){
-  if(e==ARDUINO_EVENT_WIFI_AP_START){++apStarts;apLastEvent=1;apLastEventMs=millis();}
+  if(e==ARDUINO_EVENT_WIFI_AP_START){
+    ++apStarts;apLastEvent=1;apLastEventMs=millis();
+    mdnsNetworkChangedAt=millis();mdnsRefreshPending=true;
+  }
   if(e==ARDUINO_EVENT_WIFI_AP_STOP){++apStops;apLastEvent=2;apLastEventMs=millis();}
   if(e==ARDUINO_EVENT_WIFI_AP_STACONNECTED)++apJoins;
   if(e==ARDUINO_EVENT_WIFI_AP_STADISCONNECTED){++apLeaves;apReason=info.wifi_ap_stadisconnected.reason;}
   if(e==ARDUINO_EVENT_WIFI_STA_DISCONNECTED){++staDisconnects;staLastReason=info.wifi_sta_disconnected.reason;staLastDropAt=millis();}
   if(e==ARDUINO_EVENT_WIFI_STA_GOT_IP){
     ++staConnects;staConnectedAt=millis();
+    // mDNS must advertise the newly assigned router address as well as AP.
+    mdnsNetworkChangedAt=millis();mdnsRefreshPending=true;
     const uint32_t ip=info.got_ip.ip_info.ip.addr; // first octet in the low byte
     if((ip&0xFFFFFF)==((4u<<16)|(168u<<8)|192u))staGotConflict=true;
   }
@@ -2482,12 +2492,26 @@ bool validHostName(const String &n){
 // mDNS answers <name>.local on the EngineLink network and on the router; the
 // router also learns the name from DHCP.
 void startNameService(){
+  // Initialize and announce only from the main loop, never the Wi-Fi callback.
+  // The ESP-IDF responder registers both AP and STA interfaces. A successful
+  // begin alone is not enough: verify that the HTTP service was registered.
+  mdnsLastAttemptAt=millis();
+  mdnsRefreshPending=false;
   if(mdnsReady){MDNS.end();mdnsReady=false;}
   if(MDNS.begin(cfg.hostName.c_str())){
-    MDNS.addService("http","tcp",80);
-    MDNS.setInstanceName(cfg.apName.c_str());
-    mdnsReady=true;
+    if(MDNS.addService("http","tcp",80)){
+      MDNS.setInstanceName(cfg.apName.c_str());
+      mdnsReady=true;
+      ++mdnsRestarts;
+      Serial.printf("mDNS ready: http://%s.local (AP %s)\n",
+                    cfg.hostName.c_str(),WiFi.softAPIP().toString().c_str());
+      return;
+    }
   }
+  // A partial init/service registration must not be left behind: retry later.
+  MDNS.end();
+  ++mdnsFailures;
+  Serial.println("mDNS setup failed; will retry without restarting Wi-Fi");
 }
 // Without a router EngineLink picks its own channel: at start-up, before
 // any phone is connected, it listens on 1, 6 and 11 (the channels that do not
@@ -2679,6 +2703,18 @@ void serviceNetwork(){
       scanBusy=false;scanCount=WIFI_SCAN_FAILED;
       WiFi.scanDelete();
     }
+  }
+  // Refresh Bonjour after AP recreation or router DHCP; retry failed init.
+  // Debounce network events and never reset the Wi-Fi interface to fix mDNS.
+  // Avoid restarting mDNS in the middle of a radio scan.
+  const uint32_t mdnsNow=millis();
+  if(!scanBusy && (WiFi.getMode()&WIFI_MODE_AP) &&
+     WiFi.softAPIP()==IPAddress(192,168,4,1)){
+    const bool retry=!mdnsReady && (uint32_t)(mdnsNow-mdnsLastAttemptAt)>=15000UL;
+    const bool refresh=mdnsRefreshPending &&
+      (uint32_t)(mdnsNow-mdnsNetworkChangedAt)>=2000UL &&
+      (uint32_t)(mdnsNow-mdnsLastAttemptAt)>=5000UL;
+    if(retry||refresh)startNameService();
   }
 }
 // ---------- Diagnosis: rules, events, black box, trip log, life story ----------
