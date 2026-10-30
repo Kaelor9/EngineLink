@@ -21,6 +21,7 @@ jobs:
           test -s docs/images/board-3d.png
       - name: Validate onboard UI JavaScript
         run: |
+          python3 tools/build_ui.py
           python3 tools/build_ui.py --check
           python3 - <<'PY2'
           from pathlib import Path
