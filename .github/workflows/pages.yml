@@ -104,18 +104,62 @@ jobs:
           VERSION: ${{ steps.stage.outputs.version }}
         run: |
           set -euo pipefail
+          # GitHub's Releases API occasionally returns HTTP 500/502/503.
+          # A transient API failure must not abort an otherwise valid firmware
+          # build or leave the installer stuck on the previous version.
+          gh_retry() {
+            local attempt=1 delay=4
+            until "$@"; do
+              if (( attempt >= 6 )); then
+                echo "::error::GitHub API failed after 6 attempts: $1" >&2
+                return 1
+              fi
+              echo "::warning::GitHub API temporarily failed (attempt ${attempt}/6), retrying in ${delay}s" >&2
+              sleep "$delay"
+              attempt=$((attempt+1))
+              delay=$((delay*2))
+            done
+          }
           TAG="v$VERSION"
-          if ! gh release view "$TAG" >/dev/null 2>&1; then
+          # Retry the read, and never interpret an API 500 as 'release missing'.
+          # A 404 is the only expected reason to create a new release.
+          HTTP_CODE=""
+          for attempt in 1 2 3 4 5 6; do
+            HTTP_CODE="$(gh api -i "repos/$GITHUB_REPOSITORY/releases/tags/$TAG" 2>/dev/null | head -n 1 || true)"
+            if [[ "$HTTP_CODE" == *" 200 "* || "$HTTP_CODE" == *" 404 "* ]]; then break; fi
+            if (( attempt == 6 )); then
+              echo "::error::Unable to check release $TAG after retries: $HTTP_CODE"
+              exit 1
+            fi
+            echo "::warning::GitHub release lookup failed; retrying in 5s ($attempt/6)"
+            sleep 5
+          done
+          if [[ "$HTTP_CODE" == *" 404 "* ]]; then
             NOTES_FILE="docs/releases/$TAG.md"
             if [ -s "$NOTES_FILE" ]; then NOTES="$(cat "$NOTES_FILE")"; else NOTES="EngineLink $VERSION"; fi
             PRE=""
             case "$VERSION" in *-*) PRE="--prerelease";; esac
-            gh release create "$TAG" site/enginelink-update.bin site/firmware.bin \
-              --target "$GITHUB_SHA" --title "EngineLink $VERSION" --notes "$NOTES" $PRE
+            # Creation may succeed even if GitHub returns a transient error.
+            # Re-check existence between attempts to avoid duplicate releases.
+            CREATED=false
+            for attempt in 1 2 3 4 5 6; do
+              if gh release create "$TAG" site/enginelink-update.bin site/firmware.bin \
+                --target "$GITHUB_SHA" --title "EngineLink $VERSION" --notes "$NOTES" $PRE; then
+                CREATED=true; break
+              fi
+              if gh release view "$TAG" >/dev/null 2>&1; then CREATED=true; break; fi
+              if (( attempt == 6 )); then break; fi
+              echo "::warning::Release creation failed; retrying in 8s ($attempt/6)"
+              sleep 8
+            done
+            if [[ "$CREATED" != true ]]; then
+              echo "::error::Could not create $TAG after 6 attempts"
+              exit 1
+            fi
           fi
-          # Read valid JSON as an array; GitHub CLI's pretty-printed --jq
-          # output is not JSON Lines and cannot be parsed one line at a time.
-          gh api "repos/$GITHUB_REPOSITORY/releases?per_page=100" > /tmp/releases.json
+          # Use an atomic temporary file per attempt; never publish partial JSON.
+          # gh api pretty-prints JSON, so parse the complete JSON array below.
+          gh_retry gh api "repos/$GITHUB_REPOSITORY/releases?per_page=100" > /tmp/releases.json
           python3 - <<'PY2'
           import json, os
           with open("/tmp/releases.json") as fh:
