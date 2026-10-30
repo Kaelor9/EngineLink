@@ -51,3 +51,7 @@ Before bumping the version, write `docs/releases/v<version>.md` with compatible 
 Select **Settings → Pages → Build and deployment → Source: GitHub Actions**. The `.github/workflows/pages.yml` action then publishes the `site/` folder to `https://kaelor9.github.io/EngineLink/`.
 
 Desktop Chromium browsers supporting Web Serial may flash over USB. iPhone Safari cannot use Web Serial firmware flashing but can access the unit's local SoftAP web UI.
+
+## Important: full merged USB image overwrites user data
+
+The 8 MB \`firmware.bin\` manifest entry at offset 0 covers NVS and LittleFS. It is for **new installations** only; leaving a separate Erase Flash option unchecked does **not** preserve those sectors when the entire image is written. For a previously configured EngineLink that has lost network access, use [partition-verified USB recovery](USB_RECOVERY.md) with the \`enginelink-update.bin\` application image and the backup-first \`tools/recover_usb.py\` script.
