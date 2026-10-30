@@ -50,7 +50,7 @@
 #include "routerguard.h"
 #include "miniz.h"  // the deflate compressor in the chip's ROM
 
-#define EL_VERSION "0.9.7"
+#define EL_VERSION "0.9.8"
 // Releases list published by the Pages workflow; firmware files come from
 // GitHub Releases of the same repository. Nothing else is downloaded.
 #define EL_RELEASES_URL "https://kaelor9.github.io/EngineLink/releases.json"
@@ -753,7 +753,8 @@ uint32_t routerFallbacks=0;
 RouterGuard routerGuard;
 volatile bool staGotConflict=false; // the router handed out an address in 192.168.4.x
 bool staConflict=false;
-uint32_t staNextTry=0,staBackoff=15000,staFails=0,staConnects=0,apRestarts=0,lastApCheck=0;
+uint32_t staNextTry=0,staBackoff=20000,staFails=0,staConnects=0,apRestarts=0,lastApCheck=0;
+uint32_t routerAttempts=0,routerLastSuccessMs=0;
 uint32_t staConnectedAt=0;
 // Why the router connection last dropped (Wi-Fi reason code), when, and
 // since when it is down; the last full router search; the keep-alive.
@@ -771,7 +772,7 @@ bool scanBusy=false; int16_t scanCount=-1; uint32_t scanStartedMs=0;
 // deleted by a separate router search or reconnect, while the phone still
 // needs the results. Keep the strongest 30 UNIQUE SSIDs, not the first 30 raw
 // BSSIDs (a busy marina can have many radios advertising the same SSID).
-constexpr uint8_t WIFI_SCAN_MAX_RESULTS=30;
+constexpr uint8_t WIFI_SCAN_MAX_RESULTS=60;
 struct ScanEntry {
   String ssid;
   int32_t rssi=-127;
@@ -2595,6 +2596,7 @@ void applyNetwork(){
     routerGuard.reset();
     routerGuard.attempt(millis());
     connectRouter();
+    routerAttempts=1;
     staBackoff=20000;staFails=0;staNextTry=millis()+staBackoff;
     ntpStarted=false;
   }else{
@@ -2646,6 +2648,7 @@ void serviceNetwork(){
   if(routerConfigured()&&!routerHold&&!staConflict){
     if(WiFi.status()==WL_CONNECTED){
       routerGuard.reset();
+      routerLastSuccessMs=millis();
       staFails=0;staBackoff=20000;staDownSince=0;
       const uint8_t ch=(uint8_t)WiFi.channel();
       if(ch){staChannel=ch;apChannelNow=ch;}
@@ -2661,7 +2664,7 @@ void serviceNetwork(){
       // A router failure is NOT allowed to leave the board invisible. Stop
       // all STA scans/retries and recreate the standalone AP after 45 seconds.
       if(routerGuard.expired(millis())){
-        parkRouter("no router IP within 45 seconds");
+        parkRouter("no router IP after repeated attempts for 120 seconds");
         return;
       }
       // Never during a search for networks (a connect attempt cuts the search
@@ -2677,6 +2680,7 @@ void serviceNetwork(){
         // Restart only when a full attempt window elapsed.
         esp_wifi_disconnect();
         connectRouter();
+        ++routerAttempts;
         staBackoff=20000UL;
         staNextTry=millis()+staBackoff;
       }
@@ -4050,13 +4054,15 @@ void handleWifiConnect(){
   if(pass.length()>63){reply(false,"Password too long",400);return;}
   // The user explicitly requested another router attempt; release rescue
   // mode, including the persistent latch, without modifying AP credentials.
+  if(scanBusy){reply(false,"Wait for the network scan to finish",409);return;}
   routerHold=false;routerGuard.reset();
+  routerAttempts=0;
   cfg.router=true;cfg.ssid=ssid;cfg.wifiPassword=pass;cfg.completed=true;
   saveSettings();
   // The displayed scan is only for choosing the SSID. Never lock to its
   // cached BSSID/channel: it can change before the connection begins.
   staBssidKnown=false;
-  String m="Connecting to "+ssid+". EngineLink will stop its own Wi-Fi; reconnect your phone to the router to continue at http://enginelink.local or its router IP. If joining fails, EngineLink returns to its own Wi-Fi.";
+  String m="Connecting to "+ssid+". EngineLink will stop its own Wi-Fi and try the router for up to two minutes. Connect your phone to the router and open http://enginelink.local. If all attempts fail, EngineLink restores its own Wi-Fi automatically.";
   reply(true,m);
   networkSwitchAt=millis()+1200UL;
   pendingNetwork=true;
@@ -4158,7 +4164,10 @@ void handleDiag(){
   s+=",\"reason\":";s+=(unsigned)apReason;s+=",\"staFails\":";s+=staFails;s+=",\"staDrops\":";s+=(unsigned long)staDisconnects;
   s+=",\"staReason\":";s+=(unsigned)staLastReason;s+=",\"staDropAgo\":";if(staLastDropAt)s+=(unsigned long)((millis()-staLastDropAt)/1000);else s+="null";
   s+=",\"staDown\":";if(staDownSince)s+=(unsigned long)((millis()-staDownSince)/1000);else s+="null";
-  s+=",\"staConnects\":";s+=staConnects;s+=",\"ch\":";s+=apChannelNow;
+  s+=",\"staConnects\":";s+=staConnects;
+  s+=",\"routerAttempts\":";s+=routerAttempts;
+  s+=",\"routerWaitSec\":";s+=routerGuard.disconnectedSince?(unsigned long)((millis()-routerGuard.disconnectedSince)/1000UL):0;
+  s+=",\"ch\":";s+=apChannelNow;
   s+=",\"conflict\":";s+=staConflict?"true":"false";
   s+=",\"routerHold\":";s+=routerHold?"true":"false";
   s+=",\"routerFallbacks\":";s+=routerFallbacks;
