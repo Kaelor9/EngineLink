@@ -75,7 +75,7 @@ The owner has said **merge PRs without asking** once CI is green.
 - User report: long green + short blue LED (Router unreachable), while EngineLink SSID invisible and router access unavailable after switching from standalone.
 - P0 change: AP+STA unavailable for 45 seconds -> shut down STA, recreate standalone AP, and save `enginelink/rhold=true` in NVS. The board starts AP-only on subsequent boots until the user explicitly presses Connect to a router through existing Settings. No added UI or passwords. Retains all router credentials/data.
 - Diagnostic API exposes routerHold, routerFallbacks, apMode, apDriverSsid and apDriverIp; `tools/test_routerguard.cpp` tests the deadline.
-- Hardware proof is STILL outstanding. User may need non-erasing USB flash if already locked out, then validate AP broadcast and access on iPhone.
+- Hardware proof is STILL outstanding. User must use [docs/USB_RECOVERY.md](docs/USB_RECOVERY.md) with partition backups if already locked out; the full 8 MB merged web installer overwrites NVS/LittleFS, even without a separate erase option, then validate AP broadcast and access on iPhone.
 - Tradeoff: no automatic background reconnect after 45-second timeout; user must retry deliberately to avoid recurrent lockouts.
 
 ## 0.9.1 AP-only stability
