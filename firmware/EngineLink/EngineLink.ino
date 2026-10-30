@@ -112,6 +112,8 @@ public:
   explicit EngineLinkWebServer(int port):WebServer(port){}
   uint32_t served=0,reused=0,evicted=0,slowestMs=0;
   uint32_t slowestInteractiveMs=0,slowestTransferMs=0;
+  uint32_t worstParseMs=0,worstHandlerMs=0;
+  String slowPath="";
   uint8_t openSockets()const{uint8_t n=0;for(const Slot &s:pool)if(s.used)n++;return n;}
   void handleClient() override {
     const uint32_t now=millis();
@@ -149,6 +151,8 @@ private:
     wrote=false;keepAlive=false;
     bool largeTransfer=false;
     netWaitBegin();const bool parsed=_parseRequest(_currentClient);netWaitEnd();
+    const uint32_t parsedAt=millis();
+    if(parsedAt-t0>worstParseMs)worstParseMs=parsedAt-t0;
     if(parsed){
       _contentLength=CONTENT_LENGTH_NOT_SET;_responseCode=0;_clearResponseHeaders();
       // Only HTTP/1.1 frames every response (length or chunks) for reuse.
@@ -158,7 +162,10 @@ private:
       // A slow export should not disguise a Wi-Fi/API responsiveness fault.
       const String &path=uri();
       largeTransfer=(path=="/api/speedtest"||path=="/api/log"||path=="/api/segments.csv"||path.indexOf("/download")>=0);
+      const uint32_t handleStart=millis();
       _handleRequest();
+      const uint32_t handlerMs=millis()-handleStart;
+      if(handlerMs>worstHandlerMs)worstHandlerMs=handlerMs;
       ++served;if(s.requests)++reused;
       if(s.requests<65535)s.requests++;
     }
@@ -169,6 +176,7 @@ private:
     if(keep)s.since=millis();else{s.c.stop();s.used=false;}
     const uint32_t ms=millis()-t0;
     if(ms>slowestMs)slowestMs=ms;
+    if(ms>=1000 && !largeTransfer && parsed)slowPath=uri();
     uint32_t &bucket=largeTransfer?slowestTransferMs:slowestInteractiveMs;
     if(ms>bucket)bucket=ms;
   }
@@ -4152,6 +4160,9 @@ void handleDiag(){
   s+=",\"apStops\":";s+=(unsigned long)apStops;s+=",\"chMoves\":";s+=apChannelChanges;s+=",\"autoNets\":";s+=autoChannelNets;s+=",\"bw\":";{wifi_bandwidth_t b=WIFI_BW_HT20;esp_wifi_get_bandwidth(WIFI_IF_AP,&b);s+=b==WIFI_BW_HT40?40:20;}
   s+=",\"httpServed\":";s+=web.served;s+=",\"httpReused\":";s+=web.reused;
   s+=",\"httpEvicted\":";s+=web.evicted;s+=",\"httpSlowMs\":";s+=web.slowestMs;
+  s+=",\"httpParseSlowMs\":";s+=web.worstParseMs;
+  s+=",\"httpHandleSlowMs\":";s+=web.worstHandlerMs;
+  s+=",\"httpSlowPath\":";jsonString(s,web.slowPath);
   s+=",\"httpInteractiveSlowMs\":";s+=web.slowestInteractiveMs;
   s+=",\"httpTransferSlowMs\":";s+=web.slowestTransferMs;
   s+=",\"httpOpen\":";s+=web.openSockets();s+=",\"loopMaxMs\":";s+=loopMaxMs;
