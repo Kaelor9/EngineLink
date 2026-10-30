@@ -1,6 +1,13 @@
-# EngineLink application v0.8.1
+# EngineLink application v0.8.2
 
 This is a **working application foundation**, not a validated production release. The former Lab firmware is retained under \`experiments/\`. The application is in \`firmware/EngineLink/\`.
+
+## Changes in 0.8.2: finding the router
+
+- **Searching for routers finds them again.** While the boat router could not be reached, EngineLink tried to reconnect every 8–30 seconds, also during a search for networks; every try cut the search short, so it found almost nothing. No connect attempts run during a search now, and each channel is listened to for 300 ms instead of 120 ms (hidden networks are listed too).
+- **A login gets time to finish.** Many routers take 5–10 seconds to let a device in, and EngineLink started over after 8. Each attempt now gets at least 20 seconds.
+- **Fewer drops on a weak link.** EngineLink stays connected through up to 20 seconds of not hearing the router (was 6).
+- **Transmit power** (Diagnostics → Wi-Fi): Maximum, Medium or Low. Full power's current peaks can upset the radio on some boards; if the connection keeps dropping, try Medium.
 
 ## Changes in 0.8.1: boat router
 
