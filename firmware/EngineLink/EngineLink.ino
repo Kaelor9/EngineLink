@@ -677,6 +677,7 @@ bool sdFaultLatched=false;
 uint32_t lastSdRetry=0,sdRetries=0,sdRecoveries=0;
 bool uartReady[2]={false,false};
 bool sdReady=false,sdLogging=false,canReady=false,pendingNetwork=false,mdnsReady=false;
+uint32_t networkSwitchAt=0;
 // Wi-Fi events run on a separate task. They only request a deferred mDNS
 // refresh; the main loop performs the potentially blocking restart.
 volatile bool mdnsRefreshPending=false;
@@ -2613,7 +2614,12 @@ void applyNetwork(){
 }
 
 void serviceNetwork(){
-  if(pendingNetwork){pendingNetwork=false;applyNetwork();}
+  // Give the HTTP success reply time to reach the phone before turning
+  // its current Wi-Fi interface off. All work still runs in the main loop.
+  if(pendingNetwork && (int32_t)(millis()-networkSwitchAt)>=0){
+    pendingNetwork=false;
+    applyNetwork();
+  }
   // AP recovery should never cause a reset loop on transient event timing.
   // Only act on a sustained stopped/missing-interface state. Do not call
   // esp_wifi_start() from here: softAP() establishes the interface itself.
@@ -4052,6 +4058,7 @@ void handleWifiConnect(){
   staBssidKnown=false;
   String m="Connecting to "+ssid+". EngineLink will stop its own Wi-Fi; reconnect your phone to the router to continue at http://enginelink.local or its router IP. If joining fails, EngineLink returns to its own Wi-Fi.";
   reply(true,m);
+  networkSwitchAt=millis()+1200UL;
   pendingNetwork=true;
 }
 void handleWifiForget(){
@@ -4059,6 +4066,7 @@ void handleWifiForget(){
   cfg.router=false;cfg.ssid="";cfg.wifiPassword="";saveSettings();
   esp_wifi_disconnect();
   reply(true,"Disconnected from router. EngineLink is switching to its own Wi-Fi at http://192.168.4.1.");
+  networkSwitchAt=millis()+1200UL;
   pendingNetwork=true;
 }
 void handleSeasonReset(){
