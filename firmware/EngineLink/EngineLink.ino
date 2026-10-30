@@ -751,7 +751,7 @@ bool staBssidKnown=false;
 bool routerHold=false;
 uint32_t routerFallbacks=0;
 RouterGuard routerGuard;
-volatile bool staGotConflict=false; // the router handed out an address in 192.168.4.x
+// AP and STA are mutually exclusive; 192.168.4.x is a valid router subnet.
 bool staConflict=false;
 uint32_t staNextTry=0,staBackoff=20000,staFails=0,staConnects=0,apRestarts=0,lastApCheck=0;
 uint32_t routerAttempts=0,routerLastSuccessMs=0;
@@ -844,8 +844,8 @@ void onWiFi(WiFiEvent_t e,WiFiEventInfo_t info){
     ++staConnects;staConnectedAt=millis();
     // mDNS must advertise the newly assigned router address as well as AP.
     mdnsNetworkChangedAt=millis();mdnsRefreshPending=true;
-    const uint32_t ip=info.got_ip.ip_info.ip.addr; // first octet in the low byte
-    if((ip&0xFFFFFF)==((4u<<16)|(168u<<8)|192u))staGotConflict=true;
+    // Router DHCP may use ANY private subnet, including 192.168.4.x:
+    // standalone AP is off in STA-only mode, so no interface overlaps.
   }
 }
 bool cardInserted(){return digitalRead(SD_DETECT)==LOW;}
@@ -2720,15 +2720,9 @@ void serviceNetwork(){
       startAP();
     }
   }
-  // A router that uses EngineLink's own addresses would swallow the replies to
-  // every phone on the EngineLink network. Leave it and say why in the app.
-  if(staGotConflict){
-    staGotConflict=false;staConflict=true;
-    // A router using 192.168.4.x conflicts with the fixed rescue network.
-    // Leave STA rather than hanging with an unreachable AP.
-    parkRouter("overlapping 192.168.4.x subnet");
-  }
-  if(routerConfigured()&&!routerHold&&!staConflict){
+  // Only one interface is active, so matching AP/router subnet ranges are
+  // safe and MUST NOT prevent a legitimate router connection.
+  if(routerConfigured()&&!routerHold){
     if(WiFi.status()==WL_CONNECTED){
       routerGuard.reset();
       routerLastSuccessMs=millis();
