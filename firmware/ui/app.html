@@ -1236,7 +1236,7 @@ const PAGE_VIEWS={
       h+=`<div class="sec"><div class="row"><span><span class="rt">${esc(lv.net.ssid)}</span><span class="rh" style="color:var(--green)">Connected · ${lv.net.rssi>-60?'strong':lv.net.rssi>-72?'good':'weak'} signal (${lv.net.rssi} dBm)</span></span><button class="btn sm" data-a="wifiForget">Disconnect</button></div>
         <div class="rowx s13 sub">On the router's Wi-Fi, EngineLink is at <b style="color:var(--text)">http://${esc(lv.net.ip||'')}</b> or <b style="color:var(--text)">http://${esc(lv.net.host||'enginelink')}.local</b>. The app finds it there by itself.</div></div>`;
     }else if(!lv.net.conflict){
-      if(c.router)h+=`<div class="card s13" style="margin-bottom:14px">Saved: <b>${esc(c.ssid)}</b> · not reachable right now. EngineLink tries again by itself, aimed at the router so your phone is not disturbed. <button data-a="wifiForget" style="color:var(--teal)">Forget</button></div>`;
+      if(c.router)h+=`<div class="card s13" style="margin-bottom:14px">Saved: <b>${esc(c.ssid)}</b> · not reachable right now. EngineLink uses its own Wi-Fi as recovery until you choose Connect again. <button data-a="wifiForget" style="color:var(--teal)">Forget</button></div>`;
       const sc=S.scan;
       h+=`<div class="sec">${sc&&sc.nets&&sc.nets.length?sc.nets.map(n=>{const pick=S.wifiPick===n.s;return `<div><button class="row" data-a="wifiPick" data-v="${esc(n.s)}"><span><span class="rt">${esc(n.s)}</span><span class="rh">${n.lock?'Password':'Open'} · channel ${n.ch}</span></span><span style="color:var(--teal);letter-spacing:1px">${n.r>-60?'▂▄▆':n.r>-72?'▂▄':'▂'}</span></button>
         ${pick?`<div style="display:grid;grid-template-columns:1fr auto;gap:8px;padding:0 0 12px">${n.lock?`<input class="field" type="password" data-i="wifiPass" value="${esc(S.wifiPass)}" placeholder="Router password" aria-label="Router password">`:'<span class="s13 sub" style="align-self:center">Open network</span>'}<button class="btn pri" data-a="wifiConnect" data-v="${esc(n.s)}">Connect</button></div>`:''}</div>`;}).join(''):`<div class="empty">${sc&&sc.error?esc(sc.error):sc&&sc.busy?'Scanning…':sc&&sc.done?'No 2.4 GHz networks found. Try again closer to your router.':'Scan to find the boat router.'}</div>`}
@@ -1244,7 +1244,7 @@ const PAGE_VIEWS={
         ${sc&&(sc.busy||sc.error)?`<div class="s12 sub" style="padding:8px 16px;${sc.error?'color:var(--orange);':''}">${sc.error?esc(sc.error):'Looking for 2.4 GHz networks. Previous results stay visible until the scan finishes.'}</div>`:''}</div>
         <div class="s12 sub" style="padding:0 8px 16px">Only 2.4 GHz Wi-Fi networks are supported. Scanning may briefly interrupt the EngineLink connection.</div>`;
     }
-    h+=`<div class="card s13 sub">With a router EngineLink gets internet time and can update itself from GitHub. The EngineLink network stays on as well. If your phone joins the boat router instead, the app keeps working through the router.<br><br><b style="color:var(--text)">Tips for a steady connection</b><br>Android: when the phone says the Wi-Fi has no internet, choose "Stay connected" or "Keep", and switch off "Switch to mobile data". iPhone: keep "Auto-Join" on for the EngineLink network.</div>`;
+    h+=`<div class="card s13 sub">EngineLink uses exactly one Wi-Fi mode at a time. <b>EngineLink Wi-Fi</b> is the factory default; <b>Connect to a router</b> turns off EngineLink's own network. Switch your phone to the router after connecting. If the router is unreachable for 45 seconds, EngineLink restores its own Wi-Fi for recovery.<br><br>Both modes use <b>http://enginelink.local</b> (HTTP, not HTTPS). On standalone Wi-Fi you can also use <b>http://192.168.4.1</b>.</div>`;
     return h;
   },
   fw(){
@@ -1631,8 +1631,8 @@ const A={
     setTimeout(()=>poll(0),800);
   },
   wifiPick:v=>{S.wifiPick=S.wifiPick===v?null:v;S.wifiPass='';render(true);},
-  wifiConnect:async v=>{const r=await act('/api/wifi/connect',{ssid:v,pass:S.wifiPass});if(r.ok){S.wifiPick=null;setTimeout(()=>load('state'),8000);setTimeout(()=>load('state'),20000);}},
-  wifiForget:async()=>{if(!confirm('Disconnect EngineLink from the router?'))return;await act('/api/wifi/forget',{});load('state');},
+  wifiConnect:async v=>{if(!confirm('Switch EngineLink to the router? Its own Wi-Fi will turn off. Connect your phone to the router afterwards.'))return;const r=await act('/api/wifi/connect',{ssid:v,pass:S.wifiPass});if(r.ok){S.wifiPick=null;toast('Switch phone to your router, then open http://enginelink.local');setTimeout(()=>load('state'),8000);setTimeout(()=>load('state'),20000);}},
+  wifiForget:async()=>{if(!confirm('Switch to EngineLink Wi-Fi? The router connection will end.'))return;const r=await act('/api/wifi/forget',{});if(r.ok)toast('Switch phone to EngineLink Wi-Fi and open http://192.168.4.1');},
   // Firmware
   fwBeta:()=>{S.fwBeta=!S.fwBeta;render(true);},
   fwCheck:async()=>{const r=await post('/api/fw/check',{});if(!r.ok){toast(r.message);return;}S.fw=Object.assign(S.fw||{},{state:1});render(true);fwPoll();},
