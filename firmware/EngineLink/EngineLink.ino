@@ -2766,7 +2766,13 @@ void serviceNetwork(){
       const uint8_t ch=(uint8_t)WiFi.channel();
       if(ch){staChannel=ch;apChannelNow=ch;}
     }else{
-      if(!staDownSince)staDownSince=now?now:1;
+      if(!staDownSince){
+        staDownSince=now?now:1;
+        // A link that was up for hours gets a fresh grace window. Do not
+        // issue a forced reconnect immediately after the driver's first
+        // DISCONNECTED event; native auto-reconnect gets the first 30s.
+        routerLastRecoveryAttempt=now;
+      }
       if(!routerGuard.disconnectedSince)routerGuard.attempt(now);
       if(routerGuard.expired(now)){
         // User-visible recovery, not a reboot loop.
