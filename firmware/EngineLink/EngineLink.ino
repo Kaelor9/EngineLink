@@ -2743,7 +2743,15 @@ void serviceNetwork(){
         NetworkUDP u;if(u.beginPacket(WiFi.gatewayIP(),9)){u.write((const uint8_t*)"EL",2);u.endPacket();}
       }
     }else{
-      if(!staDownSince)staDownSince=millis()?millis():1;
+      if(!staDownSince){
+        staDownSince=millis()?millis():1;
+        // The router may have dropped after hours of successful service.
+        // Start a NEW recovery window instead of reusing boot-time deadlines.
+        routerAttemptStartedAt=millis();
+        routerResetPending=false;
+        routerSeenDropEvents=staDropEvents;
+        staNextTry=millis()+ROUTER_AUTH_RETRY_DELAY_MS;
+      }
       if(!routerGuard.disconnectedSince)routerGuard.attempt(millis());
       // A router failure is NOT allowed to leave the board invisible. Stop
       // all STA scans/retries and recreate the standalone AP after 45 seconds.
