@@ -50,7 +50,7 @@
 #include "routerguard.h"
 #include "miniz.h"  // the deflate compressor in the chip's ROM
 
-#define EL_VERSION "0.9.6"
+#define EL_VERSION "0.9.7"
 // Releases list published by the Pages workflow; firmware files come from
 // GitHub Releases of the same repository. Nothing else is downloaded.
 #define EL_RELEASES_URL "https://kaelor9.github.io/EngineLink/releases.json"
@@ -2476,12 +2476,11 @@ bool findRouter(){
   return best>=0;
 }
 void connectRouter(){
-  // A known BSSID may speed reconnection, but an unknown router MUST NOT be
-  // locked to our SoftAP channel: otherwise off-channel routers are invisible.
-  if(staBssidKnown&&staChannel>=1&&staChannel<=13)
-    WiFi.begin(cfg.ssid.c_str(),cfg.wifiPassword.c_str(),staChannel,staBssid,true);
-  else
-    WiFi.begin(cfg.ssid.c_str(),cfg.wifiPassword.c_str(),0,nullptr,true);
+  // Never pin the connection to a scan-time BSSID/channel: mesh routers,
+  // band steering and AP restarts can invalidate that information before
+  // association. Let the driver find the SSID across all 2.4 GHz channels.
+  staBssidKnown=false;
+  WiFi.begin(cfg.ssid.c_str(),cfg.wifiPassword.c_str(),0,nullptr,true);
 }
 // A name for http://<name>.local: letters, digits and hyphens, as DNS allows.
 bool validHostName(const String &n){
@@ -2581,8 +2580,8 @@ void applyNetwork(){
     wifi_bandwidth_t bw;
     if(esp_wifi_get_bandwidth(WIFI_IF_STA,&bw)==ESP_OK&&bw!=WIFI_BW_HT20)
       esp_wifi_set_bandwidth(WIFI_IF_STA,WIFI_BW_HT20);
-    // Try the saved router without an extra blocking scan at boot.
-    // The explicit setup scan already cached channel/BSSID if available.
+    // Start an unrestricted association without an extra blocking scan.
+    // The driver owns scan/association in the background.
     esp_wifi_disconnect();
     routerGuard.reset();
     routerGuard.attempt(millis());
@@ -2659,23 +2658,12 @@ void serviceNetwork(){
         if((int32_t)(staNextTry-millis())<5000)staNextTry=millis()+5000;
       }else if((int32_t)(millis()-staNextTry)>=0){
         ++staFails;
-        // Routers move to another channel by themselves; then reconnecting on
-        // the old one never works. Search again after a few tries: right away
-        // with no phone on the EngineLink network, otherwise at most every 5
-        // minutes (a search briefly leaves the channel, phones stay joined).
-        // Router mode is STA-only, so no connected AP clients can be disrupted.
-        if(staFails%3==0&&!scanBusy){
-          staLastScan=millis();
-          staBssidKnown=findRouter();
-        }
-        // If the router has moved or changed BSSID, stop pinning our attempts
-        // to a stale scan result. Do an unrestricted scan by the Wi-Fi driver.
-        if(staFails>=2&&staFails%3!=0&&!scanBusy)staBssidKnown=false;
+        // Association is asynchronous and must never block the HTTP loop
+        // with the old 300 ms/channel synchronous findRouter() call.
+        // Restart only when a full attempt window elapsed.
         esp_wifi_disconnect();
         connectRouter();
-        // Reconnecting on the known channel does not disturb the phones, so
-        // it is tried often: 8 s, 16 s, then every 30 s.
-        staBackoff=max<uint32_t>(20000UL,min<uint32_t>(staBackoff*2,30000UL));
+        staBackoff=20000UL;
         staNextTry=millis()+staBackoff;
       }
     }
@@ -4051,19 +4039,9 @@ void handleWifiConnect(){
   routerHold=false;routerGuard.reset();
   cfg.router=true;cfg.ssid=ssid;cfg.wifiPassword=pass;cfg.completed=true;
   saveSettings();
+  // The displayed scan is only for choosing the SSID. Never lock to its
+  // cached BSSID/channel: it can change before the connection begins.
   staBssidKnown=false;
-  // A saved scan is useful for displaying SSIDs, but a router may change
-  // BSSID/channel at any time. Pin the connection only to fresh results.
-  const bool scanFresh=scanCompletedMs&&(uint32_t)(millis()-scanCompletedMs)<60000UL;
-  for(uint8_t i=0;scanFresh&&i<scanEntriesCount;i++){
-    const ScanEntry &entry=scanEntries[i];
-    if(entry.ssid==ssid&&entry.channel>=1&&entry.channel<=13){
-      staChannel=entry.channel;
-      memcpy(staBssid,entry.bssid,sizeof(staBssid));
-      staBssidKnown=true;
-      break;
-    }
-  }
   String m="Connecting to "+ssid+". EngineLink will stop its own Wi-Fi; reconnect your phone to the router to continue at http://enginelink.local or its router IP. If joining fails, EngineLink returns to its own Wi-Fi.";
   reply(true,m);
   pendingNetwork=true;
