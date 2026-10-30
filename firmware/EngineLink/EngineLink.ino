@@ -4175,6 +4175,10 @@ void handleDiag(){
   s+=",\"httpInteractiveSlowMs\":";s+=web.slowestInteractiveMs;
   s+=",\"httpTransferSlowMs\":";s+=web.slowestTransferMs;
   s+=",\"httpOpen\":";s+=web.openSockets();s+=",\"loopMaxMs\":";s+=loopMaxMs;
+  s+=",\"mdns\":";s+=mdnsReady?"true":"false";
+  s+=",\"mdnsStarts\":";s+=mdnsRestarts;
+  s+=",\"mdnsFailures\":";s+=mdnsFailures;
+  s+=",\"mdnsHost\":";jsonString(s,cfg.hostName);
   s+=",\"scanBusy\":";s+=scanBusy?"true":"false";
   s+=",\"scanNets\":";s+=scanEntriesCount;
   s+=",\"scanAge\":";if(scanCompletedMs)s+=(unsigned long)((millis()-scanCompletedMs)/1000);else s+="null";
