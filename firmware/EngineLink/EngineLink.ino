@@ -50,7 +50,7 @@
 #include "routerguard.h"
 #include "miniz.h"  // the deflate compressor in the chip's ROM
 
-#define EL_VERSION "0.11.7"
+#define EL_VERSION "0.11.8"
 // Releases list published by the Pages workflow; firmware files come from
 // GitHub Releases of the same repository. Nothing else is downloaded.
 #define EL_RELEASES_URL "https://kaelor9.github.io/EngineLink/releases.json"
@@ -86,8 +86,12 @@ constexpr uint8_t MAX_PIDS=96;
 // request waiting, and keeps sockets open between requests (HTTP keep-alive),
 // so the app's twice-a-second poll reuses one connection instead of setting up
 // a new one each time, which is where a weak link loses most requests.
-constexpr uint8_t HTTP_POOL=8;
-constexpr uint32_t HTTP_IDLE_MS=5000;      // silent sockets are closed after this
+// lwIP has 16 sockets in all (CONFIG_LWIP_MAX_SOCKETS). The listeners on
+// 80/81/82, mDNS and the update client need some; 8 kept-open browser
+// connections on top could use up the rest, and then a new connection is
+// accepted by the stack but never answered ("server stopped responding").
+constexpr uint8_t HTTP_POOL=4;
+constexpr uint32_t HTTP_IDLE_MS=3000;      // silent sockets are closed after this
 constexpr uint32_t HTTP_IO_TIMEOUT_MS=1000;
 
 // ---------- Engine task and its lock ----------
@@ -100,6 +104,9 @@ constexpr uint32_t HTTP_IO_TIMEOUT_MS=1000;
 SemaphoreHandle_t engineMx=nullptr;
 bool engineTaskOn=false;
 volatile uint32_t lastHttpMs=0;   // last served request (any client)
+volatile uint32_t httpBusySince=0; // a handler is running since (0 = idle)
+volatile bool httpHealPending=false;
+uint32_t httpSelfFails=0,httpHeals=0,httpSelfRestarts=0;
 // How the engine task is doing: when it last finished a round, since when it
 // waits for the lock, the longest wait and how often it waited over 100 ms.
 volatile uint32_t engineBeat=0,engineWaitSince=0;
@@ -179,7 +186,9 @@ private:
       const String &path=uri();
       largeTransfer=(path=="/api/speedtest"||path=="/api/log"||path=="/api/segments.csv"||path.indexOf("/download")>=0);
       const uint32_t handleStart=millis();
+      httpBusySince=handleStart?handleStart:1;
       _handleRequest();
+      httpBusySince=0;
       const uint32_t handlerMs=millis()-handleStart;
       if(handlerMs>worstHandlerMs)worstHandlerMs=handlerMs;
       ++served;if(s.requests)++reused;
@@ -206,7 +215,7 @@ protected:
       rewriteHeader=false;
       String h(b,(unsigned int)l);
       if(h.indexOf("\r\nConnection: close\r\n")<0){keepAlive=false;return netWrite(b,l);}
-      h.replace("\r\nConnection: close\r\n","\r\nConnection: keep-alive\r\nKeep-Alive: timeout=4\r\n");
+      h.replace("\r\nConnection: close\r\n","\r\nConnection: keep-alive\r\nKeep-Alive: timeout=2\r\n");
       return netWrite(h.c_str(),h.length())==h.length()?l:0;
     }
     return netWrite(b,l);
@@ -3117,6 +3126,11 @@ void serviceNetwork(){
   // socket state when we deliberately change AP -> STA or receive a new
   // router DHCP address. Rebind only AFTER the IP interface is ready, from
   // the main loop between request handlers, never from the event callback.
+  if(httpHealPending){
+    httpHealPending=false;++httpHeals;
+    Serial.println("HTTP self-check failed: closing connections and restarting the web server");
+    web.rebindNetwork();
+  }
   if(!pendingNetwork && !scanBusy && mdnsInterfaceReady &&
      networkIpEpoch!=httpBoundEpoch &&
      (uint32_t)(mdnsNow-networkIpEventAt)>=600UL){
@@ -4198,6 +4212,7 @@ String makeNetworkHealthJson(){
   s+=",\"failedAfterMs\":";s+=(unsigned long)routerFailureAfterMs;
   s+=",\"driverNudges\":";s+=routerForcedReconnects;
   s+=",\"httpRebinds\":";s+=web.listenerRebinds;
+  s+=",\"httpSelfFails\":";s+=httpSelfFails;s+=",\"httpHeals\":";s+=httpHeals;s+=",\"httpSelfRestarts\":";s+=httpSelfRestarts;
   s+=",\"httpBoundEpoch\":";s+=httpBoundEpoch;
   s+=",\"networkEpoch\":";s+=(unsigned long)networkIpEpoch;
   s+=",\"httpRequests\":";s+=web.served;
@@ -4274,6 +4289,7 @@ void handleNetworkReport(){
   s+="Error 202 means authentication failure; it does not prove the password is wrong.\n\n";
   s+="HTTP / WEB\n";
   s+="HTTP rebinds: ";s+=web.listenerRebinds;s+="\n";
+  s+="Web server self-check misses: ";s+=httpSelfFails;s+=" · restarted web server: ";s+=httpHeals;s+=" · board restarts for it: ";s+=httpSelfRestarts;s+="\n";
   s+="HTTP requests: ";s+=web.served;s+="\n";
   s+="Last 32 KiB server write: ";s+=speedTxLastBytes;s+=" bytes in ";s+=speedTxLastMs;s+=" ms (";
   s+=speedTxLastWrites;s+=" write calls)\n";
@@ -4382,6 +4398,40 @@ void liveHttpTask(void *){
   }
 }
 
+// Self-check of the main web server, from inside the board: every 20 s ask
+// http://127.0.0.1/api/health (loopback, no radio involved). Three misses in
+// a row: close every connection and start the web server again. Still
+// failing two minutes after that: save the totals and restart. Skipped while
+// a handler is legitimately busy (a download, a report). This catches a web
+// server that accepts connections but never answers, whatever the cause.
+void httpSelfCheckTask(void *){
+  uint8_t misses=0;uint32_t healedAt=0;
+  vTaskDelay(pdMS_TO_TICKS(60000));
+  for(;;){
+    vTaskDelay(pdMS_TO_TICKS(20000));
+    if(httpBusySince||pendingNetwork||otaActive)continue;
+    bool ok=false;
+    NetworkClient c;
+    if(c.connect(IPAddress(127,0,0,1),80,3000)){
+      c.setTimeout(4000);
+      c.print("GET /api/health HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n");
+      const String line=c.readStringUntil('\n');
+      ok=line.startsWith("HTTP/1.1 200");
+    }
+    c.stop();
+    if(ok){misses=0;healedAt=0;continue;}
+    ++httpSelfFails;
+    if(httpBusySince)continue;  // a long request started meanwhile
+    if(++misses<3)continue;
+    if(!healedAt){healedAt=millis()?millis():1;httpHealPending=true;continue;}
+    if((uint32_t)(millis()-healedAt)>=120000UL){
+      ++httpSelfRestarts;
+      Serial.println("Web server still not answering: saving and restarting");
+      if(engineMx&&xSemaphoreTake(engineMx,pdMS_TO_TICKS(3000))==pdTRUE)saveTotals();
+      delay(100);ESP.restart();
+    }
+  }
+}
 void appendTrip(String &s,const TripRec &r){
   s+="{\"id\":";s+=r.id;s+=",\"g\":";s+=r.group;
   s+=",\"s\":";s+=(long long)r.startUtc;s+=",\"e\":";s+=(long long)r.endUtc;
@@ -4818,6 +4868,7 @@ void handleDiag(){
   s+=",\"apDriverIp\":";jsonString(s,WiFi.softAPIP().toString());
   s+=",\"apStops\":";s+=(unsigned long)apStops;s+=",\"chMoves\":";s+=apChannelChanges;s+=",\"bw\":";{wifi_bandwidth_t b=WIFI_BW_HT20;esp_wifi_get_bandwidth(WIFI_IF_AP,&b);s+=b==WIFI_BW_HT40?40:20;}
   s+=",\"httpRebinds\":";s+=web.listenerRebinds;
+  s+=",\"httpSelfFails\":";s+=httpSelfFails;s+=",\"httpHeals\":";s+=httpHeals;s+=",\"httpSelfRestarts\":";s+=httpSelfRestarts;
   s+=",\"httpRebindAgoMs\":";s+=httpBoundAt?(unsigned long)(millis()-httpBoundAt):0;
   s+=",\"httpBoundEpoch\":";s+=httpBoundEpoch;
   s+=",\"wifiIpEpoch\":";s+=(unsigned long)networkIpEpoch;
@@ -5489,6 +5540,7 @@ void setup(){
     if(!engineTaskOn)xSemaphoreGive(engineMx);
     if(engineTaskOn){
       liveServer.begin();
+      xTaskCreatePinnedToCore(httpSelfCheckTask,"http-check",4096,nullptr,1,nullptr,0);
       if(xTaskCreatePinnedToCore(liveHttpTask,"live-http",8192,nullptr,1,nullptr,0)!=pdPASS)
         Serial.println("Independent live server task could not start");
     }
