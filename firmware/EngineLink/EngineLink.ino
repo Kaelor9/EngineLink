@@ -50,7 +50,7 @@
 #include "routerguard.h"
 #include "miniz.h"  // the deflate compressor in the chip's ROM
 
-#define EL_VERSION "0.11.8"
+#define EL_VERSION "0.11.9"
 // Releases list published by the Pages workflow; firmware files come from
 // GitHub Releases of the same repository. Nothing else is downloaded.
 #define EL_RELEASES_URL "https://kaelor9.github.io/EngineLink/releases.json"
@@ -498,6 +498,7 @@ struct Settings {
   uint16_t rawKeepDays=90;   // 0 = keep forever
   bool ntpOn=true;
   String ntpServer="pool.ntp.org";
+  String ghToken="";          // GitHub token for sending device reports as issues (never shown)
   bool fuelScaleOk=false;    // user confirmed 1/128 or 1/256
   bool voltOk=false;         // user checked the voltage factor
   uint8_t fineTunes=0;       // full fill-ups used to fine-tune the fuel figures
@@ -934,7 +935,14 @@ ScanEntry scanEntries[WIFI_SCAN_MAX_RESULTS];
 uint8_t scanEntriesCount=0;
 uint32_t scanCompletedMs=0;
 // Firmware from GitHub, done by a worker task so the app keeps working.
-enum FwJob : uint8_t { FW_IDLE, FW_LIST, FW_INSTALL };
+enum FwJob : uint8_t { FW_IDLE, FW_LIST, FW_INSTALL, FW_REPORT };
+// Device reports to GitHub: the board files its Wi-Fi report as an issue in
+// the EngineLink repository when it has internet, so nobody has to fetch it
+// by hand. Needs a token that may only create issues; the router name is
+// removed (the repository is public). At most one every 30 min, 10 a day.
+volatile bool reportWanted=false;bool reportManual=false;
+String reportReason="",reportBody="",reportError="";
+uint32_t reportSent=0,reportLastIssue=0,reportLastAt=0,reportDayStart=0,reportDayCount=0;
 volatile uint8_t fwJob=FW_IDLE;
 volatile uint8_t fwState=0;      // 0 idle, 1 checking, 2 list ready, 3 downloading, 4 installed, 9 error
 volatile size_t fwBytes=0,fwTotal=0;
@@ -2747,6 +2755,8 @@ void startNameService(){
 // subsequent reboots immediately start in AP-only until Connect is selected.
 void parkRouter(const char *why){
   if(routerHold)return;
+  // Filed once the router is back (no internet in standalone).
+  reportWanted=true;reportReason=String("router lost (")+why+")";
   // Snapshot diagnostics BEFORE intentional STA disconnect changes the last
   // Wi-Fi reason to a voluntary leave (reason 8 or 36).
   routerFailureReason=staLastUnexpectedReason?staLastUnexpectedReason:staLastReason;
@@ -3128,8 +3138,20 @@ void serviceNetwork(){
   // the main loop between request handlers, never from the event callback.
   if(httpHealPending){
     httpHealPending=false;++httpHeals;
+    reportWanted=true;reportReason="web server stopped answering and was restarted";
     Serial.println("HTTP self-check failed: closing connections and restarting the web server");
     web.rebindNetwork();
+  }
+  if(reportWanted&&cfg.ghToken.length()&&fwJob==FW_IDLE&&fwState!=3&&routerConfigured()&&!routerHold
+     &&WiFi.status()==WL_CONNECTED&&WiFi.localIP()!=IPAddress(0,0,0,0)
+     &&staIpAt&&(uint32_t)(millis()-staIpAt)>=60000UL){  // let the link settle first
+    if(!reportDayStart||(uint32_t)(millis()-reportDayStart)>=86400000UL){reportDayStart=millis()?millis():1;reportDayCount=0;}
+    if(reportManual||(reportDayCount<10&&(!reportLastAt||(uint32_t)(millis()-reportLastAt)>=1800000UL))){
+      String r=buildNetworkReport();
+      if(cfg.ssid.length()>=3)r.replace(cfg.ssid,"<router name hidden>");
+      reportBody=r;reportWanted=false;reportManual=false;++reportDayCount;
+      fwJob=FW_REPORT;
+    }
   }
   if(!pendingNetwork && !scanBusy && mdnsInterfaceReady &&
      networkIpEpoch!=httpBoundEpoch &&
@@ -3588,6 +3610,7 @@ void saveSettings(){
   pref.putUShort("rawkeep",cfg.rawKeepDays);
   pref.putBool("ntp",cfg.ntpOn);
   pref.putString("ntpsrv",cfg.ntpServer);
+  pref.putString("ghtok",cfg.ghToken);
   pref.putBool("scaleok",cfg.fuelScaleOk);
   pref.putBool("voltok",cfg.voltOk);
   pref.putUChar("tunes",cfg.fineTunes);
@@ -3642,6 +3665,7 @@ void loadSettings(){
   cfg.rawKeepDays=pref.getUShort("rawkeep",90);
   cfg.ntpOn=pref.getBool("ntp",true);
   cfg.ntpServer=pref.getString("ntpsrv","pool.ntp.org");
+  cfg.ghToken=pref.getString("ghtok","");
   cfg.fuelScaleOk=pref.getBool("scaleok",false);
   cfg.voltOk=pref.getBool("voltok",false);
   cfg.fineTunes=pref.getUChar("tunes",0);
@@ -3783,6 +3807,8 @@ void handleState(){
   s+=",\"rawKeep\":";s+=cfg.rawKeepDays;
   s+=",\"ntp\":";s+=cfg.ntpOn?"true":"false";
   s+=",\"ntpServer\":";jsonString(s,cfg.ntpServer);
+  s+=",\"ghToken\":";s+=cfg.ghToken.length()?"true":"false";
+  s+=",\"report\":{\"sent\":";s+=reportSent;s+=",\"lastIssue\":";s+=reportLastIssue;s+=",\"lastAgo\":";if(reportLastAt)s+=(unsigned long)((millis()-reportLastAt)/1000);else s+="null";s+=",\"error\":";jsonString(s,reportError);s+=",\"pending\":";s+=reportWanted?"true":"false";s+='}';
   s+=",\"scaleOk\":";s+=cfg.fuelScaleOk?"true":"false";
   s+=",\"voltOk\":";s+=cfg.voltOk?"true":"false";
   s+=",\"fineTunes\":";s+=cfg.fineTunes;
@@ -4247,6 +4273,10 @@ void handleNetworkHealth(){sendJSON(200,makeNetworkHealthJson());}
 
 
 void handleNetworkReport(){
+  web.sendHeader("Cache-Control","no-store");
+  web.send(200,"text/plain; charset=utf-8",buildNetworkReport());
+}
+String buildNetworkReport(){
   // Text is easy to select/copy on iPhone and can be sent to support.
   // Never include the saved Wi-Fi password or engine/boat telemetry.
   String s;s.reserve(6500);
@@ -4304,8 +4334,7 @@ void handleNetworkReport(){
   }
   s+="\nMACHINE-READABLE JSON (copy/send the entire report)\n";
   s+=makeNetworkHealthJson();s+="\n";
-  web.sendHeader("Cache-Control","no-store");
-  web.send(200,"text/plain; charset=utf-8",s);
+  return s;
 }
 
 // Independent, read-only live telemetry listener. Large CSV exports and
@@ -4378,6 +4407,16 @@ void liveHttpTask(void *){
     c.setTimeout(250);
     const String request=c.readStringUntil('\n');
     const bool pathOk=request.startsWith("GET /api/live ")||request.startsWith("GET /api/live?");
+    // The Wi-Fi report here too: this small server works even if the main
+    // web server on port 80 has stopped answering.
+    if(request.startsWith("GET /report")){
+      String rep;
+      if(engineMx&&xSemaphoreTake(engineMx,pdMS_TO_TICKS(1000))==pdTRUE){rep=buildNetworkReport();xSemaphoreGive(engineMx);}
+      if(rep.isEmpty())rep="EngineLink is busy; try again in a moment.\n";
+      c.printf("HTTP/1.1 200 OK\r\nContent-Type: text/plain; charset=utf-8\r\nCache-Control: no-store\r\nContent-Length: %u\r\nConnection: close\r\n\r\n",(unsigned)rep.length());
+      c.write((const uint8_t*)rep.c_str(),rep.length());
+      c.flush();c.stop();continue;
+    }
     if(!pathOk){
       c.print("HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
       c.stop();continue;
@@ -4632,6 +4671,7 @@ void handleCfg(){
     if(!validHostName(v)){reply(false,"Use 1 to 32 letters, digits or hyphens, for example enginelink",400);return;}
     if(v!=cfg.hostName){cfg.hostName=v;WiFi.setHostname(v.c_str());startNameService();}
   }
+  if(web.hasArg("ghtoken")){String v=web.arg("ghtoken");v.trim();if(v.length()>200){reply(false,"Token too long",400);return;}cfg.ghToken=v;reportError="";}
   if(web.hasArg("ntpServer")){String v=web.arg("ntpServer");v.trim();if(v.length()<3||v.length()>63){reply(false,"Invalid server",400);return;}cfg.ntpServer=v;ntpStarted=false;}
   if(web.hasArg("port")){const int p=web.arg("port").toInt();if(p<0||p>2){reply(false,"Invalid socket choice",400);return;}cfg.portChannel=p;}
   if(web.hasArg("can")){
@@ -5181,6 +5221,28 @@ void fwWorker(void *){
         else{fwError=String("GitHub answered ")+code;fwState=9;}
         http.end();
       }
+    }else if(job==FW_REPORT){
+      String body="{\"title\":";
+      jsonString(body,String("Device report: ")+reportReason+" (EngineLink " EL_VERSION ")");
+      body+=",\"body\":";
+      jsonString(body,String("Sent automatically by EngineLink.\n\n```text\n")+reportBody+"\n```\n");
+      body+="}";
+      reportBody="";
+      if(!http.begin(client,"https://api.github.com/repos/Kaelor9/EngineLink/issues"))reportError="Could not start the request";
+      else{
+        http.addHeader("Authorization","Bearer "+cfg.ghToken);
+        http.addHeader("Accept","application/vnd.github+json");
+        http.addHeader("Content-Type","application/json");
+        const int code=http.POST(body);
+        if(code==201){
+          const String r=http.getString();
+          const int k=r.indexOf("\"number\":");
+          reportLastIssue=k>=0?(uint32_t)r.substring(k+9).toInt():0;
+          ++reportSent;reportError="";
+        }else reportError=code==401?"GitHub refused the token":code==403||code==404?"The token may not create issues in Kaelor9/EngineLink":String("GitHub answered ")+code;
+        http.end();
+      }
+      reportLastAt=millis()?millis():1;
     }else if(job==FW_INSTALL){
       fwState=3;fwBytes=0;fwTotal=0;
       if(!http.begin(client,fwUrl)){fwError="Could not start the download";fwState=9;}
@@ -5372,6 +5434,11 @@ void initializeWeb(){
   web.on("/api/health",HTTP_GET,[](){web.send(200,"text/plain","OK");});
   web.on("/api/network-health",HTTP_GET,handleNetworkHealth);
   web.on("/api/network-report",HTTP_GET,handleNetworkReport);
+  web.on("/api/report/send",HTTP_POST,[](){
+    if(!cfg.ghToken.length()){reply(false,"Add a GitHub token first",409);return;}
+    reportWanted=true;reportManual=true;reportReason="sent from the app";
+    reply(true,routerConfigured()&&!routerHold?"The report is sent within a minute":"The report is sent once EngineLink is on the router with internet");
+  });
   web.on("/api/live",HTTP_GET,handleLive);
   web.on("/api/trips",HTTP_GET,handleTrips);
   web.on("/api/trip/note",HTTP_POST,handleTripNote);
