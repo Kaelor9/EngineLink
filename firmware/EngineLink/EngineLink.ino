@@ -50,7 +50,7 @@
 #include "routerguard.h"
 #include "miniz.h"  // the deflate compressor in the chip's ROM
 
-#define EL_VERSION "0.11.10"
+#define EL_VERSION "0.11.11"
 // Releases list published by the Pages workflow; firmware files come from
 // GitHub Releases of the same repository. Nothing else is downloaded.
 #define EL_RELEASES_URL "https://kaelor9.github.io/EngineLink/releases.json"
@@ -807,11 +807,12 @@ volatile bool staHadIp=false;
 // Arduino-ESP32 3.3.12 does not auto-retry WIFI_REASON_SA_QUERY_TIMEOUT.
 // Queue ONE non-disruptive retry for the normal loop; never reconnect in callbacks.
 volatile uint32_t saQueryRetryAt=0;
-// Router security: 0 = WPA2 without PMF first, 1 = WPA3-SAE with PMF.
-// On a WPA2/WPA3 mixed router both are allowed. In the field WPA3/PMF with
-// this ESP32 and a Zyxel ended in an SA Query timeout (209) after about an
-// hour, after which every new SAE login failed (2/4/202) for hours, so WPA2
-// is the default and WPA3 is used only when the router requires it.
+// WPA3-SAE login method: 0 = Hunting-and-Pecking, 1 = Hash-to-Element (H2E,
+// with HnP allowed). The ESP32 Wi-Fi library always uses WPA3 on a WPA2/WPA3
+// router (PMF "capable" is ignored), so WPA2 cannot be chosen. Field reports
+// from a Zyxel show SAE logins timing out over and over (codes 2/4/202) with
+// H2E in use; HnP is the default now, and EngineLink switches method after a
+// session that never got in, and keeps the method that works.
 uint8_t staSecMode=0;
 volatile bool staSecSwitchPending=false;volatile uint8_t staSecSwitchTo=0;
 bool routerGotIpThisSession=false;
@@ -1010,10 +1011,7 @@ void onWiFi(WiFiEvent_t e,WiFiEventInfo_t info){
       // Schedule an early one-shot attempt without resetting WPA/PMF state.
       if(staLastReason==WIFI_REASON_SA_QUERY_TIMEOUT && droppedOnline)
         saQueryRetryAt=millis()+2000UL;
-      // WPA3/PMF dropped the link: log in again with WPA2 straight away.
-      if(staLastReason==WIFI_REASON_SA_QUERY_TIMEOUT && staSecMode==1){staSecSwitchTo=0;staSecSwitchPending=true;}
-      // The router allows no WPA2 (WPA3-only): use WPA3-SAE.
-      if((staLastReason==210||staLastReason==211)&&staSecMode==0){staSecSwitchTo=1;staSecSwitchPending=true;}
+
     }
   }
   if(e==ARDUINO_EVENT_WIFI_STA_LOST_IP){
@@ -2689,10 +2687,9 @@ void connectRouter(){
     wifi_config_t staCfg={};
     esp_err_t err=esp_wifi_get_config(WIFI_IF_STA,&staCfg);
     if(err==ESP_OK){
-      // PMF is what WPA3 needs; leaving it off makes a mixed router use WPA2.
-      staCfg.sta.pmf_cfg.capable=staSecMode==1;
+      staCfg.sta.pmf_cfg.capable=true;
       staCfg.sta.pmf_cfg.required=false;
-      staCfg.sta.sae_pwe_h2e=WPA3_SAE_PWE_BOTH;
+      staCfg.sta.sae_pwe_h2e=staSecMode==1?WPA3_SAE_PWE_BOTH:WPA3_SAE_PWE_HUNT_AND_PECK;
       memset(staCfg.sta.sae_h2e_identifier,0,sizeof(staCfg.sta.sae_h2e_identifier));
       // A threshold is a MINIMUM, NOT a forced WPA2 downgrade. WPA3 still wins
       // automatically whenever the router and station negotiate it successfully.
@@ -2770,9 +2767,8 @@ void parkRouter(const char *why){
   routerHold=true;
   ++routerFallbacks;
   routerHoldSince=millis()?millis():1;
-  // Next time try the other security: WPA3 failed -> WPA2; WPA2 never got in
-  // -> maybe the router needs WPA3.
-  if(staSecMode==1||!routerGotIpThisSession){staSecMode=staSecMode==1?0:1;++staSecSwitches;saveSecMode();}
+  // Never got in this time: try the other WPA3 login method next time.
+  if(!routerGotIpThisSession){staSecMode=staSecMode?0:1;++staSecSwitches;saveSecMode();}
   if(routerAutoReturning){routerAutoReturning=false;routerProbeEvery=min<uint32_t>(routerProbeEvery*2,7200000UL);}
   routerProbeAt=millis()+routerProbeEvery;
   Preferences p;
@@ -4258,7 +4254,7 @@ String makeNetworkHealthJson(){
   s+=",\"lastRouterRssi\":";if(lastRouterIp.length())s+=lastRouterRssi;else s+="null";
   s+=",\"lastRouterChannel\":";s+=(unsigned)lastRouterChannel;
   s+=",\"lastSecurity\":";jsonString(s,stationSecurityName(staNegotiatedAuth));
-  s+=",\"secMode\":";s+=staSecMode?"\"wpa3\"":"\"wpa2\"";s+=",\"secSwitches\":";s+=staSecSwitches;
+  s+=",\"saeMethod\":";s+=staSecMode?"\"h2e\"":"\"hnp\"";s+=",\"secSwitches\":";s+=staSecSwitches;
   s+=",\"saeConfigured\":";s+=staSecurityConfigured?"true":"false";
   s+=",\"saeSetupError\":";s+=(int)staSecurityConfigError;
   s+=",\"lastFailureDescription\":";jsonString(s,reasonText(routerFailureReason));
@@ -4300,8 +4296,8 @@ String buildNetworkReport(){
   s+="Last router channel: ";s+=lastRouterChannel;s+="\n";
   s+="Last negotiated Wi-Fi security: ";s+=stationSecurityName(staNegotiatedAuth);s+="\n";
   s+="Explicit SAE H2E+Hunt-and-Peck setup: ";s+=staSecurityConfigured?"Applied":"Not applied";s+="\n";
-  s+="Security used for the router: ";s+=staSecMode?"WPA3-SAE (router needs WPA3)":"WPA2 (works on WPA2 and WPA2/WPA3 mixed routers)";s+="\n";
-  s+="Security switches: ";s+=staSecSwitches;s+="\n";
+  s+="WPA3 login method: ";s+=staSecMode?"Hash-to-Element (H2E)":"Hunting-and-Pecking";s+="\n";
+  s+="Login method switches: ";s+=staSecSwitches;s+="\n";
   s+="Security configuration result: ";s+=esp_err_to_name(staSecurityConfigError);s+="\n\n";
   s+="CONNECTIVITY (COUNTERS SINCE BOOT)\n";
   s+="Successful Wi-Fi associations: ";s+=(unsigned long)staAssociatedEvents;s+="\n";
