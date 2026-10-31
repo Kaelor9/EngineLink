@@ -781,6 +781,14 @@ uint32_t routerForcedReconnects=0;
 volatile uint32_t staBeginAt=0,staAssociatedAt=0,staIpAt=0,staIpLostAt=0;
 volatile uint32_t staAssociatedEvents=0,staIpEvents=0,staIpLostEvents=0;
 volatile uint32_t staJoinMs=0,staDhcpMs=0;
+volatile uint8_t staLastUnexpectedReason=0;
+volatile uint32_t staUnexpectedDisconnects=0;
+volatile bool routerIntentionalShutdown=false;
+// Last FAILED association is stored before the router interface goes away.
+// An intentional AP fallback must not overwrite the original Wi-Fi reason.
+uint8_t routerFailureReason=0;
+uint8_t routerFailurePhase=0;    // 1=no association, 2=associated but no DHCP IP
+uint32_t routerFailureAfterMs=0;
 volatile uint32_t networkIpEpoch=0,networkIpEventAt=0;
 uint32_t httpBoundEpoch=0,httpBoundAt=0;
 constexpr uint32_t ROUTER_LAST_RESORT_RETRY_MS=30000UL;
@@ -870,12 +878,21 @@ void onWiFi(WiFiEvent_t e,WiFiEventInfo_t info){
     ++staDisconnects;
     staLastReason=info.wifi_sta_disconnected.reason;
     staLastDropAt=millis();
+    // Reason 8/36 often follows our own deliberate mode switch or teardown.
+    // Preserve real RF/authentication failures instead of displaying the
+    // self-inflicted "STA is leaving" as the last router error.
+    if(!routerIntentionalShutdown &&
+       staLastReason!=WIFI_REASON_ASSOC_LEAVE && staLastReason!=36){
+      staLastUnexpectedReason=staLastReason;
+      ++staUnexpectedDisconnects;
+    }
   }
   if(e==ARDUINO_EVENT_WIFI_STA_LOST_IP){
     staIpLostAt=millis();++staIpLostEvents;
   }
   if(e==ARDUINO_EVENT_WIFI_STA_GOT_IP){
     const uint32_t now=millis();
+    routerIntentionalShutdown=false;
     ++staConnects;staConnectedAt=now;staIpAt=now;++staIpEvents;
     if(staAssociatedAt)staDhcpMs=now-staAssociatedAt;
     mdnsNetworkChangedAt=now;mdnsRefreshPending=true;
@@ -2524,6 +2541,7 @@ void connectRouter(){
   // reconnect logic handle router dropouts without application interference.
   staBssidKnown=false;
   staBeginAt=millis();
+  routerIntentionalShutdown=false;
   const wl_status_t result=WiFi.begin(cfg.ssid.c_str(),
     cfg.wifiPassword.length()?cfg.wifiPassword.c_str():nullptr);
   routerAttempts++;
@@ -2565,11 +2583,25 @@ void startNameService(){
 // subsequent reboots immediately start in AP-only until Connect is selected.
 void parkRouter(const char *why){
   if(routerHold)return;
-  Serial.printf("Router unavailable (%s); restoring standalone EngineLink AP\n",why);
+  // Snapshot diagnostics BEFORE intentional STA disconnect changes the last
+  // Wi-Fi reason to a voluntary leave (reason 8 or 36).
+  routerFailureReason=staLastUnexpectedReason?staLastUnexpectedReason:staLastReason;
+  routerFailurePhase=staAssociated?2:1;
+  routerFailureAfterMs=routerGuard.disconnectedSince?
+    (uint32_t)(millis()-routerGuard.disconnectedSince):0;
+  routerIntentionalShutdown=true;
+  Serial.printf("Router unavailable (%s): last Wi-Fi reason=%u, phase=%s; restoring standalone AP\n",
+    why,(unsigned)routerFailureReason,routerFailurePhase==2?"dhcp":"association");
   routerHold=true;
   ++routerFallbacks;
   Preferences p;
-  if(p.begin("enginelink",false)){p.putBool("rhold",true);p.end();}
+  if(p.begin("enginelink",false)){
+    p.putBool("rhold",true);
+    p.putUChar("rrsn",routerFailureReason);
+    p.putUChar("rstage",routerFailurePhase);
+    p.putULong("rduration",routerFailureAfterMs);
+    p.end();
+  }
   routerGuard.reset();
   staBssidKnown=false;
   if(scanInFlight)esp_wifi_scan_stop();
@@ -2591,6 +2623,7 @@ void parkRouter(const char *why){
     cfg.apName.c_str(),(unsigned)apChannelNow);
 }
 void applyNetwork(){
+  routerIntentionalShutdown=true; // suppress false disconnect reason on mode change
   // The only NORMAL operating modes:
   //   AP  = EngineLink standalone, local dashboard with no router.
   //   STA = boat router, EngineLink SoftAP is completely disabled.
@@ -3327,6 +3360,9 @@ void loadSettings(){
   cfg.completed=pref.getBool("done",false);
   cfg.router=pref.getBool("router",false);
   routerHold=pref.getBool("rhold",false);
+  routerFailureReason=pref.getUChar("rrsn",0);
+  routerFailurePhase=pref.getUChar("rstage",0);
+  routerFailureAfterMs=pref.getULong("rduration",0);
   cfg.canListen=pref.getBool("can",false);
   cfg.portChannel=pref.getUChar("port",1);
   cfg.apChannel=pref.getUChar("apch",6);
@@ -4380,6 +4416,11 @@ void handleDiag(){
   jsonString(s,routerHold?"rescue":!routerConfigured()?"standalone":
     WiFi.status()==WL_CONNECTED?"online":staAssociated?"dhcp":"associating");
   s+=",\"routerLastReason\":";s+=(unsigned)staLastReason;
+  s+=",\"routerUnexpectedReason\":";s+=(unsigned)staLastUnexpectedReason;
+  s+=",\"routerUnexpectedDrops\":";s+=(unsigned long)staUnexpectedDisconnects;
+  s+=",\"routerFailureReason\":";s+=(unsigned)routerFailureReason;
+  s+=",\"routerFailurePhase\":";s+=(unsigned)routerFailurePhase;
+  s+=",\"routerFailureAfterMs\":";s+=(unsigned long)routerFailureAfterMs;
   s+=",\"routerWaitSec\":";s+=routerGuard.disconnectedSince?(unsigned long)((millis()-routerGuard.disconnectedSince)/1000UL):0;
   s+=",\"ch\":";s+=apChannelNow;
   s+=",\"conflict\":";s+=staConflict?"true":"false";
