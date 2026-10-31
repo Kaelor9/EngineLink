@@ -13,7 +13,7 @@
   <img src="https://img.shields.io/badge/Engines-2%C3%97%20J1708%20isolated-success" alt="2 × isolated J1708">
   <img src="https://img.shields.io/badge/Volvo%20Penta-KAD300%20%2F%20EDC%20I-0b5394" alt="Volvo Penta KAD300 / EDC I">
   <img src="https://img.shields.io/badge/NMEA%202000-listen--only-informational" alt="NMEA 2000 listen-only">
-  <img src="https://img.shields.io/badge/Firmware-0.11.6-orange" alt="Firmware 0.11.6">
+  <img src="https://img.shields.io/badge/Firmware-0.11.7-orange" alt="Firmware 0.11.7">
 </p>
 
 <p align="center">
@@ -195,6 +195,8 @@ The board's green indicator and `associated=true`/`hasRouterIp=true` describe **
 
 **v0.11.5 (untested on hardware):** the app now switches from `enginelink.local` to the board's router IP as soon as it is known, for every request including ports 81/82. In the reports above the browser always used `enginelink.local`, so per-request mDNS resolution is a strong candidate for the slow/blank pages, `DNS_PROBE_FINISHED_NO_INTERNET` and the 0-byte speed test. If the board is equally slow at its direct IP, this hypothesis is wrong and the steps below apply.
 
+**v0.11.6 field report → v0.11.7:** on WPA3-SAE the link held ~68 min, then dropped with 209 (SA Query timeout); after that every SAE login failed (2/4/202, ~4 s apart) through two fallbacks and two automatic returns over ~70 min, while the router stayed visible. v0.11.7 joins mixed-mode routers with WPA2 (PMF off) and uses WPA3-SAE only when the router requires it, switching on 209 / 210 / 211 and remembering the working mode. Not yet field-tested.
+
 ### Immediate diagnosis: isolate DNS, TCP/HTTP and browser rendering
 
 Run these from **the same Windows computer connected to the Zyxel LAN** while the board says it is on the router (replace the example IP if DHCP assigns a new one):
@@ -247,7 +249,7 @@ Record for each case the client device/network, whether **IP** and **hostname** 
 
 | Hardware | Firmware | Engine validation |
 |----------|----------|-------------------|
-| ✅ Revision 1 assembled | 🚧 0.11.6 | ⏳ Pending first KAD300 test |
+| ✅ Revision 1 assembled | 🚧 0.11.7 | ⏳ Pending first KAD300 test |
 
 | Area | Status |
 |------|--------|
