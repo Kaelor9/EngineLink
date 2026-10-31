@@ -3924,6 +3924,47 @@ String makeLiveJson(){
   return s;
 }
 void handleLive(){sendJSON(200,makeLiveJson());}
+// Minimal network-only diagnostic, intentionally independent of SD/engine
+// data. Usable by direct IP on router Wi-Fi or after rescue AP returns.
+void handleNetworkHealth(){
+  String s;s.reserve(850);
+  s+="{\"version\":";jsonString(s,EL_VERSION);
+  s+=",\"uptimeMs\":";s+=(unsigned long)millis();
+  s+=",\"mode\":";
+  jsonString(s,routerHold?"rescue":routerConfigured()?"router":"standalone");
+  s+=",\"wifiMode\":";s+=(unsigned)WiFi.getMode();
+  s+=",\"ssid\":";jsonString(s,cfg.ssid);
+  s+=",\"status\":";s+=(int)WiFi.status();
+  s+=",\"phase\":";
+  jsonString(s,routerHold?"rescue":!routerConfigured()?"standalone":
+    WiFi.status()==WL_CONNECTED?"online":staAssociated?"dhcp":"association");
+  s+=",\"associated\":";s+=staAssociated?"true":"false";
+  s+=",\"hasRouterIp\":";s+=WiFi.status()==WL_CONNECTED?"true":"false";
+  s+=",\"ip\":";jsonString(s,WiFi.status()==WL_CONNECTED?
+    WiFi.localIP().toString():String(""));
+  s+=",\"gateway\":";jsonString(s,WiFi.status()==WL_CONNECTED?
+    WiFi.gatewayIP().toString():String(""));
+  s+=",\"rssi\":";if(WiFi.status()==WL_CONNECTED)s+=WiFi.RSSI();else s+="null";
+  s+=",\"associationEvents\":";s+=(unsigned long)staAssociatedEvents;
+  s+=",\"dhcpIpEvents\":";s+=(unsigned long)staIpEvents;
+  s+=",\"lostIpEvents\":";s+=(unsigned long)staIpLostEvents;
+  s+=",\"associationMs\":";s+=(unsigned long)staJoinMs;
+  s+=",\"dhcpMs\":";s+=(unsigned long)staDhcpMs;
+  s+=",\"driverReason\":";s+=(unsigned)staLastReason;
+  s+=",\"unexpectedReason\":";s+=(unsigned)staLastUnexpectedReason;
+  s+=",\"unexpectedDrops\":";s+=(unsigned long)staUnexpectedDisconnects;
+  s+=",\"failedReason\":";s+=(unsigned)routerFailureReason;
+  s+=",\"failedPhase\":";s+=(unsigned)routerFailurePhase;
+  s+=",\"failedAfterMs\":";s+=(unsigned long)routerFailureAfterMs;
+  s+=",\"driverNudges\":";s+=routerForcedReconnects;
+  s+=",\"httpRebinds\":";s+=web.listenerRebinds;
+  s+=",\"httpBoundEpoch\":";s+=httpBoundEpoch;
+  s+=",\"networkEpoch\":";s+=(unsigned long)networkIpEpoch;
+  s+=",\"httpRequests\":";s+=web.served;
+  s+="}";
+  sendJSON(200,s);
+}
+
 
 // Independent, read-only live telemetry listener. Large CSV exports and
 // reports can occupy the regular WebServer for seconds, but cannot block port
@@ -4932,6 +4973,7 @@ void initializeWeb(){
   web.on("/api/kad/poll",HTTP_POST,handleKadPoll);
   web.on("/api/kad/config",HTTP_POST,handleKadConfig);
   web.on("/api/health",HTTP_GET,[](){web.send(200,"text/plain","OK");});
+  web.on("/api/network-health",HTTP_GET,handleNetworkHealth);
   web.on("/api/live",HTTP_GET,handleLive);
   web.on("/api/trips",HTTP_GET,handleTrips);
   web.on("/api/trip/note",HTTP_POST,handleTripNote);
