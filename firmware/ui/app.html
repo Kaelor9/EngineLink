@@ -261,7 +261,7 @@ const dur=s=>{s=Math.max(0,Math.round(s/60));const h=Math.floor(s/60),m=s%60;ret
 const durShort=s=>{s=Math.max(0,Math.round(s/60));const h=Math.floor(s/60),m=s%60;return h?h+' h '+String(m).padStart(2,'0'):m+' min';};
 
 // Why the connection to the boat router dropped (Wi-Fi reason codes).
-const STAR={2:'the router ended the login',3:'the router ended the connection',4:'the router dropped it for being quiet',8:'EngineLink left (reconnecting)',15:'wrong password?',36:'EngineLink station left the router (mode change or retry)',200:'the router was not heard for a while (weak or blocked signal)',201:'the router was not found on its channel',202:'the router refused the password',203:'the router refused the connection',204:'the login timed out (password?)',205:'the connection failed',206:'the router restarted',207:'moved to a stronger access point',209:'the router stopped answering',210:'the router uses a security EngineLink does not support',211:'the router uses a security EngineLink does not support'};
+const STAR={2:'the router ended the login',3:'the router ended the connection',4:'the router dropped it for being quiet',8:'EngineLink left (reconnecting)',15:'wrong password?',36:'EngineLink station left the router (mode change or retry)',200:'the router was not heard for a while (weak or blocked signal)',201:'the router was not found on its channel',202:'authentication failed (password or security negotiation; not necessarily the password)',203:'the router refused the connection',204:'the login timed out (password?)',205:'the connection failed',206:'the router restarted',207:'moved to a stronger access point',209:'the router stopped answering',210:'the router uses a security EngineLink does not support',211:'the router uses a security EngineLink does not support'};
 const RESET={1:'power on',2:'reset button',3:'software or update',4:'crash',5:'watchdog',6:'watchdog',7:'watchdog',8:'deep sleep',9:'brownout (low voltage)',10:'SDIO',11:'USB (flashing or serial monitor)',12:'JTAG',14:'power glitch',15:'CPU lockup'};
 // Why a phone left the EngineLink network (Wi-Fi reason codes).
 const LEAVE={1:'unknown',2:'its login expired',3:'it left',4:'it was silent for 10 minutes',5:'too many phones',6:'not logged in',7:'not connected',8:'the phone left by itself (it may have switched to another Wi-Fi)',15:'password handshake timed out',16:'password handshake timed out',23:'login failed',200:'signal lost',201:'network not found',202:'wrong password',204:'password handshake timed out',205:'connection timed out'};
@@ -1320,15 +1320,30 @@ const PAGE_VIEWS={
       <div class="rowx"><div class="cth"><span class="rt">GPS · NMEA 2000</span><span class="rv">${d.can?(fin(d.sog)?NF(d.sog,1)+' kn':d.nmea+' messages'):'Off'}</span></div><div class="s12 sub" style="margin-top:4px">${d.can?(d.nmea?'Receiving the NMEA 2000 network.':'Switched on, but no messages yet. Check the NMEA 2000 cable.'):'Optional. Switch on under Settings › Speed source for knots and miles.'}</div></div>
       <div class="rowx s12 sub">A test asks the engine for its values for 30 seconds. Only read requests are sent, never commands.</div></div>`;
     // Wi-Fi
+
     const w=d.wifi||{};
-    h+=`<div class="hd">Wi-Fi</div><div class="sec"><div class="rowx"><div class="grid3" style="gap:8px">${[['Mode',lv.net.mode==='sta'?'Router':lv.net.rescue?'Recovery AP':'Standalone'],['Phones',lv.net.mode==='sta'?'—':lv.net.cl],['Router status',lv.net.mode==='sta'?(lv.net.sta?'Connected':'Connecting'):'—'],['Channel',w.ch||lv.net.ch],['Network restarts',w.apRestarts??'—'],['Networks found',w.scanNets??'—'],['Found in pass 1',w.scanFirstPassNets??'—'],['Scan errors',w.scanFailures??'—'],['Scan duration',w.scanDurationMs!=null?w.scanDurationMs+' ms':'—'],['mDNS',w.mdns?'Responder on':'Retrying'],['mDNS retries',w.mdnsFailures??'—'],['Requests',w.httpServed??'—'],['Reused',w.httpServed?Math.round(w.httpReused/w.httpServed*100)+' %':'—'],['Slowest UI',w.httpInteractiveSlowMs!=null?w.httpInteractiveSlowMs+' ms':w.httpSlowMs!=null?w.httpSlowMs+' ms':'—'],['Request parse',w.httpParseSlowMs!=null?w.httpParseSlowMs+' ms':'—'],['Request handler',w.httpHandleSlowMs!=null?w.httpHandleSlowMs+' ms':'—'],['Slowest HTTP path',w.httpSlowPath||'—'],['Slowest transfer',w.httpTransferSlowMs!=null?w.httpTransferSlowMs+' ms':'—'],['Phone joins',w.joins??'—'],['Phone drops',w.leaves??'—'],['Missed here',S.failTotal||0],['Channel changes',w.chMoves??'—'],['Router drops',lv.net.rt?(w.staDrops??'—'):'—'],['Router phase',w.routerPhase??'—'],['Router attempts',w.routerAttempts??'—'],['Auto reconnect',w.routerNativeAutoReconnect?'Enabled':'Off'],['Non-disruptive retries',w.routerDriverNudges??'—'],['Associated',w.routerAssociated?'Yes':lv.net.mode==='sta'?'Not yet':'—'],['Association events',w.staAssocEvents??'—'],['DHCP IP events',w.staIpEvents??'—'],['Association time',w.staAssocMs!=null?w.staAssocMs+' ms':'—'],['DHCP time',w.staDhcpMs!=null?w.staDhcpMs+' ms':'—'],['Last failure',w.routerFailureReason?'code '+w.routerFailureReason:'—'],['Failure stage',w.routerFailurePhase===2?'DHCP':w.routerFailurePhase===1?'Association':'—'],['HTTP rebinds',w.httpRebinds??'—'],['Slow loop',w.loopMaxMs!=null?w.loopMaxMs+' ms':'—']].map(([k,v])=>`<div style="background:var(--track);border-radius:12px;padding:8px 10px"><div class="s12 sub">${k}</div><div style="font-weight:600;margin-top:2px">${v}</div></div>`).join('')}</div>
-      ${w.httpSlowPath?`<div class="s12 sub" style="margin-top:8px">Slow UI endpoint: <b style="color:var(--text)">${esc(w.httpSlowPath)}</b></div>`:''}
-      <div class="s12 sub" style="margin-top:8px">Local address: <b style="color:var(--text)">http://${esc(w.mdnsHost||'enginelink')}.local</b> · mDNS status shows the responder, not whether your router forwards Bonjour traffic. On EngineLink Wi-Fi you can always use 192.168.4.1.</div>
-      ${w.leaves?`<div class="s12" style="margin-top:8px">Last phone drop: <b>${LEAVE[w.reason]||'code '+w.reason}</b></div>`:''}
-      ${lv.net.rt&&w.staDropAgo!=null?`<div class="s12" style="margin-top:6px">Last router driver event ${dur(w.staDropAgo)} ago: <b>${STAR[w.staReason]||'code '+w.staReason}</b>${w.staDown!=null?` · without router IP for ${dur(w.staDown)}`:''}</div>`:''}
-      <div class="s12 sub" style="margin-top:8px">A driver disconnect event may also be caused by switching modes. If router setup fails, the saved failure stage and code above distinguish association problems from DHCP problems.</div>
-      <a href="/api/network-health" target="_blank" rel="noopener" class="s13" style="display:inline-block;margin-top:10px;color:var(--teal)">Open detailed network report</a>
-      </div>${row('cycle','txp','Transmit power','Lower can hold the connection better if it keeps dropping',rv(['Maximum','Medium','Low'][(c&&c.txPower)||0]))}${dlBlock(d.dl,d.sp)}<div class="rowx">
+    const routerUp=lv.net.mode==='sta'&&lv.net.sta;
+    const modeName=lv.net.rescue?'Recovery Wi-Fi':routerUp?'Connected to router':lv.net.mode==='sta'?'Connecting to router':'Standalone Wi-Fi';
+    const lastCode=w.routerFailureReason||w.routerUnexpectedReason||w.staReason||0;
+    const lastLabel=lastCode?(STAR[lastCode]||'Wi-Fi driver error')+' (code '+lastCode+')':'None recorded';
+    const boxes=[
+      ['Mode',modeName],
+      ['Router',c.ssid||'Not selected'],
+      ['Successful IP connections',w.staIpEvents??0],
+      ['Unexpected router drops',w.routerUnexpectedDrops??0]
+    ];
+    h+=`<div class="hd">Wi-Fi</div><div class="sec"><div class="rowx">
+      <div class="grid2" style="gap:8px">${boxes.map(([k,v])=>`<div style="background:var(--track);border-radius:12px;padding:11px 12px;min-width:0"><div class="s12 sub">${k}</div><div style="font-size:15px;font-weight:600;margin-top:4px;overflow-wrap:anywhere">${esc(String(v))}</div></div>`).join('')}</div>
+      <div class="s13 sub" style="margin-top:12px">Current router link: <b style="color:var(--text)">${routerUp?(esc(lv.net.ip||'IP assigned')+' · '+lv.net.rssi+' dBm'):'Not connected'}</b></div>
+      <div class="s13 sub" style="margin-top:6px">Last router issue: <b style="color:var(--text)">${esc(lastLabel)}</b></div>
+      ${w.staIpEvents>0&&!routerUp?`<div class="s13 sub" style="margin-top:6px">The router assigned an IP ${w.staIpEvents} time(s) this boot, but the connection was not maintained.</div>`:''}
+      <div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:14px" class="s13">
+        <a href="/api/network-report" target="_blank" rel="noopener" style="color:var(--teal)">Open readable network report</a>
+        <a href="/api/network-health" target="_blank" rel="noopener" style="color:var(--sub)">Raw JSON</a>
+      </div>
+      <div class="s12 sub" style="margin-top:7px">The report includes event history, association and DHCP timing, driver errors and web diagnostics. It contains no Wi-Fi password.</div>
+      </div>`
+${row('cycle','txp','Transmit power','Lower can hold the connection better if it keeps dropping',rv(['Maximum','Medium','Low'][(c&&c.txPower)||0]))}${dlBlock(d.dl,d.sp)}<div class="rowx">
       <div class="s12 sub">"Missed here" counts the live updates this phone did not get since the app was opened. Up for ${dur(d.up||0)}${d.reset!=null?' · last restart: '+(RESET[d.reset]||'code '+d.reset):''}.</div></div></div>`;
     h+=restartsBlock(d);
     // Calibration
