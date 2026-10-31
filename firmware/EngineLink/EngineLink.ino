@@ -50,7 +50,7 @@
 #include "routerguard.h"
 #include "miniz.h"  // the deflate compressor in the chip's ROM
 
-#define EL_VERSION "0.11.2"
+#define EL_VERSION "0.11.3"
 // Releases list published by the Pages workflow; firmware files come from
 // GitHub Releases of the same repository. Nothing else is downloaded.
 #define EL_RELEASES_URL "https://kaelor9.github.io/EngineLink/releases.json"
@@ -841,6 +841,22 @@ const char* traceText(uint8_t t){
     default:return "Network event";
   }
 }
+// WPA3 diagnostics: report what the driver negotiated, not just what the AP advertises.
+volatile uint8_t staNegotiatedAuth=255;  // 255 = no successful association this boot
+volatile esp_err_t staSecurityConfigError=ESP_OK;
+volatile bool staSecurityConfigured=false;
+const char* stationSecurityName(uint8_t mode){
+  switch(mode){
+    case WIFI_AUTH_OPEN: return "Open";
+    case WIFI_AUTH_WEP: return "WEP";
+    case WIFI_AUTH_WPA_PSK: return "WPA-Personal";
+    case WIFI_AUTH_WPA2_PSK: return "WPA2-Personal";
+    case WIFI_AUTH_WPA_WPA2_PSK: return "WPA/WPA2-Personal";
+    case WIFI_AUTH_WPA3_PSK: return "WPA3-SAE";
+    case WIFI_AUTH_WPA2_WPA3_PSK: return "WPA2/WPA3 mixed";
+    default: return "Not yet negotiated";
+  }
+}
 volatile uint32_t networkIpEpoch=0,networkIpEventAt=0;
 uint32_t httpBoundEpoch=0,httpBoundAt=0;
 constexpr uint32_t ROUTER_LAST_RESORT_RETRY_MS=30000UL;
@@ -921,6 +937,7 @@ void onWiFi(WiFiEvent_t e,WiFiEventInfo_t info){
   if(e==ARDUINO_EVENT_WIFI_STA_CONNECTED){
     const uint32_t now=millis();
     staAssociated=true;staAssociatedAt=now;++staAssociatedEvents;
+    staNegotiatedAuth=(uint8_t)info.wifi_sta_connected.authmode;
     traceWifi(2);
     const uint32_t from=staLastDropAt && staLastDropAt>staBeginAt?
       staLastDropAt:staBeginAt;
@@ -2598,11 +2615,48 @@ void connectRouter(){
   staBeginAt=millis();
   traceWifi(1);
   routerIntentionalShutdown=false;
-  const wl_status_t result=WiFi.begin(cfg.ssid.c_str(),
-    cfg.wifiPassword.length()?cfg.wifiPassword.c_str():nullptr);
+  // Arduino's regular begin() connects immediately. Configure the SAE station
+  // BEFORE the first handshake, preserving WPA2, WPA3 and transition support.
+  // Explicitly set H2E + Hunt-and-Peck and a blank SAE password identifier:
+  // old/migrated Wi-Fi configuration can otherwise carry unsuitable SAE defaults.
+  // PMF is capable but not required, allowing WPA2 while retaining WPA3 support.
+  staSecurityConfigured=false;
+  staSecurityConfigError=ESP_OK;
+  const char *password=cfg.wifiPassword.length()?cfg.wifiPassword.c_str():nullptr;
+  const wl_status_t result=WiFi.begin(cfg.ssid.c_str(),password,0,nullptr,false);
+  if(result!=WL_CONNECT_FAILED){
+    wifi_config_t staCfg={};
+    esp_err_t err=esp_wifi_get_config(WIFI_IF_STA,&staCfg);
+    if(err==ESP_OK){
+      staCfg.sta.pmf_cfg.capable=true;
+      staCfg.sta.pmf_cfg.required=false;
+      staCfg.sta.sae_pwe_h2e=WPA3_SAE_PWE_BOTH;
+      memset(staCfg.sta.sae_h2e_identifier,0,sizeof(staCfg.sta.sae_h2e_identifier));
+      // A threshold is a MINIMUM, NOT a forced WPA2 downgrade. WPA3 still wins
+      // automatically whenever the router and station negotiate it successfully.
+      staCfg.sta.threshold.authmode=password?WIFI_AUTH_WPA2_PSK:WIFI_AUTH_OPEN;
+      err=esp_wifi_set_config(WIFI_IF_STA,&staCfg);
+    }
+    staSecurityConfigError=err;
+    if(err==ESP_OK){
+      staSecurityConfigured=true;
+      err=esp_wifi_connect();
+      if(err!=ESP_OK)staSecurityConfigError=err;
+    }
+    if(err!=ESP_OK){
+      // Safe fallback to Arduino's known-good default path; never strand the
+      // user in STA without a live connection attempt.
+      Serial.printf("Router explicit SAE setup failed (%s); using default Wi-Fi connect\n",
+                    esp_err_to_name(err));
+      WiFi.begin(cfg.ssid.c_str(),password);
+    }
+  }else{
+    staSecurityConfigError=ESP_FAIL;
+    Serial.println("Router STA configuration could not start");
+  }
   routerAttempts++;
-  Serial.printf("Router association started: SSID=%s, initial status=%d\n",
-    cfg.ssid.c_str(),(int)result);
+  Serial.printf("Router association started: SSID=%s, SAE H2E+HnP=%u, setup=%s\n",
+    cfg.ssid.c_str(),(unsigned)staSecurityConfigured,esp_err_to_name(staSecurityConfigError));
 }
 // A name for http://<name>.local: letters, digits and hyphens, as DNS allows.
 bool validHostName(const String &n){
@@ -4031,6 +4085,9 @@ String makeNetworkHealthJson(){
   s+=",\"lastRouterIp\":";jsonString(s,lastRouterIp);
   s+=",\"lastRouterRssi\":";if(lastRouterIp.length())s+=lastRouterRssi;else s+="null";
   s+=",\"lastRouterChannel\":";s+=(unsigned)lastRouterChannel;
+  s+=",\"lastSecurity\":";jsonString(s,stationSecurityName(staNegotiatedAuth));
+  s+=",\"saeConfigured\":";s+=staSecurityConfigured?"true":"false";
+  s+=",\"saeSetupError\":";s+=(int)staSecurityConfigError;
   s+=",\"lastFailureDescription\":";jsonString(s,reasonText(routerFailureReason));
   s+=",\"events\":[";
   RouterTrace trace[ROUTER_TRACE_CAP];const uint8_t n=getWifiTrace(trace);
@@ -4063,7 +4120,10 @@ void handleNetworkReport(){
   s+="Router IP now: ";s+=WiFi.status()==WL_CONNECTED?WiFi.localIP().toString():"None";s+="\n";
   s+="Last successful router IP: ";s+=lastRouterIp.isEmpty()?"None this boot":lastRouterIp;s+="\n";
   s+="Last router signal: ";if(lastRouterIp.isEmpty())s+="Not measured";else{s+=lastRouterRssi;s+=" dBm";}s+="\n";
-  s+="Last router channel: ";s+=lastRouterChannel;s+="\n\n";
+  s+="Last router channel: ";s+=lastRouterChannel;s+="\n";
+  s+="Last negotiated Wi-Fi security: ";s+=stationSecurityName(staNegotiatedAuth);s+="\n";
+  s+="Explicit SAE H2E+Hunt-and-Peck setup: ";s+=staSecurityConfigured?"Applied":"Not applied";s+="\n";
+  s+="Security configuration result: ";s+=esp_err_to_name(staSecurityConfigError);s+="\n\n";
   s+="CONNECTIVITY (COUNTERS SINCE BOOT)\n";
   s+="Successful Wi-Fi associations: ";s+=(unsigned long)staAssociatedEvents;s+="\n";
   s+="Successful router IP assignments: ";s+=(unsigned long)staIpEvents;s+="\n";
@@ -4121,9 +4181,9 @@ void refreshWorkerListener(NetworkServer &server,uint32_t &boundEpoch){
 }
 void speedHttpTask(void *){
   uint32_t boundEpoch=0;
-  static const uint8_t sample[256]={
-    'E','n','g','i','n','e','L','i','n','k',' ','W','i','-','F','i',' '
-  };
+  // Full-sized TCP payloads avoid slow small-packet/Nagle/ACK interaction.
+  // The test remains independent of filesystem and engine tasks.
+  static const uint8_t sample[1460]={'E','n','g','i','n','e','L','i','n','k'};
   for(;;){
     refreshWorkerListener(speedServer,boundEpoch);
     NetworkClient c=speedServer.accept();
@@ -4137,12 +4197,15 @@ void speedHttpTask(void *){
     c.print("HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\nCache-Control: no-store\r\nAccess-Control-Allow-Origin: *\r\nContent-Length: 32768\r\nConnection: close\r\n\r\n");
     const uint32_t begun=millis();
     size_t sent=0;
+    uint8_t blocks=0;
     while(sent<32768 && c.connected() && (uint32_t)(millis()-begun)<15000UL){
       const size_t chunk=min((size_t)sizeof(sample),(size_t)(32768-sent));
       const size_t n=c.write(sample,chunk);
       if(n==0)break;
       sent+=n;
-      vTaskDelay(1);  // do not starve the Wi-Fi or engine tasks
+      // Yield periodically, not after every tiny 256-byte packet. This task
+      // is priority 1 and remains independent from the main HTTP server.
+      if((++blocks&3)==0)vTaskDelay(1);
     }
     // No unbounded flush: incomplete responses fail cleanly in the browser.
     c.stop();
@@ -4582,6 +4645,7 @@ void handleDiag(){
   s+=",\"routerDriverNudges\":";s+=routerForcedReconnects;
   s+=",\"routerAssociated\":";s+=staAssociated?"true":"false";
   s+=",\"staAssocEvents\":";s+=(unsigned long)staAssociatedEvents;
+  s+=",\"routerAuthMode\":";jsonString(s,stationSecurityName(staNegotiatedAuth));
   s+=",\"staIpEvents\":";s+=(unsigned long)staIpEvents;
   s+=",\"staLostIpEvents\":";s+=(unsigned long)staIpLostEvents;
   s+=",\"staAssocMs\":";s+=(unsigned long)staJoinMs;

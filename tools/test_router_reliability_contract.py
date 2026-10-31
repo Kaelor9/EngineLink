@@ -79,4 +79,24 @@ assert 'Last saved failure:' in health and 'MACHINE-READABLE JSON' in health
 assert 'wifiPassword' not in health and 'wpass' not in health
 assert 'Unexpected router drops' in ui
 assert "202:'authentication failed (" in ui
+# Router WPA3 settings must be applied before starting the association.
+connect=section("void connectRouter(){","// A name for http://")
+assert "WiFi.begin(cfg.ssid.c_str(),password,0,nullptr,false)" in connect
+assert "WPA3_SAE_PWE_BOTH" in connect
+assert "staCfg.sta.pmf_cfg.required=false" in connect
+assert "memset(staCfg.sta.sae_h2e_identifier,0" in connect
+assert connect.index("esp_wifi_set_config(") < connect.index("esp_wifi_connect()")
+assert "WiFi.begin(cfg.ssid.c_str(),password);" in connect, "Failed security setup must not strand STA"
+assert "staNegotiatedAuth=(uint8_t)info.wifi_sta_connected.authmode;" in callback
+assert '"Last negotiated Wi-Fi security: "' in health
+assert "routerAuthMode" in ino
+assert "No current connection error" in ui
+assert "authentication timeout (router reply not received)" in ui
+# The speed test remains 32 KiB but no longer emits tiny 256-byte packets
+# with a task delay on every packet.
+speed=section("void speedHttpTask(void *){","void liveHttpTask(void *){")
+assert "sample[1460]" in speed
+assert "Content-Length: 32768" in speed
+assert "if((++blocks&3)==0)vTaskDelay(1);" in speed
+
 print("router lifecycle and network diagnostics regression checks passed")
