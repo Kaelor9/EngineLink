@@ -73,7 +73,7 @@ assert "makeLiveJson" not in health
 assert "fsSlurp" not in health and "SD." not in health
 assert 'web.on("/api/network-report",HTTP_GET,handleNetworkReport);' in routes
 assert 'Open readable network report' in ui
-assert 'ROUTER_TRACE_CAP=32' in ino and 'getWifiTrace(trace)' in health
+assert 'ROUTER_TRACE_CAP=64' in ino and 'getWifiTrace(trace)' in health
 assert 'Router IP now:' in health and 'Last successful router IP:' in health
 assert 'Last saved failure:' in health and 'MACHINE-READABLE JSON' in health
 assert 'wifiPassword' not in health and 'wpass' not in health
