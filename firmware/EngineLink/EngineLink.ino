@@ -3989,8 +3989,8 @@ String makeLiveJson(){
 void handleLive(){sendJSON(200,makeLiveJson());}
 // Minimal network-only diagnostic, intentionally independent of SD/engine
 // data. Usable by direct IP on router Wi-Fi or after rescue AP returns.
-void handleNetworkHealth(){
-  String s;s.reserve(850);
+String makeNetworkHealthJson(){
+  String s;s.reserve(3300);
   s+="{\"version\":";jsonString(s,EL_VERSION);
   s+=",\"uptimeMs\":";s+=(unsigned long)millis();
   s+=",\"mode\":";
@@ -4024,10 +4024,80 @@ void handleNetworkHealth(){
   s+=",\"httpBoundEpoch\":";s+=httpBoundEpoch;
   s+=",\"networkEpoch\":";s+=(unsigned long)networkIpEpoch;
   s+=",\"httpRequests\":";s+=web.served;
-  s+="}";
-  sendJSON(200,s);
+  s+=",\"routerAttempts\":";s+=routerAttempts;
+  s+=",\"routerFallbacks\":";s+=routerFallbacks;
+  s+=",\"disconnectEvents\":";s+=(unsigned long)staDisconnects;
+  s+=",\"lastGotIpUptimeMs\":";s+=(unsigned long)staIpAt;
+  s+=",\"lastRouterIp\":";jsonString(s,lastRouterIp);
+  s+=",\"lastRouterRssi\":";if(lastRouterIp.length())s+=lastRouterRssi;else s+="null";
+  s+=",\"lastRouterChannel\":";s+=(unsigned)lastRouterChannel;
+  s+=",\"lastFailureDescription\":";jsonString(s,reasonText(routerFailureReason));
+  s+=",\"events\":[";
+  RouterTrace trace[ROUTER_TRACE_CAP];const uint8_t n=getWifiTrace(trace);
+  for(uint8_t i=0;i<n;i++){
+    if(i)s+=',';
+    s+="{\"uptimeMs\":";s+=trace[i].ms;
+    s+=",\"event\":";jsonString(s,traceText(trace[i].type));
+    s+=",\"reason\":";s+=(unsigned)trace[i].reason;
+    s+='}';
+  }
+  s+="]}";
+  return s;
 }
+void handleNetworkHealth(){sendJSON(200,makeNetworkHealthJson());}
 
+
+
+void handleNetworkReport(){
+  // Text is easy to select/copy on iPhone and can be sent to support.
+  // Never include the saved Wi-Fi password or engine/boat telemetry.
+  String s;s.reserve(6500);
+  s+="ENGINELINK - WI-FI REPORT\n";
+  s+="========================\n\n";
+  s+="Firmware: ";s+=EL_VERSION;s+="\n";
+  s+="Uptime: ";s+=millis()/1000UL;s+=" seconds\n";
+  s+="Mode: ";s+=routerHold?"Recovery (EngineLink Wi-Fi)":routerConfigured()?"Router (station)":"Standalone (EngineLink Wi-Fi)";s+="\n";
+  s+="Wi-Fi radio mode: ";s+=(unsigned)WiFi.getMode();s+=" (1=station, 2=access point)\n";
+  s+="Router: ";s+=cfg.ssid.isEmpty()?"Not configured":cfg.ssid;s+="\n";
+  s+="Currently connected: ";s+=WiFi.status()==WL_CONNECTED?"Yes":"No";s+="\n";
+  s+="Router IP now: ";s+=WiFi.status()==WL_CONNECTED?WiFi.localIP().toString():"None";s+="\n";
+  s+="Last successful router IP: ";s+=lastRouterIp.isEmpty()?"None this boot":lastRouterIp;s+="\n";
+  s+="Last router signal: ";if(lastRouterIp.isEmpty())s+="Not measured";else{s+=lastRouterRssi;s+=" dBm";}s+="\n";
+  s+="Last router channel: ";s+=lastRouterChannel;s+="\n\n";
+  s+="CONNECTIVITY (COUNTERS SINCE BOOT)\n";
+  s+="Successful Wi-Fi associations: ";s+=(unsigned long)staAssociatedEvents;s+="\n";
+  s+="Successful router IP assignments: ";s+=(unsigned long)staIpEvents;s+="\n";
+  s+="Router IP losses: ";s+=(unsigned long)staIpLostEvents;s+="\n";
+  s+="Wi-Fi disconnect events: ";s+=(unsigned long)staDisconnects;s+="\n";
+  s+="Unexpected disconnects: ";s+=(unsigned long)staUnexpectedDisconnects;s+="\n";
+  s+="App-initiated router attempts: ";s+=routerAttempts;s+="\n";
+  s+="Router recovery fallbacks: ";s+=routerFallbacks;s+="\n";
+  s+="Last association time: ";s+=staJoinMs;s+=" ms\n";
+  s+="Last DHCP time: ";s+=staDhcpMs;s+=" ms\n";
+  s+="Last successful IP at uptime: ";s+=staIpAt/1000UL;s+=" seconds\n";
+  s+="Last Wi-Fi event reason: ";s+=(unsigned)staLastReason;s+=" - ";s+=reasonText(staLastReason);s+="\n";
+  s+="Last unexpected reason: ";s+=(unsigned)staLastUnexpectedReason;s+=" - ";s+=reasonText(staLastUnexpectedReason);s+="\n";
+  s+="Last saved failure: ";s+=(unsigned)routerFailureReason;s+=" - ";s+=reasonText(routerFailureReason);s+="\n";
+  s+="Failure stage at timeout: ";s+=routerFailurePhase==2?"Associated but without IP":routerFailurePhase==1?"Not associated":"Not recorded";s+="\n";
+  s+="Time before rescue: ";s+=routerFailureAfterMs;s+=" ms\n";
+  s+="Note: final failure stage does not erase any earlier successful IP events.\n";
+  s+="Error 202 means authentication failure; it does not prove the password is wrong.\n\n";
+  s+="HTTP / WEB\n";
+  s+="HTTP rebinds: ";s+=web.listenerRebinds;s+="\n";
+  s+="HTTP requests: ";s+=web.served;s+="\n\n";
+  s+="LATEST WI-FI EVENTS (oldest to newest; uptime seconds)\n";
+  RouterTrace trace[ROUTER_TRACE_CAP];const uint8_t n=getWifiTrace(trace);
+  if(!n)s+="No events recorded this boot.\n";
+  for(uint8_t i=0;i<n;i++){
+    s+="  +";s+=trace[i].ms/1000UL;s+="s  ";s+=traceText(trace[i].type);
+    if(trace[i].reason){s+="  code ";s+=(unsigned)trace[i].reason;s+=" (";s+=reasonText(trace[i].reason);s+=")";}
+    s+="\n";
+  }
+  s+="\nMACHINE-READABLE JSON (copy/send the entire report)\n";
+  s+=makeNetworkHealthJson();s+="\n";
+  web.sendHeader("Cache-Control","no-store");
+  web.send(200,"text/plain; charset=utf-8",s);
+}
 
 // Independent, read-only live telemetry listener. Large CSV exports and
 // reports can occupy the regular WebServer for seconds, but cannot block port
@@ -5037,6 +5107,7 @@ void initializeWeb(){
   web.on("/api/kad/config",HTTP_POST,handleKadConfig);
   web.on("/api/health",HTTP_GET,[](){web.send(200,"text/plain","OK");});
   web.on("/api/network-health",HTTP_GET,handleNetworkHealth);
+  web.on("/api/network-report",HTTP_GET,handleNetworkReport);
   web.on("/api/live",HTTP_GET,handleLive);
   web.on("/api/trips",HTTP_GET,handleTrips);
   web.on("/api/trip/note",HTTP_POST,handleTripNote);
