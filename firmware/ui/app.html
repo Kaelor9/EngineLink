@@ -1352,6 +1352,7 @@ const PAGE_VIEWS={
       <div class="grid2" style="gap:8px">${boxes.map(([k,v])=>`<div style="background:var(--track);border-radius:12px;padding:11px 12px;min-width:0"><div class="s12 sub">${k}</div><div style="font-size:15px;font-weight:600;margin-top:4px;overflow-wrap:anywhere">${esc(String(v))}</div></div>`).join('')}</div>
       <div class="s13 sub" style="margin-top:12px">Current router link: <b style="color:var(--text)">${routerUp?(esc(lv.net.ip||'IP assigned')+' · '+lv.net.rssi+' dBm'+(w.routerAuthMode?' · '+esc(w.routerAuthMode):'')):'Not connected'}</b></div>
       <div class="s13 sub" style="margin-top:6px">Last router issue: <b style="color:var(--text)">${esc(lastLabel)}</b></div>
+      ${lv.net.rescue&&c.ssid&&w.routerNextTryS!=null?`<div class="s13" style="margin-top:6px">EngineLink looks for <b>${esc(c.ssid)}</b> again ${w.routerNextTryS>60?'in about '+dur(w.routerNextTryS):'shortly'} and goes back to it by itself when it is there (not while the app is in use on EngineLink's own Wi-Fi).</div>`:''}
       ${w.staIpEvents>0&&!routerUp?`<div class="s13 sub" style="margin-top:6px">The router assigned an IP ${w.staIpEvents} time(s) this boot, but the connection was not maintained.</div>`:''}
       <div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:14px" class="s13">
         <a href="/api/network-report" target="_blank" rel="noopener" style="color:var(--teal)">Open readable network report</a>
