@@ -790,6 +790,57 @@ volatile bool routerIntentionalShutdown=false;
 uint8_t routerFailureReason=0;
 uint8_t routerFailurePhase=0;    // 1=no association, 2=associated but no DHCP IP
 uint32_t routerFailureAfterMs=0;
+// Bounded uptime-based router event log (kept during rescue).
+struct RouterTrace {uint32_t ms;uint8_t type,reason;};
+constexpr uint8_t ROUTER_TRACE_CAP=32;
+RouterTrace routerTrace[ROUTER_TRACE_CAP]={};
+uint8_t traceHead=0,traceSize=0;
+portMUX_TYPE traceMux=portMUX_INITIALIZER_UNLOCKED;
+String lastRouterIp="";
+int lastRouterRssi=0;
+uint8_t lastRouterChannel=0;
+void traceWifi(uint8_t type,uint8_t reason=0){
+  const uint32_t now=millis();
+  portENTER_CRITICAL(&traceMux);
+  routerTrace[traceHead]={now,type,reason};
+  traceHead=(traceHead+1)%ROUTER_TRACE_CAP;
+  if(traceSize<ROUTER_TRACE_CAP)++traceSize;
+  portEXIT_CRITICAL(&traceMux);
+}
+uint8_t getWifiTrace(RouterTrace *out){
+  portENTER_CRITICAL(&traceMux);
+  const uint8_t n=traceSize;
+  for(uint8_t i=0;i<n;i++)out[i]=routerTrace[(traceHead+ROUTER_TRACE_CAP-n+i)%ROUTER_TRACE_CAP];
+  portEXIT_CRITICAL(&traceMux);
+  return n;
+}
+const char* reasonText(uint8_t r){
+  switch(r){
+    case 0:return "No reason reported";
+    case 8:return "Station deliberately left";
+    case 15:return "WPA handshake timeout";
+    case 36:return "Station left during mode change";
+    case 200:return "Router beacons lost";
+    case 201:return "Router not found";
+    case 202:return "Authentication failed (does not prove a wrong password)";
+    case 203:return "Router association failed";
+    case 204:return "WPA handshake failed";
+    case 205:return "Router connection failed";
+    case 210:case 211:return "Incompatible Wi-Fi security";
+    default:return "Other Wi-Fi disconnect";
+  }
+}
+const char* traceText(uint8_t t){
+  switch(t){
+    case 1:return "Connect started";
+    case 2:return "Associated with router";
+    case 3:return "Received router IP";
+    case 4:return "Disconnected";
+    case 5:return "Lost router IP";
+    case 6:return "Rescue AP fallback";
+    default:return "Network event";
+  }
+}
 volatile uint32_t networkIpEpoch=0,networkIpEventAt=0;
 uint32_t httpBoundEpoch=0,httpBoundAt=0;
 constexpr uint32_t ROUTER_LAST_RESORT_RETRY_MS=30000UL;
@@ -870,6 +921,7 @@ void onWiFi(WiFiEvent_t e,WiFiEventInfo_t info){
   if(e==ARDUINO_EVENT_WIFI_STA_CONNECTED){
     const uint32_t now=millis();
     staAssociated=true;staAssociatedAt=now;++staAssociatedEvents;
+    traceWifi(2);
     const uint32_t from=staLastDropAt && staLastDropAt>staBeginAt?
       staLastDropAt:staBeginAt;
     if(from)staJoinMs=now-from;
@@ -879,6 +931,7 @@ void onWiFi(WiFiEvent_t e,WiFiEventInfo_t info){
     ++staDisconnects;
     staLastReason=info.wifi_sta_disconnected.reason;
     staLastDropAt=millis();
+    traceWifi(4,staLastReason);
     // Reason 8/36 often follows our own deliberate mode switch or teardown.
     // Preserve real RF/authentication failures instead of displaying the
     // self-inflicted "STA is leaving" as the last router error.
@@ -889,12 +942,13 @@ void onWiFi(WiFiEvent_t e,WiFiEventInfo_t info){
     }
   }
   if(e==ARDUINO_EVENT_WIFI_STA_LOST_IP){
-    staIpLostAt=millis();++staIpLostEvents;
+    staIpLostAt=millis();++staIpLostEvents;traceWifi(5);
   }
   if(e==ARDUINO_EVENT_WIFI_STA_GOT_IP){
     const uint32_t now=millis();
     routerIntentionalShutdown=false;
     ++staConnects;staConnectedAt=now;staIpAt=now;++staIpEvents;
+    traceWifi(3);
     if(staAssociatedAt)staDhcpMs=now-staAssociatedAt;
     mdnsNetworkChangedAt=now;mdnsRefreshPending=true;
     ++networkIpEpoch;networkIpEventAt=now;
@@ -2542,6 +2596,7 @@ void connectRouter(){
   // reconnect logic handle router dropouts without application interference.
   staBssidKnown=false;
   staBeginAt=millis();
+  traceWifi(1);
   routerIntentionalShutdown=false;
   const wl_status_t result=WiFi.begin(cfg.ssid.c_str(),
     cfg.wifiPassword.length()?cfg.wifiPassword.c_str():nullptr);
@@ -2590,6 +2645,7 @@ void parkRouter(const char *why){
   routerFailurePhase=staAssociated?2:1;
   routerFailureAfterMs=routerGuard.disconnectedSince?
     (uint32_t)(millis()-routerGuard.disconnectedSince):0;
+  traceWifi(6,routerFailureReason);
   routerIntentionalShutdown=true;
   Serial.printf("Router unavailable (%s): last Wi-Fi reason=%u, phase=%s; restoring standalone AP\n",
     why,(unsigned)routerFailureReason,routerFailurePhase==2?"dhcp":"association");
@@ -2604,6 +2660,7 @@ void parkRouter(const char *why){
     p.end();
   }
   routerGuard.reset();
+  staDownSince=0; // Do not count rescue time as router downtime.
   staBssidKnown=false;
   if(scanInFlight)esp_wifi_scan_stop();
   scanBusy=false;scanRequested=false;scanInFlight=false;
@@ -2825,7 +2882,10 @@ void serviceNetwork(){
     const bool hasIp=WiFi.status()==WL_CONNECTED &&
                      WiFi.localIP()!=IPAddress(0,0,0,0);
     if(hasIp){
-      if(staDownSince)Serial.printf("Router ready: %s RSSI=%d dBm\n",
+       lastRouterIp=WiFi.localIP().toString();
+       lastRouterRssi=WiFi.RSSI();
+       lastRouterChannel=WiFi.channel();
+       if(staDownSince)Serial.printf("Router ready: %s RSSI=%d dBm\n",
         WiFi.localIP().toString().c_str(),WiFi.RSSI());
       routerGuard.reset();
       routerLastSuccessMs=now;
@@ -2849,7 +2909,9 @@ void serviceNetwork(){
       // The native auto-reconnect normally handles all recoverable failures.
       // If the radio has remained genuinely unassociated for 30 seconds,
       // nudge it once with reconnect() (never another WiFi.begin()).
+      // Only nudge a truly silent driver. Never compete with native retries.
       if(!staAssociated &&
+         (!staLastDropAt||(uint32_t)(now-staLastDropAt)>=ROUTER_LAST_RESORT_RETRY_MS) &&
          (uint32_t)(now-routerLastRecoveryAttempt)>=ROUTER_LAST_RESORT_RETRY_MS){
         routerLastRecoveryAttempt=now;
         // esp_wifi_connect() does NOT forcibly disconnect an ongoing WPA
