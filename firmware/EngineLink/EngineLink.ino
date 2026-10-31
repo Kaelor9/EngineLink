@@ -4645,6 +4645,7 @@ void handleDiag(){
   s+=",\"routerDriverNudges\":";s+=routerForcedReconnects;
   s+=",\"routerAssociated\":";s+=staAssociated?"true":"false";
   s+=",\"staAssocEvents\":";s+=(unsigned long)staAssociatedEvents;
+  s+=",\"routerAuthMode\":";jsonString(s,stationSecurityName(staNegotiatedAuth));
   s+=",\"staIpEvents\":";s+=(unsigned long)staIpEvents;
   s+=",\"staLostIpEvents\":";s+=(unsigned long)staIpLostEvents;
   s+=",\"staAssocMs\":";s+=(unsigned long)staJoinMs;
