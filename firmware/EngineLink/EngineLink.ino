@@ -791,6 +791,9 @@ volatile bool staHadIp=false;
 // Queue ONE non-disruptive retry for the normal loop; never reconnect in callbacks.
 volatile uint32_t saQueryRetryAt=0;
 uint32_t saQueryFastRetries=0;
+// The browser's 32-KiB speed measurement includes HTTP setup. Track the
+// worker's own TCP write duration separately to locate actual bottlenecks.
+volatile uint32_t speedTxLastMs=0,speedTxLastBytes=0,speedTxLastWrites=0,speedTxLastAt=0;
 volatile bool routerIntentionalShutdown=false;
 // Last FAILED association is stored before the router interface goes away.
 // An intentional AP fallback must not overwrite the original Wi-Fi reason.
@@ -4110,6 +4113,9 @@ String makeNetworkHealthJson(){
   s+=",\"unexpectedDrops\":";s+=(unsigned long)staUnexpectedDisconnects;
   s+=",\"associationFailures\":";s+=(unsigned long)staAssociationFailures;
   s+=",\"saQueryFastRetries\":";s+=saQueryFastRetries;
+  s+=",\"speedTxBytes\":";s+=(unsigned long)speedTxLastBytes;
+  s+=",\"speedTxMs\":";s+=(unsigned long)speedTxLastMs;
+  s+=",\"speedTxWrites\":";s+=(unsigned long)speedTxLastWrites;
   s+=",\"failedReason\":";s+=(unsigned)routerFailureReason;
   s+=",\"failedPhase\":";s+=(unsigned)routerFailurePhase;
   s+=",\"failedAfterMs\":";s+=(unsigned long)routerFailureAfterMs;
@@ -4186,7 +4192,10 @@ void handleNetworkReport(){
   s+="Error 202 means authentication failure; it does not prove the password is wrong.\n\n";
   s+="HTTP / WEB\n";
   s+="HTTP rebinds: ";s+=web.listenerRebinds;s+="\n";
-  s+="HTTP requests: ";s+=web.served;s+="\n\n";
+  s+="HTTP requests: ";s+=web.served;s+="\n";
+  s+="Last 32 KiB server write: ";s+=speedTxLastBytes;s+=" bytes in ";s+=speedTxLastMs;s+=" ms (";
+  s+=speedTxLastWrites;s+=" write calls)\n";
+  s+="Note: server write time is NOT the same as measured radio throughput.\n\n";
   s+="LATEST WI-FI EVENTS (oldest to newest; uptime seconds)\n";
   RouterTrace trace[ROUTER_TRACE_CAP];const uint8_t n=getWifiTrace(trace);
   if(!n)s+="No events recorded this boot.\n";
@@ -4239,16 +4248,24 @@ void speedHttpTask(void *){
     c.print("HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\nCache-Control: no-store\r\nAccess-Control-Allow-Origin: *\r\nContent-Length: 32768\r\nConnection: close\r\n\r\n");
     const uint32_t begun=millis();
     size_t sent=0;
+    uint32_t writes=0;
     uint8_t blocks=0;
     while(sent<32768 && c.connected() && (uint32_t)(millis()-begun)<15000UL){
       const size_t chunk=min((size_t)sizeof(sample),(size_t)(32768-sent));
       const size_t n=c.write(sample,chunk);
+      ++writes;
       if(n==0)break;
       sent+=n;
       // Yield periodically, not after every tiny 256-byte packet. This task
       // is priority 1 and remains independent from the main HTTP server.
       if((++blocks&3)==0)vTaskDelay(1);
     }
+    // Queue/write timing is distinct from browser-observed total download time.
+    // Record even incomplete transfers; never block the engine task waiting.
+    speedTxLastBytes=(uint32_t)sent;
+    speedTxLastWrites=writes;
+    speedTxLastAt=millis();
+    speedTxLastMs=millis()-begun;
     // No unbounded flush: incomplete responses fail cleanly in the browser.
     c.stop();
   }
@@ -4700,6 +4717,9 @@ void handleDiag(){
   s+=",\"routerUnexpectedDrops\":";s+=(unsigned long)staUnexpectedDisconnects;
   s+=",\"routerAssociationFailures\":";s+=(unsigned long)staAssociationFailures;
   s+=",\"routerSaFastRetries\":";s+=saQueryFastRetries;
+  s+=",\"speedTxBytes\":";s+=(unsigned long)speedTxLastBytes;
+  s+=",\"speedTxMs\":";s+=(unsigned long)speedTxLastMs;
+  s+=",\"speedTxWrites\":";s+=(unsigned long)speedTxLastWrites;
   s+=",\"routerFailureReason\":";s+=(unsigned)routerFailureReason;
   s+=",\"routerFailurePhase\":";s+=(unsigned)routerFailurePhase;
   s+=",\"routerFailureAfterMs\":";s+=(unsigned long)routerFailureAfterMs;
