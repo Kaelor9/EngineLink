@@ -2848,6 +2848,19 @@ void serviceNetwork(){
       ? (WiFi.status()==WL_CONNECTED && (WiFi.getMode()&WIFI_MODE_STA))
       : ((WiFi.getMode()&WIFI_MODE_AP) &&
          WiFi.softAPIP()==IPAddress(192,168,4,1));
+  // A listener opened on the previous interface may retain stale lwIP
+  // socket state when we deliberately change AP -> STA or receive a new
+  // router DHCP address. Rebind only AFTER the IP interface is ready, from
+  // the main loop between request handlers, never from the event callback.
+  if(!pendingNetwork && !scanBusy && mdnsInterfaceReady &&
+     networkIpEpoch!=httpBoundEpoch &&
+     (uint32_t)(mdnsNow-networkIpEventAt)>=600UL){
+    web.rebindNetwork();
+    httpBoundEpoch=networkIpEpoch;
+    httpBoundAt=mdnsNow;
+    Serial.printf("HTTP/80 bound to active Wi-Fi interface (epoch %lu)\n",
+      (unsigned long)httpBoundEpoch);
+  }
   if(!scanBusy && mdnsInterfaceReady){
     const bool retry=!mdnsReady && (uint32_t)(mdnsNow-mdnsLastAttemptAt)>=15000UL;
     const bool refresh=mdnsRefreshPending &&
@@ -3885,11 +3898,24 @@ NetworkServer liveServer(81);
 // access is permitted here. A slow phone can occupy this task but cannot
 // block the main WebServer or the engine monitoring task.
 NetworkServer speedServer(82);
+// Port 81/82 tasks each own their listener. They rebind it themselves after
+// an interface-ready event, avoiding cross-core close/accept races.
+void refreshWorkerListener(NetworkServer &server,uint32_t &boundEpoch){
+  const uint32_t epoch=networkIpEpoch;
+  if(epoch!=boundEpoch && epoch &&
+     (uint32_t)(millis()-networkIpEventAt)>=600UL){
+    server.end();
+    server.begin();
+    boundEpoch=epoch;
+  }
+}
 void speedHttpTask(void *){
+  uint32_t boundEpoch=0;
   static const uint8_t sample[256]={
     'E','n','g','i','n','e','L','i','n','k',' ','W','i','-','F','i',' '
   };
   for(;;){
+    refreshWorkerListener(speedServer,boundEpoch);
     NetworkClient c=speedServer.accept();
     if(!c){vTaskDelay(pdMS_TO_TICKS(15));continue;}
     c.setNoDelay(true);c.setTimeout(300);
@@ -3913,7 +3939,9 @@ void speedHttpTask(void *){
   }
 }
 void liveHttpTask(void *){
+  uint32_t boundEpoch=0;
   for(;;){
+    refreshWorkerListener(liveServer,boundEpoch);
     NetworkClient c=liveServer.accept();
     if(!c){vTaskDelay(pdMS_TO_TICKS(10));continue;}
     c.setNoDelay(true);
@@ -4343,6 +4371,14 @@ void handleDiag(){
   s+=",\"routerNativeAutoReconnect\":";s+=(WiFi.getAutoReconnect()?"true":"false");
   s+=",\"routerDriverNudges\":";s+=routerForcedReconnects;
   s+=",\"routerAssociated\":";s+=staAssociated?"true":"false";
+  s+=",\"staAssocEvents\":";s+=(unsigned long)staAssociatedEvents;
+  s+=",\"staIpEvents\":";s+=(unsigned long)staIpEvents;
+  s+=",\"staLostIpEvents\":";s+=(unsigned long)staIpLostEvents;
+  s+=",\"staAssocMs\":";s+=(unsigned long)staJoinMs;
+  s+=",\"staDhcpMs\":";s+=(unsigned long)staDhcpMs;
+  s+=",\"routerPhase\":";
+  jsonString(s,routerHold?"rescue":!routerConfigured()?"standalone":
+    WiFi.status()==WL_CONNECTED?"online":staAssociated?"dhcp":"associating");
   s+=",\"routerLastReason\":";s+=(unsigned)staLastReason;
   s+=",\"routerWaitSec\":";s+=routerGuard.disconnectedSince?(unsigned long)((millis()-routerGuard.disconnectedSince)/1000UL):0;
   s+=",\"ch\":";s+=apChannelNow;
@@ -4353,6 +4389,10 @@ void handleDiag(){
   s+=",\"apDriverSsid\":";jsonString(s,WiFi.softAPSSID());
   s+=",\"apDriverIp\":";jsonString(s,WiFi.softAPIP().toString());
   s+=",\"apStops\":";s+=(unsigned long)apStops;s+=",\"chMoves\":";s+=apChannelChanges;s+=",\"bw\":";{wifi_bandwidth_t b=WIFI_BW_HT20;esp_wifi_get_bandwidth(WIFI_IF_AP,&b);s+=b==WIFI_BW_HT40?40:20;}
+  s+=",\"httpRebinds\":";s+=web.listenerRebinds;
+  s+=",\"httpRebindAgoMs\":";s+=httpBoundAt?(unsigned long)(millis()-httpBoundAt):0;
+  s+=",\"httpBoundEpoch\":";s+=httpBoundEpoch;
+  s+=",\"wifiIpEpoch\":";s+=(unsigned long)networkIpEpoch;
   s+=",\"httpServed\":";s+=web.served;s+=",\"httpReused\":";s+=web.reused;
   s+=",\"httpEvicted\":";s+=web.evicted;s+=",\"httpSlowMs\":";s+=web.slowestMs;
   s+=",\"httpParseSlowMs\":";s+=web.worstParseMs;
