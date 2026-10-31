@@ -18,7 +18,7 @@ network=section("void serviceNetwork(){","// ---------- Diagnosis")
 apply=section("void applyNetwork(){","// On each completed channel")
 teardown=section("void parkRouter(const char *why){","void applyNetwork(){")
 callback=section("void onWiFi(WiFiEvent_t e,WiFiEventInfo_t info){","bool cardInserted(){")
-health=section("void handleNetworkHealth(){","// Independent, read-only live")
+health=section("String makeNetworkHealthJson(){","// Independent, read-only live")
 workers=section("void refreshWorkerListener(NetworkServer &server,uint32_t &boundEpoch){","void speedHttpTask(void *){")
 web=section("class EngineLinkWebServer : public WebServer {","struct Frame {")
 routes=section("void initializeWeb(){","void serialStatus(){")
@@ -71,5 +71,12 @@ for key in ["associationMs","dhcpMs","failedPhase","driverReason","httpRebinds",
     assert f'\\\"{key}\\\"' in health or f'\"{key}\"' in health,key
 assert "makeLiveJson" not in health
 assert "fsSlurp" not in health and "SD." not in health
-assert "Open detailed network report" in ui
+assert 'web.on("/api/network-report",HTTP_GET,handleNetworkReport);' in routes
+assert 'Open readable network report' in ui
+assert 'ROUTER_TRACE_CAP=64' in ino and 'getWifiTrace(trace)' in health
+assert 'Router IP now:' in health and 'Last successful router IP:' in health
+assert 'Last saved failure:' in health and 'MACHINE-READABLE JSON' in health
+assert 'wifiPassword' not in health and 'wpass' not in health
+assert 'Unexpected router drops' in ui
+assert "202:'authentication failed (" in ui
 print("router lifecycle and network diagnostics regression checks passed")
