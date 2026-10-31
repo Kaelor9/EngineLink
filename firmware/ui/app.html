@@ -1342,8 +1342,7 @@ const PAGE_VIEWS={
         <a href="/api/network-health" target="_blank" rel="noopener" style="color:var(--sub)">Raw JSON</a>
       </div>
       <div class="s12 sub" style="margin-top:7px">The report includes event history, association and DHCP timing, driver errors and web diagnostics. It contains no Wi-Fi password.</div>
-      </div>`
-${row('cycle','txp','Transmit power','Lower can hold the connection better if it keeps dropping',rv(['Maximum','Medium','Low'][(c&&c.txPower)||0]))}${dlBlock(d.dl,d.sp)}<div class="rowx">
+      </div>${row('cycle','txp','Transmit power','Lower can hold the connection better if it keeps dropping',rv(['Maximum','Medium','Low'][(c&&c.txPower)||0]))}${dlBlock(d.dl,d.sp)}<div class="rowx">
       <div class="s12 sub">"Missed here" counts the live updates this phone did not get since the app was opened. Up for ${dur(d.up||0)}${d.reset!=null?' · last restart: '+(RESET[d.reset]||'code '+d.reset):''}.</div></div></div>`;
     h+=restartsBlock(d);
     // Calibration
