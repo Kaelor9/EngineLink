@@ -99,4 +99,21 @@ assert "sample[1460]" in speed
 assert "Content-Length: 32768" in speed
 assert "if((++blocks&3)==0)vTaskDelay(1);" in speed
 
+# WPA3 PMF code 209 is NOT included in Arduino-ESP32 3.3.x native
+# reconnectable-reason list. Schedule a one-shot, non-disruptive retry in the
+# main loop instead of waiting for the 30-second emergency fallback.
+assert 'case 209:return "WPA3 PMF SA Query timeout' in ino
+assert "staLastReason==WIFI_REASON_SA_QUERY_TIMEOUT && droppedOnline" in callback
+assert "saQueryRetryAt=millis()+2000UL" in callback
+assert "const bool droppedOnline=staHadIp;" in callback
+assert "if(droppedOnline)++staUnexpectedDisconnects;" in callback
+assert "else ++staAssociationFailures;" in callback
+assert "const uint32_t saRetry=saQueryRetryAt;" in network
+assert "if(saRetry && !staAssociated && (int32_t)(now-saRetry)>=0)" in network
+assert "saQueryRetryAt=0;" in network and "esp_wifi_connect();" in network
+assert "WiFi.reconnect();" not in re.sub(r"//[^\\n]*","",network)
+assert 'Last 32 KiB server write:' in health
+assert '"speedTxMs"' in ino
+assert 'speedTxLastMs=millis()-begun;' in speed
+
 print("router lifecycle and network diagnostics regression checks passed")
