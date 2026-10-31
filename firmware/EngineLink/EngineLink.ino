@@ -792,7 +792,7 @@ uint8_t routerFailurePhase=0;    // 1=no association, 2=associated but no DHCP I
 uint32_t routerFailureAfterMs=0;
 // Bounded uptime-based router event log (kept during rescue).
 struct RouterTrace {uint32_t ms;uint8_t type,reason;};
-constexpr uint8_t ROUTER_TRACE_CAP=32;
+constexpr uint8_t ROUTER_TRACE_CAP=64;
 RouterTrace routerTrace[ROUTER_TRACE_CAP]={};
 uint8_t traceHead=0,traceSize=0;
 portMUX_TYPE traceMux=portMUX_INITIALIZER_UNLOCKED;
