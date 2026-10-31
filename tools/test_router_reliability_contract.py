@@ -111,9 +111,9 @@ assert "else ++staAssociationFailures;" in callback
 assert "const uint32_t saRetry=saQueryRetryAt;" in network
 assert "if(saRetry && !staAssociated && (int32_t)(now-saRetry)>=0)" in network
 assert "saQueryRetryAt=0;" in network and "esp_wifi_connect();" in network
-assert "WiFi.reconnect();" not in re.sub(r"//[^\\n]*","",network)
+assert "WiFi.reconnect();" not in re.sub(r"//[^\n]*","",network)
 assert 'Last 32 KiB server write:' in health
-assert '"speedTxMs"' in ino
+assert "speedTxMs" in ino
 assert 'speedTxLastMs=millis()-begun;' in speed
 
 print("router lifecycle and network diagnostics regression checks passed")
