@@ -190,7 +190,8 @@ private:
     if(keep)s.since=millis();else{s.c.stop();s.used=false;}
     const uint32_t ms=millis()-t0;
     if(ms>slowestMs)slowestMs=ms;
-    if(ms>=1000 && !largeTransfer && parsed)slowPath=uri();
+    if(!largeTransfer && parsed && ms>slowestInteractiveMs)
+      slowPath=uri(); // the actual worst interactive request, not the latest
     uint32_t &bucket=largeTransfer?slowestTransferMs:slowestInteractiveMs;
     if(ms>bucket)bucket=ms;
   }
