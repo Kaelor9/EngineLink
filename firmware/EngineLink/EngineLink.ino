@@ -50,7 +50,7 @@
 #include "routerguard.h"
 #include "miniz.h"  // the deflate compressor in the chip's ROM
 
-#define EL_VERSION "0.11.9"
+#define EL_VERSION "0.11.10"
 // Releases list published by the Pages workflow; firmware files come from
 // GitHub Releases of the same repository. Nothing else is downloaded.
 #define EL_RELEASES_URL "https://kaelor9.github.io/EngineLink/releases.json"
@@ -3089,9 +3089,15 @@ void serviceNetwork(){
         routerLastRecoveryAttempt=now;
       }
       if(!routerGuard.disconnectedSince)routerGuard.attempt(now);
-      if(routerGuard.expired(now)){
+      // The router answers but is slow to let EngineLink in (WPA3-SAE logins
+      // timing out, codes 2/4/202/204): field reports show it can take ~110 s
+      // and 14 tries. Give such a router up to 5 minutes; a router that is not
+      // there at all (201 and the like) still falls back after 120 s.
+      const uint8_t lr=staLastReason;
+      const bool slowLogin=lr==2||lr==4||lr==202||lr==204||lr==15;
+      if(routerGuard.expired(now)&&(!slowLogin||(uint32_t)(now-routerGuard.disconnectedSince)>=300000UL)){
         // User-visible recovery, not a reboot loop.
-        parkRouter("no router DHCP address after 120 seconds");
+        parkRouter(slowLogin?"router did not let EngineLink in within 5 minutes":"no router DHCP address after 120 seconds");
         return;
       }
       // The native auto-reconnect normally handles all recoverable failures.
