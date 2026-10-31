@@ -13,7 +13,7 @@
   <img src="https://img.shields.io/badge/Engines-2%C3%97%20J1708%20isolated-success" alt="2 × isolated J1708">
   <img src="https://img.shields.io/badge/Volvo%20Penta-KAD300%20%2F%20EDC%20I-0b5394" alt="Volvo Penta KAD300 / EDC I">
   <img src="https://img.shields.io/badge/NMEA%202000-listen--only-informational" alt="NMEA 2000 listen-only">
-  <img src="https://img.shields.io/badge/Firmware-0.11.10-orange" alt="Firmware 0.11.10">
+  <img src="https://img.shields.io/badge/Firmware-0.11.11-orange" alt="Firmware 0.11.11">
 </p>
 
 <p align="center">
@@ -201,6 +201,8 @@ The board's green indicator and `associated=true`/`hasRouterIp=true` describe **
 
 **Correction to 0.11.7:** in this ESP-IDF, `pmf_cfg.capable` is deprecated and ignored, so a WPA2/WPA3 mixed router is still joined with WPA3-SAE; the WPA2-first change has no effect. **0.11.9:** the board can file its network report as a GitHub issue by itself (token with Issues write only, router name redacted), and serves the report on the port-81 side server (`/report`) so it is readable while port 80 is stuck. Field reports arrive as issues titled "Device report: …".
 
+**0.11.10 report → 0.11.11:** a full boot with zero associations to the Zyxel: 56 SAE attempts, all 2/4/202 (SAE handshake timeouts). Earlier boots got in after ~110 s or not at all. All versions used H2E when offered (`WPA3_SAE_PWE_BOTH`); 0.11.11 defaults to Hunting-and-Pecking, flips to BOTH after a session without an IP, and persists the working method (NVS `smode`).
+
 ### Immediate diagnosis: isolate DNS, TCP/HTTP and browser rendering
 
 Run these from **the same Windows computer connected to the Zyxel LAN** while the board says it is on the router (replace the example IP if DHCP assigns a new one):
@@ -253,7 +255,7 @@ Record for each case the client device/network, whether **IP** and **hostname** 
 
 | Hardware | Firmware | Engine validation |
 |----------|----------|-------------------|
-| ✅ Revision 1 assembled | 🚧 0.11.10 | ⏳ Pending first KAD300 test |
+| ✅ Revision 1 assembled | 🚧 0.11.11 | ⏳ Pending first KAD300 test |
 
 | Area | Status |
 |------|--------|
