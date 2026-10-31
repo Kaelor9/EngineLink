@@ -1359,6 +1359,7 @@ const PAGE_VIEWS={
         <a href="/api/network-health" target="_blank" rel="noopener" style="color:var(--sub)">Raw JSON</a>
       </div>
       <div class="s12 sub" style="margin-top:7px">The report includes event history, association and DHCP timing, driver errors and web diagnostics. It contains no Wi-Fi password.</div>
+      ${reportBlock(c,lv)}
       </div>${row('cycle','txp','Transmit power','Lower can hold the connection better if it keeps dropping',rv(['Maximum','Medium','Low'][(c&&c.txPower)||0]))}${dlBlock(d.dl,d.sp)}<div class="rowx">
       <div class="s12 sub">"Missed here" counts the live updates this phone did not get since the app was opened. Up for ${dur(d.up||0)}${d.reset!=null?' · last restart: '+(RESET[d.reset]||'code '+d.reset):''}.</div></div></div>`;
     h+=restartsBlock(d);
@@ -1427,6 +1428,22 @@ function dlBlock(dl,spd){
       ${dl.ms>5000?`<div class="s12" style="margin-top:4px">Most of the time went to <b>${top[0].toLowerCase()}</b>.</div>`:''}</div>`;
   }
   return h;
+}
+// Reports to GitHub: EngineLink files its Wi-Fi report as an issue by itself
+// (after a router loss once it is back, after the web server restarted, or
+// on request). Needs a GitHub token that may only create issues.
+function reportBlock(c,lv){
+  if(!c)return '';
+  const r=c.report||{},ip=lv&&lv.net&&lv.net.ip;
+  const last=r.lastAgo!=null?`Last report sent ${dur(r.lastAgo)} ago${r.lastIssue?' (issue #'+r.lastIssue+')':''}.`:'No report sent yet.';
+  return `<div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--line)">
+    <div class="rt">Send reports to GitHub by itself</div>
+    <div class="s12 sub" style="margin-top:3px">EngineLink files this report as an issue in the EngineLink repository when something went wrong (router lost, web server restarted) or when you tap Send. The router name is removed. Needs a GitHub token that may only create issues: github.com › Settings › Developer settings › Fine-grained tokens › only repository Kaelor9/EngineLink › Issues: Read and write.</div>
+    <input class="field" style="margin-top:10px" type="password" autocomplete="off" data-i="ghTok" value="${esc(S.ghTok||'')}" placeholder="${c.ghToken?'Token saved · paste a new one to replace it':'Paste the token (github_pat_…)'}" aria-label="GitHub token">
+    <div class="grid2" style="gap:8px;margin-top:8px"><button class="btn" data-a="ghSave">${c.ghToken&&!S.ghTok?'Remove token':'Save token'}</button><button class="btn ${c.ghToken?'pri':''}" data-a="reportSend" ${c.ghToken?'':'disabled'}>Send report now</button></div>
+    <div class="s12 ${r.error?'':'sub'}" style="margin-top:6px;${r.error?'color:var(--orange)':''}">${c.ghToken?(r.error?esc(r.error):r.pending?'A report is waiting to be sent.':last):'No token saved.'}</div>
+    ${ip?`<div class="s12 sub" style="margin-top:6px">The report can also be opened at <b style="color:var(--text)">http://${esc(ip)}:81/report</b>, even if the main page stops answering.</div>`:''}
+  </div>`;
 }
 function voltBlock(c,es){
   const raw=es.map(e=>S.diag.t[e.ch].raw[293]).find(Boolean);
@@ -1734,6 +1751,8 @@ const A={
   testStop:async()=>{await act('/api/test/stop',{});load('state');},
   busRefresh:()=>load('state'),
   dl:v=>download(v),
+  ghSave:async()=>{const v=(S.ghTok||'').trim();const r=await cfgSet({ghtoken:v});if(r.ok){S.ghTok='';toast(v?'Token saved':'Token removed');load('diag');}},
+  reportSend:async()=>{await act('/api/report/send',{});setTimeout(()=>load('state'),3000);},
   speedTest:async()=>{
     S.speed={busy:true};render(true);
     const t0=performance.now(),url=new URL(BASE||location.origin,location.href);
@@ -1815,6 +1834,7 @@ const I={
   newPlace:v=>S.newPlace=v,newNm:v=>S.newNm=v,
   apName:v=>S.d.apName=v,hostName:v=>S.d.hostName=v,apPass:v=>S.d.apPass=v,wifiPass:v=>S.wifiPass=v,wifiManualSsid:v=>S.wifiManualSsid=v,wifiManualPass:v=>S.wifiManualPass=v,
   voltMeas:v=>{S.voltMeas=v;},
+  ghTok:v=>{S.ghTok=v;},
   planCustom:v=>{P.custom=v;savePrefs();},
   planSlide:v=>{P.planIdx=+v;savePrefs();render(true);},
   fLitres:v=>{S.d.fLitres=v;updTotal();},fPrice:v=>{S.d.fPrice=v;updTotal();},

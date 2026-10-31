@@ -13,7 +13,7 @@
   <img src="https://img.shields.io/badge/Engines-2%C3%97%20J1708%20isolated-success" alt="2 × isolated J1708">
   <img src="https://img.shields.io/badge/Volvo%20Penta-KAD300%20%2F%20EDC%20I-0b5394" alt="Volvo Penta KAD300 / EDC I">
   <img src="https://img.shields.io/badge/NMEA%202000-listen--only-informational" alt="NMEA 2000 listen-only">
-  <img src="https://img.shields.io/badge/Firmware-0.11.8-orange" alt="Firmware 0.11.8">
+  <img src="https://img.shields.io/badge/Firmware-0.11.9-orange" alt="Firmware 0.11.9">
 </p>
 
 <p align="center">
@@ -199,6 +199,8 @@ The board's green indicator and `associated=true`/`hasRouterIp=true` describe **
 
 **0.11.7 field observation → v0.11.8:** in router mode with a steady green LED (associated, IP 192.168.1.57), iPhone Safari at the direct IP got "network connection was lost" and then "server stopped responding" — TCP reached the board but HTTP never answered. This rules out mDNS for that case and points at the HTTP server (socket exhaustion suspected: 16 lwIP sockets, pool of 8 plus three listeners and others). v0.11.8 halves the pool and adds a loopback self-check that rebinds the server and, failing that, restarts. Not yet field-tested.
 
+**Correction to 0.11.7:** in this ESP-IDF, `pmf_cfg.capable` is deprecated and ignored, so a WPA2/WPA3 mixed router is still joined with WPA3-SAE; the WPA2-first change has no effect. **0.11.9:** the board can file its network report as a GitHub issue by itself (token with Issues write only, router name redacted), and serves the report on the port-81 side server (`/report`) so it is readable while port 80 is stuck. Field reports arrive as issues titled "Device report: …".
+
 ### Immediate diagnosis: isolate DNS, TCP/HTTP and browser rendering
 
 Run these from **the same Windows computer connected to the Zyxel LAN** while the board says it is on the router (replace the example IP if DHCP assigns a new one):
@@ -251,7 +253,7 @@ Record for each case the client device/network, whether **IP** and **hostname** 
 
 | Hardware | Firmware | Engine validation |
 |----------|----------|-------------------|
-| ✅ Revision 1 assembled | 🚧 0.11.8 | ⏳ Pending first KAD300 test |
+| ✅ Revision 1 assembled | 🚧 0.11.9 | ⏳ Pending first KAD300 test |
 
 | Area | Status |
 |------|--------|
