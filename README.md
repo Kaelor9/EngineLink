@@ -13,7 +13,7 @@
   <img src="https://img.shields.io/badge/Engines-2%C3%97%20J1708%20isolated-success" alt="2 × isolated J1708">
   <img src="https://img.shields.io/badge/Volvo%20Penta-KAD300%20%2F%20EDC%20I-0b5394" alt="Volvo Penta KAD300 / EDC I">
   <img src="https://img.shields.io/badge/NMEA%202000-listen--only-informational" alt="NMEA 2000 listen-only">
-  <img src="https://img.shields.io/badge/Firmware-0.11.4-orange" alt="Firmware 0.11.4">
+  <img src="https://img.shields.io/badge/Firmware-0.11.5-orange" alt="Firmware 0.11.5">
 </p>
 
 <p align="center">
@@ -193,6 +193,8 @@ See [KAD300 / EDC I](docs/KAD300_EDC1.md), [alpha status and safety](docs/PRODUC
 
 The board's green indicator and `associated=true`/`hasRouterIp=true` describe **Wi-Fi association + DHCP**, **not** successful TCP connections, page serving or browser name resolution. Code 202 does **not** by itself prove an incorrect password. Code 209 is a WPA3/PMF SA Query timeout; v0.11.4 schedules an earlier retry for this case, but that does not establish that the underlying timeout has been eliminated. `DNS_PROBE_FINISHED_NO_INTERNET` does **not** isolate the cause to mDNS, nor does it mean EngineLink itself needs internet to serve its page.
 
+**v0.11.5 (untested on hardware):** the app now switches from `enginelink.local` to the board's router IP as soon as it is known, for every request including ports 81/82. In the reports above the browser always used `enginelink.local`, so per-request mDNS resolution is a strong candidate for the slow/blank pages, `DNS_PROBE_FINISHED_NO_INTERNET` and the 0-byte speed test. If the board is equally slow at its direct IP, this hypothesis is wrong and the steps below apply.
+
 ### Immediate diagnosis: isolate DNS, TCP/HTTP and browser rendering
 
 Run these from **the same Windows computer connected to the Zyxel LAN** while the board says it is on the router (replace the example IP if DHCP assigns a new one):
@@ -245,7 +247,7 @@ Record for each case the client device/network, whether **IP** and **hostname** 
 
 | Hardware | Firmware | Engine validation |
 |----------|----------|-------------------|
-| ✅ Revision 1 assembled | 🚧 0.11.4 | ⏳ Pending first KAD300 test |
+| ✅ Revision 1 assembled | 🚧 0.11.5 | ⏳ Pending first KAD300 test |
 
 | Area | Status |
 |------|--------|
