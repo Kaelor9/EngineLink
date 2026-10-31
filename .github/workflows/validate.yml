@@ -43,6 +43,8 @@ jobs:
           python3 tools/test_usb_recovery.py
       - name: Check exclusive Wi-Fi and non-blocking HTTP architecture
         run: python3 tools/test_network_architecture.py
+      - name: Validate router lifecycle, reconnect safety and network diagnostics
+        run: python3 tools/test_router_reliability_contract.py
       - name: Check non-blocking Wi-Fi discovery contract
         run: python3 tools/test_wifi_scan_contract.py
       - name: Test router AP-rescue deadline and reboot-safe timer
