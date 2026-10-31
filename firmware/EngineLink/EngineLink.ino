@@ -50,7 +50,7 @@
 #include "routerguard.h"
 #include "miniz.h"  // the deflate compressor in the chip's ROM
 
-#define EL_VERSION "0.11.0"
+#define EL_VERSION "0.11.1"
 // Releases list published by the Pages workflow; firmware files come from
 // GitHub Releases of the same repository. Nothing else is downloaded.
 #define EL_RELEASES_URL "https://kaelor9.github.io/EngineLink/releases.json"
@@ -115,6 +115,20 @@ public:
   uint32_t worstParseMs=0,worstHandlerMs=0;
   String slowPath="";
   uint8_t openSockets()const{uint8_t n=0;for(const Slot &s:pool)if(s.used)n++;return n;}
+  uint32_t listenerRebinds=0;
+  // All request handlers run on the main loop, so this is called only
+  // between HTTP requests. Clients from the old interface must not be
+  // kept after switching between standalone AP and router STA.
+  void rebindNetwork(){
+    for(Slot &slot:pool){
+      if(slot.used){slot.c.stop();slot.used=false;}
+      slot.since=0;slot.requests=0;
+    }
+    _currentClient=NetworkClient();
+    _currentStatus=HC_NONE;
+    WebServer::begin();
+    ++listenerRebinds;
+  }
   void handleClient() override {
     const uint32_t now=millis();
     for(;;){
@@ -762,6 +776,13 @@ volatile uint32_t staLastDropAt=0;
 volatile bool staAssociated=false;
 uint32_t staDownSince=0,routerLastRecoveryAttempt=0;
 uint32_t routerForcedReconnects=0;
+// Only the driver event callback writes these measurements. The main loop
+// reads snapshots and performs network operations outside the callback.
+volatile uint32_t staBeginAt=0,staAssociatedAt=0,staIpAt=0,staIpLostAt=0;
+volatile uint32_t staAssociatedEvents=0,staIpEvents=0,staIpLostEvents=0;
+volatile uint32_t staJoinMs=0,staDhcpMs=0;
+volatile uint32_t networkIpEpoch=0,networkIpEventAt=0;
+uint32_t httpBoundEpoch=0,httpBoundAt=0;
 constexpr uint32_t ROUTER_LAST_RESORT_RETRY_MS=30000UL;
 // Last access point event. AP_STOP also arrives (late) when the network only
 // changed its settings, so the watchdog acts on "stopped and not started again".
@@ -829,25 +850,36 @@ bool allowTime(const String &source){
 void ntpCallback(struct timeval *tv){(void)tv;ntpNotification=true;}
 void onWiFi(WiFiEvent_t e,WiFiEventInfo_t info){
   if(e==ARDUINO_EVENT_WIFI_AP_START){
-    ++apStarts;apLastEvent=1;apLastEventMs=millis();
-    mdnsNetworkChangedAt=millis();mdnsRefreshPending=true;
+    const uint32_t now=millis();
+    ++apStarts;apLastEvent=1;apLastEventMs=now;
+    mdnsNetworkChangedAt=now;mdnsRefreshPending=true;
+    ++networkIpEpoch;networkIpEventAt=now;
   }
   if(e==ARDUINO_EVENT_WIFI_AP_STOP){++apStops;apLastEvent=2;apLastEventMs=millis();}
   if(e==ARDUINO_EVENT_WIFI_AP_STACONNECTED)++apJoins;
   if(e==ARDUINO_EVENT_WIFI_AP_STADISCONNECTED){++apLeaves;apReason=info.wifi_ap_stadisconnected.reason;}
-  if(e==ARDUINO_EVENT_WIFI_STA_CONNECTED)staAssociated=true;
+  if(e==ARDUINO_EVENT_WIFI_STA_CONNECTED){
+    const uint32_t now=millis();
+    staAssociated=true;staAssociatedAt=now;++staAssociatedEvents;
+    const uint32_t from=staLastDropAt && staLastDropAt>staBeginAt?
+      staLastDropAt:staBeginAt;
+    if(from)staJoinMs=now-from;
+  }
   if(e==ARDUINO_EVENT_WIFI_STA_DISCONNECTED){
     staAssociated=false;
     ++staDisconnects;
     staLastReason=info.wifi_sta_disconnected.reason;
     staLastDropAt=millis();
   }
+  if(e==ARDUINO_EVENT_WIFI_STA_LOST_IP){
+    staIpLostAt=millis();++staIpLostEvents;
+  }
   if(e==ARDUINO_EVENT_WIFI_STA_GOT_IP){
-    ++staConnects;staConnectedAt=millis();
-    // mDNS must advertise the newly assigned router address as well as AP.
-    mdnsNetworkChangedAt=millis();mdnsRefreshPending=true;
-    // Router DHCP may use ANY private subnet, including 192.168.4.x:
-    // standalone AP is off in STA-only mode, so no interface overlaps.
+    const uint32_t now=millis();
+    ++staConnects;staConnectedAt=now;staIpAt=now;++staIpEvents;
+    if(staAssociatedAt)staDhcpMs=now-staAssociatedAt;
+    mdnsNetworkChangedAt=now;mdnsRefreshPending=true;
+    ++networkIpEpoch;networkIpEventAt=now;
   }
 }
 bool cardInserted(){return digitalRead(SD_DETECT)==LOW;}
@@ -2491,6 +2523,7 @@ void connectRouter(){
   // controller. Configure credentials once and let Arduino's built-in
   // reconnect logic handle router dropouts without application interference.
   staBssidKnown=false;
+  staBeginAt=millis();
   const wl_status_t result=WiFi.begin(cfg.ssid.c_str(),
     cfg.wifiPassword.length()?cfg.wifiPassword.c_str():nullptr);
   routerAttempts++;
@@ -2785,12 +2818,14 @@ void serviceNetwork(){
       if(!staAssociated &&
          (uint32_t)(now-routerLastRecoveryAttempt)>=ROUTER_LAST_RESORT_RETRY_MS){
         routerLastRecoveryAttempt=now;
-        if(WiFi.reconnect()){
-          ++routerForcedReconnects;
-          ++routerAttempts;
-        }else{
-          ++staFails;
-        }
+        // esp_wifi_connect() does NOT forcibly disconnect an ongoing WPA
+        // handshake. WiFi.reconnect() does, and used to restart attempts at
+        // 30-second intervals even when the router was still negotiating.
+        const esp_err_t err=esp_wifi_connect();
+        if(err==ESP_OK){++routerForcedReconnects;++routerAttempts;}
+        else if(err!=ESP_ERR_WIFI_STATE){++staFails;}
+        Serial.printf("Router retry nudge: %s (associated=%u, reason=%u)\n",
+          esp_err_to_name(err),(unsigned)staAssociated,(unsigned)staLastReason);
       }
     }
   }
