@@ -282,6 +282,21 @@ function hostCandidates(){
   add('http://192.168.4.1');
   return h;
 }
+// Opened as http://enginelink.local, every request needs a multicast name
+// lookup (mDNS). Through many routers and on Windows that takes seconds or
+// fails ("DNS_PROBE_FINISHED_NO_INTERNET"), which made router mode look slow
+// and unstable while the board itself was fine. As soon as EngineLink tells
+// its router address, the app talks to that address directly instead.
+let ipTried='',ipTriedAt=0;
+async function preferIp(ip){
+  if(!ip||!/\.local$/i.test(location.hostname))return;
+  const want='http://'+ip;
+  if(BASE===want||(ipTried===ip&&Date.now()-ipTriedAt<30000))return;
+  ipTried=ip;ipTriedAt=Date.now();
+  const c=new AbortController(),id=setTimeout(()=>c.abort(),2500);
+  try{const r=await fetch(want+'/api/live',{cache:'no-store',signal:c.signal});if(r.ok){const d=await r.json();if(d&&d.net){BASE=want;liveSidecarWorked=false;liveSidecarRetryAt=0;}}}
+  catch(e){}finally{clearTimeout(id);}
+}
 let discoveryPending=null;
 async function findHost(){
   // Serial probes took 6+ seconds on a disconnected network (4 x 1500ms).
@@ -460,7 +475,7 @@ const gearName=v=>{
 // ---------- Live updates ----------
 function onLive(){
   const lv=S.live;
-  if(lv.net&&lv.net.ip)rememberIp(lv.net.ip);
+  if(lv.net&&lv.net.ip){rememberIp(lv.net.ip);preferIp(lv.net.ip);}
   if(lv.net&&lv.net.host&&lv.net.host!==S.hostSeen){S.hostSeen=lv.net.host;try{localStorage.setItem('el.host',lv.net.host);}catch(e){}}
   // The phone's clock sets EngineLink's clock when nothing better is there.
   if((!lv.utc||Math.abs(lv.utc*1000-Date.now())>90000)&&Date.now()-S.timeSentAt>300000){S.timeSentAt=Date.now();post('/api/phone-time',{ms:String(Date.now())});}
@@ -1262,7 +1277,8 @@ const PAGE_VIEWS={
     // Router LAN addresses can legitimately be 192.168.4.x too.
     if(lv.net.sta){
       h+=`<div class="sec"><div class="row"><span><span class="rt">${esc(lv.net.ssid)}</span><span class="rh" style="color:var(--green)">Connected · ${lv.net.rssi>-60?'strong':lv.net.rssi>-72?'good':'weak'} signal (${lv.net.rssi} dBm)</span></span><button class="btn sm" data-a="wifiForget">Disconnect</button></div>
-        <div class="rowx s13 sub">On the router's Wi-Fi, EngineLink is at <b style="color:var(--text)">http://${esc(lv.net.ip||'')}</b> or <b style="color:var(--text)">http://${esc(lv.net.host||'enginelink')}.local</b>. The app finds it there by itself.</div></div>`;
+        <div class="rowx s13 sub">On the router's Wi-Fi, EngineLink is at <b style="color:var(--text)">http://${esc(lv.net.ip||'')}</b> or <b style="color:var(--text)">http://${esc(lv.net.host||'enginelink')}.local</b>. The app finds it there by itself.</div>
+        <div class="rowx s13 sub">Bookmark <b style="color:var(--text)">http://${esc(lv.net.ip||'')}</b> (or add that to the home screen): it is faster and steadier than the .local name, which depends on the router passing name look-ups. Opened by name, the app switches to the address by itself. Tip: set a fixed address for EngineLink in the router (DHCP reservation), so the bookmark keeps working.</div></div>`;
     }else{
       if(c.router)h+=`<div class="card s13" style="margin-bottom:14px">Saved: <b>${esc(c.ssid)}</b> · not reachable right now. EngineLink uses its own Wi-Fi as recovery until you choose Connect again. <button data-a="wifiForget" style="color:var(--teal)">Forget</button></div>`;
       const sc=S.scan;
