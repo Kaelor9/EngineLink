@@ -13,7 +13,7 @@
   <img src="https://img.shields.io/badge/Engines-2%C3%97%20J1708%20isolated-success" alt="2 × isolated J1708">
   <img src="https://img.shields.io/badge/Volvo%20Penta-KAD300%20%2F%20EDC%20I-0b5394" alt="Volvo Penta KAD300 / EDC I">
   <img src="https://img.shields.io/badge/NMEA%202000-listen--only-informational" alt="NMEA 2000 listen-only">
-  <img src="https://img.shields.io/badge/Firmware-0.11.5-orange" alt="Firmware 0.11.5">
+  <img src="https://img.shields.io/badge/Firmware-0.11.6-orange" alt="Firmware 0.11.6">
 </p>
 
 <p align="center">
@@ -177,7 +177,7 @@ See [KAD300 / EDC I](docs/KAD300_EDC1.md), [alpha status and safety](docs/PRODUC
 
 - **Standalone:** ESP32-S3 runs its own EngineLink Wi-Fi as **AP-only**; dashboard is available at `http://192.168.4.1` without a router or internet. This is the factory default.
 - **Router mode:** ESP32-S3 joins a user-selected **2.4 GHz** Wi-Fi as **STA-only**. It must **not** also expose the EngineLink SoftAP. The phone/computer reaches the dashboard through that router; `http://enginelink.local` is a convenience, but access by the assigned IP must work even if mDNS does not.
-- **Recovery:** If joining/rejoining fails persistently (currently 120-second guard), restore the standalone AP and retain useful failure diagnostics. Do not strand users on an unreachable network or create reboot loops.
+- **Recovery:** If joining/rejoining fails persistently (currently 120-second guard), restore the standalone AP and retain useful failure diagnostics. Do not strand users on an unreachable network or create reboot loops. Since v0.11.6 the standalone fallback looks for the saved router (asynchronous scan, AP stays on) after 2 min and then every 10 min, doubling after each failed return up to 2 h, and never while the app is in use on the AP.
 - Support standard **WPA2-Personal and WPA3-SAE / WPA2-WPA3 transition mode**, without requiring users to downgrade their router security. Preserve the read-only-by-default J1708, CAN/NMEA 2000 and engine-monitoring behavior. Engine data collection must not be blocked by a slow browser.
 
 ### What has been measured on the real board
@@ -247,7 +247,7 @@ Record for each case the client device/network, whether **IP** and **hostname** 
 
 | Hardware | Firmware | Engine validation |
 |----------|----------|-------------------|
-| ✅ Revision 1 assembled | 🚧 0.11.5 | ⏳ Pending first KAD300 test |
+| ✅ Revision 1 assembled | 🚧 0.11.6 | ⏳ Pending first KAD300 test |
 
 | Area | Status |
 |------|--------|

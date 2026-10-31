@@ -50,7 +50,7 @@
 #include "routerguard.h"
 #include "miniz.h"  // the deflate compressor in the chip's ROM
 
-#define EL_VERSION "0.11.5"
+#define EL_VERSION "0.11.6"
 // Releases list published by the Pages workflow; firmware files come from
 // GitHub Releases of the same repository. Nothing else is downloaded.
 #define EL_RELEASES_URL "https://kaelor9.github.io/EngineLink/releases.json"
@@ -99,6 +99,7 @@ constexpr uint32_t HTTP_IO_TIMEOUT_MS=1000;
 // used to stop.
 SemaphoreHandle_t engineMx=nullptr;
 bool engineTaskOn=false;
+volatile uint32_t lastHttpMs=0;   // last served request (any client)
 // How the engine task is doing: when it last finished a round, since when it
 // waits for the lock, the longest wait and how often it waited over 100 ms.
 volatile uint32_t engineBeat=0,engineWaitSince=0;
@@ -159,6 +160,7 @@ private:
   bool wrote=false,keepAlive=false,rewriteHeader=false;
   void serve(Slot &s){
     const uint32_t t0=millis();
+    lastHttpMs=t0;
     _currentClient=s.c;
     _currentClient.setTimeout(HTTP_IO_TIMEOUT_MS);
     _currentStatus=HC_WAIT_READ;_statusChange=t0;
@@ -765,6 +767,11 @@ bool staBssidKnown=false;
 // Once a router is parked, only choosing Connect in the app resumes it.
 bool routerHold=false;
 uint32_t routerFallbacks=0;
+// Going back to the router by itself after a fallback to standalone: every
+// 10 minutes at first, doubling after each failed return (up to 2 hours).
+uint32_t routerProbeAt=0,routerProbeEvery=600000UL,routerAutoReturns=0;
+bool routerAutoReturning=false,routerProbing=false,routerProbeHadSta=false;
+uint32_t routerProbeStarted=0;
 RouterGuard routerGuard;
 // AP and STA are mutually exclusive; 192.168.4.x is a valid router subnet.
 bool staConflict=false;
@@ -2726,6 +2733,8 @@ void parkRouter(const char *why){
     why,(unsigned)routerFailureReason,routerFailurePhase==2?"dhcp":"association");
   routerHold=true;
   ++routerFallbacks;
+  if(routerAutoReturning){routerAutoReturning=false;routerProbeEvery=min<uint32_t>(routerProbeEvery*2,7200000UL);}
+  routerProbeAt=millis()+routerProbeEvery;
   Preferences p;
   if(p.begin("enginelink",false)){
     p.putBool("rhold",true);
@@ -2952,6 +2961,37 @@ void serviceNetwork(){
       startAP();
     }
   }
+  // Standalone after a router fallback: listen for the saved router now and
+  // then, with EngineLink's own Wi-Fi kept on, and go back to router mode
+  // when it is there. Not while someone is using the app on EngineLink's own
+  // Wi-Fi (a request in the last 2 minutes), so nobody is cut off mid-use.
+  if(routerProbing){
+    const int16_t r=WiFi.scanComplete();
+    if(r>=0||r==WIFI_SCAN_FAILED||(uint32_t)(millis()-routerProbeStarted)>10000){
+      bool seen=false;
+      for(int16_t i=0;i<r;i++)if(WiFi.SSID(i)==cfg.ssid){seen=true;break;}
+      WiFi.scanDelete();
+      routerProbing=false;
+      if(!seen&&!routerProbeHadSta)WiFi.mode(WIFI_AP);
+      if(seen&&routerHold){
+        Serial.println("Saved router is back: returning to router mode");
+        routerHold=false;routerGuard.reset();routerAttempts=0;
+        routerAutoReturning=true;++routerAutoReturns;
+        {Preferences pr;if(pr.begin("enginelink",false)){pr.putBool("rhold",false);pr.end();}}
+        networkSwitchAt=millis();
+        pendingNetwork=true;
+      }
+    }
+  }else if(routerHold&&routerConfigured()&&!pendingNetwork&&!scanBusy&&!otaActive
+     &&(int32_t)(millis()-routerProbeAt)>=0
+     &&!(WiFi.softAPgetStationNum()>0&&(uint32_t)(millis()-lastHttpMs)<120000UL)){
+    routerProbeAt=millis()+routerProbeEvery;
+    routerProbeHadSta=(WiFi.getMode()&WIFI_MODE_STA)!=0;
+    if(!routerProbeHadSta)WiFi.mode(WIFI_AP_STA);
+    // Asynchronous: the loop keeps serving while the radio listens.
+    if(WiFi.scanNetworks(true,true,false,300,0,cfg.ssid.c_str())!=WIFI_SCAN_FAILED){routerProbing=true;routerProbeStarted=millis();}
+    else if(!routerProbeHadSta)WiFi.mode(WIFI_AP);
+  }
   // The driver, not EngineLink, reconnects to the selected router. This
   // avoids resetting in-flight WPA handshakes and DHCP exchanges.
   // EngineLink only guards against indefinite invisibility, and supplies a
@@ -2969,6 +3009,7 @@ void serviceNetwork(){
       routerGuard.reset();
       routerLastSuccessMs=now;
       staDownSince=0;
+      if(routerAutoReturning){routerAutoReturning=false;routerProbeEvery=600000UL;}
       const uint8_t ch=(uint8_t)WiFi.channel();
       if(ch){staChannel=ch;apChannelNow=ch;}
     }else{
@@ -3518,6 +3559,7 @@ void loadSettings(){
   cfg.completed=pref.getBool("done",false);
   cfg.router=pref.getBool("router",false);
   routerHold=pref.getBool("rhold",false);
+  routerProbeAt=120000UL;  // after a start in standalone, first look after 2 minutes
   routerFailureReason=pref.getUChar("rrsn",0);
   routerFailurePhase=pref.getUChar("rstage",0);
   routerFailureAfterMs=pref.getULong("rduration",0);
@@ -4126,6 +4168,8 @@ String makeNetworkHealthJson(){
   s+=",\"httpRequests\":";s+=web.served;
   s+=",\"routerAttempts\":";s+=routerAttempts;
   s+=",\"routerFallbacks\":";s+=routerFallbacks;
+  s+=",\"routerAutoReturns\":";s+=routerAutoReturns;s+=",\"routerNextTryS\":";
+  if(routerHold&&routerConfigured())s+=(long)((int32_t)(routerProbeAt-millis())/1000);else s+="null";
   s+=",\"disconnectEvents\":";s+=(unsigned long)staDisconnects;
   s+=",\"lastGotIpUptimeMs\":";s+=(unsigned long)staIpAt;
   s+=",\"lastRouterIp\":";jsonString(s,lastRouterIp);
@@ -4540,6 +4584,7 @@ void handleWifiScan(){
     if(!(WiFi.getMode()&WIFI_MODE_AP)||pendingNetwork||routerConfigured()&&!routerHold){
       reply(false,"Connect to EngineLink Wi-Fi before scanning for a router",409);return;
     }
+    if(routerProbing){reply(false,"EngineLink is looking for the saved router; try again in a few seconds",409);return;}
     if(!scanBusy&&!scanRequested){
       // Acknowledge the HTTP request BEFORE changing radio modes. This
       // prevents the phone losing the response that initiated the scan.
@@ -4728,6 +4773,8 @@ void handleDiag(){
   s+=",\"conflict\":";s+=staConflict?"true":"false";
   s+=",\"routerHold\":";s+=routerHold?"true":"false";
   s+=",\"routerFallbacks\":";s+=routerFallbacks;
+  s+=",\"routerAutoReturns\":";s+=routerAutoReturns;s+=",\"routerNextTryS\":";
+  if(routerHold&&routerConfigured())s+=(long)((int32_t)(routerProbeAt-millis())/1000);else s+="null";
   s+=",\"apMode\":";s+=(unsigned)WiFi.getMode();
   s+=",\"apDriverSsid\":";jsonString(s,WiFi.softAPSSID());
   s+=",\"apDriverIp\":";jsonString(s,WiFi.softAPIP().toString());
