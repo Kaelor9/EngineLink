@@ -50,7 +50,7 @@
 #include "routerguard.h"
 #include "miniz.h"  // the deflate compressor in the chip's ROM
 
-#define EL_VERSION "0.11.3"
+#define EL_VERSION "0.11.4"
 // Releases list published by the Pages workflow; firmware files come from
 // GitHub Releases of the same repository. Nothing else is downloaded.
 #define EL_RELEASES_URL "https://kaelor9.github.io/EngineLink/releases.json"
@@ -784,6 +784,13 @@ volatile uint32_t staAssociatedEvents=0,staIpEvents=0,staIpLostEvents=0;
 volatile uint32_t staJoinMs=0,staDhcpMs=0;
 volatile uint8_t staLastUnexpectedReason=0;
 volatile uint32_t staUnexpectedDisconnects=0;
+// Count failed association attempts separately from dropped live connections.
+volatile uint32_t staAssociationFailures=0;
+volatile bool staHadIp=false;
+// Arduino-ESP32 3.3.12 does not auto-retry WIFI_REASON_SA_QUERY_TIMEOUT.
+// Queue ONE non-disruptive retry for the normal loop; never reconnect in callbacks.
+volatile uint32_t saQueryRetryAt=0;
+uint32_t saQueryFastRetries=0;
 volatile bool routerIntentionalShutdown=false;
 // Last FAILED association is stored before the router interface goes away.
 // An intentional AP fallback must not overwrite the original Wi-Fi reason.
@@ -826,6 +833,7 @@ const char* reasonText(uint8_t r){
     case 203:return "Router association failed";
     case 204:return "WPA handshake failed";
     case 205:return "Router connection failed";
+    case 209:return "WPA3 PMF SA Query timeout (router did not answer)";
     case 210:case 211:return "Incompatible Wi-Fi security";
     default:return "Other Wi-Fi disconnect";
   }
@@ -937,6 +945,7 @@ void onWiFi(WiFiEvent_t e,WiFiEventInfo_t info){
   if(e==ARDUINO_EVENT_WIFI_STA_CONNECTED){
     const uint32_t now=millis();
     staAssociated=true;staAssociatedAt=now;++staAssociatedEvents;
+    saQueryRetryAt=0; // A native reconnect may already have succeeded.
     staNegotiatedAuth=(uint8_t)info.wifi_sta_connected.authmode;
     traceWifi(2);
     const uint32_t from=staLastDropAt && staLastDropAt>staBeginAt?
@@ -944,18 +953,25 @@ void onWiFi(WiFiEvent_t e,WiFiEventInfo_t info){
     if(from)staJoinMs=now-from;
   }
   if(e==ARDUINO_EVENT_WIFI_STA_DISCONNECTED){
+    const bool droppedOnline=staHadIp;
+    staHadIp=false;
     staAssociated=false;
     ++staDisconnects;
     staLastReason=info.wifi_sta_disconnected.reason;
     staLastDropAt=millis();
     traceWifi(4,staLastReason);
-    // Reason 8/36 often follows our own deliberate mode switch or teardown.
-    // Preserve real RF/authentication failures instead of displaying the
-    // self-inflicted "STA is leaving" as the last router error.
-    if(!routerIntentionalShutdown &&
-       staLastReason!=WIFI_REASON_ASSOC_LEAVE && staLastReason!=36){
+    // Count a lost live connection only after a DHCP IP was obtained.
+    // Failures BEFORE first association are connection attempts, not drops.
+    const bool unexpected=!routerIntentionalShutdown &&
+       staLastReason!=WIFI_REASON_ASSOC_LEAVE && staLastReason!=36;
+    if(unexpected){
       staLastUnexpectedReason=staLastReason;
-      ++staUnexpectedDisconnects;
+      if(droppedOnline)++staUnexpectedDisconnects;
+      else ++staAssociationFailures;
+      // The Arduino 3.3.12 auto-reconnect list excludes reason 209.
+      // Schedule an early one-shot attempt without resetting WPA/PMF state.
+      if(staLastReason==WIFI_REASON_SA_QUERY_TIMEOUT && droppedOnline)
+        saQueryRetryAt=millis()+2000UL;
     }
   }
   if(e==ARDUINO_EVENT_WIFI_STA_LOST_IP){
@@ -965,6 +981,8 @@ void onWiFi(WiFiEvent_t e,WiFiEventInfo_t info){
     const uint32_t now=millis();
     routerIntentionalShutdown=false;
     ++staConnects;staConnectedAt=now;staIpAt=now;++staIpEvents;
+    staHadIp=true;
+    saQueryRetryAt=0;
     traceWifi(3);
     if(staAssociatedAt)staDhcpMs=now-staAssociatedAt;
     mdnsNetworkChangedAt=now;mdnsRefreshPending=true;
@@ -2714,6 +2732,8 @@ void parkRouter(const char *why){
     p.end();
   }
   routerGuard.reset();
+  saQueryRetryAt=0;
+  staHadIp=false;
   staDownSince=0; // Do not count rescue time as router downtime.
   staBssidKnown=false;
   if(scanInFlight)esp_wifi_scan_stop();
@@ -2756,6 +2776,8 @@ void applyNetwork(){
   WiFi.setHostname(cfg.hostName.c_str());
   apStarted=false;
   staAssociated=false;
+  staHadIp=false;
+  saQueryRetryAt=0;
   ntpStarted=false;
   if(withRouter){
     WiFi.mode(WIFI_STA);         // never broadcast EngineLink in router mode
@@ -2947,6 +2969,22 @@ void serviceNetwork(){
       const uint8_t ch=(uint8_t)WiFi.channel();
       if(ch){staChannel=ch;apChannelNow=ch;}
     }else{
+      // A PMF SA Query timeout can leave Arduino's station idle because its
+      // native reconnect list omits error 209. Run one retry ~2 s later,
+      // OUTSIDE the event callback, without disconnecting a live WPA3 link.
+      const uint32_t saRetry=saQueryRetryAt;
+      if(saRetry && !staAssociated && (int32_t)(now-saRetry)>=0){
+        saQueryRetryAt=0;
+        const esp_err_t saErr=esp_wifi_connect();
+        if(saErr==ESP_OK){
+          ++saQueryFastRetries;
+          ++routerAttempts;
+          routerLastRecoveryAttempt=now;
+        }else if(saErr!=ESP_ERR_WIFI_STATE){
+          ++staFails;
+        }
+        Serial.printf("WPA3 SA Query recovery: %s\n",esp_err_to_name(saErr));
+      }
       if(!staDownSince){
         staDownSince=now?now:1;
         // A link that was up for hours gets a fresh grace window. Do not
@@ -4070,6 +4108,8 @@ String makeNetworkHealthJson(){
   s+=",\"driverReason\":";s+=(unsigned)staLastReason;
   s+=",\"unexpectedReason\":";s+=(unsigned)staLastUnexpectedReason;
   s+=",\"unexpectedDrops\":";s+=(unsigned long)staUnexpectedDisconnects;
+  s+=",\"associationFailures\":";s+=(unsigned long)staAssociationFailures;
+  s+=",\"saQueryFastRetries\":";s+=saQueryFastRetries;
   s+=",\"failedReason\":";s+=(unsigned)routerFailureReason;
   s+=",\"failedPhase\":";s+=(unsigned)routerFailurePhase;
   s+=",\"failedAfterMs\":";s+=(unsigned long)routerFailureAfterMs;
@@ -4129,7 +4169,9 @@ void handleNetworkReport(){
   s+="Successful router IP assignments: ";s+=(unsigned long)staIpEvents;s+="\n";
   s+="Router IP losses: ";s+=(unsigned long)staIpLostEvents;s+="\n";
   s+="Wi-Fi disconnect events: ";s+=(unsigned long)staDisconnects;s+="\n";
-  s+="Unexpected disconnects: ";s+=(unsigned long)staUnexpectedDisconnects;s+="\n";
+  s+="Dropped active router connections: ";s+=(unsigned long)staUnexpectedDisconnects;s+="\n";
+  s+="Pre-connection failures: ";s+=(unsigned long)staAssociationFailures;s+="\n";
+  s+="SA Query fast recovery attempts: ";s+=saQueryFastRetries;s+="\n";
   s+="App-initiated router attempts: ";s+=routerAttempts;s+="\n";
   s+="Router recovery fallbacks: ";s+=routerFallbacks;s+="\n";
   s+="Last association time: ";s+=staJoinMs;s+=" ms\n";
@@ -4656,6 +4698,8 @@ void handleDiag(){
   s+=",\"routerLastReason\":";s+=(unsigned)staLastReason;
   s+=",\"routerUnexpectedReason\":";s+=(unsigned)staLastUnexpectedReason;
   s+=",\"routerUnexpectedDrops\":";s+=(unsigned long)staUnexpectedDisconnects;
+  s+=",\"routerAssociationFailures\":";s+=(unsigned long)staAssociationFailures;
+  s+=",\"routerSaFastRetries\":";s+=saQueryFastRetries;
   s+=",\"routerFailureReason\":";s+=(unsigned)routerFailureReason;
   s+=",\"routerFailurePhase\":";s+=(unsigned)routerFailurePhase;
   s+=",\"routerFailureAfterMs\":";s+=(unsigned long)routerFailureAfterMs;
