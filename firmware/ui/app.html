@@ -261,7 +261,7 @@ const dur=s=>{s=Math.max(0,Math.round(s/60));const h=Math.floor(s/60),m=s%60;ret
 const durShort=s=>{s=Math.max(0,Math.round(s/60));const h=Math.floor(s/60),m=s%60;return h?h+' h '+String(m).padStart(2,'0'):m+' min';};
 
 // Why the connection to the boat router dropped (Wi-Fi reason codes).
-const STAR={2:'the router ended the login',3:'the router ended the connection',4:'the router dropped it for being quiet',8:'EngineLink left (reconnecting)',15:'wrong password?',36:'EngineLink station left the router (mode change or retry)',200:'the router was not heard for a while (weak or blocked signal)',201:'the router was not found on its channel',202:'authentication failed (password or security negotiation; not necessarily the password)',203:'the router refused the connection',204:'the login timed out (password?)',205:'the connection failed',206:'the router restarted',207:'moved to a stronger access point',209:'the router stopped answering',210:'the router uses a security EngineLink does not support',211:'the router uses a security EngineLink does not support'};
+const STAR={2:'authentication timeout (router reply not received)',3:'the router ended the connection',4:'the router dropped it for being quiet',8:'EngineLink left (reconnecting)',15:'wrong password?',36:'EngineLink station left the router (mode change or retry)',200:'the router was not heard for a while (weak or blocked signal)',201:'the router was not found on its channel',202:'authentication failed (password or security negotiation; not necessarily the password)',203:'the router refused the connection',204:'the login timed out (password?)',205:'the connection failed',206:'the router restarted',207:'moved to a stronger access point',209:'the router stopped answering',210:'the router uses a security EngineLink does not support',211:'the router uses a security EngineLink does not support'};
 const RESET={1:'power on',2:'reset button',3:'software or update',4:'crash',5:'watchdog',6:'watchdog',7:'watchdog',8:'deep sleep',9:'brownout (low voltage)',10:'SDIO',11:'USB (flashing or serial monitor)',12:'JTAG',14:'power glitch',15:'CPU lockup'};
 // Why a phone left the EngineLink network (Wi-Fi reason codes).
 const LEAVE={1:'unknown',2:'its login expired',3:'it left',4:'it was silent for 10 minutes',5:'too many phones',6:'not logged in',7:'not connected',8:'the phone left by itself (it may have switched to another Wi-Fi)',15:'password handshake timed out',16:'password handshake timed out',23:'login failed',200:'signal lost',201:'network not found',202:'wrong password',204:'password handshake timed out',205:'connection timed out'};
@@ -1324,8 +1324,8 @@ const PAGE_VIEWS={
     const w=d.wifi||{};
     const routerUp=lv.net.mode==='sta'&&lv.net.sta;
     const modeName=lv.net.rescue?'Recovery Wi-Fi':routerUp?'Connected to router':lv.net.mode==='sta'?'Connecting to router':'Standalone Wi-Fi';
-    const lastCode=w.routerFailureReason||w.routerUnexpectedReason||w.staReason||0;
-    const lastLabel=lastCode?(STAR[lastCode]||'Wi-Fi driver error')+' (code '+lastCode+')':'None recorded';
+    const lastCode=routerUp?0:(w.routerFailureReason||w.routerUnexpectedReason||w.staReason||0);
+    const lastLabel=routerUp?'No current connection error':lastCode?(STAR[lastCode]||'Wi-Fi driver error')+' (code '+lastCode+')':'None recorded';
     const boxes=[
       ['Mode',modeName],
       ['Router',c.ssid||'Not selected'],
@@ -1334,7 +1334,7 @@ const PAGE_VIEWS={
     ];
     h+=`<div class="hd">Wi-Fi</div><div class="sec"><div class="rowx">
       <div class="grid2" style="gap:8px">${boxes.map(([k,v])=>`<div style="background:var(--track);border-radius:12px;padding:11px 12px;min-width:0"><div class="s12 sub">${k}</div><div style="font-size:15px;font-weight:600;margin-top:4px;overflow-wrap:anywhere">${esc(String(v))}</div></div>`).join('')}</div>
-      <div class="s13 sub" style="margin-top:12px">Current router link: <b style="color:var(--text)">${routerUp?(esc(lv.net.ip||'IP assigned')+' · '+lv.net.rssi+' dBm'):'Not connected'}</b></div>
+      <div class="s13 sub" style="margin-top:12px">Current router link: <b style="color:var(--text)">${routerUp?(esc(lv.net.ip||'IP assigned')+' · '+lv.net.rssi+' dBm'+(w.routerAuthMode?' · '+esc(w.routerAuthMode):'')):'Not connected'}</b></div>
       <div class="s13 sub" style="margin-top:6px">Last router issue: <b style="color:var(--text)">${esc(lastLabel)}</b></div>
       ${w.staIpEvents>0&&!routerUp?`<div class="s13 sub" style="margin-top:6px">The router assigned an IP ${w.staIpEvents} time(s) this boot, but the connection was not maintained.</div>`:''}
       <div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:14px" class="s13">
