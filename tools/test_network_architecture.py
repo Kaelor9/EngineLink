@@ -56,7 +56,9 @@ assert "WiFi.reconnect()" in network
 assert "ROUTER_LAST_RESORT_RETRY_MS=30000UL" in ino
 assert "routerGuard.expired(" in network and "parkRouter(" in network
 assert "staAssociated" in network, "Last-resort retry must not interrupt an associated STA"
-assert "STA_CONNECTED)staAssociated=true" in ino
+assert "ARDUINO_EVENT_WIFI_STA_CONNECTED" in ino
+assert "staAssociated=true;" in ino
+assert "staAssociatedAt=now" in ino
 assert "staAssociated=false;" in ino
 assert "staDropEvents" not in ino and "routerResetPending" not in ino
 assert "120000UL" in Path("firmware/EngineLink/routerguard.h").read_text()

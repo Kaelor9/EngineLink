@@ -50,7 +50,7 @@
 #include "routerguard.h"
 #include "miniz.h"  // the deflate compressor in the chip's ROM
 
-#define EL_VERSION "0.11.0"
+#define EL_VERSION "0.11.1"
 // Releases list published by the Pages workflow; firmware files come from
 // GitHub Releases of the same repository. Nothing else is downloaded.
 #define EL_RELEASES_URL "https://kaelor9.github.io/EngineLink/releases.json"
@@ -115,6 +115,20 @@ public:
   uint32_t worstParseMs=0,worstHandlerMs=0;
   String slowPath="";
   uint8_t openSockets()const{uint8_t n=0;for(const Slot &s:pool)if(s.used)n++;return n;}
+  uint32_t listenerRebinds=0;
+  // All request handlers run on the main loop, so this is called only
+  // between HTTP requests. Clients from the old interface must not be
+  // kept after switching between standalone AP and router STA.
+  void rebindNetwork(){
+    for(Slot &slot:pool){
+      if(slot.used){slot.c.stop();slot.used=false;}
+      slot.since=0;slot.requests=0;
+    }
+    _currentClient=NetworkClient();
+    _currentStatus=HC_NONE;
+    WebServer::begin();
+    ++listenerRebinds;
+  }
   void handleClient() override {
     const uint32_t now=millis();
     for(;;){
@@ -176,7 +190,8 @@ private:
     if(keep)s.since=millis();else{s.c.stop();s.used=false;}
     const uint32_t ms=millis()-t0;
     if(ms>slowestMs)slowestMs=ms;
-    if(ms>=1000 && !largeTransfer && parsed)slowPath=uri();
+    if(!largeTransfer && parsed && ms>slowestInteractiveMs)
+      slowPath=uri(); // the actual worst interactive request, not the latest
     uint32_t &bucket=largeTransfer?slowestTransferMs:slowestInteractiveMs;
     if(ms>bucket)bucket=ms;
   }
@@ -762,6 +777,21 @@ volatile uint32_t staLastDropAt=0;
 volatile bool staAssociated=false;
 uint32_t staDownSince=0,routerLastRecoveryAttempt=0;
 uint32_t routerForcedReconnects=0;
+// Only the driver event callback writes these measurements. The main loop
+// reads snapshots and performs network operations outside the callback.
+volatile uint32_t staBeginAt=0,staAssociatedAt=0,staIpAt=0,staIpLostAt=0;
+volatile uint32_t staAssociatedEvents=0,staIpEvents=0,staIpLostEvents=0;
+volatile uint32_t staJoinMs=0,staDhcpMs=0;
+volatile uint8_t staLastUnexpectedReason=0;
+volatile uint32_t staUnexpectedDisconnects=0;
+volatile bool routerIntentionalShutdown=false;
+// Last FAILED association is stored before the router interface goes away.
+// An intentional AP fallback must not overwrite the original Wi-Fi reason.
+uint8_t routerFailureReason=0;
+uint8_t routerFailurePhase=0;    // 1=no association, 2=associated but no DHCP IP
+uint32_t routerFailureAfterMs=0;
+volatile uint32_t networkIpEpoch=0,networkIpEventAt=0;
+uint32_t httpBoundEpoch=0,httpBoundAt=0;
 constexpr uint32_t ROUTER_LAST_RESORT_RETRY_MS=30000UL;
 // Last access point event. AP_STOP also arrives (late) when the network only
 // changed its settings, so the watchdog acts on "stopped and not started again".
@@ -829,25 +859,45 @@ bool allowTime(const String &source){
 void ntpCallback(struct timeval *tv){(void)tv;ntpNotification=true;}
 void onWiFi(WiFiEvent_t e,WiFiEventInfo_t info){
   if(e==ARDUINO_EVENT_WIFI_AP_START){
-    ++apStarts;apLastEvent=1;apLastEventMs=millis();
-    mdnsNetworkChangedAt=millis();mdnsRefreshPending=true;
+    const uint32_t now=millis();
+    ++apStarts;apLastEvent=1;apLastEventMs=now;
+    mdnsNetworkChangedAt=now;mdnsRefreshPending=true;
+    ++networkIpEpoch;networkIpEventAt=now;
   }
   if(e==ARDUINO_EVENT_WIFI_AP_STOP){++apStops;apLastEvent=2;apLastEventMs=millis();}
   if(e==ARDUINO_EVENT_WIFI_AP_STACONNECTED)++apJoins;
   if(e==ARDUINO_EVENT_WIFI_AP_STADISCONNECTED){++apLeaves;apReason=info.wifi_ap_stadisconnected.reason;}
-  if(e==ARDUINO_EVENT_WIFI_STA_CONNECTED)staAssociated=true;
+  if(e==ARDUINO_EVENT_WIFI_STA_CONNECTED){
+    const uint32_t now=millis();
+    staAssociated=true;staAssociatedAt=now;++staAssociatedEvents;
+    const uint32_t from=staLastDropAt && staLastDropAt>staBeginAt?
+      staLastDropAt:staBeginAt;
+    if(from)staJoinMs=now-from;
+  }
   if(e==ARDUINO_EVENT_WIFI_STA_DISCONNECTED){
     staAssociated=false;
     ++staDisconnects;
     staLastReason=info.wifi_sta_disconnected.reason;
     staLastDropAt=millis();
+    // Reason 8/36 often follows our own deliberate mode switch or teardown.
+    // Preserve real RF/authentication failures instead of displaying the
+    // self-inflicted "STA is leaving" as the last router error.
+    if(!routerIntentionalShutdown &&
+       staLastReason!=WIFI_REASON_ASSOC_LEAVE && staLastReason!=36){
+      staLastUnexpectedReason=staLastReason;
+      ++staUnexpectedDisconnects;
+    }
+  }
+  if(e==ARDUINO_EVENT_WIFI_STA_LOST_IP){
+    staIpLostAt=millis();++staIpLostEvents;
   }
   if(e==ARDUINO_EVENT_WIFI_STA_GOT_IP){
-    ++staConnects;staConnectedAt=millis();
-    // mDNS must advertise the newly assigned router address as well as AP.
-    mdnsNetworkChangedAt=millis();mdnsRefreshPending=true;
-    // Router DHCP may use ANY private subnet, including 192.168.4.x:
-    // standalone AP is off in STA-only mode, so no interface overlaps.
+    const uint32_t now=millis();
+    routerIntentionalShutdown=false;
+    ++staConnects;staConnectedAt=now;staIpAt=now;++staIpEvents;
+    if(staAssociatedAt)staDhcpMs=now-staAssociatedAt;
+    mdnsNetworkChangedAt=now;mdnsRefreshPending=true;
+    ++networkIpEpoch;networkIpEventAt=now;
   }
 }
 bool cardInserted(){return digitalRead(SD_DETECT)==LOW;}
@@ -2491,6 +2541,8 @@ void connectRouter(){
   // controller. Configure credentials once and let Arduino's built-in
   // reconnect logic handle router dropouts without application interference.
   staBssidKnown=false;
+  staBeginAt=millis();
+  routerIntentionalShutdown=false;
   const wl_status_t result=WiFi.begin(cfg.ssid.c_str(),
     cfg.wifiPassword.length()?cfg.wifiPassword.c_str():nullptr);
   routerAttempts++;
@@ -2532,11 +2584,25 @@ void startNameService(){
 // subsequent reboots immediately start in AP-only until Connect is selected.
 void parkRouter(const char *why){
   if(routerHold)return;
-  Serial.printf("Router unavailable (%s); restoring standalone EngineLink AP\n",why);
+  // Snapshot diagnostics BEFORE intentional STA disconnect changes the last
+  // Wi-Fi reason to a voluntary leave (reason 8 or 36).
+  routerFailureReason=staLastUnexpectedReason?staLastUnexpectedReason:staLastReason;
+  routerFailurePhase=staAssociated?2:1;
+  routerFailureAfterMs=routerGuard.disconnectedSince?
+    (uint32_t)(millis()-routerGuard.disconnectedSince):0;
+  routerIntentionalShutdown=true;
+  Serial.printf("Router unavailable (%s): last Wi-Fi reason=%u, phase=%s; restoring standalone AP\n",
+    why,(unsigned)routerFailureReason,routerFailurePhase==2?"dhcp":"association");
   routerHold=true;
   ++routerFallbacks;
   Preferences p;
-  if(p.begin("enginelink",false)){p.putBool("rhold",true);p.end();}
+  if(p.begin("enginelink",false)){
+    p.putBool("rhold",true);
+    p.putUChar("rrsn",routerFailureReason);
+    p.putUChar("rstage",routerFailurePhase);
+    p.putULong("rduration",routerFailureAfterMs);
+    p.end();
+  }
   routerGuard.reset();
   staBssidKnown=false;
   if(scanInFlight)esp_wifi_scan_stop();
@@ -2558,6 +2624,7 @@ void parkRouter(const char *why){
     cfg.apName.c_str(),(unsigned)apChannelNow);
 }
 void applyNetwork(){
+  routerIntentionalShutdown=true; // suppress false disconnect reason on mode change
   // The only NORMAL operating modes:
   //   AP  = EngineLink standalone, local dashboard with no router.
   //   STA = boat router, EngineLink SoftAP is completely disabled.
@@ -2785,12 +2852,14 @@ void serviceNetwork(){
       if(!staAssociated &&
          (uint32_t)(now-routerLastRecoveryAttempt)>=ROUTER_LAST_RESORT_RETRY_MS){
         routerLastRecoveryAttempt=now;
-        if(WiFi.reconnect()){
-          ++routerForcedReconnects;
-          ++routerAttempts;
-        }else{
-          ++staFails;
-        }
+        // esp_wifi_connect() does NOT forcibly disconnect an ongoing WPA
+        // handshake. WiFi.reconnect() does, and used to restart attempts at
+        // 30-second intervals even when the router was still negotiating.
+        const esp_err_t err=esp_wifi_connect();
+        if(err==ESP_OK){++routerForcedReconnects;++routerAttempts;}
+        else if(err!=ESP_ERR_WIFI_STATE){++staFails;}
+        Serial.printf("Router retry nudge: %s (associated=%u, reason=%u)\n",
+          esp_err_to_name(err),(unsigned)staAssociated,(unsigned)staLastReason);
       }
     }
   }
@@ -2813,6 +2882,19 @@ void serviceNetwork(){
       ? (WiFi.status()==WL_CONNECTED && (WiFi.getMode()&WIFI_MODE_STA))
       : ((WiFi.getMode()&WIFI_MODE_AP) &&
          WiFi.softAPIP()==IPAddress(192,168,4,1));
+  // A listener opened on the previous interface may retain stale lwIP
+  // socket state when we deliberately change AP -> STA or receive a new
+  // router DHCP address. Rebind only AFTER the IP interface is ready, from
+  // the main loop between request handlers, never from the event callback.
+  if(!pendingNetwork && !scanBusy && mdnsInterfaceReady &&
+     networkIpEpoch!=httpBoundEpoch &&
+     (uint32_t)(mdnsNow-networkIpEventAt)>=600UL){
+    web.rebindNetwork();
+    httpBoundEpoch=networkIpEpoch;
+    httpBoundAt=mdnsNow;
+    Serial.printf("HTTP/80 bound to active Wi-Fi interface (epoch %lu)\n",
+      (unsigned long)httpBoundEpoch);
+  }
   if(!scanBusy && mdnsInterfaceReady){
     const bool retry=!mdnsReady && (uint32_t)(mdnsNow-mdnsLastAttemptAt)>=15000UL;
     const bool refresh=mdnsRefreshPending &&
@@ -3279,6 +3361,9 @@ void loadSettings(){
   cfg.completed=pref.getBool("done",false);
   cfg.router=pref.getBool("router",false);
   routerHold=pref.getBool("rhold",false);
+  routerFailureReason=pref.getUChar("rrsn",0);
+  routerFailurePhase=pref.getUChar("rstage",0);
+  routerFailureAfterMs=pref.getULong("rduration",0);
   cfg.canListen=pref.getBool("can",false);
   cfg.portChannel=pref.getUChar("port",1);
   cfg.apChannel=pref.getUChar("apch",6);
@@ -3840,6 +3925,47 @@ String makeLiveJson(){
   return s;
 }
 void handleLive(){sendJSON(200,makeLiveJson());}
+// Minimal network-only diagnostic, intentionally independent of SD/engine
+// data. Usable by direct IP on router Wi-Fi or after rescue AP returns.
+void handleNetworkHealth(){
+  String s;s.reserve(850);
+  s+="{\"version\":";jsonString(s,EL_VERSION);
+  s+=",\"uptimeMs\":";s+=(unsigned long)millis();
+  s+=",\"mode\":";
+  jsonString(s,routerHold?"rescue":routerConfigured()?"router":"standalone");
+  s+=",\"wifiMode\":";s+=(unsigned)WiFi.getMode();
+  s+=",\"ssid\":";jsonString(s,cfg.ssid);
+  s+=",\"status\":";s+=(int)WiFi.status();
+  s+=",\"phase\":";
+  jsonString(s,routerHold?"rescue":!routerConfigured()?"standalone":
+    WiFi.status()==WL_CONNECTED?"online":staAssociated?"dhcp":"association");
+  s+=",\"associated\":";s+=staAssociated?"true":"false";
+  s+=",\"hasRouterIp\":";s+=WiFi.status()==WL_CONNECTED?"true":"false";
+  s+=",\"ip\":";jsonString(s,WiFi.status()==WL_CONNECTED?
+    WiFi.localIP().toString():String(""));
+  s+=",\"gateway\":";jsonString(s,WiFi.status()==WL_CONNECTED?
+    WiFi.gatewayIP().toString():String(""));
+  s+=",\"rssi\":";if(WiFi.status()==WL_CONNECTED)s+=WiFi.RSSI();else s+="null";
+  s+=",\"associationEvents\":";s+=(unsigned long)staAssociatedEvents;
+  s+=",\"dhcpIpEvents\":";s+=(unsigned long)staIpEvents;
+  s+=",\"lostIpEvents\":";s+=(unsigned long)staIpLostEvents;
+  s+=",\"associationMs\":";s+=(unsigned long)staJoinMs;
+  s+=",\"dhcpMs\":";s+=(unsigned long)staDhcpMs;
+  s+=",\"driverReason\":";s+=(unsigned)staLastReason;
+  s+=",\"unexpectedReason\":";s+=(unsigned)staLastUnexpectedReason;
+  s+=",\"unexpectedDrops\":";s+=(unsigned long)staUnexpectedDisconnects;
+  s+=",\"failedReason\":";s+=(unsigned)routerFailureReason;
+  s+=",\"failedPhase\":";s+=(unsigned)routerFailurePhase;
+  s+=",\"failedAfterMs\":";s+=(unsigned long)routerFailureAfterMs;
+  s+=",\"driverNudges\":";s+=routerForcedReconnects;
+  s+=",\"httpRebinds\":";s+=web.listenerRebinds;
+  s+=",\"httpBoundEpoch\":";s+=httpBoundEpoch;
+  s+=",\"networkEpoch\":";s+=(unsigned long)networkIpEpoch;
+  s+=",\"httpRequests\":";s+=web.served;
+  s+="}";
+  sendJSON(200,s);
+}
+
 
 // Independent, read-only live telemetry listener. Large CSV exports and
 // reports can occupy the regular WebServer for seconds, but cannot block port
@@ -3850,11 +3976,24 @@ NetworkServer liveServer(81);
 // access is permitted here. A slow phone can occupy this task but cannot
 // block the main WebServer or the engine monitoring task.
 NetworkServer speedServer(82);
+// Port 81/82 tasks each own their listener. They rebind it themselves after
+// an interface-ready event, avoiding cross-core close/accept races.
+void refreshWorkerListener(NetworkServer &server,uint32_t &boundEpoch){
+  const uint32_t epoch=networkIpEpoch;
+  if(epoch!=boundEpoch && epoch &&
+     (uint32_t)(millis()-networkIpEventAt)>=600UL){
+    server.end();
+    server.begin();
+    boundEpoch=epoch;
+  }
+}
 void speedHttpTask(void *){
+  uint32_t boundEpoch=0;
   static const uint8_t sample[256]={
     'E','n','g','i','n','e','L','i','n','k',' ','W','i','-','F','i',' '
   };
   for(;;){
+    refreshWorkerListener(speedServer,boundEpoch);
     NetworkClient c=speedServer.accept();
     if(!c){vTaskDelay(pdMS_TO_TICKS(15));continue;}
     c.setNoDelay(true);c.setTimeout(300);
@@ -3878,7 +4017,9 @@ void speedHttpTask(void *){
   }
 }
 void liveHttpTask(void *){
+  uint32_t boundEpoch=0;
   for(;;){
+    refreshWorkerListener(liveServer,boundEpoch);
     NetworkClient c=liveServer.accept();
     if(!c){vTaskDelay(pdMS_TO_TICKS(10));continue;}
     c.setNoDelay(true);
@@ -4308,7 +4449,20 @@ void handleDiag(){
   s+=",\"routerNativeAutoReconnect\":";s+=(WiFi.getAutoReconnect()?"true":"false");
   s+=",\"routerDriverNudges\":";s+=routerForcedReconnects;
   s+=",\"routerAssociated\":";s+=staAssociated?"true":"false";
+  s+=",\"staAssocEvents\":";s+=(unsigned long)staAssociatedEvents;
+  s+=",\"staIpEvents\":";s+=(unsigned long)staIpEvents;
+  s+=",\"staLostIpEvents\":";s+=(unsigned long)staIpLostEvents;
+  s+=",\"staAssocMs\":";s+=(unsigned long)staJoinMs;
+  s+=",\"staDhcpMs\":";s+=(unsigned long)staDhcpMs;
+  s+=",\"routerPhase\":";
+  jsonString(s,routerHold?"rescue":!routerConfigured()?"standalone":
+    WiFi.status()==WL_CONNECTED?"online":staAssociated?"dhcp":"associating");
   s+=",\"routerLastReason\":";s+=(unsigned)staLastReason;
+  s+=",\"routerUnexpectedReason\":";s+=(unsigned)staLastUnexpectedReason;
+  s+=",\"routerUnexpectedDrops\":";s+=(unsigned long)staUnexpectedDisconnects;
+  s+=",\"routerFailureReason\":";s+=(unsigned)routerFailureReason;
+  s+=",\"routerFailurePhase\":";s+=(unsigned)routerFailurePhase;
+  s+=",\"routerFailureAfterMs\":";s+=(unsigned long)routerFailureAfterMs;
   s+=",\"routerWaitSec\":";s+=routerGuard.disconnectedSince?(unsigned long)((millis()-routerGuard.disconnectedSince)/1000UL):0;
   s+=",\"ch\":";s+=apChannelNow;
   s+=",\"conflict\":";s+=staConflict?"true":"false";
@@ -4318,6 +4472,10 @@ void handleDiag(){
   s+=",\"apDriverSsid\":";jsonString(s,WiFi.softAPSSID());
   s+=",\"apDriverIp\":";jsonString(s,WiFi.softAPIP().toString());
   s+=",\"apStops\":";s+=(unsigned long)apStops;s+=",\"chMoves\":";s+=apChannelChanges;s+=",\"bw\":";{wifi_bandwidth_t b=WIFI_BW_HT20;esp_wifi_get_bandwidth(WIFI_IF_AP,&b);s+=b==WIFI_BW_HT40?40:20;}
+  s+=",\"httpRebinds\":";s+=web.listenerRebinds;
+  s+=",\"httpRebindAgoMs\":";s+=httpBoundAt?(unsigned long)(millis()-httpBoundAt):0;
+  s+=",\"httpBoundEpoch\":";s+=httpBoundEpoch;
+  s+=",\"wifiIpEpoch\":";s+=(unsigned long)networkIpEpoch;
   s+=",\"httpServed\":";s+=web.served;s+=",\"httpReused\":";s+=web.reused;
   s+=",\"httpEvicted\":";s+=web.evicted;s+=",\"httpSlowMs\":";s+=web.slowestMs;
   s+=",\"httpParseSlowMs\":";s+=web.worstParseMs;
@@ -4816,6 +4974,7 @@ void initializeWeb(){
   web.on("/api/kad/poll",HTTP_POST,handleKadPoll);
   web.on("/api/kad/config",HTTP_POST,handleKadConfig);
   web.on("/api/health",HTTP_GET,[](){web.send(200,"text/plain","OK");});
+  web.on("/api/network-health",HTTP_GET,handleNetworkHealth);
   web.on("/api/live",HTTP_GET,handleLive);
   web.on("/api/trips",HTTP_GET,handleTrips);
   web.on("/api/trip/note",HTTP_POST,handleTripNote);
