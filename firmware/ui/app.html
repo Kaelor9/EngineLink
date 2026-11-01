@@ -1282,7 +1282,7 @@ const PAGE_VIEWS={
     }else{
       if(c.router)h+=`<div class="card s13" style="margin-bottom:14px">Saved: <b>${esc(c.ssid)}</b> · not reachable right now. EngineLink uses its own Wi-Fi as recovery until you choose Connect again. <button data-a="wifiForget" style="color:var(--teal)">Forget</button></div>`;
       const sc=S.scan;
-      h+=`<div class="sec">${sc&&sc.nets&&sc.nets.length?sc.nets.map(n=>{const pick=S.wifiPick===n.s;return `<div><button class="row" data-a="wifiPick" data-v="${esc(n.s)}"><span><span class="rt">${esc(n.s)}</span><span class="rh">${n.lock?'Password':'Open'} · channel ${n.ch}</span></span><span style="color:var(--teal);letter-spacing:1px">${n.r>-60?'▂▄▆':n.r>-72?'▂▄':'▂'}</span></button>
+      h+=`<div class="sec">${sc&&sc.nets&&sc.nets.length?sc.nets.map(n=>{const pick=S.wifiPick===n.s;return `<div><button class="row" data-a="wifiPick" data-v="${esc(n.s)}"><span><span class="rt">${esc(n.s)}</span><span class="rh">${n.lock?'Password':'Open'} · channel ${n.ch}</span></span>${sigBars(n.r)}</button>
         ${pick?`<div style="display:grid;grid-template-columns:1fr auto;gap:8px;padding:0 0 12px">${n.lock?`<input class="field" type="password" data-i="wifiPass" value="${esc(S.wifiPass)}" placeholder="Router password" aria-label="Router password">`:'<span class="s13 sub" style="align-self:center">Open network</span>'}<button class="btn pri" data-a="wifiConnect" data-v="${esc(n.s)}" ${sc&&sc.busy?'disabled':''}>Connect</button></div>`:''}</div>`;}).join(''):`<div class="empty">${sc&&sc.error?esc(sc.error):sc&&sc.busy?'Searching for 2.4 GHz networks…':sc&&sc.done?'No 2.4 GHz networks found. Try scanning again closer to your router.':'Scan to find the boat router.'}</div>`}
         <button class="row" data-a="wifiScan" style="color:var(--teal)" ${sc&&sc.busy?'disabled':''}><span class="rt">${sc&&sc.busy?'Scanning channels…':'Scan for networks'}</span></button>
         ${sc&&(sc.busy||sc.error)?`<div class="s12 sub" style="padding:8px 16px;${sc.error?'color:var(--orange);':''}">${sc.error?esc(sc.error):`Scan ${sc.pass||1}/${sc.passes||2} ${(sc.pass||1)===1?'(active)':'(beacon)'} · channel ${sc.channel||1} of ${sc.channels||13} · ${sc.nets?.length||0} networks found. Results from both surveys are combined.`}</div>`:''}</div>
@@ -1360,7 +1360,7 @@ const PAGE_VIEWS={
       </div>
       <div class="s12 sub" style="margin-top:7px">The report includes event history, association and DHCP timing, driver errors and web diagnostics. It contains no Wi-Fi password.</div>
       ${reportBlock(c,lv)}
-      </div>${row('cycle','txp','Transmit power','EngineLink lowers it by itself if the router does not hear it',rv(['Maximum','Medium','Low','Very low'][(c&&c.txPower!=null)?c.txPower:1]))}${dlBlock(d.dl,d.sp)}<div class="rowx">
+      </div>${row('cycle','txp','Transmit power','EngineLink lowers it by itself if the router does not hear it',rv(['Maximum','Medium','Low','Very low'][(c&&c.txPower!=null)?c.txPower:1]))}${tuneBlock(d,lv)}${dlBlock(d.dl,d.sp)}<div class="rowx">
       <div class="s12 sub">"Missed here" counts the live updates this phone did not get since the app was opened. Up for ${dur(d.up||0)}${d.reset!=null?' · last restart: '+(RESET[d.reset]||'code '+d.reset):''}.</div></div></div>`;
     h+=restartsBlock(d);
     // Calibration
@@ -1444,6 +1444,21 @@ function reportBlock(c,lv){
     <div class="s12 ${r.error?'':'sub'}" style="margin-top:6px;${r.error?'color:var(--orange)':''}">${c.ghToken?(r.error?esc(r.error):r.pending?'A report is waiting to be sent.':last):'No token saved.'}</div>
     ${ip?`<div class="s12 sub" style="margin-top:6px">The report can also be opened at <b style="color:var(--text)">http://${esc(ip)}:81/report</b>, even if the main page stops answering.</div>`:''}
   </div>`;
+}
+// Signal strength as four bars of rising height on one baseline (the old
+// text glyphs rendered differently on every phone).
+function sigBars(r){
+  const n=r>-55?4:r>-65?3:r>-75?2:1;
+  return `<svg width="22" height="16" viewBox="0 0 22 16" role="img" aria-label="Signal ${n} of 4, ${r} dBm" style="flex:none"><title>${r} dBm</title>${[0,1,2,3].map(i=>{const h=4+i*4;return `<rect x="${i*6}" y="${16-h}" width="4" height="${h}" rx="1" fill="${i<n?'var(--teal)':'var(--line)'}"/>`;}).join('')}</svg>`;
+}
+// Transmit power test: the board pings its router at each power step and
+// keeps the one with the fewest losses and the shortest round trip.
+function tuneBlock(d,lv){
+  const t=d.linkTune||{},routerUp=lv&&lv.net&&lv.net.mode==='sta'&&lv.net.sta,nm=['19.5','15','11','8.5'];
+  const steps=(t.steps||[]).map(x=>`${nm[x.level]} dBm: ${x.got}/${x.sent} back, ${x.ms} ms`).join(' · ');
+  return `<div class="rowx"><div class="cth"><span class="rt">Find the best transmit power</span><span class="rv">${t.running?'Testing…':t.chosen!=null?nm[t.chosen]+' dBm':''}</span></div>
+    <div class="s12 sub" style="margin-top:3px">${steps?esc(steps):'EngineLink pings its router at each power step and keeps the one the router hears best. It does this by itself once after each start on the router.'}</div>
+    ${routerUp?`<button class="btn" style="width:100%;margin-top:10px" data-a="linkTune" ${t.running?'disabled':''}>${t.running?'Testing…':'Test now'}</button>`:''}</div>`;
 }
 function voltBlock(c,es){
   const raw=es.map(e=>S.diag.t[e.ch].raw[293]).find(Boolean);
@@ -1751,6 +1766,7 @@ const A={
   testStop:async()=>{await act('/api/test/stop',{});load('state');},
   busRefresh:()=>load('state'),
   dl:v=>download(v),
+  linkTune:async()=>{await act('/api/linktune',{});for(let i=0;i<14;i++){await new Promise(r=>setTimeout(r,2500));await load('diag');if(S.diag&&S.diag.linkTune&&!S.diag.linkTune.running&&i>2)break;}load('state');},
   ghSave:async()=>{const v=(S.ghTok||'').trim();const r=await cfgSet({ghtoken:v});if(r.ok){S.ghTok='';toast(v?'Token saved':'Token removed');load('diag');}},
   reportSend:async()=>{await act('/api/report/send',{});setTimeout(()=>load('state'),3000);},
   speedTest:async()=>{

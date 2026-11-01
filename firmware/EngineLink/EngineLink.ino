@@ -51,9 +51,17 @@
 #include "miniz.h"
 // wifiwpa3.cpp: WPA3 on or off for the Wi-Fi driver (see there)
 extern volatile bool elAllowSae;
-bool elSaeControlActive();  // the deflate compressor in the chip's ROM
+bool elSaeControlActive();
+// linktune.cpp: picks the transmit power the router hears best (see there)
+struct LinkTuneStep { uint8_t level; uint8_t sent, got; uint16_t avgMs; };
+extern LinkTuneStep linkTuneSteps[4];
+extern volatile uint8_t linkTuneCount,linkTuneChosen;
+extern volatile bool linkTuneRunning;
+extern volatile uint32_t linkTuneAt;
+uint8_t runLinkTune(uint8_t current);
+volatile bool linkTuneWanted=false;  // the deflate compressor in the chip's ROM
 
-#define EL_VERSION "0.12.3"
+#define EL_VERSION "0.12.4"
 // Releases list published by the Pages workflow; firmware files come from
 // GitHub Releases of the same repository. Nothing else is downloaded.
 #define EL_RELEASES_URL "https://kaelor9.github.io/EngineLink/releases.json"
@@ -4289,6 +4297,9 @@ String makeNetworkHealthJson(){
   s+=",\"lastRouterRssi\":";if(lastRouterIp.length())s+=lastRouterRssi;else s+="null";
   s+=",\"lastRouterChannel\":";s+=(unsigned)lastRouterChannel;
   s+=",\"lastSecurity\":";jsonString(s,stationSecurityName(staNegotiatedAuth));
+  s+=",\"linkTune\":{\"running\":";s+=linkTuneRunning?"true":"false";s+=",\"chosen\":";s+=linkTuneChosen<4?String(linkTuneChosen):String("null");s+=",\"steps\":[";
+  for(uint8_t i=0;i<linkTuneCount;i++){if(i)s+=',';s+="{\"level\":";s+=linkTuneSteps[i].level;s+=",\"got\":";s+=linkTuneSteps[i].got;s+=",\"sent\":";s+=linkTuneSteps[i].sent;s+=",\"ms\":";s+=linkTuneSteps[i].avgMs;s+='}';}
+  s+="]}";
   s+=",\"secMode\":";s+=staSecMode?"\"wpa3\"":"\"wpa2\"";s+=",\"saeControl\":";s+=elSaeControlActive()?"true":"false";s+=",\"secSwitches\":";s+=staSecSwitches;
   s+=",\"saeConfigured\":";s+=staSecurityConfigured?"true":"false";
   s+=",\"saeSetupError\":";s+=(int)staSecurityConfigError;
@@ -4335,6 +4346,15 @@ String buildNetworkReport(){
   s+="Security switches: ";s+=staSecSwitches;s+="\n";
   s+="Transmit power: ";s+=cfg.txPower==3?"very low (8.5 dBm)":cfg.txPower==2?"low (11 dBm)":cfg.txPower==1?"medium (15 dBm)":"maximum (19.5 dBm)";
   s+=" · lowered automatically ";s+=txAutoSteps;s+=" time(s) this start\n";
+  s+="Transmit power test (ping to the router, 20 x 1400 bytes): ";
+  if(linkTuneRunning)s+="running";
+  else if(!linkTuneCount)s+="not run yet";
+  else{
+    static const char *nm[4]={"19.5","15","11","8.5"};
+    for(uint8_t i=0;i<linkTuneCount;i++){const LinkTuneStep &x=linkTuneSteps[i];if(i)s+=" | ";s+=nm[x.level];s+=" dBm: ";s+=x.got;s+="/";s+=x.sent;s+=" back, ";s+=x.avgMs;s+=" ms";}
+    if(linkTuneChosen<4){s+=" -> chose ";s+=nm[linkTuneChosen];s+=" dBm";}
+  }
+  s+="\n";
   s+="Security configuration result: ";s+=esp_err_to_name(staSecurityConfigError);s+="\n\n";
   s+="CONNECTIVITY (COUNTERS SINCE BOOT)\n";
   s+="Successful Wi-Fi associations: ";s+=(unsigned long)staAssociatedEvents;s+="\n";
@@ -4482,6 +4502,24 @@ void liveHttpTask(void *){
 // failing two minutes after that: save the totals and restart. Skipped while
 // a handler is legitimately busy (a download, a report). This catches a web
 // server that accepts connections but never answers, whatever the cause.
+// Tunes the transmit power once per start, 60 s after the router link is up,
+// and when asked from the app. Never during a download or an update.
+void linkTuneTask(void *){
+  bool tunedThisBoot=false;
+  for(;;){
+    vTaskDelay(pdMS_TO_TICKS(2000));
+    const bool online=routerConfigured()&&!routerHold&&WiFi.status()==WL_CONNECTED&&staIpAt&&(uint32_t)(millis()-staIpAt)>=60000UL;
+    if(!online||otaActive||httpBusySince)continue;
+    if(!linkTuneWanted&&tunedThisBoot)continue;
+    linkTuneWanted=false;tunedThisBoot=true;
+    const uint8_t was=cfg.txPower;
+    const uint8_t best=runLinkTune(was);
+    if(best!=cfg.txPower){
+      cfg.txPower=best;
+      Preferences tp;if(tp.begin("enginelink",false)){tp.putUChar("txp2",best);tp.end();}
+    }
+  }
+}
 void httpSelfCheckTask(void *){
   uint8_t misses=0;uint32_t healedAt=0;
   vTaskDelay(pdMS_TO_TICKS(60000));
@@ -4893,6 +4931,9 @@ void handleDiag(){
   s+=",\"fsWriteErrors\":";s+=fsWriteErrors;
   s+=",\"fsRecoveredFiles\":";s+=fsRecoveredFiles;
   s+=",\"fsLastFailure\":";jsonString(s,fsLastFailure);
+  s+=",\"linkTune\":{\"running\":";s+=linkTuneRunning?"true":"false";s+=",\"chosen\":";s+=linkTuneChosen<4?String(linkTuneChosen):String("null");s+=",\"steps\":[";
+  for(uint8_t i=0;i<linkTuneCount;i++){if(i)s+=',';s+="{\"level\":";s+=linkTuneSteps[i].level;s+=",\"got\":";s+=linkTuneSteps[i].got;s+=",\"sent\":";s+=linkTuneSteps[i].sent;s+=",\"ms\":";s+=linkTuneSteps[i].avgMs;s+='}';}
+  s+="]}";
   s+=",\"engineTask\":";s+=engineTaskOn?"true":"false";
   s+=",\"engineWait\":{\"max\":";s+=engineMaxWaitMs;s+=",\"slow\":";s+=engineSlowWaits;s+='}';
   s+=",\"reading\":[";
@@ -5476,6 +5517,10 @@ void initializeWeb(){
   web.on("/api/health",HTTP_GET,[](){web.send(200,"text/plain","OK");});
   web.on("/api/network-health",HTTP_GET,handleNetworkHealth);
   web.on("/api/network-report",HTTP_GET,handleNetworkReport);
+  web.on("/api/linktune",HTTP_POST,[](){
+    if(!(routerConfigured()&&!routerHold&&WiFi.status()==WL_CONNECTED)){reply(false,"Only on the router",409);return;}
+    linkTuneWanted=true;reply(true,"Testing the transmit power, about 20 seconds");
+  });
   web.on("/api/report/send",HTTP_POST,[](){
     if(!cfg.ghToken.length()){reply(false,"Add a GitHub token first",409);return;}
     reportWanted=true;reportManual=true;reportReason="sent from the app";
@@ -5650,6 +5695,7 @@ void setup(){
     if(engineTaskOn){
       liveServer.begin();
       xTaskCreatePinnedToCore(httpSelfCheckTask,"http-check",4096,nullptr,1,nullptr,0);
+      xTaskCreatePinnedToCore(linkTuneTask,"link-tune",4096,nullptr,1,nullptr,0);
       if(xTaskCreatePinnedToCore(liveHttpTask,"live-http",8192,nullptr,1,nullptr,0)!=pdPASS)
         Serial.println("Independent live server task could not start");
     }
