@@ -70,6 +70,8 @@ extern volatile uint32_t linkTuneAt;
 extern volatile bool linkScanDone;
 extern volatile uint8_t linkScanTotal,linkScanSame,linkScanOverlap;
 extern volatile int8_t linkScanSameBest;
+extern String linkScanList;
+extern volatile uint8_t linkScanQuiet;
 extern const wifi_power_t elTxPower[5];
 extern const char *const elTxName[5];
 uint8_t runLinkTune(uint8_t current,bool apply);
@@ -88,7 +90,7 @@ uint32_t phoneTuneAt=0;uint8_t phoneTuneBest=255;
 uint32_t txTryAt=0;  // a sweep step is being tried; undone if the sweep never finishes
 volatile bool linkTuneWanted=false;volatile bool linkTuneManual=false;  // the deflate compressor in the chip's ROM
 
-#define EL_VERSION "0.12.12"
+#define EL_VERSION "0.12.13"
 // Releases list published by the Pages workflow; firmware files come from
 // GitHub Releases of the same repository. Nothing else is downloaded.
 #define EL_RELEASES_URL "https://kaelor9.github.io/EngineLink/releases.json"
@@ -4477,7 +4479,12 @@ String buildNetworkReport(){
     s+="Wi-Fi networks seen in the test: ";
     if(linkScanDone){s+=linkScanTotal;s+=" · others on the router's channel: ";s+=linkScanSame;if(linkScanSame){s+=" (strongest ";s+=(int)linkScanSameBest;s+=" dBm)";}s+=" · on overlapping channels: ";s+=linkScanOverlap;}
     else s+="not scanned yet";
-    s+="\n\n";
+    s+="\n";
+    if(linkScanDone){
+      s+="Networks on or next to the router's channel: ";s+=linkScanList.length()?linkScanList:String("none");s+="\n";
+      s+="Quietest of channels 1, 6 and 11 around EngineLink: ";s+=linkScanQuiet;s+=linkScanQuiet==lastRouterChannel?" (the router already uses it)":" (setting the router to it may help)";s+="\n";
+    }
+    s+="\n";
   }
   s+="SYSTEM\n";
   s+="Chip: ";s+=ESP.getChipModel();s+=" rev ";s+=ESP.getChipRevision();s+=" · ";s+=ESP.getCpuFreqMHz();s+=" MHz · Arduino core ";s+=ESP_ARDUINO_VERSION_MAJOR;s+=".";s+=ESP_ARDUINO_VERSION_MINOR;s+=".";s+=ESP_ARDUINO_VERSION_PATCH;s+=" · IDF ";s+=esp_get_idf_version();s+="\n";
@@ -4637,7 +4644,7 @@ void appendLinkJson(String &s){
   s+=']';
   appendPingJson(s,"small",linkSmall.sent,linkSmall.got,linkSmall.minMs,linkSmall.avgMs,linkSmall.maxMs);
   appendPingJson(s,"internet",linkNet.sent,linkNet.got,linkNet.minMs,linkNet.avgMs,linkNet.maxMs);
-  s+=",\"channel\":";s+=(unsigned)lastRouterChannel;
+  s+=",\"channel\":";s+=(unsigned)lastRouterChannel;s+=",\"quiet\":";s+=(unsigned)linkScanQuiet;
   if(linkScanDone){s+=",\"scan\":{\"total\":";s+=linkScanTotal;s+=",\"sameChannel\":";s+=linkScanSame;s+=",\"overlapping\":";s+=linkScanOverlap;s+=",\"sameBest\":";s+=(int)linkScanSameBest;s+='}';}
   s+='}';
   s+=",\"txMode\":";s+=cfg.txMode;s+=",\"txLevel\":";s+=txLevel;
@@ -5868,12 +5875,12 @@ void setup(){
       liveServer.begin();
       xTaskCreatePinnedToCore(httpSelfCheckTask,"http-check",4096,nullptr,1,nullptr,0);
       xTaskCreatePinnedToCore(linkTuneTask,"link-tune",4096,nullptr,1,nullptr,0);
-      if(xTaskCreatePinnedToCore(liveHttpTask,"live-http",8192,nullptr,1,nullptr,0)!=pdPASS)
+      if(xTaskCreatePinnedToCore(liveHttpTask,"live-http",8192,nullptr,5,nullptr,1)!=pdPASS)
         Serial.println("Independent live server task could not start");
     }
   }
   speedServer.begin();
-  if(xTaskCreatePinnedToCore(speedHttpTask,"speed-http",4096,nullptr,1,nullptr,0)!=pdPASS)
+  if(xTaskCreatePinnedToCore(speedHttpTask,"speed-http",4096,nullptr,5,nullptr,1)!=pdPASS)
     Serial.println("Independent speed test listener could not start");
   Serial.printf("EngineLink HTTP ready: %s (port 80 UI, 81 live, 82 speed test)\n",
     routerConfigured()&&!routerHold?"router":"standalone");
