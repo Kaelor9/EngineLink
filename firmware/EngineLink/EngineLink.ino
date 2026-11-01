@@ -53,7 +53,7 @@
 extern volatile bool elAllowSae;
 bool elSaeControlActive();  // the deflate compressor in the chip's ROM
 
-#define EL_VERSION "0.12.1"
+#define EL_VERSION "0.12.2"
 // Releases list published by the Pages workflow; firmware files come from
 // GitHub Releases of the same repository. Nothing else is downloaded.
 #define EL_RELEASES_URL "https://kaelor9.github.io/EngineLink/releases.json"
@@ -480,7 +480,7 @@ struct Settings {
   bool canListen=false;
   uint8_t portChannel=1; // 1=J7 port, 2=J6 port, 0=unassigned
   uint8_t apChannel=6;
-  uint8_t txPower=0;          // 0 max (19.5 dBm), 1 medium (15 dBm), 2 low (11 dBm)
+  uint8_t txPower=1;          // 0 max (19.5 dBm), 1 medium (15), 2 low (11), 3 very low (8.5)
   String apPassword="12345678";
   String ssid="";
   String wifiPassword="";
@@ -810,6 +810,14 @@ volatile bool staHadIp=false;
 // Arduino-ESP32 3.3.12 does not auto-retry WIFI_REASON_SA_QUERY_TIMEOUT.
 // Queue ONE non-disruptive retry for the normal loop; never reconnect in callbacks.
 volatile uint32_t saQueryRetryAt=0;
+// Transmit power that the router can hear. Field reports (WPA2 on a Zyxel):
+// EngineLink hears the router strongly (-45 dBm) while the router does not
+// answer EngineLink's login frames (codes 2/15, about once a second), DHCP
+// takes 29 s and links drop: frames from EngineLink are lost. Full transmit
+// power can distort on some ESP32-S3 boards or pull the supply down. After 12
+// unanswered logins in a row EngineLink lowers its power one step (15 -> 11
+// -> 8.5 dBm) and keeps the level that works.
+volatile uint16_t txNoAnswer=0;uint32_t txAutoSteps=0;
 // Router security, like most ESP32 products: 0 = WPA2 (the driver starts
 // without WPA3, see wifiwpa3.cpp), which works on WPA2 and WPA2/WPA3 mixed
 // routers; 1 = WPA3 allowed, only for a router that needs it (WPA3-only).
@@ -1015,6 +1023,7 @@ void onWiFi(WiFiEvent_t e,WiFiEventInfo_t info){
       // Schedule an early one-shot attempt without resetting WPA/PMF state.
       if(staLastReason==WIFI_REASON_SA_QUERY_TIMEOUT && droppedOnline)
         saQueryRetryAt=millis()+2000UL;
+      if(staLastReason==2||staLastReason==15){if(txNoAnswer<65535)++txNoAnswer;}
       // The router offers no WPA2 (WPA3-only): start the driver with WPA3.
       if((staLastReason==210||staLastReason==211)&&staSecMode==0){staSecSwitchTo=1;staSecSwitchPending=true;}
 
@@ -1030,6 +1039,7 @@ void onWiFi(WiFiEvent_t e,WiFiEventInfo_t info){
     staHadIp=true;
     saQueryRetryAt=0;
     routerGotIpThisSession=true;
+    txNoAnswer=0;
     traceWifi(3);
     if(staAssociatedAt)staDhcpMs=now-staAssociatedAt;
     mdnsNetworkChangedAt=now;mdnsRefreshPending=true;
@@ -2644,7 +2654,7 @@ void radioTuning(){
   // Full power reaches furthest, but its current peaks can upset the radio on
   // a board with a weak supply or a chip antenna; a lower setting can then
   // hold the connection better (Diagnostics → Wi-Fi → Transmit power).
-  WiFi.setTxPower(cfg.txPower==2?WIFI_POWER_11dBm:cfg.txPower==1?WIFI_POWER_15dBm:WIFI_POWER_19_5dBm);
+  WiFi.setTxPower(cfg.txPower==3?WIFI_POWER_8_5dBm:cfg.txPower==2?WIFI_POWER_11dBm:cfg.txPower==1?WIFI_POWER_15dBm:WIFI_POWER_19_5dBm);
   // Ride out a few seconds of not hearing the router (default 6 s) instead of
   // dropping and logging in again on a weak or busy link.
   esp_wifi_set_inactive_time(WIFI_IF_STA,20);
@@ -3006,6 +3016,15 @@ void serviceNetwork(){
       apStarted=false;
       if(!modeOk)WiFi.mode(WIFI_AP);
       startAP();
+    }
+  }
+  if(txNoAnswer>=12&&routerConfigured()&&!routerHold&&!pendingNetwork){
+    txNoAnswer=0;
+    if(cfg.txPower<3){
+      ++cfg.txPower;++txAutoSteps;
+      {Preferences tp;if(tp.begin("enginelink",false)){tp.putUChar("txp2",cfg.txPower);tp.end();}}
+      WiFi.setTxPower(cfg.txPower==3?WIFI_POWER_8_5dBm:cfg.txPower==2?WIFI_POWER_11dBm:WIFI_POWER_15dBm);
+      Serial.printf("Router does not answer: transmit power lowered to step %u\n",(unsigned)cfg.txPower);
     }
   }
   if(staSecSwitchPending&&routerConfigured()&&!routerHold&&!pendingNetwork){
@@ -3604,7 +3623,7 @@ void saveSettings(){
   pref.putBool("can",cfg.canListen);
   pref.putUChar("port",cfg.portChannel);
   pref.putUChar("apch",cfg.apChannel);
-  pref.putUChar("txp",cfg.txPower);
+  pref.putUChar("txp2",cfg.txPower);
   pref.putString("appass",cfg.apPassword);
   pref.putString("ssid",cfg.ssid);
   pref.putString("wpass",cfg.wifiPassword);
@@ -3656,7 +3675,7 @@ void loadSettings(){
   cfg.canListen=pref.getBool("can",false);
   cfg.portChannel=pref.getUChar("port",1);
   cfg.apChannel=pref.getUChar("apch",6);
-  cfg.txPower=pref.getUChar("txp",0);
+  cfg.txPower=pref.getUChar("txp2",1);  // new key: everyone starts on Medium
   cfg.apPassword=pref.getString("appass","12345678");
   cfg.ssid=pref.getString("ssid","");
   cfg.wifiPassword=pref.getString("wpass","");
@@ -3701,7 +3720,7 @@ void loadSettings(){
   if(cfg.apPassword.length()<8)cfg.apPassword="12345678";
   if(cfg.portChannel>2)cfg.portChannel=0;
   if(cfg.apChannel<1||cfg.apChannel>13)cfg.apChannel=6;
-  if(cfg.txPower>2)cfg.txPower=0;
+  if(cfg.txPower>3)cfg.txPower=1;
 }
 void jsonString(String &out,const String &v){
   out+='"';
@@ -3811,7 +3830,7 @@ void handleState(){
   s+=",\"protocol\":";s+=cfg.protocol==PROTO_KAD?"\"kad\"":"\"j1587\"";
   s+=",\"kadBigEndian\":";s+=cfg.kadBigEndian?"true":"false";
   s+=",\"kadFuelDiv\":";s+=cfg.kadFuelDiv;
-  s+=",\"kadVolt\":";s+=cfg.kadVolt;s+=",\"txPower\":";s+=cfg.txPower;
+  s+=",\"kadVolt\":";s+=cfg.kadVolt;s+=",\"txPower\":";s+=cfg.txPower;s+=",\"txAutoSteps\":";s+=txAutoSteps;
   s+=",\"fuelCorr\":[";s+=String(cfg.fuelCorr[0],4);s+=',';s+=String(cfg.fuelCorr[1],4);s+=']';
   s+=",\"apName\":";jsonString(s,cfg.apName);
   s+=",\"host\":";jsonString(s,cfg.hostName);
@@ -4315,6 +4334,8 @@ String buildNetworkReport(){
   s+="Security mode: ";s+=staSecMode?"WPA3 allowed (router needs WPA3)":"WPA2, like most IoT devices (works on WPA2 and WPA2/WPA3 routers)";s+="\n";
   s+="WPA3 switch in firmware: ";s+=elSaeControlActive()?"active":"NOT active (built without -Wl,--wrap=esp_wifi_init)";s+="\n";
   s+="Security switches: ";s+=staSecSwitches;s+="\n";
+  s+="Transmit power: ";s+=cfg.txPower==3?"very low (8.5 dBm)":cfg.txPower==2?"low (11 dBm)":cfg.txPower==1?"medium (15 dBm)":"maximum (19.5 dBm)";
+  s+=" · lowered automatically ";s+=txAutoSteps;s+=" time(s) this start\n";
   s+="Security configuration result: ";s+=esp_err_to_name(staSecurityConfigError);s+="\n\n";
   s+="CONNECTIVITY (COUNTERS SINCE BOOT)\n";
   s+="Successful Wi-Fi associations: ";s+=(unsigned long)staAssociatedEvents;s+="\n";
@@ -4683,7 +4704,7 @@ void handleCfg(){
     }
     if(g){cfg.gearMaskR=m;cfg.gearValR=val;}else{cfg.gearMaskF=m;cfg.gearValF=val;}
   }
-  if(web.hasArg("txp")){const int v=web.arg("txp").toInt();if(v<0||v>2){reply(false,"Invalid transmit power",400);return;}cfg.txPower=v;radioTuning();}
+  if(web.hasArg("txp")){const int v=web.arg("txp").toInt();if(v<0||v>3){reply(false,"Invalid transmit power",400);return;}cfg.txPower=v;radioTuning();}
   if(web.hasArg("host")){
     String v=web.arg("host");v.trim();v.toLowerCase();v.replace(' ','-');
     if(v.endsWith(".local"))v.remove(v.length()-6);
@@ -5261,7 +5282,7 @@ void fwWorker(void *){
           const int k=r.indexOf("\"number\":");
           reportLastIssue=k>=0?(uint32_t)r.substring(k+9).toInt():0;
           ++reportSent;reportError="";
-        }else reportError=code==401?"GitHub refused the token":code==403||code==404?"The token may not create issues in Kaelor9/EngineLink":String("GitHub answered ")+code;
+        }else reportError=code<0?"No internet: EngineLink is not on the router right now":code==401?"GitHub refused the token":code==403||code==404?"The token may not create issues in Kaelor9/EngineLink":String("GitHub answered ")+code;
         http.end();
       }
       reportLastAt=millis()?millis():1;
