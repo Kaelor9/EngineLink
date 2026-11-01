@@ -53,16 +53,32 @@
 extern volatile bool elAllowSae;
 extern volatile bool elAmpduTx;
 bool elSaeControlActive();
-// linktune.cpp: picks the transmit power the router hears best (see there)
-struct LinkTuneStep { uint8_t level; uint8_t sent, got; uint16_t avgMs; };
-extern LinkTuneStep linkTuneSteps[4];
+// linktune.cpp: transmit power test and link measurements (see there)
+struct PingStat { uint8_t sent, got; uint16_t minMs, avgMs, maxMs; };
+struct LinkTuneStep { uint8_t level; PingStat p; };
+extern LinkTuneStep linkTuneSteps[5];
+extern PingStat linkSmall,linkNet;
 extern volatile uint8_t linkTuneCount,linkTuneChosen;
 extern volatile bool linkTuneRunning;
 extern volatile uint32_t linkTuneAt;
-uint8_t runLinkTune(uint8_t current);
+extern volatile bool linkScanDone;
+extern volatile uint8_t linkScanTotal,linkScanSame,linkScanOverlap;
+extern volatile int8_t linkScanSameBest;
+extern const wifi_power_t elTxPower[5];
+extern const char *const elTxName[5];
+uint8_t runLinkTune(uint8_t current,bool apply);
+// Transmit power: the owner's setting (0 very low .. 4 high, 5 auto) and the
+// step in use. In Auto the phone's download test picks the step.
+#define TX_AUTO 5
+uint8_t txLevel=3;
+// Download tests measured by the phone (newest last), for the report.
+struct SpeedLogRec { uint32_t at; uint8_t level; uint16_t kbs10; uint16_t rttMs; uint8_t sweep; };
+#define SPEED_LOG_N 12
+SpeedLogRec speedLog[SPEED_LOG_N];uint8_t speedLogCount=0;
+uint32_t phoneTuneAt=0;uint8_t phoneTuneBest=255;
 volatile bool linkTuneWanted=false;  // the deflate compressor in the chip's ROM
 
-#define EL_VERSION "0.12.6"
+#define EL_VERSION "0.12.7"
 // Releases list published by the Pages workflow; firmware files come from
 // GitHub Releases of the same repository. Nothing else is downloaded.
 #define EL_RELEASES_URL "https://kaelor9.github.io/EngineLink/releases.json"
@@ -490,7 +506,7 @@ struct Settings {
   uint8_t portChannel=1; // 1=J7 port, 2=J6 port, 0=unassigned
   uint8_t apChannel=6;
   uint8_t aggr=1;             // A-MPDU to the router: 1 on (default), 0 off
-  uint8_t txPower=1;          // 0 max (19.5 dBm), 1 medium (15), 2 low (11), 3 very low (8.5)
+  uint8_t txMode=TX_AUTO;     // 0 very low (8.5 dBm), 1 low (11), 2 moderate (13), 3 medium (15), 4 high (19.5), 5 auto
   String apPassword="12345678";
   String ssid="";
   String wifiPassword="";
@@ -2664,7 +2680,8 @@ void radioTuning(){
   // Full power reaches furthest, but its current peaks can upset the radio on
   // a board with a weak supply or a chip antenna; a lower setting can then
   // hold the connection better (Diagnostics → Wi-Fi → Transmit power).
-  WiFi.setTxPower(cfg.txPower==3?WIFI_POWER_8_5dBm:cfg.txPower==2?WIFI_POWER_11dBm:cfg.txPower==1?WIFI_POWER_15dBm:WIFI_POWER_19_5dBm);
+  if(txLevel>4)txLevel=3;
+  WiFi.setTxPower(elTxPower[txLevel]);
   // Ride out a few seconds of not hearing the router (default 6 s) instead of
   // dropping and logging in again on a weak or busy link.
   esp_wifi_set_inactive_time(WIFI_IF_STA,20);
@@ -3032,11 +3049,12 @@ void serviceNetwork(){
   }
   if(txNoAnswer>=12&&routerConfigured()&&!routerHold&&!pendingNetwork){
     txNoAnswer=0;
-    if(cfg.txPower<3){
-      ++cfg.txPower;++txAutoSteps;
-      {Preferences tp;if(tp.begin("enginelink",false)){tp.putUChar("txp2",cfg.txPower);tp.end();}}
-      WiFi.setTxPower(cfg.txPower==3?WIFI_POWER_8_5dBm:cfg.txPower==2?WIFI_POWER_11dBm:WIFI_POWER_15dBm);
-      Serial.printf("Router does not answer: transmit power lowered to step %u\n",(unsigned)cfg.txPower);
+    if(txLevel>0){
+      --txLevel;++txAutoSteps;
+      if(cfg.txMode!=TX_AUTO)cfg.txMode=txLevel;
+      {Preferences tp;if(tp.begin("enginelink",false)){tp.putUChar("txp3",cfg.txMode);tp.putUChar("txal",txLevel);tp.end();}}
+      WiFi.setTxPower(elTxPower[txLevel]);
+      Serial.printf("Router does not answer: transmit power lowered to %s\n",elTxName[txLevel]);
     }
   }
   if(staSecSwitchPending&&routerConfigured()&&!routerHold&&!pendingNetwork){
@@ -3643,7 +3661,7 @@ void saveSettings(){
   pref.putBool("can",cfg.canListen);
   pref.putUChar("port",cfg.portChannel);
   pref.putUChar("apch",cfg.apChannel);
-  pref.putUChar("txp2",cfg.txPower);
+  pref.putUChar("txp3",cfg.txMode);
   pref.putUChar("aggr2",cfg.aggr);
   pref.putString("appass",cfg.apPassword);
   pref.putString("ssid",cfg.ssid);
@@ -3697,7 +3715,8 @@ void loadSettings(){
   cfg.portChannel=pref.getUChar("port",1);
   cfg.apChannel=pref.getUChar("apch",6);
   cfg.aggr=pref.getUChar("aggr2",1)?1:0;
-  cfg.txPower=pref.getUChar("txp2",1);  // new key: everyone starts on Medium
+  cfg.txMode=pref.getUChar("txp3",TX_AUTO);  // new key: everyone starts on Auto
+  txLevel=pref.getUChar("txal",3);
   cfg.apPassword=pref.getString("appass","12345678");
   cfg.ssid=pref.getString("ssid","");
   cfg.wifiPassword=pref.getString("wpass","");
@@ -3742,7 +3761,9 @@ void loadSettings(){
   if(cfg.apPassword.length()<8)cfg.apPassword="12345678";
   if(cfg.portChannel>2)cfg.portChannel=0;
   if(cfg.apChannel<1||cfg.apChannel>13)cfg.apChannel=6;
-  if(cfg.txPower>3)cfg.txPower=1;
+  if(cfg.txMode>TX_AUTO)cfg.txMode=TX_AUTO;
+  if(txLevel>4)txLevel=3;
+  if(cfg.txMode!=TX_AUTO)txLevel=cfg.txMode;
 }
 void jsonString(String &out,const String &v){
   out+='"';
@@ -3852,7 +3873,7 @@ void handleState(){
   s+=",\"protocol\":";s+=cfg.protocol==PROTO_KAD?"\"kad\"":"\"j1587\"";
   s+=",\"kadBigEndian\":";s+=cfg.kadBigEndian?"true":"false";
   s+=",\"kadFuelDiv\":";s+=cfg.kadFuelDiv;
-  s+=",\"kadVolt\":";s+=cfg.kadVolt;s+=",\"txPower\":";s+=cfg.txPower;s+=",\"aggr\":";s+=cfg.aggr;s+=",\"txAutoSteps\":";s+=txAutoSteps;
+  s+=",\"kadVolt\":";s+=cfg.kadVolt;s+=",\"txPower\":";s+=cfg.txMode;s+=",\"txLevel\":";s+=txLevel;s+=",\"aggr\":";s+=cfg.aggr;s+=",\"txAutoSteps\":";s+=txAutoSteps;
   s+=",\"fuelCorr\":[";s+=String(cfg.fuelCorr[0],4);s+=',';s+=String(cfg.fuelCorr[1],4);s+=']';
   s+=",\"apName\":";jsonString(s,cfg.apName);
   s+=",\"host\":";jsonString(s,cfg.hostName);
@@ -4311,9 +4332,7 @@ String makeNetworkHealthJson(){
   s+=",\"lastRouterRssi\":";if(lastRouterIp.length())s+=lastRouterRssi;else s+="null";
   s+=",\"lastRouterChannel\":";s+=(unsigned)lastRouterChannel;
   s+=",\"lastSecurity\":";jsonString(s,stationSecurityName(staNegotiatedAuth));
-  s+=",\"linkTune\":{\"running\":";s+=linkTuneRunning?"true":"false";s+=",\"chosen\":";s+=linkTuneChosen<4?String(linkTuneChosen):String("null");s+=",\"steps\":[";
-  for(uint8_t i=0;i<linkTuneCount;i++){if(i)s+=',';s+="{\"level\":";s+=linkTuneSteps[i].level;s+=",\"got\":";s+=linkTuneSteps[i].got;s+=",\"sent\":";s+=linkTuneSteps[i].sent;s+=",\"ms\":";s+=linkTuneSteps[i].avgMs;s+='}';}
-  s+="]}";
+  appendLinkJson(s);
   s+=",\"secMode\":";s+=staSecMode?"\"wpa3\"":"\"wpa2\"";s+=",\"saeControl\":";s+=elSaeControlActive()?"true":"false";s+=",\"secSwitches\":";s+=staSecSwitches;{wifi_ps_type_t ps=WIFI_PS_NONE;esp_wifi_get_ps(&ps);s+=",\"powerSave\":";s+=(int)ps;}s+=",\"ampduTx\":";s+=elAmpduTx?"true":"false";
   s+=",\"saeConfigured\":";s+=staSecurityConfigured?"true":"false";
   s+=",\"saeSetupError\":";s+=(int)staSecurityConfigError;
@@ -4358,7 +4377,8 @@ String buildNetworkReport(){
   s+="Security mode: ";s+=staSecMode?"WPA3 allowed (router needs WPA3)":"WPA2, like most IoT devices (works on WPA2 and WPA2/WPA3 routers)";s+="\n";
   s+="WPA3 switch in firmware: ";s+=elSaeControlActive()?"active":"NOT active (built without -Wl,--wrap=esp_wifi_init)";s+="\n";
   s+="Security switches: ";s+=staSecSwitches;s+="\n";
-  s+="Transmit power: ";s+=cfg.txPower==3?"very low (8.5 dBm)":cfg.txPower==2?"low (11 dBm)":cfg.txPower==1?"medium (15 dBm)":"maximum (19.5 dBm)";
+  s+="Transmit power: ";s+=elTxName[txLevel<5?txLevel:3];s+=cfg.txMode==TX_AUTO?" (Auto)":" (fixed by the owner)";
+  {int8_t q=0;if(esp_wifi_get_max_tx_power(&q)==ESP_OK){s+=" · driver reports ";s+=q/4.0f;s+=" dBm";}}
   s+=" · lowered automatically ";s+=txAutoSteps;s+=" time(s) this start\n";
   {wifi_ps_type_t ps=WIFI_PS_NONE;esp_wifi_get_ps(&ps);
    s+="Power save: ";s+=ps==WIFI_PS_NONE?"off":ps==WIFI_PS_MIN_MODEM?"ON (minimum modem sleep)":"ON (maximum modem sleep)";s+="\n";}
@@ -4367,15 +4387,19 @@ String buildNetworkReport(){
     wifi_phy_mode_t pm;
     if(esp_wifi_sta_get_negotiated_phymode(&pm)==ESP_OK){s+="Negotiated Wi-Fi standard: ";s+=pm==WIFI_PHY_MODE_11B?"802.11b (slow)":pm==WIFI_PHY_MODE_11G?"802.11g":pm==WIFI_PHY_MODE_HT20?"802.11n 20 MHz":pm==WIFI_PHY_MODE_HT40?"802.11n 40 MHz":pm==WIFI_PHY_MODE_HE20?"802.11ax":"other";s+="\n";}
   }
-  s+="Transmit power test (ping to the router, 20 x 1400 bytes): ";
+  s+="Transmit power test (ping to the router, 20 x 1400 bytes, min/avg/max): ";
   if(linkTuneRunning)s+="running";
   else if(!linkTuneCount)s+="not run yet";
   else{
-    static const char *nm[4]={"19.5","15","11","8.5"};
-    for(uint8_t i=0;i<linkTuneCount;i++){const LinkTuneStep &x=linkTuneSteps[i];if(i)s+=" | ";s+=nm[x.level];s+=" dBm: ";s+=x.got;s+="/";s+=x.sent;s+=" back, ";s+=x.avgMs;s+=" ms";}
-    if(linkTuneChosen<4){s+=" -> chose ";s+=nm[linkTuneChosen];s+=" dBm";}
+    static const char *nm[5]={"8.5","11","13","15","19.5"};
+    for(uint8_t i=0;i<linkTuneCount;i++){const LinkTuneStep &x=linkTuneSteps[i];s+="\n  ";s+=nm[x.level];s+=" dBm: ";s+=x.p.got;s+="/";s+=x.p.sent;s+=" back, ";s+=x.p.minMs;s+="/";s+=x.p.avgMs;s+="/";s+=x.p.maxMs;s+=" ms";}
+    if(linkTuneChosen<5){s+="\n  best by ping: ";s+=nm[linkTuneChosen];s+=" dBm";}
+    s+=" (";s+=(millis()-linkTuneAt)/1000UL;s+=" s ago)";
   }
   s+="\n";
+  if(linkSmall.sent){s+="Small pings to the router (20 x 64 bytes): ";s+=linkSmall.got;s+="/";s+=linkSmall.sent;s+=" back, ";s+=linkSmall.minMs;s+="/";s+=linkSmall.avgMs;s+="/";s+=linkSmall.maxMs;s+=" ms\n";}
+  if(linkNet.sent){s+="Pings to the internet (1.1.1.1, 10 x 64 bytes): ";s+=linkNet.got;s+="/";s+=linkNet.sent;s+=" back";if(linkNet.got){s+=", ";s+=linkNet.minMs;s+="/";s+=linkNet.avgMs;s+="/";s+=linkNet.maxMs;s+=" ms";}s+="\n";}
+  s+="Note: if pings to the internet are faster than pings to the router, the router is slow to answer pings itself, not the Wi-Fi.\n";
   s+="Security configuration result: ";s+=esp_err_to_name(staSecurityConfigError);s+="\n\n";
   s+="CONNECTIVITY (COUNTERS SINCE BOOT)\n";
   s+="Successful Wi-Fi associations: ";s+=(unsigned long)staAssociatedEvents;s+="\n";
@@ -4397,6 +4421,40 @@ String buildNetworkReport(){
   s+="Time before rescue: ";s+=routerFailureAfterMs;s+=" ms\n";
   s+="Note: final failure stage does not erase any earlier successful IP events.\n";
   s+="Error 202 means authentication failure; it does not prove the password is wrong.\n\n";
+  s+="DOWNLOAD TESTS FROM THE PHONE (newest last)\n";
+  if(!speedLogCount)s+="None yet: tap \"Test download speed\" in Diagnostics.\n";
+  {static const char *nm[5]={"8.5","11","13","15","19.5"};
+   for(uint8_t i=0;i<speedLogCount;i++){const SpeedLogRec &x=speedLog[i];
+    s+="  ";s+=(millis()-x.at)/1000UL;s+=" s ago · ";s+=x.level<5?nm[x.level]:"?";s+=" dBm · ";
+    if(x.kbs10){s+=x.kbs10/10.0f;s+=" kB/s";}else s+="failed";
+    s+=" · request round trip ";s+=x.rttMs;s+=" ms";if(x.sweep)s+=" · auto sweep";s+="\n";}
+   if(phoneTuneBest<5){s+="Auto chose from the phone test: ";s+=nm[phoneTuneBest];s+=" dBm\n";}}
+  s+="\n";
+  if((WiFi.getMode()&WIFI_MODE_STA)&&WiFi.status()==WL_CONNECTED){
+    s+="ROUTER (AS SEEN BY ENGINELINK)\n";
+    wifi_ap_record_t ap;
+    if(esp_wifi_sta_get_ap_info(&ap)==ESP_OK){
+      char oui[12];snprintf(oui,sizeof(oui),"%02X:%02X:%02X",ap.bssid[0],ap.bssid[1],ap.bssid[2]);
+      s+="Maker prefix (first half of the router's MAC address): ";s+=oui;s+="\n";
+      s+="Router supports: ";s+=ap.phy_11b?"b ":"";s+=ap.phy_11g?"g ":"";s+=ap.phy_11n?"n ":"";s+=ap.phy_11ax?"ax ":"";s+=ap.phy_lr?"LR ":"";s+="\n";
+      s+="Router channel: ";s+=ap.primary;s+=ap.second==WIFI_SECOND_CHAN_ABOVE?" + upper (router uses 40 MHz)":ap.second==WIFI_SECOND_CHAN_BELOW?" + lower (router uses 40 MHz)":" (20 MHz)";s+="\n";
+      s+="Router country: ";s+=String(ap.country.cc).substring(0,2);s+=" (channels ";s+=ap.country.schan;s+="-";s+=ap.country.schan+ap.country.nchan-1;s+=")\n";
+      static const char *ciph[]={"none","WEP40","WEP104","TKIP (slow, limits Wi-Fi to 54 Mbit/s)","CCMP (AES)","TKIP+CCMP","AES-CMAC","SMS4","GCMP","GCMP-256","AES-GMAC-128","AES-GMAC-256"};
+      s+="Encryption: pairwise ";s+=ap.pairwise_cipher<12?ciph[ap.pairwise_cipher]:"other";s+=", group ";s+=ap.group_cipher<12?ciph[ap.group_cipher]:"other";s+="\n";
+      s+="Signal now: ";s+=ap.rssi;s+=" dBm\n";
+    }
+    uint8_t proto=0;if(esp_wifi_get_protocol(WIFI_IF_STA,&proto)==ESP_OK){s+="EngineLink allows: ";s+=proto&WIFI_PROTOCOL_11B?"b ":"";s+=proto&WIFI_PROTOCOL_11G?"g ":"";s+=proto&WIFI_PROTOCOL_11N?"n ":"";s+=proto&WIFI_PROTOCOL_LR?"LR ":"";s+="\n";}
+    wifi_bandwidth_t bw;if(esp_wifi_get_bandwidth(WIFI_IF_STA,&bw)==ESP_OK){s+="EngineLink bandwidth: ";s+=bw==WIFI_BW_HT40?"40 MHz":"20 MHz";s+="\n";}
+    s+="Wi-Fi networks seen in the test: ";
+    if(linkScanDone){s+=linkScanTotal;s+=" · others on the router's channel: ";s+=linkScanSame;if(linkScanSame){s+=" (strongest ";s+=(int)linkScanSameBest;s+=" dBm)";}s+=" · on overlapping channels: ";s+=linkScanOverlap;}
+    else s+="not scanned yet";
+    s+="\n\n";
+  }
+  s+="SYSTEM\n";
+  s+="Chip: ";s+=ESP.getChipModel();s+=" rev ";s+=ESP.getChipRevision();s+=" · ";s+=ESP.getCpuFreqMHz();s+=" MHz · Arduino core ";s+=ESP_ARDUINO_VERSION_MAJOR;s+=".";s+=ESP_ARDUINO_VERSION_MINOR;s+=".";s+=ESP_ARDUINO_VERSION_PATCH;s+=" · IDF ";s+=esp_get_idf_version();s+="\n";
+  s+="Memory: free ";s+=ESP.getFreeHeap()/1024;s+=" KB, lowest ";s+=ESP.getMinFreeHeap()/1024;s+=" KB, largest block ";s+=ESP.getMaxAllocHeap()/1024;s+=" KB · PSRAM free ";s+=ESP.getFreePsram()/1024;s+=" KB\n";
+  s+="Main loop: longest pass ";s+=loopMaxMs;s+=" ms · engine reading in own task: ";s+=engineTaskOn?"yes":"no";s+="\n";
+  s+="Reset reason: ";s+=(int)esp_reset_reason();s+="\n\n";
   s+="HTTP / WEB\n";
   s+="HTTP rebinds: ";s+=web.listenerRebinds;s+="\n";
   s+="Web server self-check misses: ";s+=httpSelfFails;s+=" · restarted web server: ";s+=httpHeals;s+=" · board restarts for it: ";s+=httpSelfRestarts;s+="\n";
@@ -4448,6 +4506,10 @@ void speedHttpTask(void *){
     if(!c){vTaskDelay(pdMS_TO_TICKS(15));continue;}
     c.setNoDelay(true);c.setTimeout(300);
     const String req=c.readStringUntil('\n');
+    if(req.startsWith("GET /api/rtt")){  // round trip of one small request, for the report
+      c.print("HTTP/1.1 204 No Content\r\nAccess-Control-Allow-Origin: *\r\nCache-Control: no-store\r\nConnection: close\r\n\r\n");
+      c.stop();continue;
+    }
     if(!req.startsWith("GET /api/speedtest ") && !req.startsWith("GET /api/speedtest?")){
       c.print("HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
       c.stop();continue;
@@ -4525,6 +4587,24 @@ void liveHttpTask(void *){
 // server that accepts connections but never answers, whatever the cause.
 // Tunes the transmit power once per start, 60 s after the router link is up,
 // and when asked from the app. Never during a download or an update.
+static void appendPingJson(String &s,const char *k,uint8_t sent,uint8_t got,uint16_t mn,uint16_t av,uint16_t mx){
+  s+=",\"";s+=k;s+="\":{\"sent\":";s+=sent;s+=",\"got\":";s+=got;s+=",\"min\":";s+=mn;s+=",\"avg\":";s+=av;s+=",\"max\":";s+=mx;s+='}';
+}
+void appendLinkJson(String &s){
+  s+=",\"linkTune\":{\"running\":";s+=linkTuneRunning?"true":"false";s+=",\"chosen\":";s+=linkTuneChosen<5?String(linkTuneChosen):String("null");
+  s+=",\"agoS\":";if(linkTuneAt)s+=(unsigned long)((millis()-linkTuneAt)/1000UL);else s+="null";
+  s+=",\"steps\":[";
+  for(uint8_t i=0;i<linkTuneCount;i++){const LinkTuneStep &x=linkTuneSteps[i];if(i)s+=',';s+="{\"level\":";s+=x.level;s+=",\"got\":";s+=x.p.got;s+=",\"sent\":";s+=x.p.sent;s+=",\"ms\":";s+=x.p.avgMs;s+=",\"min\":";s+=x.p.minMs;s+=",\"max\":";s+=x.p.maxMs;s+='}';}
+  s+=']';
+  appendPingJson(s,"small",linkSmall.sent,linkSmall.got,linkSmall.minMs,linkSmall.avgMs,linkSmall.maxMs);
+  appendPingJson(s,"internet",linkNet.sent,linkNet.got,linkNet.minMs,linkNet.avgMs,linkNet.maxMs);
+  if(linkScanDone){s+=",\"scan\":{\"total\":";s+=linkScanTotal;s+=",\"sameChannel\":";s+=linkScanSame;s+=",\"overlapping\":";s+=linkScanOverlap;s+=",\"sameBest\":";s+=(int)linkScanSameBest;s+='}';}
+  s+='}';
+  s+=",\"txMode\":";s+=cfg.txMode;s+=",\"txLevel\":";s+=txLevel;
+  s+=",\"phoneTests\":[";
+  for(uint8_t i=0;i<speedLogCount;i++){const SpeedLogRec &x=speedLog[i];if(i)s+=',';s+="{\"agoS\":";s+=(unsigned long)((millis()-x.at)/1000UL);s+=",\"level\":";s+=x.level;s+=",\"kbs\":";s+=x.kbs10/10.0f;s+=",\"rttMs\":";s+=x.rttMs;s+=",\"sweep\":";s+=x.sweep?"true":"false";s+='}';}
+  s+="],\"phoneBest\":";s+=phoneTuneBest<5?String(phoneTuneBest):String("null");
+}
 void linkTuneTask(void *){
   bool tunedThisBoot=false;
   for(;;){
@@ -4533,11 +4613,12 @@ void linkTuneTask(void *){
     if(!online||otaActive||httpBusySince)continue;
     if(!linkTuneWanted&&tunedThisBoot)continue;
     linkTuneWanted=false;tunedThisBoot=true;
-    const uint8_t was=cfg.txPower;
-    const uint8_t best=runLinkTune(was);
-    if(best!=cfg.txPower){
-      cfg.txPower=best;
-      Preferences tp;if(tp.begin("enginelink",false)){tp.putUChar("txp2",best);tp.end();}
+    // In Auto a phone download test (more telling than pings) wins over this.
+    const bool apply=cfg.txMode==TX_AUTO&&!phoneTuneAt;
+    const uint8_t best=runLinkTune(txLevel,apply);
+    if(apply&&best!=txLevel){
+      txLevel=best;
+      Preferences tp;if(tp.begin("enginelink",false)){tp.putUChar("txal",best);tp.end();}
     }
   }
 }
@@ -4763,7 +4844,8 @@ void handleCfg(){
     if(g){cfg.gearMaskR=m;cfg.gearValR=val;}else{cfg.gearMaskF=m;cfg.gearValF=val;}
   }
   if(web.hasArg("aggr")){const uint8_t v=web.arg("aggr").toInt()?1:0;if(v!=cfg.aggr){cfg.aggr=v;if(routerConfigured()&&!routerHold){networkSwitchAt=millis();pendingNetwork=true;}}}
-  if(web.hasArg("txp")){const int v=web.arg("txp").toInt();if(v<0||v>3){reply(false,"Invalid transmit power",400);return;}cfg.txPower=v;radioTuning();}
+  if(web.hasArg("txp")){const int v=web.arg("txp").toInt();if(v<0||v>TX_AUTO){reply(false,"Invalid transmit power",400);return;}
+    cfg.txMode=v;if(v!=TX_AUTO){txLevel=v;WiFi.setTxPower(elTxPower[txLevel]);}else{Preferences tp;if(tp.begin("enginelink",false)){tp.putUChar("txal",txLevel);tp.end();}}}
   if(web.hasArg("host")){
     String v=web.arg("host");v.trim();v.toLowerCase();v.replace(' ','-');
     if(v.endsWith(".local"))v.remove(v.length()-6);
@@ -4953,9 +5035,7 @@ void handleDiag(){
   s+=",\"fsWriteErrors\":";s+=fsWriteErrors;
   s+=",\"fsRecoveredFiles\":";s+=fsRecoveredFiles;
   s+=",\"fsLastFailure\":";jsonString(s,fsLastFailure);
-  s+=",\"linkTune\":{\"running\":";s+=linkTuneRunning?"true":"false";s+=",\"chosen\":";s+=linkTuneChosen<4?String(linkTuneChosen):String("null");s+=",\"steps\":[";
-  for(uint8_t i=0;i<linkTuneCount;i++){if(i)s+=',';s+="{\"level\":";s+=linkTuneSteps[i].level;s+=",\"got\":";s+=linkTuneSteps[i].got;s+=",\"sent\":";s+=linkTuneSteps[i].sent;s+=",\"ms\":";s+=linkTuneSteps[i].avgMs;s+='}';}
-  s+="]}";
+  appendLinkJson(s);
   s+=",\"engineTask\":";s+=engineTaskOn?"true":"false";
   s+=",\"engineWait\":{\"max\":";s+=engineMaxWaitMs;s+=",\"slow\":";s+=engineSlowWaits;s+='}';
   s+=",\"reading\":[";
@@ -5542,6 +5622,32 @@ void initializeWeb(){
   web.on("/api/linktune",HTTP_POST,[](){
     if(!(routerConfigured()&&!routerHold&&WiFi.status()==WL_CONNECTED)){reply(false,"Only on the router",409);return;}
     linkTuneWanted=true;reply(true,"Testing the transmit power, about 20 seconds");
+  });
+  // Auto transmit power: the app tries each step with a download test.
+  web.on("/api/txtry",HTTP_POST,[](){
+    const int l=web.arg("l").toInt();
+    if(l<0||l>4){reply(false,"Invalid level",400);return;}
+    if(cfg.txMode!=TX_AUTO){reply(false,"Only with transmit power on Auto",409);return;}
+    txLevel=l;WiFi.setTxPower(elTxPower[txLevel]);reply(true,elTxName[txLevel]);
+  });
+  // A download test measured by the phone; best= ends an auto sweep.
+  web.on("/api/speedlog",HTTP_POST,[](){
+    if(web.hasArg("kbs")){
+      if(speedLogCount==SPEED_LOG_N){memmove(speedLog,speedLog+1,sizeof(SpeedLogRec)*(SPEED_LOG_N-1));--speedLogCount;}
+      SpeedLogRec &x=speedLog[speedLogCount++];
+      x.at=millis();x.level=web.hasArg("l")?(uint8_t)web.arg("l").toInt():txLevel;
+      x.kbs10=(uint16_t)constrain(web.arg("kbs").toFloat()*10.0f,0.0f,65000.0f);
+      x.rttMs=(uint16_t)constrain(web.arg("rtt").toInt(),0,65000);
+      x.sweep=web.arg("sweep").toInt()?1:0;
+    }
+    if(web.hasArg("best")&&cfg.txMode==TX_AUTO){
+      const int b=web.arg("best").toInt();
+      if(b>=0&&b<=4){
+        txLevel=b;phoneTuneBest=b;phoneTuneAt=millis()?millis():1;WiFi.setTxPower(elTxPower[txLevel]);
+        Preferences tp;if(tp.begin("enginelink",false)){tp.putUChar("txal",txLevel);tp.end();}
+      }
+    }
+    reply(true,"ok");
   });
   web.on("/api/report/send",HTTP_POST,[](){
     if(!cfg.ghToken.length()){reply(false,"Add a GitHub token first",409);return;}
