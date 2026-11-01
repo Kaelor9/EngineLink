@@ -88,7 +88,7 @@ static void surveyChannel() {
 // is restored afterwards (a fixed setting chosen by the owner).
 uint8_t runLinkTune(uint8_t current, bool apply) {
   linkTuneRunning = true; linkTuneCount = 0;
-  uint8_t best = current; int32_t bestScore = INT32_MAX;
+  uint8_t best = current; int32_t bestScore = INT32_MAX, curScore = INT32_MAX;
   for (int8_t lv = 4; lv >= 0; lv--) {
     if (WiFi.status() != WL_CONNECTED) break;
     WiFi.setTxPower(elTxPower[lv]);
@@ -99,7 +99,11 @@ uint8_t runLinkTune(uint8_t current, bool apply) {
     // Every lost packet costs as much as 100 ms of extra round trip.
     const int32_t score = (int32_t)(20 - p.got) * 100 + p.avgMs;
     if (p.got >= 10 && score < bestScore) { bestScore = score; best = lv; }
+    if (lv == current) curScore = p.got >= 10 ? score : INT32_MAX;
   }
+  // Stay on the current step unless another one is clearly (20 %) better:
+  // a busy channel makes single measurements jump around.
+  if (curScore != INT32_MAX && (int64_t)curScore * 100 <= (int64_t)bestScore * 120) best = current;
   const uint8_t use = apply ? best : current;
   WiFi.setTxPower(elTxPower[use]);
   if (WiFi.status() == WL_CONNECTED) {
