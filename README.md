@@ -13,7 +13,7 @@
   <img src="https://img.shields.io/badge/Engines-2%C3%97%20J1708%20isolated-success" alt="2 × isolated J1708">
   <img src="https://img.shields.io/badge/Volvo%20Penta-KAD300%20%2F%20EDC%20I-0b5394" alt="Volvo Penta KAD300 / EDC I">
   <img src="https://img.shields.io/badge/NMEA%202000-listen--only-informational" alt="NMEA 2000 listen-only">
-  <img src="https://img.shields.io/badge/Firmware-0.12.1-orange" alt="Firmware 0.12.1">
+  <img src="https://img.shields.io/badge/Firmware-0.12.2-orange" alt="Firmware 0.12.2">
 </p>
 
 <p align="center">
@@ -205,6 +205,8 @@ The board's green indicator and `associated=true`/`hasRouterIp=true` describe **
 
 **0.12.0: WPA2 like most ESP32 products.** The prebuilt Arduino libraries always offer WPA3-SAE (`pmf_cfg.capable` is ignored), and the Zyxel failed SAE logins for whole boots. `firmware/EngineLink/wifiwpa3.cpp` wraps `esp_wifi_init` (link option `-Wl,--wrap=esp_wifi_init`, in both CI builds, guarded by an objdump check) and clears `CONFIG_FEATURE_WPA3_SAE_BIT` from `feature_caps` unless WPA3 is allowed. WPA2 is the default (works on WPA2 and WPA2/WPA3 mixed routers); WPA3 is enabled only for a WPA3-only router (scan shows WPA3_PSK, or reason 210/211), via a full driver restart on the next mode change. Without the link option the firmware still builds, WPA3 stays on, and the network report says so.
 
+**0.12.1 report → 0.12.2:** WPA2 negotiated (switch active), associated in 2.7 s, but DHCP took 29.5 s, the link dropped, then ~1 Hz reason 2 (auth not answered) and 15, mixed with 201, while the router's beacons were strong (-45 dBm): an uplink (board → router) loss pattern. 0.12.2 defaults TX power to 15 dBm and steps down to 11/8.5 dBm after 12 unanswered logins, persisting the level (NVS txp2).
+
 ### Immediate diagnosis: isolate DNS, TCP/HTTP and browser rendering
 
 Run these from **the same Windows computer connected to the Zyxel LAN** while the board says it is on the router (replace the example IP if DHCP assigns a new one):
@@ -257,7 +259,7 @@ Record for each case the client device/network, whether **IP** and **hostname** 
 
 | Hardware | Firmware | Engine validation |
 |----------|----------|-------------------|
-| ✅ Revision 1 assembled | 🚧 0.12.1 | ⏳ Pending first KAD300 test |
+| ✅ Revision 1 assembled | 🚧 0.12.2 | ⏳ Pending first KAD300 test |
 
 | Area | Status |
 |------|--------|
