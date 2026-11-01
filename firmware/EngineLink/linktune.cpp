@@ -40,7 +40,7 @@ static void onOk(esp_ping_handle_t h, void *a) {
 }
 static void onEnd(esp_ping_handle_t, void *a) { ((PingAcc *)a)->done = true; }
 
-static bool pingHost(IPAddress ip, uint8_t count, uint16_t size, uint16_t intervalMs, PingStat &out) {
+bool pingHost(IPAddress ip, uint8_t count, uint16_t size, uint16_t intervalMs, PingStat &out) {
   out = {count, 0, 0, 0, 0};
   if (ip == IPAddress(0, 0, 0, 0)) return false;
   esp_ping_config_t cfg = ESP_PING_DEFAULT_CONFIG();
@@ -111,4 +111,9 @@ uint8_t runLinkTune(uint8_t current, bool apply) {
   linkTuneChosen = best; linkTuneAt = millis() ? millis() : 1;
   linkTuneRunning = false;
   return best;
+}
+
+// Pings the router; used by the frame bundling test in the sketch.
+bool linkPingRouter(uint8_t count, uint16_t size, uint16_t intervalMs, PingStat &out) {
+  return pingHost(WiFi.gatewayIP(), count, size, intervalMs, out);
 }

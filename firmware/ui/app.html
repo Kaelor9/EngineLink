@@ -1360,7 +1360,7 @@ const PAGE_VIEWS={
       </div>
       <div class="s12 sub" style="margin-top:7px">The report includes event history, association and DHCP timing, driver errors and web diagnostics. It contains no Wi-Fi password.</div>
       ${reportBlock(c,lv)}
-      </div>${row('cycle','txp','Transmit power',(c&&c.txPower!=null?c.txPower:5)===5?'Auto picks the strength with the fastest download: tap Test download speed below':'Fixed. EngineLink lowers it by itself if the router does not hear it',rv(txName(c)))}${row('cycle','aggr','Frame bundling to the router','Normally on. Off can help a router that drops bundled frames. EngineLink reconnects after a change.',rv(c&&c.aggr===0?'Off':'On (normal)'))}${tuneBlock(d,lv)}${dlBlock(d.dl,d.sp)}<div class="rowx">
+      </div>${row('cycle','txp','Transmit power',(c&&c.txPower!=null?c.txPower:5)===5?'Auto picks the strength with the fastest download: tap Test download speed below':'Fixed. EngineLink lowers it by itself if the router does not hear it',rv(txName(c)))}${row('cycle','aggrRx','Frame bundling from the router','EngineLink tests both ways once and keeps the faster. EngineLink reconnects after a change.',rv(c&&c.aggrRx?'On':'Off'))}${row('cycle','aggr','Frame bundling to the router','Normally on. Off can help a router that drops bundled frames. EngineLink reconnects after a change.',rv(c&&c.aggr===0?'Off':'On (normal)'))}${tuneBlock(d,lv)}${dlBlock(d.dl,d.sp)}<div class="rowx">
       <div class="s12 sub">"Missed here" counts the live updates this phone did not get since the app was opened. Up for ${dur(d.up||0)}${d.reset!=null?' · last restart: '+(RESET[d.reset]||'code '+d.reset):''}.</div></div></div>`;
     h+=restartsBlock(d);
     // Calibration
@@ -1460,7 +1460,7 @@ function tuneBlock(d,lv){
   const t=d.linkTune||{},routerUp=lv&&lv.net&&lv.net.mode==='sta'&&lv.net.sta,nm=TXD;
   const steps=(t.steps||[]).map(x=>`${nm[x.level]} dBm: ${x.got}/${x.sent} back, ${x.ms} ms`).join(' · ');
   return `<div class="rowx"><div class="cth"><span class="rt">Find the best transmit power</span><span class="rv">${t.running?'Testing…':t.chosen!=null?nm[t.chosen]+' dBm':''}</span></div>
-    <div class="s12 sub" style="margin-top:3px">${steps?esc(steps):'EngineLink pings its router at each strength once after each start. On Auto it uses the best one until a download test picks the fastest.'}</div>
+    <div class="s12 sub" style="margin-top:3px">${steps?esc(steps):'Once after each start EngineLink pings its router at each strength (on Auto it uses the best until a download test picks the fastest). The first time it also compares frame bundling on and off. Test now repeats both, about a minute.'}</div>
     ${routerUp?`<button class="btn" style="width:100%;margin-top:10px" data-a="linkTune" ${t.running?'disabled':''}>${t.running?'Testing…':'Test now'}</button>`:''}</div>`;
 }
 function voltBlock(c,es){
@@ -1678,6 +1678,7 @@ const A={
     if(CYCLE[v]){const [list,key]=CYCLE[v];await cfgSet({[key]:nextOf(list,v==='port'?c.portChannel:c[key])});render(true);return;}
     if(v==='can'){await cfgSet({can:c.canListen?0:1});render(true);return;}
     if(v==='ntp'){await cfgSet({ntp:c.ntp?0:1});render(true);return;}
+    if(v==='aggrRx'){await cfgSet({aggrRx:c&&c.aggrRx?0:1});toast('EngineLink reconnects to the router');load('diag');return;}
     if(v==='aggr'){await cfgSet({aggr:c&&c.aggr===0?1:0});toast('EngineLink reconnects to the router');load('diag');return;}
     if(v==='txp'){await cfgSet({txp:(((c&&c.txPower!=null)?c.txPower:5)+1)%6});load('diag');return;}
     if(v==='proto'){

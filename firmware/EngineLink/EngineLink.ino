@@ -52,6 +52,7 @@
 // wifiwpa3.cpp: WPA3 on or off for the Wi-Fi driver (see there)
 extern volatile bool elAllowSae;
 extern volatile bool elAmpduTx;
+extern volatile bool elAmpduRx;
 bool elSaeControlActive();
 // linktune.cpp: transmit power test and link measurements (see there)
 struct PingStat { uint8_t sent, got; uint16_t minMs, avgMs, maxMs; };
@@ -67,6 +68,9 @@ extern volatile int8_t linkScanSameBest;
 extern const wifi_power_t elTxPower[5];
 extern const char *const elTxName[5];
 uint8_t runLinkTune(uint8_t current,bool apply);
+bool linkPingRouter(uint8_t count,uint16_t size,uint16_t intervalMs,PingStat &out);
+// Frame bundling test: pings with bundling from the router on and off.
+PingStat bundleTestOn={},bundleTestOff={};uint32_t bundleTestAt=0;bool bundleTestRunning=false;
 // Transmit power: the owner's setting (0 very low .. 4 high, 5 auto) and the
 // step in use. In Auto the phone's download test picks the step.
 #define TX_AUTO 5
@@ -76,9 +80,9 @@ struct SpeedLogRec { uint32_t at; uint8_t level; uint16_t kbs10; uint16_t rttMs;
 #define SPEED_LOG_N 12
 SpeedLogRec speedLog[SPEED_LOG_N];uint8_t speedLogCount=0;
 uint32_t phoneTuneAt=0;uint8_t phoneTuneBest=255;
-volatile bool linkTuneWanted=false;  // the deflate compressor in the chip's ROM
+volatile bool linkTuneWanted=false;volatile bool linkTuneManual=false;  // the deflate compressor in the chip's ROM
 
-#define EL_VERSION "0.12.7"
+#define EL_VERSION "0.12.8"
 // Releases list published by the Pages workflow; firmware files come from
 // GitHub Releases of the same repository. Nothing else is downloaded.
 #define EL_RELEASES_URL "https://kaelor9.github.io/EngineLink/releases.json"
@@ -506,6 +510,8 @@ struct Settings {
   uint8_t portChannel=1; // 1=J7 port, 2=J6 port, 0=unassigned
   uint8_t apChannel=6;
   uint8_t aggr=1;             // A-MPDU to the router: 1 on (default), 0 off
+  uint8_t aggrRx=0;           // A-MPDU from the router: 0 off (default), 1 on
+  uint8_t aggrRxTested=0;     // the board has compared both ways
   uint8_t txMode=TX_AUTO;     // 0 very low (8.5 dBm), 1 low (11), 2 moderate (13), 3 medium (15), 4 high (19.5), 5 auto
   String apPassword="12345678";
   String ssid="";
@@ -2868,6 +2874,7 @@ void applyNetwork(){
   // Read by wifiwpa3.cpp when the driver starts again below.
   elAllowSae=routerConfigured()&&!routerHold&&staSecMode==1;
   elAmpduTx=!(withRouter&&!cfg.aggr);
+  elAmpduRx=!(withRouter&&!cfg.aggrRx);
   WiFi.persistent(false);
   WiFi.setHostname(cfg.hostName.c_str());
   apStarted=false;
@@ -3663,6 +3670,7 @@ void saveSettings(){
   pref.putUChar("apch",cfg.apChannel);
   pref.putUChar("txp3",cfg.txMode);
   pref.putUChar("aggr2",cfg.aggr);
+  pref.putUChar("agrx",cfg.aggrRx);pref.putUChar("agrxt",cfg.aggrRxTested);
   pref.putString("appass",cfg.apPassword);
   pref.putString("ssid",cfg.ssid);
   pref.putString("wpass",cfg.wifiPassword);
@@ -3715,6 +3723,7 @@ void loadSettings(){
   cfg.portChannel=pref.getUChar("port",1);
   cfg.apChannel=pref.getUChar("apch",6);
   cfg.aggr=pref.getUChar("aggr2",1)?1:0;
+  cfg.aggrRx=pref.getUChar("agrx",0)?1:0;cfg.aggrRxTested=pref.getUChar("agrxt",0)?1:0;
   cfg.txMode=pref.getUChar("txp3",TX_AUTO);  // new key: everyone starts on Auto
   txLevel=pref.getUChar("txal",3);
   cfg.apPassword=pref.getString("appass","12345678");
@@ -3873,7 +3882,7 @@ void handleState(){
   s+=",\"protocol\":";s+=cfg.protocol==PROTO_KAD?"\"kad\"":"\"j1587\"";
   s+=",\"kadBigEndian\":";s+=cfg.kadBigEndian?"true":"false";
   s+=",\"kadFuelDiv\":";s+=cfg.kadFuelDiv;
-  s+=",\"kadVolt\":";s+=cfg.kadVolt;s+=",\"txPower\":";s+=cfg.txMode;s+=",\"txLevel\":";s+=txLevel;s+=",\"aggr\":";s+=cfg.aggr;s+=",\"txAutoSteps\":";s+=txAutoSteps;
+  s+=",\"kadVolt\":";s+=cfg.kadVolt;s+=",\"txPower\":";s+=cfg.txMode;s+=",\"txLevel\":";s+=txLevel;s+=",\"aggr\":";s+=cfg.aggr;s+=",\"aggrRx\":";s+=cfg.aggrRx;s+=",\"txAutoSteps\":";s+=txAutoSteps;
   s+=",\"fuelCorr\":[";s+=String(cfg.fuelCorr[0],4);s+=',';s+=String(cfg.fuelCorr[1],4);s+=']';
   s+=",\"apName\":";jsonString(s,cfg.apName);
   s+=",\"host\":";jsonString(s,cfg.hostName);
@@ -4383,6 +4392,12 @@ String buildNetworkReport(){
   {wifi_ps_type_t ps=WIFI_PS_NONE;esp_wifi_get_ps(&ps);
    s+="Power save: ";s+=ps==WIFI_PS_NONE?"off":ps==WIFI_PS_MIN_MODEM?"ON (minimum modem sleep)":"ON (maximum modem sleep)";s+="\n";}
   s+="Frame bundling (A-MPDU) to the router: ";s+=elAmpduTx?"on":"off";s+=cfg.aggr?" (default)":" (turned off in Diagnostics)";s+="\n";
+  s+="Frame bundling (A-MPDU) from the router: ";s+=elAmpduRx?"on":"off";s+=cfg.aggrRxTested?" (chosen by the board's test)":" (default)";s+="\n";
+  if(bundleTestRunning)s+="Bundling test: running\n";
+  else if(bundleTestAt){
+    s+="Bundling test (30 x 1400-byte pings, min/avg/max): from-router bundling on: ";s+=bundleTestOn.got;s+="/";s+=bundleTestOn.sent;s+=" back, ";s+=bundleTestOn.minMs;s+="/";s+=bundleTestOn.avgMs;s+="/";s+=bundleTestOn.maxMs;
+    s+=" ms | off: ";s+=bundleTestOff.got;s+="/";s+=bundleTestOff.sent;s+=" back, ";s+=bundleTestOff.minMs;s+="/";s+=bundleTestOff.avgMs;s+="/";s+=bundleTestOff.maxMs;s+=" ms\n";
+  }
   if(WiFi.getMode()&WIFI_MODE_STA){
     wifi_phy_mode_t pm;
     if(esp_wifi_sta_get_negotiated_phymode(&pm)==ESP_OK){s+="Negotiated Wi-Fi standard: ";s+=pm==WIFI_PHY_MODE_11B?"802.11b (slow)":pm==WIFI_PHY_MODE_11G?"802.11g":pm==WIFI_PHY_MODE_HT20?"802.11n 20 MHz":pm==WIFI_PHY_MODE_HT40?"802.11n 40 MHz":pm==WIFI_PHY_MODE_HE20?"802.11ax":"other";s+="\n";}
@@ -4601,6 +4616,8 @@ void appendLinkJson(String &s){
   if(linkScanDone){s+=",\"scan\":{\"total\":";s+=linkScanTotal;s+=",\"sameChannel\":";s+=linkScanSame;s+=",\"overlapping\":";s+=linkScanOverlap;s+=",\"sameBest\":";s+=(int)linkScanSameBest;s+='}';}
   s+='}';
   s+=",\"txMode\":";s+=cfg.txMode;s+=",\"txLevel\":";s+=txLevel;
+  s+=",\"ampduRx\":";s+=elAmpduRx?"true":"false";
+  if(bundleTestAt){appendPingJson(s,"bundleOn",bundleTestOn.sent,bundleTestOn.got,bundleTestOn.minMs,bundleTestOn.avgMs,bundleTestOn.maxMs);appendPingJson(s,"bundleOff",bundleTestOff.sent,bundleTestOff.got,bundleTestOff.minMs,bundleTestOff.avgMs,bundleTestOff.maxMs);}
   s+=",\"phoneTests\":[";
   for(uint8_t i=0;i<speedLogCount;i++){const SpeedLogRec &x=speedLog[i];if(i)s+=',';s+="{\"agoS\":";s+=(unsigned long)((millis()-x.at)/1000UL);s+=",\"level\":";s+=x.level;s+=",\"kbs\":";s+=x.kbs10/10.0f;s+=",\"rttMs\":";s+=x.rttMs;s+=",\"sweep\":";s+=x.sweep?"true":"false";s+='}';}
   s+="],\"phoneBest\":";s+=phoneTuneBest<5?String(phoneTuneBest):String("null");
@@ -4619,6 +4636,25 @@ void linkTuneTask(void *){
     if(apply&&best!=txLevel){
       txLevel=best;
       Preferences tp;if(tp.begin("enginelink",false)){tp.putUChar("txal",best);tp.end();}
+    }
+    // Frame bundling from the router: measured both ways once (and on "Test
+    // now"), the faster one is kept. The driver has to start again for each
+    // way: two short reconnects of about 2 seconds.
+    if(!cfg.aggrRxTested||linkTuneManual){
+      linkTuneManual=false;bundleTestRunning=true;
+      const uint8_t was=cfg.aggrRx;
+      PingStat a={},b={};
+      linkPingRouter(30,1400,50,a);
+      cfg.aggrRx=!was;networkSwitchAt=millis();pendingNetwork=true;
+      bool back=false;
+      for(uint16_t i=0;i<60&&!back;i++){vTaskDelay(pdMS_TO_TICKS(1000));back=!pendingNetwork&&WiFi.status()==WL_CONNECTED&&staIpAt&&(uint32_t)(millis()-staIpAt)>=8000UL;}
+      if(back)linkPingRouter(30,1400,50,b);
+      const int32_t sa=(int32_t)(a.sent-a.got)*100+a.avgMs,sb=(int32_t)(b.sent-b.got)*100+b.avgMs;
+      if(!back||!b.got||sb>=sa){cfg.aggrRx=was;networkSwitchAt=millis();pendingNetwork=true;}
+      if(was){bundleTestOn=a;bundleTestOff=b;}else{bundleTestOff=a;bundleTestOn=b;}
+      cfg.aggrRxTested=1;bundleTestAt=millis()?millis():1;bundleTestRunning=false;
+      Preferences tp;if(tp.begin("enginelink",false)){tp.putUChar("agrx",cfg.aggrRx);tp.putUChar("agrxt",1);tp.end();}
+      Serial.printf("Bundling from router: on %u ms, off %u ms -> %s\n",bundleTestOn.avgMs,bundleTestOff.avgMs,cfg.aggrRx?"on":"off");
     }
   }
 }
@@ -4843,6 +4879,7 @@ void handleCfg(){
     }
     if(g){cfg.gearMaskR=m;cfg.gearValR=val;}else{cfg.gearMaskF=m;cfg.gearValF=val;}
   }
+  if(web.hasArg("aggrRx")){const uint8_t v=web.arg("aggrRx").toInt()?1:0;cfg.aggrRxTested=1;if(v!=cfg.aggrRx){cfg.aggrRx=v;if(routerConfigured()&&!routerHold){networkSwitchAt=millis();pendingNetwork=true;}}}
   if(web.hasArg("aggr")){const uint8_t v=web.arg("aggr").toInt()?1:0;if(v!=cfg.aggr){cfg.aggr=v;if(routerConfigured()&&!routerHold){networkSwitchAt=millis();pendingNetwork=true;}}}
   if(web.hasArg("txp")){const int v=web.arg("txp").toInt();if(v<0||v>TX_AUTO){reply(false,"Invalid transmit power",400);return;}
     cfg.txMode=v;if(v!=TX_AUTO){txLevel=v;WiFi.setTxPower(elTxPower[txLevel]);}else{Preferences tp;if(tp.begin("enginelink",false)){tp.putUChar("txal",txLevel);tp.end();}}}
@@ -5621,7 +5658,7 @@ void initializeWeb(){
   web.on("/api/network-report",HTTP_GET,handleNetworkReport);
   web.on("/api/linktune",HTTP_POST,[](){
     if(!(routerConfigured()&&!routerHold&&WiFi.status()==WL_CONNECTED)){reply(false,"Only on the router",409);return;}
-    linkTuneWanted=true;reply(true,"Testing the transmit power, about 20 seconds");
+    linkTuneWanted=true;linkTuneManual=true;reply(true,"Testing the Wi-Fi link, about a minute");
   });
   // Auto transmit power: the app tries each step with a download test.
   web.on("/api/txtry",HTTP_POST,[](){
