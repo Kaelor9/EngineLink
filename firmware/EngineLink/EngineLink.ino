@@ -51,6 +51,7 @@
 #include "miniz.h"
 // wifiwpa3.cpp: WPA3 on or off for the Wi-Fi driver (see there)
 extern volatile bool elAllowSae;
+extern volatile bool elAmpduTx;
 bool elSaeControlActive();
 // linktune.cpp: picks the transmit power the router hears best (see there)
 struct LinkTuneStep { uint8_t level; uint8_t sent, got; uint16_t avgMs; };
@@ -61,7 +62,7 @@ extern volatile uint32_t linkTuneAt;
 uint8_t runLinkTune(uint8_t current);
 volatile bool linkTuneWanted=false;  // the deflate compressor in the chip's ROM
 
-#define EL_VERSION "0.12.4"
+#define EL_VERSION "0.12.5"
 // Releases list published by the Pages workflow; firmware files come from
 // GitHub Releases of the same repository. Nothing else is downloaded.
 #define EL_RELEASES_URL "https://kaelor9.github.io/EngineLink/releases.json"
@@ -488,6 +489,7 @@ struct Settings {
   bool canListen=false;
   uint8_t portChannel=1; // 1=J7 port, 2=J6 port, 0=unassigned
   uint8_t apChannel=6;
+  uint8_t aggr=0;             // A-MPDU to the router: 0 off (default), 1 on
   uint8_t txPower=1;          // 0 max (19.5 dBm), 1 medium (15), 2 low (11), 3 very low (8.5)
   String apPassword="12345678";
   String ssid="";
@@ -1046,6 +1048,7 @@ void onWiFi(WiFiEvent_t e,WiFiEventInfo_t info){
     staHadIp=true;
     saQueryRetryAt=0;
     routerGotIpThisSession=true;
+    esp_wifi_set_ps(WIFI_PS_NONE); // modem sleep adds up to a beacon (~100 ms) to every reply
     txNoAnswer=0;
     traceWifi(3);
     if(staAssociatedAt)staDhcpMs=now-staAssociatedAt;
@@ -2847,6 +2850,7 @@ void applyNetwork(){
   WiFi.mode(WIFI_OFF);
   // Read by wifiwpa3.cpp when the driver starts again below.
   elAllowSae=routerConfigured()&&!routerHold&&staSecMode==1;
+  elAmpduTx=!(withRouter&&!cfg.aggr);
   WiFi.persistent(false);
   WiFi.setHostname(cfg.hostName.c_str());
   apStarted=false;
@@ -3632,6 +3636,7 @@ void saveSettings(){
   pref.putUChar("port",cfg.portChannel);
   pref.putUChar("apch",cfg.apChannel);
   pref.putUChar("txp2",cfg.txPower);
+  pref.putUChar("aggr",cfg.aggr);
   pref.putString("appass",cfg.apPassword);
   pref.putString("ssid",cfg.ssid);
   pref.putString("wpass",cfg.wifiPassword);
@@ -3683,6 +3688,7 @@ void loadSettings(){
   cfg.canListen=pref.getBool("can",false);
   cfg.portChannel=pref.getUChar("port",1);
   cfg.apChannel=pref.getUChar("apch",6);
+  cfg.aggr=pref.getUChar("aggr",0)?1:0;
   cfg.txPower=pref.getUChar("txp2",1);  // new key: everyone starts on Medium
   cfg.apPassword=pref.getString("appass","12345678");
   cfg.ssid=pref.getString("ssid","");
@@ -3838,7 +3844,7 @@ void handleState(){
   s+=",\"protocol\":";s+=cfg.protocol==PROTO_KAD?"\"kad\"":"\"j1587\"";
   s+=",\"kadBigEndian\":";s+=cfg.kadBigEndian?"true":"false";
   s+=",\"kadFuelDiv\":";s+=cfg.kadFuelDiv;
-  s+=",\"kadVolt\":";s+=cfg.kadVolt;s+=",\"txPower\":";s+=cfg.txPower;s+=",\"txAutoSteps\":";s+=txAutoSteps;
+  s+=",\"kadVolt\":";s+=cfg.kadVolt;s+=",\"txPower\":";s+=cfg.txPower;s+=",\"aggr\":";s+=cfg.aggr;s+=",\"txAutoSteps\":";s+=txAutoSteps;
   s+=",\"fuelCorr\":[";s+=String(cfg.fuelCorr[0],4);s+=',';s+=String(cfg.fuelCorr[1],4);s+=']';
   s+=",\"apName\":";jsonString(s,cfg.apName);
   s+=",\"host\":";jsonString(s,cfg.hostName);
@@ -4300,7 +4306,7 @@ String makeNetworkHealthJson(){
   s+=",\"linkTune\":{\"running\":";s+=linkTuneRunning?"true":"false";s+=",\"chosen\":";s+=linkTuneChosen<4?String(linkTuneChosen):String("null");s+=",\"steps\":[";
   for(uint8_t i=0;i<linkTuneCount;i++){if(i)s+=',';s+="{\"level\":";s+=linkTuneSteps[i].level;s+=",\"got\":";s+=linkTuneSteps[i].got;s+=",\"sent\":";s+=linkTuneSteps[i].sent;s+=",\"ms\":";s+=linkTuneSteps[i].avgMs;s+='}';}
   s+="]}";
-  s+=",\"secMode\":";s+=staSecMode?"\"wpa3\"":"\"wpa2\"";s+=",\"saeControl\":";s+=elSaeControlActive()?"true":"false";s+=",\"secSwitches\":";s+=staSecSwitches;
+  s+=",\"secMode\":";s+=staSecMode?"\"wpa3\"":"\"wpa2\"";s+=",\"saeControl\":";s+=elSaeControlActive()?"true":"false";s+=",\"secSwitches\":";s+=staSecSwitches;{wifi_ps_type_t ps=WIFI_PS_NONE;esp_wifi_get_ps(&ps);s+=",\"powerSave\":";s+=(int)ps;}s+=",\"ampduTx\":";s+=elAmpduTx?"true":"false";
   s+=",\"saeConfigured\":";s+=staSecurityConfigured?"true":"false";
   s+=",\"saeSetupError\":";s+=(int)staSecurityConfigError;
   s+=",\"lastFailureDescription\":";jsonString(s,reasonText(routerFailureReason));
@@ -4346,6 +4352,13 @@ String buildNetworkReport(){
   s+="Security switches: ";s+=staSecSwitches;s+="\n";
   s+="Transmit power: ";s+=cfg.txPower==3?"very low (8.5 dBm)":cfg.txPower==2?"low (11 dBm)":cfg.txPower==1?"medium (15 dBm)":"maximum (19.5 dBm)";
   s+=" · lowered automatically ";s+=txAutoSteps;s+=" time(s) this start\n";
+  {wifi_ps_type_t ps=WIFI_PS_NONE;esp_wifi_get_ps(&ps);
+   s+="Power save: ";s+=ps==WIFI_PS_NONE?"off":ps==WIFI_PS_MIN_MODEM?"ON (minimum modem sleep)":"ON (maximum modem sleep)";s+="\n";}
+  s+="Frame bundling (A-MPDU) to the router: ";s+=elAmpduTx?"on":"off";s+=cfg.aggr?" (turned on in Diagnostics)":" (default in router mode)";s+="\n";
+  if(WiFi.getMode()&WIFI_MODE_STA){
+    wifi_phy_mode_t pm;
+    if(esp_wifi_sta_get_negotiated_phymode(&pm)==ESP_OK){s+="Negotiated Wi-Fi standard: ";s+=pm==WIFI_PHY_MODE_11B?"802.11b (slow)":pm==WIFI_PHY_MODE_11G?"802.11g":pm==WIFI_PHY_MODE_HT20?"802.11n 20 MHz":pm==WIFI_PHY_MODE_HT40?"802.11n 40 MHz":pm==WIFI_PHY_MODE_HE20?"802.11ax":"other";s+="\n";}
+  }
   s+="Transmit power test (ping to the router, 20 x 1400 bytes): ";
   if(linkTuneRunning)s+="running";
   else if(!linkTuneCount)s+="not run yet";
@@ -4741,6 +4754,7 @@ void handleCfg(){
     }
     if(g){cfg.gearMaskR=m;cfg.gearValR=val;}else{cfg.gearMaskF=m;cfg.gearValF=val;}
   }
+  if(web.hasArg("aggr")){const uint8_t v=web.arg("aggr").toInt()?1:0;if(v!=cfg.aggr){cfg.aggr=v;if(routerConfigured()&&!routerHold){networkSwitchAt=millis();pendingNetwork=true;}}}
   if(web.hasArg("txp")){const int v=web.arg("txp").toInt();if(v<0||v>3){reply(false,"Invalid transmit power",400);return;}cfg.txPower=v;radioTuning();}
   if(web.hasArg("host")){
     String v=web.arg("host");v.trim();v.toLowerCase();v.replace(' ','-');
