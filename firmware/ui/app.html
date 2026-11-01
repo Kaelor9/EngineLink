@@ -440,7 +440,9 @@ async function load(what){
     if(what==='econ')S.econ=await get('/api/economy',5000);
     if(what==='diag')S.diag=await get('/api/diag',5000);
     if(what==='sd')S.sd=await get('/api/sd/info',8000);
-    if(what==='state')S.state=await get('/api/state',6000);
+    if(what==='state'){S.state=await get('/api/state',6000);
+      // New firmware on the board: load its app instead of this old copy.
+      if(S.state&&S.state.build){if(!S.bootBuild)S.bootBuild=S.state.build;else if(S.bootBuild!==S.state.build&&!BASE)location.reload();}}
     if(what==='fw')S.fw=await get('/api/fw/status',4000);
     if(what==='events')S.events=await get('/api/events',5000);
     if(what==='life')S.life=await get('/api/life',5000);
@@ -1357,15 +1359,13 @@ const PAGE_VIEWS={
         ${!routerUp&&lastCode?`<div class="s12" style="margin-top:4px;color:var(--orange)">${esc(lastLabel)}</div>`:''}
         ${lv.net.rescue&&c.ssid&&w.routerNextTryS!=null?`<div class="s12 sub" style="margin-top:4px">Tries ${esc(c.ssid)} again ${w.routerNextTryS>60?'in about '+dur(w.routerNextTryS):'shortly'}.</div>`:''}</div>
       ${dlBlock(d.dl,d.sp)}
-      ${row('cycle','txp','Transmit power',(c&&c.txPower!=null?c.txPower:5)===5?'Auto: Test speed picks the fastest':'Fixed',rv(txName(c)))}
       <div class="rowx"><div class="cth"><span class="rt">Network report</span><a class="s13" href="/api/network-report" target="_blank" rel="noopener" style="color:var(--teal)">Open</a></div>
         ${c.ghToken?`<button class="btn" style="width:100%;margin-top:10px" data-a="reportSend">Send report</button><div class="s12 ${rep.error?'':'sub'}" style="margin-top:6px;${rep.error?'color:var(--orange)':''}">${rep.error?esc(rep.error):rep.pending?'Waiting to be sent.':rep.lastAgo!=null?'Last sent '+dur(rep.lastAgo)+' ago'+(rep.lastIssue?' (#'+rep.lastIssue+')':'')+'.':'Not sent yet.'}</div>`:`<div class="s12 sub" style="margin-top:3px">Add a GitHub token under Advanced to send it with one tap.</div>`}</div>
       <button class="rowx" data-a="wifiAdv" style="width:100%;text-align:left;display:block"><div class="cth"><span class="rt">Advanced</span><span class="sub">${S.wifiAdv?'▾':'›'}</span></div></button>
       ${S.wifiAdv?`<div class="rowx"><div class="grid2" style="gap:8px">${boxes.slice(2).map(([k,v])=>`<div style="background:var(--track);border-radius:12px;padding:11px 12px;min-width:0"><div class="s12 sub">${k}</div><div style="font-size:15px;font-weight:600;margin-top:4px">${esc(String(v))}</div></div>`).join('')}</div>
         <div class="s12 sub" style="margin-top:8px">Last router issue: ${esc(lastLabel)}${routerUp&&w.routerAuthMode?' · '+esc(w.routerAuthMode):''} · <a href="/api/network-health" target="_blank" rel="noopener" style="color:var(--sub)">Raw JSON</a></div></div>
         ${speedDetail()}
-        ${row('cycle','aggrRx','Frame bundling from the router','Tested by EngineLink. Reconnects after a change.',rv(c&&c.aggrRx?'On':'Off'))}
-        ${row('cycle','aggr','Frame bundling to the router','Reconnects after a change.',rv(c&&c.aggr===0?'Off':'On'))}
+        ${row('cycle','txp','Transmit power',(c&&c.txPower!=null?c.txPower:5)===5?'Auto (recommended): Test speed picks the fastest':'Fixed by you',rv(txName(c)))}
         ${tuneBlock(d,lv)}
         <div class="rowx">${reportBlock(c,lv)}</div>`:''}
       <div class="rowx"><div class="s12 sub">"Missed here" counts the live updates this phone did not get since the app was opened. Up for ${dur(d.up||0)}${d.reset!=null?' · last restart: '+(RESET[d.reset]||'code '+d.reset):''}.</div></div></div>`;
@@ -1428,9 +1428,9 @@ function speedDetail(){
 function dlBlock(dl,spd){
   const sp=S.speed,secs=ms=>ms<1000?NF(ms,0)+' ms':ms<60000?NF(ms/1000,ms<10000?1:0)+' s':dur(Math.round(ms/1000));
   const via=x=>x.ap?'over the EngineLink Wi-Fi':'over the boat router'+(x.rssi?` (signal ${x.rssi} dBm, ${x.rssi>-60?'strong':x.rssi>-72?'good':'weak'})`:'');
-  const verdict=sp&&!sp.busy&&!sp.err?(sp.kbs>=100?'Fast':sp.kbs>=30?'OK':'Slow')+(sp.best!=null?' · Auto chose '+TXN[sp.best].toLowerCase():''):'';
+  const verdict=sp&&!sp.busy&&!sp.err?(sp.kbs>=100?'Fast':sp.kbs>=30?'OK':'Slow')+(sp.best!=null?' · transmit power set to '+TXN[sp.best].toLowerCase():''):'';
   let h=`<div class="rowx"><div class="cth"><span class="rt">Speed</span><span class="rv">${sp?sp.busy?(sp.msg||'Testing…'):sp.err?'Failed':NF(sp.kbs,0)+' kB/s':''}</span></div>
-    <div class="s12 sub" style="margin-top:3px">${verdict||'Tests how fast data gets from EngineLink to this phone.'}</div>
+    <div class="s12 sub" style="margin-top:3px">${verdict||'Tests how fast data gets from EngineLink to this phone. On the router it also picks the best transmit power (about 30 seconds).'}</div>
     <button class="btn" style="width:100%;margin-top:10px" data-a="speedTest" ${sp&&sp.busy?'disabled':''}>${sp&&sp.busy?'Testing…':'Test speed'}</button></div>`;
   if(!S.wifiAdv)return h;
   if(dl&&dl.ms>0){
@@ -1791,13 +1791,13 @@ const A={
   speedTest:async()=>{
     const c=S.state&&S.state.config,url=new URL(BASE||location.origin,location.href);
     // Run the diagnostic on a separate low-priority HTTP worker. Never send
-    // 32 KiB through the main server: slow links froze every other request.
+    // big test data through the main server: slow links froze every other request.
     if(url.protocol!=='http:'){S.speed={err:true};render(true);return;}
-    url.port='82';
-    const once=async()=>{const t0=performance.now(),ac=new AbortController(),id=setTimeout(()=>ac.abort(),18000);
-      try{const r=await fetch(url.origin+'/api/speedtest',{cache:'no-store',signal:ac.signal});if(!r.ok)throw Error('HTTP '+r.status);
-        const data=await r.arrayBuffer();if(data.byteLength!==32768)throw Error('Incomplete transfer');
-        const ms=performance.now()-t0;return {kb:data.byteLength/1024,ms,kbs:data.byteLength/1024/(ms/1000)};}
+    url.port='82';const KB=64;
+    const once=async()=>{const t0=performance.now(),ac=new AbortController(),id=setTimeout(()=>ac.abort(),20000);
+      try{const r=await fetch(url.origin+'/api/speedtest?kb='+KB,{cache:'no-store',signal:ac.signal});if(!r.ok)throw Error('HTTP '+r.status);
+        const data=await r.arrayBuffer();if(data.byteLength!==KB*1024)throw Error('Incomplete transfer');
+        const ms=performance.now()-t0;return {kb:KB,ms,kbs:KB/(ms/1000)};}
       catch(e){return null;}finally{clearTimeout(id);}};
     // Round trip of a small request (median of 5), for the report.
     const rttOf=async()=>{const v=[];for(let i=0;i<5;i++){const t0=performance.now();try{await fetch(url.origin+'/api/rtt?'+i,{cache:'no-store'});v.push(performance.now()-t0);}catch(e){}}v.sort((a,b)=>a-b);return v.length?Math.round(v[v.length>>1]):0;};
@@ -1805,18 +1805,23 @@ const A={
     const auto=routerUp&&c&&(c.txPower==null||c.txPower===5);
     S.speed={busy:true};render(true);
     if(auto){
-      const sweep=[];
-      for(let l=4;l>=0;l--){
-        S.speed={busy:true,msg:'Testing '+TXN[l].toLowerCase()+'…'};render(true);
+      // Two rounds over every strength (high to low, then low to high, so a
+      // drifting link favours none) and the average per strength: one test
+      // alone swings too much on a busy 2.4 GHz channel.
+      const sum=[0,0,0,0,0],n=[0,0,0,0,0],order=[4,3,2,1,0,0,1,2,3,4];let last=null,step=0;
+      for(const l of order){
+        S.speed={busy:true,msg:'Testing '+(++step)+'/10…'};render(true);
         const t=await post('/api/txtry',{l});if(!t.ok)break;
-        await new Promise(r=>setTimeout(r,1500));
-        const rtt=await rttOf(),m=await once();
-        sweep.push({l,kbs:m?m.kbs:0,m,rtt});
+        await new Promise(r=>setTimeout(r,1200));
+        const rtt=step%5===1?await rttOf():0,m=await once();
+        if(m){sum[l]+=m.kbs;n[l]++;last=m;}
         await post('/api/speedlog',{l,kbs:m?m.kbs.toFixed(1):0,rtt,sweep:1});
       }
-      const ok=sweep.filter(x=>x.kbs>0).sort((a,b)=>b.kbs-a.kbs);
-      if(ok.length){const b=ok[0];await post('/api/speedlog',{best:b.l});S.speed={...b.m,rtt:b.rtt,sweep:sweep.map(x=>({l:x.l,kbs:x.kbs})),best:b.l};}
-      else{await post('/api/speedlog',{best:c.txLevel!=null?c.txLevel:3});S.speed={err:true};}
+      const avg=sum.map((x,i)=>n[i]?x/n[i]:0),cur=c.txLevel!=null?c.txLevel:3;
+      let best=avg.indexOf(Math.max(...avg));
+      if(avg[cur]>0&&avg[best]<avg[cur]*1.15)best=cur;  // keep the current one unless clearly better
+      if(avg[best]>0){await post('/api/speedlog',{best});S.speed={kb:KB,ms:KB/avg[best]*1000,kbs:avg[best],sweep:avg.map((k,l)=>({l,kbs:k})).reverse(),best};}
+      else{await post('/api/speedlog',{best:cur});S.speed={err:true};}
     }else{
       const rtt=await rttOf(),m=await once();
       await post('/api/speedlog',{kbs:m?m.kbs.toFixed(1):0,rtt});

@@ -66,7 +66,7 @@ assert "120000UL" in Path("firmware/EngineLink/routerguard.h").read_text()
 # A 32KiB network test previously froze the normal HTTP loop for 33s.
 assert "ChunkOut" not in speed_main and "beginDownload(" not in speed_main
 assert "speedServer.accept()" in speed_worker
-assert "Content-Length: 32768" in speed_worker
+assert "Content-Length: %u" in speed_worker and "size_t total=32768" in speed_worker
 assert 'url.port=\'82\'' in ui
 assert "NetworkServer speedServer(82);" in ino
 

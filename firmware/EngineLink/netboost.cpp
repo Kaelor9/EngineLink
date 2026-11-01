@@ -17,25 +17,37 @@
 
 uint32_t elBoostedSockets = 0;
 
+static bool portsOf(int fd, u16_t &lport, u16_t &rport) {
+  // Arduino's servers listen on a dual-stack IPv6 socket, so IPv4 phones
+  // show up as IPv4-mapped IPv6 addresses: take the ports from either form.
+  struct sockaddr_storage a = {}, b = {};
+  socklen_t al = sizeof(a), bl = sizeof(b);
+  if (getsockname(fd, (struct sockaddr *)&a, &al) != 0) return false;
+  if (getpeername(fd, (struct sockaddr *)&b, &bl) != 0) return false;
+  if (a.ss_family == AF_INET) lport = lwip_ntohs(((struct sockaddr_in *)&a)->sin_port);
+  else if (a.ss_family == AF_INET6) lport = lwip_ntohs(((struct sockaddr_in6 *)&a)->sin6_port);
+  else return false;
+  if (b.ss_family == AF_INET) rport = lwip_ntohs(((struct sockaddr_in *)&b)->sin_port);
+  else if (b.ss_family == AF_INET6) rport = lwip_ntohs(((struct sockaddr_in6 *)&b)->sin6_port);
+  else return false;
+  return true;
+}
+
+uint32_t elBoostMisses = 0;
+
 bool elBoostSocket(int fd, uint16_t extra) {
-  if (fd < 0) return false;
-  struct sockaddr_in local = {}, peer = {};
-  socklen_t ll = sizeof(local), pl = sizeof(peer);
-  if (getsockname(fd, (struct sockaddr *)&local, &ll) != 0) return false;
-  if (getpeername(fd, (struct sockaddr *)&peer, &pl) != 0) return false;
-  if (local.sin_family != AF_INET || peer.sin_family != AF_INET) return false;
-  const u16_t lport = lwip_ntohs(local.sin_port), rport = lwip_ntohs(peer.sin_port);
+  u16_t lport = 0, rport = 0;
+  if (fd < 0 || !portsOf(fd, lport, rport)) { ++elBoostMisses; return false; }
   bool ok = false;
   LOCK_TCPIP_CORE();
   for (struct tcp_pcb *pcb = tcp_active_pcbs; pcb; pcb = pcb->next) {
     if (pcb->local_port != lport || pcb->remote_port != rport) continue;
-    if (!IP_IS_V4(&pcb->remote_ip) || ip_2_ip4(&pcb->remote_ip)->addr != peer.sin_addr.s_addr) continue;
     const uint32_t nb = (uint32_t)pcb->snd_buf + extra;
     pcb->snd_buf = (tcpwnd_size_t)(nb > 0xFFFF ? 0xFFFF : nb);
     ok = true;
     break;
   }
   UNLOCK_TCPIP_CORE();
-  if (ok) ++elBoostedSockets;
+  if (ok) ++elBoostedSockets; else ++elBoostMisses;
   return ok;
 }
