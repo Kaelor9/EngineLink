@@ -5,20 +5,24 @@ Static contracts complement hardware tests; they cannot prove RF stability.
 from pathlib import Path
 import re
 
-ino = Path("firmware/EngineLink/EngineLink.ino").read_text(encoding="utf-8")
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from fwsource import firmware_source, body as fn
+
+ino = firmware_source()
 ui = Path("firmware/ui/app.html").read_text(encoding="utf-8")
 
 def section(text, begin, end):
     assert text.count(begin) == 1, f"missing/duplicate: {begin}"
     return text.split(begin, 1)[1].split(end, 1)[0]
 
-setup = section(ino, "void setup(){", "\nvoid loop(){")
-apply_network = section(ino, "void applyNetwork(){", "\nvoid serviceWifiScan(){")
-network = section(ino, "void serviceNetwork(){", "// ---------- Diagnosis")
-forget = section(ino, "void handleWifiForget(){", "\nvoid handleSeasonReset(){")
-speed_main = section(ino, "void handleSpeedTest(){", "\n// ---------- Backup")
-speed_worker = section(ino, "void speedHttpTask(void *){", "\nvoid liveHttpTask(void *){")
-network_api = section(ino, "void handleWifiScan(){", "\nvoid handleWifiConnect(){")
+setup = fn(ino, "void setup(){")
+apply_network = fn(ino, "void applyNetwork(){")
+network = fn(ino, "void serviceNetwork(){")
+forget = fn(ino, "void handleWifiForget(){")
+speed_main = fn(ino, "void handleSpeedTest(){")
+speed_worker = fn(ino, "void speedHttpTask(void *){")
+network_api = fn(ino, "void handleWifiScan(){")
 
 # The two user-selected normal operating modes are exclusive.
 assert "WiFi.mode(WIFI_AP);" in apply_network

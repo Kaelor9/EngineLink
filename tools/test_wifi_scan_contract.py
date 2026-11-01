@@ -6,15 +6,19 @@ Actual radio reliability and channel coverage require testing the ESP32-S3 PCB.
 from pathlib import Path
 import re
 
-ino = Path("firmware/EngineLink/EngineLink.ino").read_text(encoding="utf-8")
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from fwsource import firmware_source, body as fn
+
+ino = firmware_source()
 ui = Path("firmware/ui/app.html").read_text(encoding="utf-8")
 
 def body(name, next_name):
     return ino.split(name, 1)[1].split(next_name, 1)[0]
 
-api = body("void handleWifiScan(){", "void handleWifiConnect(){")
-service = body("void serviceWifiScan(){", "void serviceNetwork(){")
-capture = body("void captureWifiScan(int16_t total){", "// ---------- Wi-Fi: exclusive")
+api = fn(ino, "void handleWifiScan(){")
+service = fn(ino, "void serviceWifiScan(){")
+capture = fn(ino, "void captureWifiScan(int16_t total){")
 assert "WiFi.mode(" not in api and "WiFi.scanNetworks(" not in api, (
     "HTTP scan handler must acknowledge before manipulating the radio"
 )

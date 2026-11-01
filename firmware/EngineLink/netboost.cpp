@@ -3,9 +3,9 @@
 // The prebuilt Arduino ESP32 libraries give each TCP connection a send buffer
 // of 5744 bytes: four packets may be on their way before EngineLink must wait
 // for the phone's acknowledgement. On EngineLink's own Wi-Fi the phone answers
-// in a few milliseconds, so that is plenty. Through a router every answer took
-// 50-80 ms (field reports, 0.12.7/0.12.8), which caps a download below about
-// 90 kB/s, and with only four packets out a single lost packet cannot be
+// in a few milliseconds, so that is plenty. Through a router an answer can take
+// 50-80 ms, which caps a download below about 90 kB/s, and with only four
+// packets out a single lost packet cannot be
 // repaired quickly (that needs three later packets to arrive): the connection
 // then waits a second or more. The buffer size is fixed when the library is
 // built, but it is only a counter in each connection, so it can be raised for
@@ -14,6 +14,7 @@
 #include <lwip/tcpip.h>
 #include <lwip/sockets.h>
 #include <lwip/priv/tcp_priv.h>
+#include "netboost.h"
 
 uint32_t elBoostedSockets = 0;
 
