@@ -1,0 +1,44 @@
+name: Cleanup releases and branches
+
+# Manual only: Actions -> "Cleanup releases and branches" -> Run workflow.
+# Deletes GitHub releases older than the newest N (tags are kept, so old
+# firmware stays reachable) and remote branches whose pull request was merged.
+on:
+  workflow_dispatch:
+    inputs:
+      keep:
+        description: "How many newest releases to keep"
+        default: "5"
+        required: true
+
+permissions:
+  contents: write
+  pull-requests: read
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Delete old releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+          KEEP: ${{ inputs.keep }}
+        run: |
+          gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
+            --jq '.[] | "\(.created_at) \(.id) \(.tag_name)"' | sort -r > rel.txt
+          echo "Releases: $(wc -l < rel.txt), keeping newest $KEEP"
+          tail -n +$((KEEP + 1)) rel.txt | while read -r _ id tag; do
+            echo "Deleting release $tag"
+            gh api -X DELETE "repos/$GITHUB_REPOSITORY/releases/$id"
+          done
+      - name: Delete merged branches
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api --paginate "repos/$GITHUB_REPOSITORY/pulls?state=closed&per_page=100" \
+            --jq '.[] | select(.merged_at != null and .head.repo.full_name == env.GITHUB_REPOSITORY) | .head.ref' | sort -u > merged.txt
+          gh api --paginate "repos/$GITHUB_REPOSITORY/branches?per_page=100" --jq '.[].name' > branches.txt
+          grep -Fxf merged.txt branches.txt | grep -vxE 'main|gh-pages' | while read -r b; do
+            echo "Deleting branch $b"
+            gh api -X DELETE "repos/$GITHUB_REPOSITORY/git/refs/heads/$b" || true
+          done
