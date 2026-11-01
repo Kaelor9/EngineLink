@@ -56,7 +56,9 @@ extern volatile bool elAmpduRx;
 bool elSaeControlActive();
 // netboost.cpp: more data in flight per TCP connection (see there)
 bool elBoostSocket(int fd,uint16_t extra);
-extern uint32_t elBoostedSockets;
+extern uint32_t elBoostedSockets,elBoostMisses;
+// crashinfo.cpp: the last crash from the core dump in flash
+String elCrashSummary();
 // linktune.cpp: transmit power test and link measurements (see there)
 struct PingStat { uint8_t sent, got; uint16_t minMs, avgMs, maxMs; };
 struct LinkTuneStep { uint8_t level; PingStat p; };
@@ -86,7 +88,7 @@ uint32_t phoneTuneAt=0;uint8_t phoneTuneBest=255;
 uint32_t txTryAt=0;  // a sweep step is being tried; undone if the sweep never finishes
 volatile bool linkTuneWanted=false;volatile bool linkTuneManual=false;  // the deflate compressor in the chip's ROM
 
-#define EL_VERSION "0.12.9"
+#define EL_VERSION "0.12.10"
 // Releases list published by the Pages workflow; firmware files come from
 // GitHub Releases of the same repository. Nothing else is downloaded.
 #define EL_RELEASES_URL "https://kaelor9.github.io/EngineLink/releases.json"
@@ -2878,8 +2880,9 @@ void applyNetwork(){
   WiFi.mode(WIFI_OFF);
   // Read by wifiwpa3.cpp when the driver starts again below.
   elAllowSae=routerConfigured()&&!routerHold&&staSecMode==1;
-  elAmpduTx=!(withRouter&&!cfg.aggr);
-  elAmpduRx=!(withRouter&&!cfg.aggrRx);
+  // Frame bundling stays as the Wi-Fi driver ships it: on/off tests in the
+  // field (0.12.5, 0.12.8) showed only noise, and each switch costs a reconnect.
+  elAmpduTx=true;elAmpduRx=true;
   WiFi.persistent(false);
   WiFi.setHostname(cfg.hostName.c_str());
   apStarted=false;
@@ -4401,13 +4404,6 @@ String buildNetworkReport(){
   s+=" · lowered automatically ";s+=txAutoSteps;s+=" time(s) this start\n";
   {wifi_ps_type_t ps=WIFI_PS_NONE;esp_wifi_get_ps(&ps);
    s+="Power save: ";s+=ps==WIFI_PS_NONE?"off":ps==WIFI_PS_MIN_MODEM?"ON (minimum modem sleep)":"ON (maximum modem sleep)";s+="\n";}
-  s+="Frame bundling (A-MPDU) to the router: ";s+=elAmpduTx?"on":"off";s+=cfg.aggr?" (default)":" (turned off in Diagnostics)";s+="\n";
-  s+="Frame bundling (A-MPDU) from the router: ";s+=elAmpduRx?"on":"off";s+=cfg.aggrRxTested?" (chosen by the board's test)":" (default)";s+="\n";
-  if(bundleTestRunning)s+="Bundling test: running\n";
-  else if(bundleTestAt){
-    s+="Bundling test (30 x 1400-byte pings, min/avg/max): from-router bundling on: ";s+=bundleTestOn.got;s+="/";s+=bundleTestOn.sent;s+=" back, ";s+=bundleTestOn.minMs;s+="/";s+=bundleTestOn.avgMs;s+="/";s+=bundleTestOn.maxMs;
-    s+=" ms | off: ";s+=bundleTestOff.got;s+="/";s+=bundleTestOff.sent;s+=" back, ";s+=bundleTestOff.minMs;s+="/";s+=bundleTestOff.avgMs;s+="/";s+=bundleTestOff.maxMs;s+=" ms\n";
-  }
   if(WiFi.getMode()&WIFI_MODE_STA){
     wifi_phy_mode_t pm;
     if(esp_wifi_sta_get_negotiated_phymode(&pm)==ESP_OK){s+="Negotiated Wi-Fi standard: ";s+=pm==WIFI_PHY_MODE_11B?"802.11b (slow)":pm==WIFI_PHY_MODE_11G?"802.11g":pm==WIFI_PHY_MODE_HT20?"802.11n 20 MHz":pm==WIFI_PHY_MODE_HT40?"802.11n 40 MHz":pm==WIFI_PHY_MODE_HE20?"802.11ax":"other";s+="\n";}
@@ -4479,14 +4475,19 @@ String buildNetworkReport(){
   s+="Chip: ";s+=ESP.getChipModel();s+=" rev ";s+=ESP.getChipRevision();s+=" · ";s+=ESP.getCpuFreqMHz();s+=" MHz · Arduino core ";s+=ESP_ARDUINO_VERSION_MAJOR;s+=".";s+=ESP_ARDUINO_VERSION_MINOR;s+=".";s+=ESP_ARDUINO_VERSION_PATCH;s+=" · IDF ";s+=esp_get_idf_version();s+="\n";
   s+="Memory: free ";s+=ESP.getFreeHeap()/1024;s+=" KB, lowest ";s+=ESP.getMinFreeHeap()/1024;s+=" KB, largest block ";s+=ESP.getMaxAllocHeap()/1024;s+=" KB · PSRAM free ";s+=ESP.getFreePsram()/1024;s+=" KB\n";
   s+="Main loop: longest pass ";s+=loopMaxMs;s+=" ms · engine reading in own task: ";s+=engineTaskOn?"yes":"no";s+="\n";
-  s+="Reset reason: ";s+=(int)esp_reset_reason();s+="\n\n";
+  s+="Reset reason: ";s+=(int)esp_reset_reason();s+=" (1 power on, 3 software/update, 4 crash, 5/6/7 watchdog, 9 brownout)\n";
+  s+="Recent restarts (newest first): ";
+  {bool any=false;for(uint8_t i=0;i<RESTART_LOG_N;i++){const RestartRec &x=restartLog[i];if(!x.ver[0])continue;if(any)s+=" | ";any=true;s+="reason ";s+=x.reason;s+=" after ";s+=x.upBefore;s+=" s on ";s+=x.ver;}if(!any)s+="none recorded";}
+  s+="\n";
+  s+=elCrashSummary();
+  s+="\n";
   s+="HTTP / WEB\n";
   s+="HTTP rebinds: ";s+=web.listenerRebinds;s+="\n";
   s+="Web server self-check misses: ";s+=httpSelfFails;s+=" · restarted web server: ";s+=httpHeals;s+=" · board restarts for it: ";s+=httpSelfRestarts;s+="\n";
   s+="HTTP requests: ";s+=web.served;s+="\n";
   s+="Last 32 KiB server write: ";s+=speedTxLastBytes;s+=" bytes in ";s+=speedTxLastMs;s+=" ms (";
   s+=speedTxLastWrites;s+=" write calls)\n";
-  s+="TCP send window: 5744 bytes by default, raised to 17 KB for page/file requests and 23 KB for the speed test (";s+=elBoostedSockets;s+=" connections raised)\n";
+  s+="TCP send window: 5744 bytes by default, raised to 17 KB for page/file requests and 23 KB for the speed test (";s+=elBoostedSockets;s+=" connections raised, ";s+=elBoostMisses;s+=" not found)\n";
   s+="Note: server write time is NOT the same as measured radio throughput.\n\n";
   s+="LATEST WI-FI EVENTS (oldest to newest; uptime seconds)\n";
   RouterTrace trace[ROUTER_TRACE_CAP];const uint8_t n=getWifiTrace(trace);
@@ -4541,13 +4542,16 @@ void speedHttpTask(void *){
       c.print("HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
       c.stop();continue;
     }
-    c.print("HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\nCache-Control: no-store\r\nAccess-Control-Allow-Origin: *\r\nContent-Length: 32768\r\nConnection: close\r\n\r\n");
+    // Size from ?kb= (16-256 KB, default 32): bigger tests even out a jumpy link.
+    size_t total=32768;
+    {const int q=req.indexOf("kb=");if(q>0){const long kb=strtol(req.c_str()+q+3,nullptr,10);if(kb>=16&&kb<=256)total=(size_t)kb*1024;}}
+    c.printf("HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\nCache-Control: no-store\r\nAccess-Control-Allow-Origin: *\r\nContent-Length: %u\r\nConnection: close\r\n\r\n",(unsigned)total);
     const uint32_t begun=millis();
     size_t sent=0;
     uint32_t writes=0;
     uint8_t blocks=0;
-    while(sent<32768 && c.connected() && (uint32_t)(millis()-begun)<15000UL){
-      const size_t chunk=min((size_t)sizeof(sample),(size_t)(32768-sent));
+    while(sent<total && c.connected() && (uint32_t)(millis()-begun)<20000UL){
+      const size_t chunk=min((size_t)sizeof(sample),(size_t)(total-sent));
       const size_t n=c.write(sample,chunk);
       ++writes;
       if(n==0)break;
@@ -4629,7 +4633,6 @@ void appendLinkJson(String &s){
   s+='}';
   s+=",\"txMode\":";s+=cfg.txMode;s+=",\"txLevel\":";s+=txLevel;
   s+=",\"ampduRx\":";s+=elAmpduRx?"true":"false";
-  if(bundleTestAt){appendPingJson(s,"bundleOn",bundleTestOn.sent,bundleTestOn.got,bundleTestOn.minMs,bundleTestOn.avgMs,bundleTestOn.maxMs);appendPingJson(s,"bundleOff",bundleTestOff.sent,bundleTestOff.got,bundleTestOff.minMs,bundleTestOff.avgMs,bundleTestOff.maxMs);}
   s+=",\"phoneTests\":[";
   for(uint8_t i=0;i<speedLogCount;i++){const SpeedLogRec &x=speedLog[i];if(i)s+=',';s+="{\"agoS\":";s+=(unsigned long)((millis()-x.at)/1000UL);s+=",\"level\":";s+=x.level;s+=",\"kbs\":";s+=x.kbs10/10.0f;s+=",\"rttMs\":";s+=x.rttMs;s+=",\"sweep\":";s+=x.sweep?"true":"false";s+='}';}
   s+="],\"phoneBest\":";s+=phoneTuneBest<5?String(phoneTuneBest):String("null");
@@ -4648,25 +4651,6 @@ void linkTuneTask(void *){
     if(apply&&best!=txLevel){
       txLevel=best;
       Preferences tp;if(tp.begin("enginelink",false)){tp.putUChar("txal",best);tp.end();}
-    }
-    // Frame bundling from the router: measured both ways once (and on "Test
-    // now"), the faster one is kept. The driver has to start again for each
-    // way: two short reconnects of about 2 seconds.
-    if(!cfg.aggrRxTested||linkTuneManual){
-      linkTuneManual=false;bundleTestRunning=true;
-      const uint8_t was=cfg.aggrRx;
-      PingStat a={},b={};
-      linkPingRouter(30,1400,50,a);
-      cfg.aggrRx=!was;networkSwitchAt=millis();pendingNetwork=true;
-      bool back=false;
-      for(uint16_t i=0;i<60&&!back;i++){vTaskDelay(pdMS_TO_TICKS(1000));back=!pendingNetwork&&WiFi.status()==WL_CONNECTED&&staIpAt&&(uint32_t)(millis()-staIpAt)>=8000UL;}
-      if(back)linkPingRouter(30,1400,50,b);
-      const int32_t sa=(int32_t)(a.sent-a.got)*100+a.avgMs,sb=(int32_t)(b.sent-b.got)*100+b.avgMs;
-      if(!back||!b.got||sb>=sa){cfg.aggrRx=was;networkSwitchAt=millis();pendingNetwork=true;}
-      if(was){bundleTestOn=a;bundleTestOff=b;}else{bundleTestOff=a;bundleTestOn=b;}
-      cfg.aggrRxTested=1;bundleTestAt=millis()?millis():1;bundleTestRunning=false;
-      Preferences tp;if(tp.begin("enginelink",false)){tp.putUChar("agrx",cfg.aggrRx);tp.putUChar("agrxt",1);tp.end();}
-      Serial.printf("Bundling from router: on %u ms, off %u ms -> %s\n",bundleTestOn.avgMs,bundleTestOff.avgMs,cfg.aggrRx?"on":"off");
     }
   }
 }
@@ -4891,8 +4875,6 @@ void handleCfg(){
     }
     if(g){cfg.gearMaskR=m;cfg.gearValR=val;}else{cfg.gearMaskF=m;cfg.gearValF=val;}
   }
-  if(web.hasArg("aggrRx")){const uint8_t v=web.arg("aggrRx").toInt()?1:0;cfg.aggrRxTested=1;if(v!=cfg.aggrRx){cfg.aggrRx=v;if(routerConfigured()&&!routerHold){networkSwitchAt=millis();pendingNetwork=true;}}}
-  if(web.hasArg("aggr")){const uint8_t v=web.arg("aggr").toInt()?1:0;if(v!=cfg.aggr){cfg.aggr=v;if(routerConfigured()&&!routerHold){networkSwitchAt=millis();pendingNetwork=true;}}}
   if(web.hasArg("txp")){const int v=web.arg("txp").toInt();if(v<0||v>TX_AUTO){reply(false,"Invalid transmit power",400);return;}
     cfg.txMode=v;if(v!=TX_AUTO){txLevel=v;WiFi.setTxPower(elTxPower[txLevel]);}else{Preferences tp;if(tp.begin("enginelink",false)){tp.putUChar("txal",txLevel);tp.end();}}}
   if(web.hasArg("host")){

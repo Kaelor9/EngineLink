@@ -96,7 +96,7 @@ assert "authentication timeout (router reply not received)" in ui
 # with a task delay on every packet.
 speed=section("void speedHttpTask(void *){","void liveHttpTask(void *){")
 assert "sample[1460]" in speed
-assert "Content-Length: 32768" in speed
+assert "Content-Length: %u" in speed and "size_t total=32768" in speed
 assert "if((++blocks&3)==0)vTaskDelay(1);" in speed
 
 # WPA3 PMF code 209 is NOT included in Arduino-ESP32 3.3.x native
