@@ -66,7 +66,7 @@ main::-webkit-scrollbar{display:none}
 .hd{font-size:12px;font-weight:600;letter-spacing:.6px;text-transform:uppercase;color:var(--sub);padding:0 6px 9px}
 .sec{background:var(--card);border-radius:22px;padding:0 18px;box-shadow:var(--shadow);margin-bottom:26px}
 .row{width:100%;display:flex;justify-content:space-between;align-items:center;gap:12px;padding:14px 0 13px;text-align:left}
-.row+.row,.row+.rowx,.rowx+.row,.rowx+.rowx{border-top:1px solid var(--line)}
+.row+.row,.row+.rowx,.rowx+.row,.rowx+.rowx,.row+.grp,.rowx+.grp,.grp+.row,.grp+.rowx,.grp>.row+.row{border-top:1px solid var(--line)}
 .rowx{padding:14px 0 13px}
 .rt{display:block;font-size:15px;line-height:1.25}
 .rh{display:block;font-size:12.5px;color:var(--sub);margin-top:2px;line-height:1.25}
@@ -1053,12 +1053,12 @@ function vSettings(){
   // Connection
   h+=`<div class="hd">Connection</div><div class="sec">${row('page','ap','EngineLink Wi-Fi','Your phone connects here',rv(esc(c.apName||'EngineLink')))}
     ${row('page','router','Boat router','Gives internet time and updates',rv(router?'Connected · '+esc(lv.net.ssid):c.router?'Not reachable':'Not connected'))}
-    <div class="row"><span><span class="rt">Connected right now</span><span class="rh">Up to 6 phones at once</span></span><span class="rv">${lv?lv.net.cl+' phone'+(lv.net.cl===1?'':'s'):'—'}</span></div></div>`;
+    ${lv&&!router?`<div class="row"><span><span class="rt">Phones on EngineLink Wi-Fi</span><span class="rh">Up to 6 at once</span></span><span class="rv">${lv.net.cl+' phone'+(lv.net.cl===1?'':'s')}</span></div>`:''}</div>`;
   // Time
   const ts={gps:'GPS',ntp:'internet time',phone:'from phone',none:'not set'}[lv?lv.ts:'none']||'—';
   h+=`<div class="hd">Time</div><div class="sec"><div class="row"><span><span class="rt">Clock</span><span class="rh">Set from your phone, GPS or the internet</span></span><span class="rv">${lv&&lv.utc?hm(lv.utc)+' · '+ts:ts}</span></div>
     <div class="row"><span><span class="rt">Time zone</span><span class="rh">Times are shown in your phone's time zone</span></span><span class="rv">From phone</span></div>
-    <div class="${router?'':'dim'}">${row('cycle','ntp','Internet time (NTP)',router?(c.ntp?'On':'Off'):'Needs a router connection',tg(router&&c.ntp))}
+    <div class="grp ${router?'':'dim'}">${row('cycle','ntp','Internet time (NTP)',router?(c.ntp?'On':'Off'):'Needs a router connection',tg(router&&c.ntp))}
     <div class="row"><span class="rt">Server</span><input class="field" style="width:170px;text-align:right" data-i="ntpServer" value="${esc(c.ntpServer)}" aria-label="NTP server"></div></div></div>`;
   // SD card
   const sd=S.sd;
@@ -1118,7 +1118,7 @@ const EVT={
   'status':[e=>`Status bits changed`,e=>`From ${HEX(e.ref)} to ${HEX(e.v)}. A lamp, relay or switch changed. Note what you saw on the panel: it helps to decode these bits.`],
   'long-idle':[e=>`Idled for 20 minutes`,e=>`Long idling makes a diesel soot up. Run it under load now and then.`],
   'stays-cold':[e=>`Coolant only ${TT(e.v)} after 20 minutes`,e=>`The engine does not warm up under load. The thermostat may be stuck open.`],
-  'mark':[e=>`You marked something odd`,e=>`The two minutes before and after are saved. Look at the curves below, and write down what you noticed.`]
+  'mark':[e=>`You marked this moment`,e=>`The two minutes before and after are saved. The curves below show what both engines did.`]
 };
 const SEVC=['var(--blue)','var(--orange)','var(--red)'];
 function evTitle(e){const d=EVT[e.t];return (e.eng<2?engName(e.eng)+': ':'')+(d?d[0](e):e.t);}
@@ -1189,9 +1189,13 @@ function lifeCard(es){
 function eventsView(){
   const ev=S.events;
   let h=backPill();
-  h+=`<div class="grid2" style="gap:8px;margin-bottom:14px"><button class="btn" data-a="mark">${svg(IC.flag,15)}Something's odd</button><button class="btn" data-a="evAck" data-v="all">Mark all as seen</button></div>`;
+  const unseen=ev&&ev.list?ev.list.filter(e=>!e.ack).length:0;
+  h+=`<div class="card" style="margin-bottom:14px"><div class="rt">Noticed something yourself?</div>
+    <div class="s13 sub" style="margin-top:4px">A noise, a vibration, a smell or a gauge that looked wrong: tap the button while it happens. EngineLink keeps every engine value from two minutes before to two minutes after, and it shows up below so you can look at it later.</div>
+    <button class="btn pri" style="width:100%;margin-top:12px" data-a="mark">${svg(IC.flag,15)}Mark this moment</button></div>
+    ${unseen?`<div style="display:flex;justify-content:space-between;align-items:center;margin:0 4px 10px"><span class="s13 sub">${unseen} new</span><button class="s13" style="color:var(--teal)" data-a="evAck" data-v="all">Mark all as seen</button></div>`:''}`;
   if(!ev)return h+waiting();
-  if(!ev.list.length)return h+`<div class="card"><div class="empty">Nothing noticed yet. EngineLink watches both engines all the time and lists here what is out of the ordinary, with the two minutes before and after.</div></div>`;
+  if(!ev.list.length)return h+`<div class="card"><div class="empty">Nothing out of the ordinary so far. EngineLink checks both engines every second (temperatures, pressures, rpm, fuel and how the two compare) and lists anything unusual here, with the two minutes before and after.</div></div>`;
   h+='<div class="card" style="padding:0 18px">';
   ev.list.forEach((e,i)=>{
     const open=S.evOpen===e.id,d=EVT[e.t];
@@ -1360,14 +1364,13 @@ const PAGE_VIEWS={
         ${routerUp?busyHint(d,lv):''}
         ${lv.net.rescue&&c.ssid&&w.routerNextTryS!=null?`<div class="s12 sub" style="margin-top:4px">Tries ${esc(c.ssid)} again ${w.routerNextTryS>60?'in about '+dur(w.routerNextTryS):'shortly'}.</div>`:''}</div>
       ${dlBlock(d.dl,d.sp)}
-      <div class="rowx"><div class="cth"><span class="rt">Network report</span><a class="s13" href="/api/network-report" target="_blank" rel="noopener" style="color:var(--teal)">Open</a></div>
-        ${c.ghToken?`<button class="btn" style="width:100%;margin-top:10px" data-a="reportSend">Send report</button><div class="s12 ${rep.error?'':'sub'}" style="margin-top:6px;${rep.error?'color:var(--orange)':''}">${rep.error?esc(rep.error):rep.pending?'Waiting to be sent.':rep.lastAgo!=null?'Last sent '+dur(rep.lastAgo)+' ago'+(rep.lastIssue?' (#'+rep.lastIssue+')':'')+'.':'Not sent yet.'}</div>`:`<div class="s12 sub" style="margin-top:3px">Add a GitHub token under Advanced to send it with one tap.</div>`}</div>
       <button class="rowx" data-a="wifiAdv" style="width:100%;text-align:left;display:block"><div class="cth"><span class="rt">Advanced</span><span class="sub">${S.wifiAdv?'▾':'›'}</span></div></button>
       ${S.wifiAdv?`<div class="rowx"><div class="grid2" style="gap:8px">${boxes.slice(2).map(([k,v])=>`<div style="background:var(--track);border-radius:12px;padding:11px 12px;min-width:0"><div class="s12 sub">${k}</div><div style="font-size:15px;font-weight:600;margin-top:4px">${esc(String(v))}</div></div>`).join('')}</div>
         <div class="s12 sub" style="margin-top:8px">Last router issue: ${esc(lastLabel)}${routerUp&&w.routerAuthMode?' · '+esc(w.routerAuthMode):''} · <a href="/api/network-health" target="_blank" rel="noopener" style="color:var(--sub)">Raw JSON</a></div></div>
-        <div class="rowx">${reportBlock(c,lv)}</div>`:''}
+`:''}
       <div class="rowx"><div class="s12 sub">"Missed here" counts the live updates this phone did not get since the app was opened. Up for ${dur(d.up||0)}${d.reset!=null?' · last restart: '+(RESET[d.reset]||'code '+d.reset):''}.</div></div></div>`;
     h+=restartsBlock(d);
+    h+=reportsSection(c,lv);
     // Calibration
     const lastFull=S.fuel&&S.fuel.log.find(r=>r.full&&r.base!=null&&r.pump>0);
     h+=`<div class="hd">Calibration</div><div class="sec"><div class="rowx"><div class="cth"><span class="rt">Fuel rate scale</span><span class="s12" style="font-weight:600;color:${c.scaleOk?'var(--green)':'var(--orange)'}">${c.scaleOk?'Confirmed':'Not confirmed yet'}</span></div>
@@ -1451,18 +1454,21 @@ function dlBlock(dl,spd){
 // Reports to GitHub: EngineLink files its Wi-Fi report as an issue by itself
 // (after a router loss once it is back, after the web server restarted, or
 // on request). Needs a GitHub token that may only create issues.
-function reportBlock(c,lv){
+function reportsSection(c,lv){
   if(!c)return '';
-  const r=c.report||{},ip=lv&&lv.net&&lv.net.ip;
-  const last=r.lastAgo!=null?`Last report sent ${dur(r.lastAgo)} ago${r.lastIssue?' (issue #'+r.lastIssue+')':''}.`:'No report sent yet.';
-  return `<div>
-    <div class="rt">Send reports to GitHub by itself</div>
-    <div class="s12 sub" style="margin-top:3px">Sent as an issue to the EngineLink repository when something goes wrong or you tap Send (router name removed). Needs a fine-grained GitHub token for Kaelor9/EngineLink with Issues: read and write.</div>
-    <input class="field" style="margin-top:10px" type="password" autocomplete="off" data-i="ghTok" value="${esc(S.ghTok||'')}" placeholder="${c.ghToken?'Token saved · paste a new one to replace it':'Paste the token (github_pat_…)'}" aria-label="GitHub token">
-    <div class="grid2" style="gap:8px;margin-top:8px"><button class="btn" data-a="ghSave">${c.ghToken&&!S.ghTok?'Remove token':'Save token'}</button><button class="btn ${c.ghToken?'pri':''}" data-a="reportSend" ${c.ghToken?'':'disabled'}>Send report now</button></div>
-    <div class="s12 ${r.error?'':'sub'}" style="margin-top:6px;${r.error?'color:var(--orange)':''}">${c.ghToken?(r.error?esc(r.error):r.pending?'A report is waiting to be sent.':last):'No token saved.'}</div>
-    ${ip?`<div class="s12 sub" style="margin-top:6px">The report can also be opened at <b style="color:var(--text)">http://${esc(ip)}:81/report</b>, even if the main page stops answering.</div>`:''}
-  </div>`;
+  const r=c.report||{},ip=lv&&lv.net&&lv.net.ip,tok=!!c.ghToken;
+  const last=r.error?`<span style="color:var(--orange)">${esc(r.error)}</span>`:r.pending||c.engReportPending?'Waiting for the router to send.':r.lastAgo!=null?`Last sent ${dur(r.lastAgo)} ago${r.lastIssue?' (#'+r.lastIssue+')':''}.`:'Nothing sent yet.';
+  return `<div class="hd">Reports</div><div class="sec">
+    <div class="rowx"><div class="s13 sub">EngineLink can send its reports to the EngineLink project on GitHub by itself, so a problem can be looked into without copying anything. They hold engine data, trip times and Wi-Fi figures, never a position, the router's name or a password. Issues on GitHub are public.</div></div>
+    ${tok?`${row('engRep','','Engine report after each trip','How well both engines were read, sent when back on the router',tg(c.engReports!==false))}
+    <div class="rowx"><div class="grid2" style="gap:8px"><button class="btn" data-a="reportEngine">Send engine report</button><button class="btn" data-a="reportSend">Send Wi-Fi report</button></div>
+      <div class="s12 sub" style="margin-top:8px">${last}</div></div>`:''}
+    <div class="rowx"><div class="cth"><span class="rt">GitHub token</span><span class="s12 sub">${tok?'Saved':'Not set'}</span></div>
+      ${tok?'':'<div class="s12 sub" style="margin-top:3px">github.com › Settings › Developer settings › Fine-grained tokens: only the repository Kaelor9/EngineLink, permission Issues: read and write.</div>'}
+      <input class="field" style="margin-top:10px" type="password" autocomplete="off" data-i="ghTok" value="${esc(S.ghTok||'')}" placeholder="${tok?'Paste a new token to replace it':'Paste the token (github_pat_…)'}" aria-label="GitHub token">
+      <button class="btn" style="width:100%;margin-top:8px" data-a="ghSave">${tok&&!S.ghTok?'Remove token':'Save token'}</button></div>
+    <div class="rowx"><div class="cth"><span class="rt">Wi-Fi report</span><a class="s13" href="/api/network-report" target="_blank" rel="noopener" style="color:var(--teal)">Open</a></div>
+      ${ip?`<div class="s12 sub" style="margin-top:3px">Also at http://${esc(ip)}:81/report, even if the app stops answering.</div>`:''}</div></div>`;
 }
 // Signal strength as four bars of rising height on one baseline (the old
 // text glyphs rendered differently on every phone).
@@ -1695,6 +1701,7 @@ const A={
     if(pc){P[v]=nextOf(pc,P[v]);savePrefs();applyTheme();render(true);}
   },
   pref:v=>{P[v]=!P[v];savePrefs();if(v==='keepOn')wake();render(true);},
+  engRep:async()=>{const c=cfgv();await cfgSet({erep:c&&c.engReports!==false?0:1});render(true);},
   autoPoll:()=>{const c=cfgv();if(c.autoPoll){cfgSet({autoPoll:0}).then(()=>render(true));}else openSheet('autoPoll');},
   autoPollOn:async()=>{const r=await cfgSet({autoPoll:1,confirm:'POLL'});if(!r.ok)return;history.back();toast('EngineLink now reads both engines');render(true);},
   exportGo:()=>{goTab('history');S.selMode='export';render(true);},
@@ -1779,6 +1786,7 @@ const A={
   dl:v=>download(v),
   wifiAdv:()=>{S.wifiAdv=!S.wifiAdv;render(true);},
   ghSave:async()=>{const v=(S.ghTok||'').trim();const r=await cfgSet({ghtoken:v});if(r.ok){S.ghTok='';toast(v?'Token saved':'Token removed');load('diag');}},
+  reportEngine:async()=>{await act('/api/report/engine',{});setTimeout(()=>load('state'),3000);},
   reportSend:async()=>{await act('/api/report/send',{});setTimeout(()=>load('state'),3000);},
   speedTest:async()=>{
     // Served by the separate speed-test listener on port 82, never by the main

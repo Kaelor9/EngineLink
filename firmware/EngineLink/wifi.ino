@@ -736,6 +736,19 @@ void serviceNetwork(){
       fwJob=FW_REPORT;
     }
   }
+  // Engine report: after a trip (also one that ended away from the router)
+  // or when asked for in the app. Waits for a free moment on the router.
+  if((engineReportTrip||engineReportNow)&&!reportWanted&&cfg.ghToken.length()&&fwJob==FW_IDLE&&fwState!=3
+     &&routerConfigured()&&!routerHold&&WiFi.status()==WL_CONNECTED&&staIpAt&&(uint32_t)(millis()-staIpAt)>=60000UL){
+    // Runs in loop(), which already holds the engine lock.
+    const TripRec *t=engineReportTrip?tripById(engineReportTrip):nullptr;
+    reportBody=buildEngineReport(t);
+    reportTitle=t?String("Engine report: trip ")+t->id+" ("+(t->anySec/60)+" min, EngineLink " EL_VERSION ")":String("Engine report: sent from the app (EngineLink " EL_VERSION ")");
+    reportReason="engine report";
+    if(engineReportTrip){engineReportTrip=0;Preferences p;if(p.begin("enginelink",false)){p.remove("erpend");p.end();}}
+    engineReportNow=false;
+    fwJob=FW_REPORT;
+  }
   if(!pendingNetwork && !scanBusy && mdnsInterfaceReady &&
      networkIpEpoch!=httpBoundEpoch &&
      (uint32_t)(mdnsNow-networkIpEventAt)>=600UL){

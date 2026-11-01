@@ -63,7 +63,7 @@
 uint8_t txLevel=3;
 SpeedLogRec speedLog[SPEED_LOG_N];uint8_t speedLogCount=0;
 
-#define EL_VERSION "0.13.0"
+#define EL_VERSION "0.13.1"
 // Releases list published by the Pages workflow; firmware files come from
 // GitHub Releases of the same repository. Nothing else is downloaded.
 #define EL_RELEASES_URL "https://kaelor9.github.io/EngineLink/releases.json"
@@ -333,7 +333,10 @@ uint32_t scanCompletedMs=0;
 // by hand. Needs a token that may only create issues; the router name is
 // removed (the repository is public). At most one every 30 min, 10 a day.
 volatile bool reportWanted=false;bool reportManual=false,reportedThisBoot=false;
-String reportReason="",reportBody="",reportError="";
+String reportReason="",reportBody="",reportError="",reportTitle="";
+// Trip whose engine report still has to be sent (0 = none); kept in NVS so a
+// trip that ended at sea is reported once the board is back on the router.
+uint32_t engineReportTrip=0;bool engineReportNow=false;
 uint32_t reportSent=0,reportLastIssue=0,reportLastAt=0,reportDayStart=0,reportDayCount=0;
 volatile uint8_t fwJob=FW_IDLE;
 volatile uint8_t fwState=0;      // 0 idle, 1 checking, 2 list ready, 3 downloading, 4 installed, 9 error

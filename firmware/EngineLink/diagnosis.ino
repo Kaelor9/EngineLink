@@ -350,7 +350,7 @@ void handleLife(){
   sendJSON(200,s);
 }
 // ---------- Diagnostics ----------
-void handleDiag(){
+String makeDiagJson(){
   const uint64_t now=elapsedMs();
   String s;s.reserve(3000);
   s+="{\"t\":[";
@@ -496,8 +496,9 @@ void handleDiag(){
   s+=",\"reset\":";s+=(unsigned)esp_reset_reason();
   s+=",\"up\":";s+=(unsigned long)(now/1000ULL);
   s+='}';
-  sendJSON(200,s);
+  return s;
 }
+void handleDiag(){sendJSON(200,makeDiagJson());}
 // 30 s read test on one connector. Polls (read requests only) unless the
 // connector is already being polled, then counts the answers.
 // "Discover more values": asks once for every index from 256 to 319 with the

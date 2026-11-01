@@ -334,6 +334,7 @@ void saveSettings(){
   pref.putBool("ntp",cfg.ntpOn);
   pref.putString("ntpsrv",cfg.ntpServer);
   pref.putString("ghtok",cfg.ghToken);
+  pref.putBool("erep",cfg.engReports);
   pref.putBool("scaleok",cfg.fuelScaleOk);
   pref.putBool("voltok",cfg.voltOk);
   pref.putUChar("tunes",cfg.fineTunes);
@@ -391,6 +392,8 @@ void loadSettings(){
   cfg.ntpOn=pref.getBool("ntp",true);
   cfg.ntpServer=pref.getString("ntpsrv","pool.ntp.org");
   cfg.ghToken=pref.getString("ghtok","");
+  cfg.engReports=pref.getBool("erep",true);
+  engineReportTrip=pref.getUInt("erpend",0);
   cfg.fuelScaleOk=pref.getBool("scaleok",false);
   cfg.voltOk=pref.getBool("voltok",false);
   cfg.fineTunes=pref.getUChar("tunes",0);
