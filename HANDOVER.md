@@ -50,7 +50,7 @@ Which socket is port or starboard is a setting (on this boat: port J6, starboard
 | `docs/KAD300_EDC1.md` | What is known about the KAD protocol on this engine |
 | `.github/workflows/` | `validate.yml` (host tests, UI check, demo build), `build-engine.yml` (compile), `pages.yml` (release + Pages) |
 
-**Build:** arduino-cli, FQBN `esp32:esp32:esp32s3:FlashSize=8M,PartitionScheme=default_8MB,PSRAM=opi,USBMode=hwcdc,CDCOnBoot=cdc`, core esp32 3.3.x. Arduino pitfall: types used in function signatures must be declared near the top (the builder inserts prototypes before the first function).
+**Build:** arduino-cli, FQBN `esp32:esp32:esp32s3:FlashSize=8M,PartitionScheme=default_8MB,PSRAM=opi,USBMode=hwcdc,CDCOnBoot=cdc`, core esp32 3.3.x, with `--build-property "compiler.c.elf.extra_flags=-Wl,--wrap=esp_wifi_init"` (needed to switch WPA3 off, see `wifiwpa3.cpp`; CI fails the build without it). Arduino pitfall: types used in function signatures must be declared near the top (the builder inserts prototypes before the first function).
 
 **Release:** bump `#define EL_VERSION` in the .ino, README badge, add `docs/releases/vX.Y.Z.md` and a section in `docs/PRODUCTION_ALPHA.md`. On merge to `main` the workflow builds and publishes release `vX.Y.Z` with `enginelink-update.bin` (OTA / "Update from file") and `firmware.bin` (full USB image). The board can update itself from GitHub (Settings → Firmware) when it is on a router with internet; a new version that does not run properly for a minute is rolled back.
 
