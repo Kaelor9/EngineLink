@@ -88,7 +88,7 @@ uint32_t phoneTuneAt=0;uint8_t phoneTuneBest=255;
 uint32_t txTryAt=0;  // a sweep step is being tried; undone if the sweep never finishes
 volatile bool linkTuneWanted=false;volatile bool linkTuneManual=false;  // the deflate compressor in the chip's ROM
 
-#define EL_VERSION "0.12.11"
+#define EL_VERSION "0.12.12"
 // Releases list published by the Pages workflow; firmware files come from
 // GitHub Releases of the same repository. Nothing else is downloaded.
 #define EL_RELEASES_URL "https://kaelor9.github.io/EngineLink/releases.json"
@@ -4646,18 +4646,22 @@ void appendLinkJson(String &s){
   for(uint8_t i=0;i<speedLogCount;i++){const SpeedLogRec &x=speedLog[i];if(i)s+=',';s+="{\"agoS\":";s+=(unsigned long)((millis()-x.at)/1000UL);s+=",\"level\":";s+=x.level;s+=",\"kbs\":";s+=x.kbs10/10.0f;s+=",\"rttMs\":";s+=x.rttMs;s+=",\"sweep\":";s+=x.sweep?"true":"false";s+='}';}
   s+="],\"phoneBest\":";s+=phoneTuneBest<5?String(phoneTuneBest):String("null");
 }
+// Transmit power, fully automatic: a ping test 60 s after joining the router
+// and again every 30 minutes while nobody is downloading, keeping the
+// strength the router answers best. Nothing to set or press.
 void linkTuneTask(void *){
-  bool tunedThisBoot=false;
+  uint32_t lastRun=0,lastIp=0;
   for(;;){
     vTaskDelay(pdMS_TO_TICKS(2000));
     const bool online=routerConfigured()&&!routerHold&&WiFi.status()==WL_CONNECTED&&staIpAt&&(uint32_t)(millis()-staIpAt)>=60000UL;
     if(!online||otaActive||httpBusySince)continue;
-    if(!linkTuneWanted&&tunedThisBoot)continue;
-    linkTuneWanted=false;tunedThisBoot=true;
-    // In Auto a phone download test (more telling than pings) wins over this.
-    const bool apply=cfg.txMode==TX_AUTO&&!phoneTuneAt;
-    const uint8_t best=runLinkTune(txLevel,apply);
-    if(apply&&best!=txLevel){
+    const bool fresh=staIpAt!=lastIp;                       // a new connection
+    const bool due=lastRun&&(uint32_t)(millis()-lastRun)>=1800000UL;
+    if(!fresh&&!due&&!linkTuneWanted)continue;
+    if(!fresh&&!linkTuneWanted&&(uint32_t)(millis()-lastHttpMs)<20000UL)continue;  // the app is busy: later
+    linkTuneWanted=false;lastIp=staIpAt;lastRun=millis()?millis():1;
+    const uint8_t best=runLinkTune(txLevel,true);
+    if(best!=txLevel){
       txLevel=best;
       Preferences tp;if(tp.begin("enginelink",false)){tp.putUChar("txal",best);tp.end();}
     }
