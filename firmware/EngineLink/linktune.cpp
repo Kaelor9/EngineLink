@@ -1,14 +1,12 @@
 // Transmit power test and link measurements for the network report.
 //
-// The board pings its router (ICMP, the router answers by itself) at each
-// power step and keeps the one with the fewest losses and the shortest round
-// trip. In "Auto" the phone's own download test across the steps has the last
-// word (it measures what matters: data from EngineLink to the phone); this
-// ping test is the start-up choice until then. It also measures small pings,
-// pings to the internet (1.1.1.1: tells a slow router CPU from a slow radio
-// link) and counts the Wi-Fi networks on the router's channel. Runs in its own
-// task, so engine reading and the web server carry on. In its own file: the
-// ping API uses C callbacks.
+// After joining the router (and every 30 minutes while idle) the board pings
+// its router with large packets at each transmit power step and keeps the
+// step with the fewest losses and the shortest round trip, unless the current
+// step is within 20 %. It also measures small pings, pings to the internet
+// (a slow router CPU versus a slow radio link) and scans which networks share
+// the router's channel. Runs in its own task. In its own file: the ping API
+// uses C callbacks.
 #include <Arduino.h>
 #include <WiFi.h>
 #include "ping/ping_sock.h"
@@ -40,7 +38,7 @@ static void onOk(esp_ping_handle_t h, void *a) {
 }
 static void onEnd(esp_ping_handle_t, void *a) { ((PingAcc *)a)->done = true; }
 
-bool pingHost(IPAddress ip, uint8_t count, uint16_t size, uint16_t intervalMs, PingStat &out) {
+static bool pingHost(IPAddress ip, uint8_t count, uint16_t size, uint16_t intervalMs, PingStat &out) {
   out = {count, 0, 0, 0, 0};
   if (ip == IPAddress(0, 0, 0, 0)) return false;
   esp_ping_config_t cfg = ESP_PING_DEFAULT_CONFIG();
@@ -107,10 +105,9 @@ static void surveyChannel() {
   WiFi.scanDelete();
 }
 
-// Called from a task. `current` is the level in use; returns the best level
-// (or `current` if the test could not run). With apply=false the level in use
-// is restored afterwards (a fixed setting chosen by the owner).
-uint8_t runLinkTune(uint8_t current, bool apply) {
+// Called from a task. `current` is the step in use; returns the step to use
+// (`current` if the test could not run) and leaves the radio on it.
+uint8_t runLinkTune(uint8_t current) {
   linkTuneRunning = true; linkTuneCount = 0;
   uint8_t best = current; int32_t bestScore = INT32_MAX, curScore = INT32_MAX;
   for (int8_t lv = 4; lv >= 0; lv--) {
@@ -128,8 +125,7 @@ uint8_t runLinkTune(uint8_t current, bool apply) {
   // Stay on the current step unless another one is clearly (20 %) better:
   // a busy channel makes single measurements jump around.
   if (curScore != INT32_MAX && (int64_t)curScore * 100 <= (int64_t)bestScore * 120) best = current;
-  const uint8_t use = apply ? best : current;
-  WiFi.setTxPower(elTxPower[use]);
+  WiFi.setTxPower(elTxPower[best]);
   if (WiFi.status() == WL_CONNECTED) {
     vTaskDelay(pdMS_TO_TICKS(1000));
     pingHost(WiFi.gatewayIP(), 20, 64, 100, linkSmall);
@@ -139,9 +135,4 @@ uint8_t runLinkTune(uint8_t current, bool apply) {
   linkTuneChosen = best; linkTuneAt = millis() ? millis() : 1;
   linkTuneRunning = false;
   return best;
-}
-
-// Pings the router; used by the frame bundling test in the sketch.
-bool linkPingRouter(uint8_t count, uint16_t size, uint16_t intervalMs, PingStat &out) {
-  return pingHost(WiFi.gatewayIP(), count, size, intervalMs, out);
 }

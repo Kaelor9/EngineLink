@@ -1431,10 +1431,6 @@ function busyHint(d,lv){
   const ch=t.channel,q=t.quiet&&t.quiet!==ch?t.quiet:(ch&&ch<=3?11:1);
   return `<div class="s12" style="margin-top:6px;color:var(--orange)">Strong signal, but the router's Wi-Fi is slow${sc.sameChannel?`: ${sc.sameChannel} other network${sc.sameChannel>1?'s':''} share${sc.sameChannel>1?'':'s'} its channel ${ch||''}${sc.sameBest?' (strongest '+sc.sameBest+' dBm)':''}`:''}. Set the router's 2.4 GHz channel to ${q} in its settings, then test again.</div>`;
 }
-function speedDetail(){
-  const sp=S.speed;if(!sp||sp.busy||sp.err)return '';
-  return `<div class="rowx s12 sub">${sp.sweep?`Auto tried: ${sp.sweep.map(x=>TXD[x.l]+' dBm '+(x.kbs?NF(x.kbs,0)+' kB/s':'failed')).join(' · ')}. `:''}${NF(sp.kb,0)} kB in ${NF(sp.ms,0)} ms${sp.rtt!=null?', round trip '+NF(sp.rtt,0)+' ms':''}.</div>`;
-}
 function dlBlock(dl,spd){
   const sp=S.speed,secs=ms=>ms<1000?NF(ms,0)+' ms':ms<60000?NF(ms/1000,ms<10000?1:0)+' s':dur(Math.round(ms/1000));
   const via=x=>x.ap?'over the EngineLink Wi-Fi':'over the boat router'+(x.rssi?` (signal ${x.rssi} dBm, ${x.rssi>-60?'strong':x.rssi>-72?'good':'weak'})`:'');
@@ -1476,16 +1472,6 @@ function sigBars(r){
 }
 // Transmit power test: the board pings its router at each power step and
 // keeps the one with the fewest losses and the shortest round trip.
-// Transmit power steps, lowest to highest, and the owner's setting (5 = Auto).
-const TXN=['Very low','Low','Moderate','Medium','High'],TXD=['8.5','11','13','15','19.5'];
-function txName(c){const m=c&&c.txPower!=null?c.txPower:5;return m===5?'Auto'+(c&&c.txLevel!=null?' · '+TXN[c.txLevel]:''):TXN[m]||'Auto';}
-function tuneBlock(d,lv){
-  const t=d.linkTune||{},routerUp=lv&&lv.net&&lv.net.mode==='sta'&&lv.net.sta,nm=TXD;
-  const steps=(t.steps||[]).map(x=>`${nm[x.level]} dBm: ${x.got}/${x.sent} back, ${x.ms} ms`).join(' · ');
-  return `<div class="rowx"><div class="cth"><span class="rt">Find the best transmit power</span><span class="rv">${t.running?'Testing…':t.chosen!=null?nm[t.chosen]+' dBm':''}</span></div>
-    <div class="s12 sub" style="margin-top:3px">${steps?esc(steps):'Once after each start EngineLink pings its router at each strength (on Auto it uses the best until a download test picks the fastest). The first time it also compares frame bundling on and off. Test now repeats both, about a minute.'}</div>
-    ${routerUp?`<button class="btn" style="width:100%;margin-top:10px" data-a="linkTune" ${t.running?'disabled':''}>${t.running?'Testing…':'Test now'}</button>`:''}</div>`;
-}
 function voltBlock(c,es){
   const raw=es.map(e=>S.diag.t[e.ch].raw[293]).find(Boolean);
   const vA=raw?raw[0]*0.01308:null,vB=raw?raw[0]*0.0125:null,m=parseFloat(String(S.voltMeas).replace(',','.'));
@@ -1701,9 +1687,6 @@ const A={
     if(CYCLE[v]){const [list,key]=CYCLE[v];await cfgSet({[key]:nextOf(list,v==='port'?c.portChannel:c[key])});render(true);return;}
     if(v==='can'){await cfgSet({can:c.canListen?0:1});render(true);return;}
     if(v==='ntp'){await cfgSet({ntp:c.ntp?0:1});render(true);return;}
-    if(v==='aggrRx'){await cfgSet({aggrRx:c&&c.aggrRx?0:1});toast('EngineLink reconnects to the router');load('diag');return;}
-    if(v==='aggr'){await cfgSet({aggr:c&&c.aggr===0?1:0});toast('EngineLink reconnects to the router');load('diag');return;}
-    if(v==='txp'){await cfgSet({txp:(((c&&c.txPower!=null)?c.txPower:5)+1)%6});load('diag');return;}
     if(v==='proto'){
       const to=c.protocol==='kad'?'j1587':'kad';
       if(to==='j1587'&&!confirm('Switch to SAE J1587?\n\nEngineLink then stops reading Volvo Penta KAD / EDC I engines (like the KAD300) and only listens. Only for engines that send J1587 by themselves.'))return;
@@ -1794,14 +1777,13 @@ const A={
   testStop:async()=>{await act('/api/test/stop',{});load('state');},
   busRefresh:()=>load('state'),
   dl:v=>download(v),
-  linkTune:async()=>{await act('/api/linktune',{});for(let i=0;i<14;i++){await new Promise(r=>setTimeout(r,2500));await load('diag');if(S.diag&&S.diag.linkTune&&!S.diag.linkTune.running&&i>2)break;}load('state');},
   wifiAdv:()=>{S.wifiAdv=!S.wifiAdv;render(true);},
   ghSave:async()=>{const v=(S.ghTok||'').trim();const r=await cfgSet({ghtoken:v});if(r.ok){S.ghTok='';toast(v?'Token saved':'Token removed');load('diag');}},
   reportSend:async()=>{await act('/api/report/send',{});setTimeout(()=>load('state'),3000);},
   speedTest:async()=>{
-    const c=S.state&&S.state.config,url=new URL(BASE||location.origin,location.href);
-    // Run the diagnostic on a separate low-priority HTTP worker. Never send
-    // big test data through the main server: slow links froze every other request.
+    // Served by the separate speed-test listener on port 82, never by the main
+    // web server: a slow link would hold up every other request.
+    const url=new URL(BASE||location.origin,location.href);
     if(url.protocol!=='http:'){S.speed={err:true};render(true);return;}
     url.port='82';const KB=64;
     const once=async()=>{const t0=performance.now(),ac=new AbortController(),id=setTimeout(()=>ac.abort(),20000);
@@ -1811,7 +1793,6 @@ const A={
       catch(e){return null;}finally{clearTimeout(id);}};
     // Round trip of a small request (median of 5), for the report.
     const rttOf=async()=>{const v=[];for(let i=0;i<5;i++){const t0=performance.now();try{await fetch(url.origin+'/api/rtt?'+i,{cache:'no-store'});v.push(performance.now()-t0);}catch(e){}}v.sort((a,b)=>a-b);return v.length?Math.round(v[v.length>>1]):0;};
-    // One test. Transmit power is tuned by EngineLink itself in the background.
     S.speed={busy:true};render(true);
     const rtt=await rttOf(),m=await once();
     await post('/api/speedlog',{kbs:m?m.kbs.toFixed(1):0,rtt});

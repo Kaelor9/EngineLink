@@ -13,7 +13,7 @@
   <img src="https://img.shields.io/badge/Engines-2%C3%97%20J1708%20isolated-success" alt="2 × isolated J1708">
   <img src="https://img.shields.io/badge/Volvo%20Penta-KAD300%20%2F%20EDC%20I-0b5394" alt="Volvo Penta KAD300 / EDC I">
   <img src="https://img.shields.io/badge/NMEA%202000-listen--only-informational" alt="NMEA 2000 listen-only">
-  <img src="https://img.shields.io/badge/Firmware-0.12.14-orange" alt="Firmware 0.12.14">
+  <img src="https://img.shields.io/badge/Firmware-0.12.15-orange" alt="Firmware 0.12.15">
 </p>
 
 <p align="center">
@@ -35,11 +35,6 @@
 
 ---
 
-> [!WARNING]
-> **Current engineering blocker (2026-10-31, firmware v0.11.4):** The ESP32-S3 can associate with a Zyxel EX3600-T0 using **WPA3-SAE** and obtain a DHCP address, but the web UI and HTTP endpoints are intermittently extremely slow or inaccessible over the router. `enginelink.local` sometimes gives Chrome `DNS_PROBE_FINISHED_NO_INTERNET`, while the device still reports an active Wi-Fi connection. The independent 32 KiB download test has also failed in router mode. **Wi-Fi association is not proof that the product is reachable.** See [Current blocker / developer handover](#current-blocker--developer-handover-wi-fi-router-mode) before working on the next firmware revision.
-
----
-
 ## About
 
 **EngineLink** is a dedicated onboard device for boats with two engines. It reads fuel and engine data from two separate J1708 engine interfaces, processes it locally and serves a clean web app straight from the device.
@@ -56,7 +51,7 @@ Marine engine displays rarely show combined consumption, economy per nautical mi
 
 EngineLink combines both on one board:
 
-- Two **galvanically isolated** J1708 transceivers, one per engine
+- **galvanically isolated** J1708 transceivers, one per engine
 - An isolated NMEA 2000 interface for GPS speed and time
 - microSD storage for raw data, engine runs and calibration captures
 - Its own Wi-Fi network, so it works with no router and no internet
@@ -66,22 +61,22 @@ EngineLink combines both on one board:
 
 ## Key Features
 
-- 📱 **Phone app "Engine Link":** Trip, Economy, Tank, History and Engines, add it to the home screen. Light, dark and night themes, metric or imperial, any currency
-- ⛽ **Live fuel flow:** per engine and combined L/h (KAD index 289 or J1587 PID 183)
-- 🛥 **Automatic trips** with notes (people, sea, wind), combine/split and CSV export
-- 🛢 **Fuel log and tank:** fuel aboard with an honest ±, range at the current speed
-- 🎯 **Self-calibrating fuel figures:** weighted fit over all fill-ups (topped up / clicked off), separate correction for idle, part load and cruise, odd fill-ups caught, every trip recalculated
-- 📊 **Economy:** best cruising speed, trip planner, season statistics per RPM band, engine health trend
-- 🔧 **Volvo Penta KAD / EDC I:** VODIA scaling, passive decoding of an EDC display, or opt-in read-only polling
-- ⚖️ **Calibration tools:** voltage check against a multimeter, fuel scale check, gear learned at the dock
-- 🧹 **Checked engine data:** physical limits and jump confirmation on every answer, short gaps bridged, faster reading while the throttle moves
-- 🧭 **Fuel economy:** L/nm when NMEA 2000 GPS speed is available
-- 🧾 **Lifetime totals** with engine hours that survive restarts and recalculate after calibration
-- 🔎 **Bus discovery:** every parameter your ECUs actually answer or send, with raw bytes
-- 🧪 **Guided engine test:** record steady RPM stages with your own reference readings, export CSV
-- 📶 **Two exclusive Wi-Fi modes:** EngineLink standalone AP at `192.168.4.1` / `enginelink.local` (factory default), or router-only STA at `enginelink.local`. Router failure restores the rescue AP after up to 120 seconds.
-- 🔄 **Firmware updates from GitHub** over the boat router, with automatic rollback, or from a file
-- 🩺 **Diagnostics** with a setup check, connection tests and calibration
+- **Phone app "Engine Link":** Trip, Economy, Tank, History and Engines, add it to the home screen. Light, dark and night themes, metric or imperial, any currency
+- **Live fuel flow:** per engine and combined L/h (KAD index 289 or J1587 PID 183)
+- **Automatic trips** with notes (people, sea, wind), combine/split and CSV export
+- **Fuel log and tank:** fuel aboard with an honest ±, range at the current speed
+- **Self-calibrating fuel figures:** weighted fit over all fill-ups (topped up / clicked off), separate correction for idle, part load and cruise, odd fill-ups caught, every trip recalculated
+- **Economy:** best cruising speed, trip planner, season statistics per RPM band, engine health trend
+- **Volvo Penta KAD / EDC I:** VODIA scaling, passive decoding of an EDC display, or opt-in read-only polling
+- **Calibration tools:** voltage check against a multimeter, fuel scale check, gear learned at the dock
+- **Checked engine data:** physical limits and jump confirmation on every answer, short gaps bridged, faster reading while the throttle moves
+- **Fuel economy:** L/nm when NMEA 2000 GPS speed is available
+- **Lifetime totals** with engine hours that survive restarts and recalculate after calibration
+- **Bus discovery:** every parameter your ECUs actually answer or send, with raw bytes
+- **Guided engine test:** record steady RPM stages with your own reference readings, export CSV
+- **Two Wi-Fi modes:** EngineLink's own network at `192.168.4.1` (factory default), or on the boat router at the address the router gives it. If the router is lost, EngineLink brings its own network back within two minutes and returns to the router by itself. Transmit power is tuned automatically.
+- **Firmware updates from GitHub** over the boat router, with automatic rollback, or from a file
+- **Diagnostics** with a setup check, connection tests and calibration
 
 ---
 
@@ -165,95 +160,7 @@ Settings, trips, the fuel log and fuel totals are kept with Wi-Fi application up
 > - Do not poll while a Volvo diagnostic tool (VODIA) is connected
 > - Change the factory Wi-Fi password `12345678` in Settings
 
-See [KAD300 / EDC I](docs/KAD300_EDC1.md), [alpha status and safety](docs/PRODUCTION_ALPHA.md) and the [engine test procedure](docs/ENGINE_TEST.md).
-
----
-
-## Current blocker / developer handover: Wi-Fi router mode
-
-**For an engineer or AI coding agent taking over this project.** This section describes observed hardware behavior, not a confirmed root cause. **Latest field-tested build: v0.11.4 (2026-10-31). The router-mode usability issue remains OPEN.** Do not mark it fixed because GitHub Actions compiles or because the ESP32 says `WL_CONNECTED`.
-
-### Required network behavior
-
-- **Standalone:** ESP32-S3 runs its own EngineLink Wi-Fi as **AP-only**; dashboard is available at `http://192.168.4.1` without a router or internet. This is the factory default.
-- **Router mode:** ESP32-S3 joins a user-selected **2.4 GHz** Wi-Fi as **STA-only**. It must **not** also expose the EngineLink SoftAP. The phone/computer reaches the dashboard through that router; `http://enginelink.local` is a convenience, but access by the assigned IP must work even if mDNS does not.
-- **Recovery:** If joining/rejoining fails persistently (currently 120-second guard), restore the standalone AP and retain useful failure diagnostics. Do not strand users on an unreachable network or create reboot loops. Since v0.11.6 the standalone fallback looks for the saved router (asynchronous scan, AP stays on) after 2 min and then every 10 min, doubling after each failed return up to 2 h, and never while the app is in use on the AP.
-- Support standard **WPA2-Personal and WPA3-SAE / WPA2-WPA3 transition mode**, without requiring users to downgrade their router security. Preserve the read-only-by-default J1708, CAN/NMEA 2000 and engine-monitoring behavior. Engine data collection must not be blocked by a slow browser.
-
-### What has been measured on the real board
-
-| Firmware / network | Verified behavior |
-|---|---|
-| v0.11.1, standalone | AP-only / local HTTP responsive; no router connection is expected in this mode. |
-| v0.11.1–0.11.2, Zyxel EX3600-T0 in WPA2/WPA3 mixed mode | Repeated association/authentication failures (including codes **2, 15, 202**); one run fell back after 120 s with **zero** association/IP events. An earlier v0.11.1 run had **two** DHCP IP events but multiple disconnects. |
-| v0.11.2, iPhone 2.4 GHz hotspot | Joined cleanly: association **786 ms**, DHCP **1,513 ms**, zero disconnects in the supplied sample. Shows the hardware can operate as an STA. |
-| v0.11.2–v0.11.3, Zyxel switched to WPA2-PSK | Obtained IP in roughly **2 seconds** with strong signal. Browser-measured 32 KiB download was poor (around **6–23 kB/s**), compared with about **369 kB/s** measured in standalone after the v0.11.3 speed-test changes. These are short, non-controlled application-level tests, **not** RF throughput measurements. |
-| v0.11.3, Zyxel restored to WPA2/WPA3 mixed mode | **WPA3-SAE successfully negotiated**; DHCP succeeded. Then one active connection ended with **reason 209 (SA Query timeout)** at uptime ~365 s, recovering association/IP after ~31–33 s; router-side browser speed about **17 kB/s**. |
-| **v0.11.4, Zyxel WPA2/WPA3 mixed mode — latest** | After pre-connection failures **202, 2, 2** at uptime 1–9 s, it **associated at 10.4 s**, received router IP **192.168.1.57 at 11.5 s**, negotiated **WPA3-SAE**, and reported around **−44 dBm**. At uptime **256 s**, it recorded **zero post-IP drops**, **one HTTP listener rebind**, and **34 served HTTP requests**; nevertheless the browser intermittently failed to load `enginelink.local` (including `DNS_PROBE_FINISHED_NO_INTERNET`), sometimes showed an empty/delayed UI, and the download speed check showed **Failed**. The speed worker reported **0 bytes / 0 write calls**, meaning it did **not record a completed payload write**; this does not by itself prove a zero-throughput radio link. |
-
-The board's green indicator and `associated=true`/`hasRouterIp=true` describe **Wi-Fi association + DHCP**, **not** successful TCP connections, page serving or browser name resolution. Code 202 does **not** by itself prove an incorrect password. Code 209 is a WPA3/PMF SA Query timeout; v0.11.4 schedules an earlier retry for this case, but that does not establish that the underlying timeout has been eliminated. `DNS_PROBE_FINISHED_NO_INTERNET` does **not** isolate the cause to mDNS, nor does it mean EngineLink itself needs internet to serve its page.
-
-**v0.11.5 (untested on hardware):** the app now switches from `enginelink.local` to the board's router IP as soon as it is known, for every request including ports 81/82. In the reports above the browser always used `enginelink.local`, so per-request mDNS resolution is a strong candidate for the slow/blank pages, `DNS_PROBE_FINISHED_NO_INTERNET` and the 0-byte speed test. If the board is equally slow at its direct IP, this hypothesis is wrong and the steps below apply.
-
-**v0.11.6 field report → v0.11.7:** on WPA3-SAE the link held ~68 min, then dropped with 209 (SA Query timeout); after that every SAE login failed (2/4/202, ~4 s apart) through two fallbacks and two automatic returns over ~70 min, while the router stayed visible. v0.11.7 joins mixed-mode routers with WPA2 (PMF off) and uses WPA3-SAE only when the router requires it, switching on 209 / 210 / 211 and remembering the working mode. Not yet field-tested.
-
-**0.11.7 field observation → v0.11.8:** in router mode with a steady green LED (associated, IP 192.168.1.57), iPhone Safari at the direct IP got "network connection was lost" and then "server stopped responding" — TCP reached the board but HTTP never answered. This rules out mDNS for that case and points at the HTTP server (socket exhaustion suspected: 16 lwIP sockets, pool of 8 plus three listeners and others). v0.11.8 halves the pool and adds a loopback self-check that rebinds the server and, failing that, restarts. Not yet field-tested.
-
-**Correction to 0.11.7:** in this ESP-IDF, `pmf_cfg.capable` is deprecated and ignored, so a WPA2/WPA3 mixed router is still joined with WPA3-SAE; the WPA2-first change has no effect. **0.11.9:** the board can file its network report as a GitHub issue by itself (token with Issues write only, router name redacted), and serves the report on the port-81 side server (`/report`) so it is readable while port 80 is stuck. Field reports arrive as issues titled "Device report: …".
-
-**0.11.10 report → 0.11.11:** a full boot with zero associations to the Zyxel: 56 SAE attempts, all 2/4/202 (SAE handshake timeouts). Earlier boots got in after ~110 s or not at all. All versions used H2E when offered (`WPA3_SAE_PWE_BOTH`); 0.11.11 defaults to Hunting-and-Pecking, flips to BOTH after a session without an IP, and persists the working method (NVS `smode`).
-
-**0.12.0: WPA2 like most ESP32 products.** The prebuilt Arduino libraries always offer WPA3-SAE (`pmf_cfg.capable` is ignored), and the Zyxel failed SAE logins for whole boots. `firmware/EngineLink/wifiwpa3.cpp` wraps `esp_wifi_init` (link option `-Wl,--wrap=esp_wifi_init`, in both CI builds, guarded by an objdump check) and clears `CONFIG_FEATURE_WPA3_SAE_BIT` from `feature_caps` unless WPA3 is allowed. WPA2 is the default (works on WPA2 and WPA2/WPA3 mixed routers); WPA3 is enabled only for a WPA3-only router (scan shows WPA3_PSK, or reason 210/211), via a full driver restart on the next mode change. Without the link option the firmware still builds, WPA3 stays on, and the network report says so.
-
-**0.12.1 report → 0.12.2:** WPA2 negotiated (switch active), associated in 2.7 s, but DHCP took 29.5 s, the link dropped, then ~1 Hz reason 2 (auth not answered) and 15, mixed with 201, while the router's beacons were strong (-45 dBm): an uplink (board → router) loss pattern. 0.12.2 defaults TX power to 15 dBm and steps down to 11/8.5 dBm after 12 unanswered logins, persisting the level (NVS txp2).
-
-**Field result, 0.12.2 (report #62):** WPA2 at 15 dBm: association 280 ms, DHCP 1.55 s, zero disconnects, HTTP self-check clean, router-mode HTTP reachable. Root causes were the router failing WPA3-SAE logins with this ESP32 and uplink loss at full TX power. 0.12.3 stops flipping security on generic fallbacks.
-
-### Immediate diagnosis: isolate DNS, TCP/HTTP and browser rendering
-
-Run these from **the same Windows computer connected to the Zyxel LAN** while the board says it is on the router (replace the example IP if DHCP assigns a new one):
-
-```powershell
-# Port-80 reachability without any .local name resolution
-Test-NetConnection 192.168.1.57 -Port 80
-curl.exe -v --max-time 8 http://192.168.1.57/api/health
-curl.exe -v --max-time 8 http://192.168.1.57/api/network-health
-
-# Check whether the extra independent HTTP listeners are reachable
-Test-NetConnection 192.168.1.57 -Port 81
-Test-NetConnection 192.168.1.57 -Port 82
-curl.exe -v --max-time 8 http://192.168.1.57:81/api/live
-curl.exe -v --max-time 18 -o NUL http://192.168.1.57:82/api/speedtest
-
-# Compare only after direct-IP access has been established
-curl.exe -v --max-time 8 http://enginelink.local/api/health
-```
-
-Interpretation:
-
-- **Direct IP port 80 works quickly but `.local` does not:** focus on mDNS advertisement/resolution and router multicast behavior. Do not modify WPA3 settings to fix a name-resolution-only problem.
-- **Direct IP port 80 also fails or stalls:** investigate listening socket lifecycle, TCP handshake, server task blocking, routing/client isolation, and router-side packet delivery. A valid DHCP lease and green status are insufficient.
-- **`/api/health` works but `/` is blank or very slow:** inspect gzip UI response, content length/chunking/keep-alive, browser caching and JS/bootstrap/API calls separately.
-- **Port 80 works but ports 81/82 fail:** inspect sidecar listener startup/rebinding, worker task health, port binding and browser port access; do **not** infer low RF throughput from a failed port-82 speed test.
-
-Record for each case the client device/network, whether **IP** and **hostname** work, TCP connection time, HTTP response time, exact error, and `/api/network-report` before and after the event. If possible also check Zyxel client logs and reproduce using a second WPA3 router; no packet capture has yet established whether the issue is in firmware, AP, mDNS, socket handling or their interaction.
-
-### Source files / suspected boundaries (review, do not assume guilt)
-
-- [`firmware/EngineLink/EngineLink.ino`](firmware/EngineLink/EngineLink.ino): `onWiFi()`, `connectRouter()` (explicit SAE H2E/Hunting-and-Pecking + PMF), `applyNetwork()`, `serviceNetwork()`, `startNameService()`, `EngineLinkWebServer::handleClient()` / `rebindNetwork()`, `refreshWorkerListener()`, `speedHttpTask()`, `liveHttpTask()`, `initializeWeb()`. The main listener serves **80**, live sidecar **81**, and the 32 KiB speed test **82**.
-- [`firmware/ui/app.html`](firmware/ui/app.html): `hostCandidates()`, `findHost()`, `get()`, `tick()`, `speedTest` — hostname fallback, timeouts, live requests, port-82 measurement and presentation. Regenerate the embedded `firmware/EngineLink/ui.h` via [`tools/build_ui.py`](tools/build_ui.py) when editing UI source.
-- [`firmware/EngineLink/routerguard.h`](firmware/EngineLink/routerguard.h): router recovery timeout.
-- [`tools/test_router_reliability_contract.py`](tools/test_router_reliability_contract.py) and [`tools/test_network_architecture.py`](tools/test_network_architecture.py): static regression checks. CI success is necessary, **not a WPA3 / network performance field test**.
-- [v0.11.3](docs/releases/v0.11.3.md) and [v0.11.4](docs/releases/v0.11.4.md) release notes document previous changes. Verify assumptions against current implementation rather than layering on more reconnect workarounds.
-
-### Suggested engineering order and acceptance criteria
-
-1. **Establish an IP-only baseline and get reproducible HTTP timings** in STA mode before changing SAE/PMF or RF settings. Diagnose the failed port-82 test separately.
-2. **Instrument the full request path** (TCP listener alive/accepts, request parsing, main-handler latency, worker status, bytes actually written, mDNS lifecycle) with bounded, password-free diagnostics; avoid expensive debug logging or blocking engine acquisition.
-3. **Fix the verified root cause**, not just reduce reconnect delays. Keep WPA3/PMF security intact, keep router mode STA-only and standalone AP-only, and preserve fallback/OTA/engine safety.
-4. **Verify on actual hardware:** standalone `192.168.4.1`; WPA2 and WPA3-SAE against Zyxel and ideally another router; direct-IP HTTP and `.local` where multicast supports it; ports 80/81/82; repeated reloads/speed tests; sustained operation (at least 30 minutes) and recovery after deliberate router interruption. Report measured delays and failures, not only association status.
-
-**Handover warning:** The user should **not** have to change the router's security mode or maintain a special router configuration just to make EngineLink usable. Do not describe v0.11.4 as a completed Wi-Fi fix.
+See [KAD300 / EDC I](docs/KAD300_EDC1.md), [status and safety](docs/STATUS.md) and the [engine test procedure](docs/ENGINE_TEST.md).
 
 ---
 
@@ -261,7 +168,7 @@ Record for each case the client device/network, whether **IP** and **hostname** 
 
 | Hardware | Firmware | Engine validation |
 |----------|----------|-------------------|
-| ✅ Revision 1 assembled | 🚧 0.12.14 | ⏳ Pending first KAD300 test |
+| ✅ Revision 1 assembled | 🚧 0.12.15 | ⏳ Pending first KAD300 test |
 
 | Area | Status |
 |------|--------|
@@ -269,7 +176,7 @@ Record for each case the client device/network, whether **IP** and **hostname** 
 | microSD read/write | Bench tested |
 | Status LED | Bench tested |
 | Firmware build | CI compiled on every change |
-| Router Wi-Fi / WPA3 | **OPEN — WPA3 association/DHCP confirmed; HTTP reachability and speed intermittently fail on Zyxel EX3600-T0 in v0.11.4. See developer handover above.** |
+| Router Wi-Fi | Tested on a Zyxel EX3600 (WPA2/WPA3 mixed): 500–630 kB/s, about 20 ms round trip on a free 2.4 GHz channel |
 | KAD300 scaling (VODIA, M_902) | Confirmed from the database, fuel ×1/128 confirmed three ways |
 | KAD request/reply on the wire | Reconstructed, verify with the voltage check |
 | Fuel factor on the boat | Pending tank-to-tank |
@@ -289,8 +196,8 @@ Record for each case the client device/network, whether **IP** and **hostname** 
 - [x] Bus discovery
 - [x] Wi-Fi firmware updates, from GitHub with rollback
 - [x] Phone app with trips, fuel log, economy and engine health
-- [x] Exclusive AP or STA: standalone Wi-Fi or boat router, 120-second rescue AP fallback
-- [ ] Validate reliable router-mode HTTP/mDNS/sidecar performance with WPA2 and WPA3 on real hardware
+- [x] Own Wi-Fi or boat router, with automatic fallback and return
+- [x] Router mode validated on real hardware (WPA2, WPA3-capable routers)
 - [x] Volvo Penta KAD / EDC I decoding and opt-in polling
 - [ ] KAD reply layout confirmed on the wire
 - [ ] Fuel factor and corrections confirmed tank to tank
@@ -319,7 +226,7 @@ Record for each case the client device/network, whether **IP** and **hostname** 
 │   └── EngineLink/        # Application firmware + embedded web UI (ui.h)
 ├── hardware/              # Hardware notes
 ├── site/                  # GitHub Pages installer
-├── HANDOVER.md            # Product requirements and design decisions
+├── HANDOVER.md            # Design decisions and constraints for developers
 └── README.md
 ```
 
@@ -334,7 +241,7 @@ arduino-cli compile \
   firmware/EngineLink
 ```
 
-The version is defined once as `EL_VERSION` in `firmware/EngineLink/EngineLink.ino`. The installer and manifests take it from there. See [docs/RELEASING.md](docs/RELEASING.md).
+The version is defined once as `EL_VERSION` in `firmware/EngineLink/EngineLink.ino`. The installer and manifests take it from there. See [docs/RELEASING.md](docs/RELEASING.md). Release notes for every version are in [docs/releases](docs/releases).
 
 ---
 
