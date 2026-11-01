@@ -4,7 +4,7 @@
 // router with WPA2: their Wi-Fi is built without WPA3, so on a WPA2/WPA3
 // "mixed" router they use WPA2, which every router of the last 15 years
 // handles well. The prebuilt Arduino ESP32 libraries always offer WPA3, and
-// some routers (a Zyxel in the field) then fail the WPA3-SAE login again and
+// some routers then fail the WPA3-SAE login with the ESP32 again and
 // again. Arduino starts the Wi-Fi driver with esp_wifi_init(); with the link
 // option -Wl,--wrap=esp_wifi_init this function sits in front of it and
 // clears the driver's WPA3-SAE capability unless EngineLink allows it.
@@ -13,6 +13,7 @@
 // without a restart. In its own file: Arduino would add a C++ prototype for
 // it in the sketch, which clashes with the C linkage the linker needs.
 #include <esp_wifi.h>
+#include "wifiwpa3.h"
 
 volatile bool elAllowSae = false;
 

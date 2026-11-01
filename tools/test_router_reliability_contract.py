@@ -7,21 +7,25 @@ are required before treating a green build as proof of connectivity.
 from pathlib import Path
 import re
 
-ino=Path("firmware/EngineLink/EngineLink.ino").read_text(encoding="utf-8")
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from fwsource import firmware_source, body as fn
+
+ino=firmware_source()
 ui=Path("firmware/ui/app.html").read_text(encoding="utf-8")
 
 def section(start,end):
     assert ino.count(start)==1, "Missing or ambiguous section: "+start
     return ino.split(start,1)[1].split(end,1)[0]
 
-network=section("void serviceNetwork(){","// ---------- Diagnosis")
-apply=section("void applyNetwork(){","// On each completed channel")
-teardown=section("void parkRouter(const char *why){","void applyNetwork(){")
-callback=section("void onWiFi(WiFiEvent_t e,WiFiEventInfo_t info){","bool cardInserted(){")
-health=section("String makeNetworkHealthJson(){","// Independent, read-only live")
-workers=section("void refreshWorkerListener(NetworkServer &server,uint32_t &boundEpoch){","void speedHttpTask(void *){")
-web=section("class EngineLinkWebServer : public WebServer {","struct Frame {")
-routes=section("void initializeWeb(){","void serialStatus(){")
+network=fn(ino,"void serviceNetwork(){")
+apply=fn(ino,"void applyNetwork(){")
+teardown=fn(ino,"void parkRouter(const char *why){")
+callback=fn(ino,"void onWiFi(WiFiEvent_t e,WiFiEventInfo_t info){")
+health=fn(ino,"String makeNetworkHealthJson(){")+fn(ino,"String buildNetworkReport(){")
+workers=fn(ino,"void refreshWorkerListener(NetworkServer &server,uint32_t &boundEpoch){")
+web=fn(ino,"class EngineLinkWebServer : public WebServer {")
+routes=fn(ino,"void initializeWeb(){")
 
 # Single, exclusive operation modes.
 assert "WiFi.mode(WIFI_AP);" in apply
@@ -80,7 +84,7 @@ assert 'wifiPassword' not in health and 'wpass' not in health
 assert 'Unexpected router drops' in ui
 assert "202:'authentication failed (" in ui
 # Router WPA3 settings must be applied before starting the association.
-connect=section("void connectRouter(){","// A name for http://")
+connect=fn(ino,"void connectRouter(){")
 assert "WiFi.begin(cfg.ssid.c_str(),password,0,nullptr,false)" in connect
 assert "WPA3_SAE_PWE_BOTH" in connect
 assert "staCfg.sta.pmf_cfg.required=false" in connect
@@ -94,7 +98,7 @@ assert "No current connection error" in ui
 assert "authentication timeout (router reply not received)" in ui
 # The speed test remains 32 KiB but no longer emits tiny 256-byte packets
 # with a task delay on every packet.
-speed=section("void speedHttpTask(void *){","void liveHttpTask(void *){")
+speed=fn(ino,"void speedHttpTask(void *){")
 assert "sample[1460]" in speed
 assert "Content-Length: %u" in speed and "size_t total=32768" in speed
 assert "if((++blocks&3)==0)vTaskDelay(1);" in speed

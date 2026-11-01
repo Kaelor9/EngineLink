@@ -31,16 +31,37 @@ the boat router. No cloud, no app store, no internet needed.
 
 ## Code layout
 
+Firmware (`firmware/EngineLink/`). Arduino joins the `.ino` files into one
+program, so they share the globals in `EngineLink.ino`.
+
+| File | What |
+|---|---|
+| `EngineLink.ino` | Libraries, global state, `setup()` and `loop()` |
+| `model.h` | All data types and constants (in a header so Arduino's generated prototypes always see them) |
+| `engines.ino` | J1708 receive tasks, frame checks, J1587 and KAD decoding, read-only KAD polling, engine task |
+| `fuel.ino` | Fuel integration per rpm band, calibration from fill-ups, fuel log, tank estimate |
+| `trips.ino` | Trip start/end, trip logs, data coverage, history, per-second learning |
+| `diagnosis.ino` | Sample ring, rules, events and black boxes, engine life story, series downloads |
+| `storage.ino` | SD card, LittleFS, NVS settings and totals, restart log, raw logging |
+| `wifi.ino` | Own access point or router, fallback and return, scans, mDNS |
+| `webserver.h` | The port 80 web server (connection pool) |
+| `webapi.ino` | JSON helpers, the app's API handlers and the route table |
+| `netreport.ino` | Network report, ports 81 and 82, web server self-check, transmit power task |
+| `downloads.ino`, `sdexport.ino` | Streaming (compressed) downloads, CSV exports, SD clean-up, backup |
+| `updates.ino` | Firmware updates from GitHub or a file, with rollback |
+| `led.ino`, `nmea2000.ino`, `enginetest.ino` | Status LED, NMEA 2000 listener, engine test capture |
+| `wifiwpa3.cpp/.h` | Wraps `esp_wifi_init` to switch WPA3-SAE off unless the router needs it |
+| `linktune.cpp/.h` | Automatic transmit power, link measurements, channel scan |
+| `netboost.cpp/.h` | Raises the TCP send window per connection |
+| `crashinfo.cpp/.h` | The last crash from the core dump, for the report |
+| `fuelcal.h`, `diagrules.h`, `ledpatterns.h`, `routerguard.h`, `otaheader.h` | Logic without Arduino, tested on a PC in CI |
+
+Elsewhere:
+
 | Path | What |
 |---|---|
-| `firmware/EngineLink/EngineLink.ino` | Main firmware: J1708 receive, KAD polling, fuel, trips, diagnosis, SD, Wi-Fi, web server, updates |
-| `firmware/EngineLink/wifiwpa3.cpp` | Wraps `esp_wifi_init` to switch WPA3-SAE off unless the router needs it |
-| `firmware/EngineLink/linktune.cpp` | Automatic transmit power, link measurements and channel scan for the report |
-| `firmware/EngineLink/netboost.cpp` | Raises the TCP send window per connection |
-| `firmware/EngineLink/crashinfo.cpp` | Reads the last crash from the core dump for the report |
-| `firmware/EngineLink/*.h` | Logic kept free of Arduino so it can be tested on a PC: fuel calibration, diagnosis rules, LED patterns, router fallback timer, firmware header check |
 | `firmware/ui/app.html` | The phone app (one file, plain JavaScript). Edit this, then run `python3 tools/build_ui.py` to regenerate `ui.h` |
-| `tools/test_*` | Host tests, run in CI |
+| `tools/test_*` | Host tests and source checks, run in CI (`tools/fwsource.py` reads the firmware for the source checks) |
 | `tools/build_demo.py`, `tools/demo/` | Browser demo (app + simulated boat) for GitHub Pages |
 | `docs/` | Protocol notes, hardware, status, release process |
 

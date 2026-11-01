@@ -3,6 +3,7 @@
 // source with the firmware's .elf file (xtensa-esp32s3-elf-addr2line).
 #include <Arduino.h>
 #include <esp_core_dump.h>
+#include "crashinfo.h"
 
 String elCrashSummary() {
   String s;

@@ -10,15 +10,12 @@
 #include <Arduino.h>
 #include <WiFi.h>
 #include "ping/ping_sock.h"
+#include "linktune.h"
 
 // Transmit power steps, lowest to highest (index = level).
-extern const wifi_power_t elTxPower[5];
 const wifi_power_t elTxPower[5] = {WIFI_POWER_8_5dBm, WIFI_POWER_11dBm, WIFI_POWER_13dBm, WIFI_POWER_15dBm, WIFI_POWER_19_5dBm};
-extern const char *const elTxName[5];
 const char *const elTxName[5] = {"very low (8.5 dBm)", "low (11 dBm)", "moderate (13 dBm)", "medium (15 dBm)", "high (19.5 dBm)"};
 
-struct PingStat { uint8_t sent, got; uint16_t minMs, avgMs, maxMs; };
-struct LinkTuneStep { uint8_t level; PingStat p; };
 LinkTuneStep linkTuneSteps[5];
 PingStat linkSmall = {}, linkNet = {};
 volatile uint8_t linkTuneCount = 0, linkTuneChosen = 255;
