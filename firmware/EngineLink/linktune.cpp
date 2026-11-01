@@ -64,7 +64,7 @@ bool pingHost(IPAddress ip, uint8_t count, uint16_t size, uint16_t intervalMs, P
 // Networks per channel and the ones on or near the router's channel (maker
 // prefix and signal, no names), for the report and the channel advice.
 String linkScanList;
-volatile uint8_t linkScanQuiet = 0;   // the 1/6/11 channel with the least around it
+volatile uint8_t linkScanQuiet = 0, linkScanCh = 0;  // ... and the router's channel at the scan   // the 1/6/11 channel with the least around it
 static void surveyChannel() {
   const int ch = WiFi.channel();
   if (WiFi.scanComplete() == WIFI_SCAN_RUNNING) return;  // someone else is scanning
@@ -100,7 +100,7 @@ static void surveyChannel() {
   }
   const int cand[3] = {1, 6, 11}; int q = 1;
   for (int k = 0; k < 3; k++) if (load[cand[k]] < load[q]) q = cand[k];
-  linkScanQuiet = q;
+  linkScanQuiet = q; linkScanCh = ch;
   linkScanList = list;
   linkScanTotal = n > 255 ? 255 : n; linkScanSame = same; linkScanOverlap = overlap;
   linkScanSameBest = same ? best : 0; linkScanDone = true;
