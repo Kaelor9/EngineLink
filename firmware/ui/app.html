@@ -1360,7 +1360,7 @@ const PAGE_VIEWS={
       </div>
       <div class="s12 sub" style="margin-top:7px">The report includes event history, association and DHCP timing, driver errors and web diagnostics. It contains no Wi-Fi password.</div>
       ${reportBlock(c,lv)}
-      </div>${row('cycle','txp','Transmit power','EngineLink lowers it by itself if the router does not hear it',rv(['Maximum','Medium','Low','Very low'][(c&&c.txPower!=null)?c.txPower:1]))}${row('cycle','aggr','Frame bundling to the router','Normally on. Off can help a router that drops bundled frames. EngineLink reconnects after a change.',rv(c&&c.aggr===0?'Off':'On (normal)'))}${tuneBlock(d,lv)}${dlBlock(d.dl,d.sp)}<div class="rowx">
+      </div>${row('cycle','txp','Transmit power',(c&&c.txPower!=null?c.txPower:5)===5?'Auto picks the strength with the fastest download: tap Test download speed below':'Fixed. EngineLink lowers it by itself if the router does not hear it',rv(txName(c)))}${row('cycle','aggr','Frame bundling to the router','Normally on. Off can help a router that drops bundled frames. EngineLink reconnects after a change.',rv(c&&c.aggr===0?'Off':'On (normal)'))}${tuneBlock(d,lv)}${dlBlock(d.dl,d.sp)}<div class="rowx">
       <div class="s12 sub">"Missed here" counts the live updates this phone did not get since the app was opened. Up for ${dur(d.up||0)}${d.reset!=null?' · last restart: '+(RESET[d.reset]||'code '+d.reset):''}.</div></div></div>`;
     h+=restartsBlock(d);
     // Calibration
@@ -1417,8 +1417,8 @@ function restartsBlock(d){
 function dlBlock(dl,spd){
   const sp=S.speed,secs=ms=>ms<1000?NF(ms,0)+' ms':ms<60000?NF(ms/1000,ms<10000?1:0)+' s':dur(Math.round(ms/1000));
   const via=x=>x.ap?'over the EngineLink Wi-Fi':'over the boat router'+(x.rssi?` (signal ${x.rssi} dBm, ${x.rssi>-60?'strong':x.rssi>-72?'good':'weak'})`:'');
-  let h=`<div class="rowx"><div class="cth"><span class="rt">Download speed</span><span class="rv">${sp?sp.busy?'Testing…':sp.err?'Failed':NF(sp.kbs,0)+' kB/s':''}</span></div>
-    <div class="s12 sub" style="margin-top:3px">${sp&&!sp.busy&&!sp.err?`${NF(sp.kb,0)} kB in ${secs(sp.ms)}${spd?', '+via(spd):''}. ${sp.kbs>=100?'Fast enough for every export.':sp.kbs>=20?'A long trip with raw data takes a few minutes.':'Slow: move closer, or join the EngineLink Wi-Fi directly for big files.'}`:'Sends a short sample from memory, without the SD card, to test Wi-Fi without freezing live updates.'}</div>
+  let h=`<div class="rowx"><div class="cth"><span class="rt">Download speed</span><span class="rv">${sp?sp.busy?(sp.msg||'Testing…'):sp.err?'Failed':NF(sp.kbs,0)+' kB/s':''}</span></div>
+    <div class="s12 sub" style="margin-top:3px">${sp&&sp.sweep&&!sp.busy?`Auto tried every strength: ${sp.sweep.map(x=>TXD[x.l]+' dBm '+(x.kbs?NF(x.kbs,0)+' kB/s':'failed')).join(' · ')}. Now using ${TXN[sp.best]||'—'}. `:''}${sp&&!sp.busy&&!sp.err?`${NF(sp.kb,0)} kB in ${secs(sp.ms)}${sp.rtt!=null?', request round trip '+NF(sp.rtt,0)+' ms':''}${spd?', '+via(spd):''}. ${sp.kbs>=100?'Fast enough for every export.':sp.kbs>=20?'A long trip with raw data takes a few minutes.':'Slow: move closer, or join the EngineLink Wi-Fi directly for big files.'}`:'Sends a short sample from memory, without the SD card, to test Wi-Fi without freezing live updates.'}</div>
     <button class="btn" style="width:100%;margin-top:10px" data-a="speedTest" ${sp&&sp.busy?'disabled':''}>${sp&&sp.busy?'Testing…':'Test download speed'}</button></div>`;
   if(dl&&dl.ms>0){
     const other=Math.max(0,dl.ms-dl.findMs-dl.sdMs-dl.netMs),parts=[['Finding the trip',dl.findMs],['Reading the SD card',dl.sdMs],['Sending',dl.netMs],['Other',other]];
@@ -1453,11 +1453,14 @@ function sigBars(r){
 }
 // Transmit power test: the board pings its router at each power step and
 // keeps the one with the fewest losses and the shortest round trip.
+// Transmit power steps, lowest to highest, and the owner's setting (5 = Auto).
+const TXN=['Very low','Low','Moderate','Medium','High'],TXD=['8.5','11','13','15','19.5'];
+function txName(c){const m=c&&c.txPower!=null?c.txPower:5;return m===5?'Auto'+(c&&c.txLevel!=null?' · '+TXN[c.txLevel]:''):TXN[m]||'Auto';}
 function tuneBlock(d,lv){
-  const t=d.linkTune||{},routerUp=lv&&lv.net&&lv.net.mode==='sta'&&lv.net.sta,nm=['19.5','15','11','8.5'];
+  const t=d.linkTune||{},routerUp=lv&&lv.net&&lv.net.mode==='sta'&&lv.net.sta,nm=TXD;
   const steps=(t.steps||[]).map(x=>`${nm[x.level]} dBm: ${x.got}/${x.sent} back, ${x.ms} ms`).join(' · ');
   return `<div class="rowx"><div class="cth"><span class="rt">Find the best transmit power</span><span class="rv">${t.running?'Testing…':t.chosen!=null?nm[t.chosen]+' dBm':''}</span></div>
-    <div class="s12 sub" style="margin-top:3px">${steps?esc(steps):'EngineLink pings its router at each power step and keeps the one the router hears best. It does this by itself once after each start on the router.'}</div>
+    <div class="s12 sub" style="margin-top:3px">${steps?esc(steps):'EngineLink pings its router at each strength once after each start. On Auto it uses the best one until a download test picks the fastest.'}</div>
     ${routerUp?`<button class="btn" style="width:100%;margin-top:10px" data-a="linkTune" ${t.running?'disabled':''}>${t.running?'Testing…':'Test now'}</button>`:''}</div>`;
 }
 function voltBlock(c,es){
@@ -1676,7 +1679,7 @@ const A={
     if(v==='can'){await cfgSet({can:c.canListen?0:1});render(true);return;}
     if(v==='ntp'){await cfgSet({ntp:c.ntp?0:1});render(true);return;}
     if(v==='aggr'){await cfgSet({aggr:c&&c.aggr===0?1:0});toast('EngineLink reconnects to the router');load('diag');return;}
-    if(v==='txp'){await cfgSet({txp:(((c&&c.txPower!=null)?c.txPower:1)+1)%4});load('diag');return;}
+    if(v==='txp'){await cfgSet({txp:(((c&&c.txPower!=null)?c.txPower:5)+1)%6});load('diag');return;}
     if(v==='proto'){
       const to=c.protocol==='kad'?'j1587':'kad';
       if(to==='j1587'&&!confirm('Switch to SAE J1587?\n\nEngineLink then stops reading Volvo Penta KAD / EDC I engines (like the KAD300) and only listens. Only for engines that send J1587 by themselves.'))return;
@@ -1771,21 +1774,40 @@ const A={
   ghSave:async()=>{const v=(S.ghTok||'').trim();const r=await cfgSet({ghtoken:v});if(r.ok){S.ghTok='';toast(v?'Token saved':'Token removed');load('diag');}},
   reportSend:async()=>{await act('/api/report/send',{});setTimeout(()=>load('state'),3000);},
   speedTest:async()=>{
-    S.speed={busy:true};render(true);
-    const t0=performance.now(),url=new URL(BASE||location.origin,location.href);
+    const c=S.state&&S.state.config,url=new URL(BASE||location.origin,location.href);
     // Run the diagnostic on a separate low-priority HTTP worker. Never send
     // 32 KiB through the main server: slow links froze every other request.
     if(url.protocol!=='http:'){S.speed={err:true};render(true);return;}
-    url.port='82';const c=new AbortController(),id=setTimeout(()=>c.abort(),18000);
-    try{
-      const r=await fetch(url.origin+'/api/speedtest',{cache:'no-store',signal:c.signal});
-      if(!r.ok)throw Error('HTTP '+r.status);
-      const data=await r.arrayBuffer();
-      if(data.byteLength!==32768)throw Error('Incomplete transfer');
-      const ms=performance.now()-t0;
-      S.speed={kb:data.byteLength/1024,ms,kbs:data.byteLength/1024/(ms/1000)};
-    }catch(e){S.speed={err:true};}finally{clearTimeout(id);}
-    await load('diag');render(true);
+    url.port='82';
+    const once=async()=>{const t0=performance.now(),ac=new AbortController(),id=setTimeout(()=>ac.abort(),18000);
+      try{const r=await fetch(url.origin+'/api/speedtest',{cache:'no-store',signal:ac.signal});if(!r.ok)throw Error('HTTP '+r.status);
+        const data=await r.arrayBuffer();if(data.byteLength!==32768)throw Error('Incomplete transfer');
+        const ms=performance.now()-t0;return {kb:data.byteLength/1024,ms,kbs:data.byteLength/1024/(ms/1000)};}
+      catch(e){return null;}finally{clearTimeout(id);}};
+    // Round trip of a small request (median of 5), for the report.
+    const rttOf=async()=>{const v=[];for(let i=0;i<5;i++){const t0=performance.now();try{await fetch(url.origin+'/api/rtt?'+i,{cache:'no-store'});v.push(performance.now()-t0);}catch(e){}}v.sort((a,b)=>a-b);return v.length?Math.round(v[v.length>>1]):0;};
+    const routerUp=S.live&&S.live.net&&S.live.net.mode==='sta';
+    const auto=routerUp&&c&&(c.txPower==null||c.txPower===5);
+    S.speed={busy:true};render(true);
+    if(auto){
+      const sweep=[];
+      for(let l=4;l>=0;l--){
+        S.speed={busy:true,msg:'Testing '+TXN[l].toLowerCase()+'…'};render(true);
+        const t=await post('/api/txtry',{l});if(!t.ok)break;
+        await new Promise(r=>setTimeout(r,1500));
+        const rtt=await rttOf(),m=await once();
+        sweep.push({l,kbs:m?m.kbs:0,m,rtt});
+        await post('/api/speedlog',{l,kbs:m?m.kbs.toFixed(1):0,rtt,sweep:1});
+      }
+      const ok=sweep.filter(x=>x.kbs>0).sort((a,b)=>b.kbs-a.kbs);
+      if(ok.length){const b=ok[0];await post('/api/speedlog',{best:b.l});S.speed={...b.m,rtt:b.rtt,sweep:sweep.map(x=>({l:x.l,kbs:x.kbs})),best:b.l};}
+      else{await post('/api/speedlog',{best:c.txLevel!=null?c.txLevel:3});S.speed={err:true};}
+    }else{
+      const rtt=await rttOf(),m=await once();
+      await post('/api/speedlog',{kbs:m?m.kbs.toFixed(1):0,rtt});
+      S.speed=m?{...m,rtt}:{err:true};
+    }
+    await load('state');await load('diag');render(true);
   },
   protoKad:async()=>{const r=await cfgSet({protocol:'kad'});if(r.ok){toast('Reading Volvo Penta KAD engines');load('diag');}},
   exFile:v=>{download(v);if(!IOS_APP())toast('Downloading');},
