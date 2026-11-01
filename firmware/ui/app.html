@@ -1424,8 +1424,10 @@ function restartsBlock(d){
 function busyHint(d,lv){
   const t=d.linkTune||{},sm=t.small||{},sc=t.scan||{},sp=S.speed;
   if(!(lv.net.rssi>-67))return '';
-  const slowPing=sm.sent&&(sm.got<sm.sent||sm.avg>40),slowTest=sp&&!sp.busy&&(sp.err||sp.kbs<40||sp.rtt>300);
-  if(!slowPing&&!slowTest)return '';
+  if(sp&&!sp.busy&&!sp.err&&sp.kbs>=150)return '';  // the speed test is fast: nothing to fix
+  if(t.scanCh&&t.channel&&t.scanCh!==t.channel)return '';  // measured on the router's old channel
+  const slowTest=sp&&!sp.busy&&(sp.err||sp.kbs<40||sp.rtt>300);
+  if(!slowTest)return '';  // only a slow speed test counts: the router may just answer pings late
   const ch=t.channel,q=t.quiet&&t.quiet!==ch?t.quiet:(ch&&ch<=3?11:1);
   return `<div class="s12" style="margin-top:6px;color:var(--orange)">Strong signal, but the router's Wi-Fi is slow${sc.sameChannel?`: ${sc.sameChannel} other network${sc.sameChannel>1?'s':''} share${sc.sameChannel>1?'':'s'} its channel ${ch||''}${sc.sameBest?' (strongest '+sc.sameBest+' dBm)':''}`:''}. Set the router's 2.4 GHz channel to ${q} in its settings, then test again.</div>`;
 }

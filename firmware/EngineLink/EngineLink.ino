@@ -71,7 +71,7 @@ extern volatile bool linkScanDone;
 extern volatile uint8_t linkScanTotal,linkScanSame,linkScanOverlap;
 extern volatile int8_t linkScanSameBest;
 extern String linkScanList;
-extern volatile uint8_t linkScanQuiet;
+extern volatile uint8_t linkScanQuiet,linkScanCh;
 extern const wifi_power_t elTxPower[5];
 extern const char *const elTxName[5];
 uint8_t runLinkTune(uint8_t current,bool apply);
@@ -90,7 +90,7 @@ uint32_t phoneTuneAt=0;uint8_t phoneTuneBest=255;
 uint32_t txTryAt=0;  // a sweep step is being tried; undone if the sweep never finishes
 volatile bool linkTuneWanted=false;volatile bool linkTuneManual=false;  // the deflate compressor in the chip's ROM
 
-#define EL_VERSION "0.12.13"
+#define EL_VERSION "0.12.14"
 // Releases list published by the Pages workflow; firmware files come from
 // GitHub Releases of the same repository. Nothing else is downloaded.
 #define EL_RELEASES_URL "https://kaelor9.github.io/EngineLink/releases.json"
@@ -4481,6 +4481,7 @@ String buildNetworkReport(){
     else s+="not scanned yet";
     s+="\n";
     if(linkScanDone){
+      if(linkScanCh!=lastRouterChannel){s+="Note: the scan and ping tests were made while the router was on channel ";s+=linkScanCh;s+="; they repeat a minute after reconnecting.\n";}
       s+="Networks on or next to the router's channel: ";s+=linkScanList.length()?linkScanList:String("none");s+="\n";
       s+="Quietest of channels 1, 6 and 11 around EngineLink: ";s+=linkScanQuiet;s+=linkScanQuiet==lastRouterChannel?" (the router already uses it)":" (setting the router to it may help)";s+="\n";
     }
@@ -4490,7 +4491,7 @@ String buildNetworkReport(){
   s+="Chip: ";s+=ESP.getChipModel();s+=" rev ";s+=ESP.getChipRevision();s+=" · ";s+=ESP.getCpuFreqMHz();s+=" MHz · Arduino core ";s+=ESP_ARDUINO_VERSION_MAJOR;s+=".";s+=ESP_ARDUINO_VERSION_MINOR;s+=".";s+=ESP_ARDUINO_VERSION_PATCH;s+=" · IDF ";s+=esp_get_idf_version();s+="\n";
   s+="Memory: free ";s+=ESP.getFreeHeap()/1024;s+=" KB, lowest ";s+=ESP.getMinFreeHeap()/1024;s+=" KB, largest block ";s+=ESP.getMaxAllocHeap()/1024;s+=" KB · PSRAM free ";s+=ESP.getFreePsram()/1024;s+=" KB\n";
   s+="Main loop: longest pass ";s+=loopMaxMs;s+=" ms · engine reading in own task: ";s+=engineTaskOn?"yes":"no";s+="\n";
-  s+="Reset reason: ";s+=(int)esp_reset_reason();s+=" (1 power on, 3 software/update, 4 crash, 5/6/7 watchdog, 9 brownout)\n";
+  s+="Reset reason: ";s+=(int)esp_reset_reason();s+=" (1 power on, 3 software/update, 4 crash, 5/6/7 watchdog, 9 brownout, 11 reset over USB)\n";
   s+="Recent restarts (newest first): ";
   {bool any=false;for(uint8_t i=0;i<RESTART_LOG_N;i++){const RestartRec &x=restartLog[i];if(!x.ver[0])continue;if(any)s+=" | ";any=true;s+="reason ";s+=x.reason;s+=" after ";s+=x.upBefore;s+=" s on ";s+=x.ver;}if(!any)s+="none recorded";}
   s+="\n";
@@ -4644,7 +4645,7 @@ void appendLinkJson(String &s){
   s+=']';
   appendPingJson(s,"small",linkSmall.sent,linkSmall.got,linkSmall.minMs,linkSmall.avgMs,linkSmall.maxMs);
   appendPingJson(s,"internet",linkNet.sent,linkNet.got,linkNet.minMs,linkNet.avgMs,linkNet.maxMs);
-  s+=",\"channel\":";s+=(unsigned)lastRouterChannel;s+=",\"quiet\":";s+=(unsigned)linkScanQuiet;
+  s+=",\"channel\":";s+=(unsigned)lastRouterChannel;s+=",\"quiet\":";s+=(unsigned)linkScanQuiet;s+=",\"scanCh\":";s+=(unsigned)linkScanCh;
   if(linkScanDone){s+=",\"scan\":{\"total\":";s+=linkScanTotal;s+=",\"sameChannel\":";s+=linkScanSame;s+=",\"overlapping\":";s+=linkScanOverlap;s+=",\"sameBest\":";s+=(int)linkScanSameBest;s+='}';}
   s+='}';
   s+=",\"txMode\":";s+=cfg.txMode;s+=",\"txLevel\":";s+=txLevel;
