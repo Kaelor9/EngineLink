@@ -88,7 +88,7 @@ uint32_t phoneTuneAt=0;uint8_t phoneTuneBest=255;
 uint32_t txTryAt=0;  // a sweep step is being tried; undone if the sweep never finishes
 volatile bool linkTuneWanted=false;volatile bool linkTuneManual=false;  // the deflate compressor in the chip's ROM
 
-#define EL_VERSION "0.12.10"
+#define EL_VERSION "0.12.11"
 // Releases list published by the Pages workflow; firmware files come from
 // GitHub Releases of the same repository. Nothing else is downloaded.
 #define EL_RELEASES_URL "https://kaelor9.github.io/EngineLink/releases.json"
@@ -165,6 +165,13 @@ public:
   // All request handlers run on the main loop, so this is called only
   // between HTTP requests. Clients from the old interface must not be
   // kept after switching between standalone AP and router STA.
+  // Before the Wi-Fi driver stops: received data still waiting in a socket
+  // points into the driver's buffers, and reading it after the driver
+  // restarted crashed the board (0.12.9 core dump: pbuf_free in recv).
+  void closeClients(){
+    for(Slot &slot:pool){if(slot.used){slot.c.stop();slot.used=false;}slot.since=0;slot.requests=0;}
+    _currentClient=NetworkClient();_currentStatus=HC_NONE;
+  }
   void rebindNetwork(){
     for(Slot &slot:pool){
       if(slot.used){slot.c.stop();slot.used=false;}
@@ -2877,6 +2884,7 @@ void applyNetwork(){
   // Hostname must be assigned before Wi-Fi is started (ESP32 requirement).
   // A real mode change may drop old clients, but it must never happen in
   // normal operating loops or between two reconnect attempts.
+  web.closeClients();
   WiFi.mode(WIFI_OFF);
   // Read by wifiwpa3.cpp when the driver starts again below.
   elAllowSae=routerConfigured()&&!routerHold&&staSecMode==1;
@@ -3783,7 +3791,7 @@ void loadSettings(){
   if(cfg.apPassword.length()<8)cfg.apPassword="12345678";
   if(cfg.portChannel>2)cfg.portChannel=0;
   if(cfg.apChannel<1||cfg.apChannel>13)cfg.apChannel=6;
-  if(cfg.txMode>TX_AUTO)cfg.txMode=TX_AUTO;
+  cfg.txMode=TX_AUTO;  // transmit power is always chosen by EngineLink
   if(txLevel>4)txLevel=3;
   if(cfg.txMode!=TX_AUTO)txLevel=cfg.txMode;
 }
@@ -4629,6 +4637,7 @@ void appendLinkJson(String &s){
   s+=']';
   appendPingJson(s,"small",linkSmall.sent,linkSmall.got,linkSmall.minMs,linkSmall.avgMs,linkSmall.maxMs);
   appendPingJson(s,"internet",linkNet.sent,linkNet.got,linkNet.minMs,linkNet.avgMs,linkNet.maxMs);
+  s+=",\"channel\":";s+=(unsigned)lastRouterChannel;
   if(linkScanDone){s+=",\"scan\":{\"total\":";s+=linkScanTotal;s+=",\"sameChannel\":";s+=linkScanSame;s+=",\"overlapping\":";s+=linkScanOverlap;s+=",\"sameBest\":";s+=(int)linkScanSameBest;s+='}';}
   s+='}';
   s+=",\"txMode\":";s+=cfg.txMode;s+=",\"txLevel\":";s+=txLevel;
