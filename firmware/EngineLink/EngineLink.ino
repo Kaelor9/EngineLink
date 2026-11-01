@@ -54,6 +54,9 @@ extern volatile bool elAllowSae;
 extern volatile bool elAmpduTx;
 extern volatile bool elAmpduRx;
 bool elSaeControlActive();
+// netboost.cpp: more data in flight per TCP connection (see there)
+bool elBoostSocket(int fd,uint16_t extra);
+extern uint32_t elBoostedSockets;
 // linktune.cpp: transmit power test and link measurements (see there)
 struct PingStat { uint8_t sent, got; uint16_t minMs, avgMs, maxMs; };
 struct LinkTuneStep { uint8_t level; PingStat p; };
@@ -80,9 +83,10 @@ struct SpeedLogRec { uint32_t at; uint8_t level; uint16_t kbs10; uint16_t rttMs;
 #define SPEED_LOG_N 12
 SpeedLogRec speedLog[SPEED_LOG_N];uint8_t speedLogCount=0;
 uint32_t phoneTuneAt=0;uint8_t phoneTuneBest=255;
+uint32_t txTryAt=0;  // a sweep step is being tried; undone if the sweep never finishes
 volatile bool linkTuneWanted=false;volatile bool linkTuneManual=false;  // the deflate compressor in the chip's ROM
 
-#define EL_VERSION "0.12.8"
+#define EL_VERSION "0.12.9"
 // Releases list published by the Pages workflow; firmware files come from
 // GitHub Releases of the same repository. Nothing else is downloaded.
 #define EL_RELEASES_URL "https://kaelor9.github.io/EngineLink/releases.json"
@@ -175,6 +179,7 @@ public:
       NetworkClient c=_server.accept();
       if(!c)break;
       c.setNoDelay(true);
+      elBoostSocket(c.fd(),11488);   // 8 packets in flight instead of 4
       int slot=-1,oldest=0;
       for(int i=0;i<HTTP_POOL;i++){
         if(!pool[i].used){slot=i;break;}
@@ -3064,6 +3069,11 @@ void serviceNetwork(){
       Serial.printf("Router does not answer: transmit power lowered to %s\n",elTxName[txLevel]);
     }
   }
+  if(txTryAt&&(uint32_t)(millis()-txTryAt)>90000UL){
+    // The phone left in the middle of an auto sweep: back to the saved step.
+    txTryAt=0;Preferences tp;if(tp.begin("enginelink",true)){txLevel=tp.getUChar("txal",txLevel);tp.end();}
+    if(txLevel>4)txLevel=3;WiFi.setTxPower(elTxPower[txLevel]);
+  }
   if(staSecSwitchPending&&routerConfigured()&&!routerHold&&!pendingNetwork){
     staSecSwitchPending=false;
     if(staSecMode!=staSecSwitchTo){
@@ -4476,6 +4486,7 @@ String buildNetworkReport(){
   s+="HTTP requests: ";s+=web.served;s+="\n";
   s+="Last 32 KiB server write: ";s+=speedTxLastBytes;s+=" bytes in ";s+=speedTxLastMs;s+=" ms (";
   s+=speedTxLastWrites;s+=" write calls)\n";
+  s+="TCP send window: 5744 bytes by default, raised to 17 KB for page/file requests and 23 KB for the speed test (";s+=elBoostedSockets;s+=" connections raised)\n";
   s+="Note: server write time is NOT the same as measured radio throughput.\n\n";
   s+="LATEST WI-FI EVENTS (oldest to newest; uptime seconds)\n";
   RouterTrace trace[ROUTER_TRACE_CAP];const uint8_t n=getWifiTrace(trace);
@@ -4520,6 +4531,7 @@ void speedHttpTask(void *){
     NetworkClient c=speedServer.accept();
     if(!c){vTaskDelay(pdMS_TO_TICKS(15));continue;}
     c.setNoDelay(true);c.setTimeout(300);
+    elBoostSocket(c.fd(),17232);     // 16 packets in flight instead of 4
     const String req=c.readStringUntil('\n');
     if(req.startsWith("GET /api/rtt")){  // round trip of one small request, for the report
       c.print("HTTP/1.1 204 No Content\r\nAccess-Control-Allow-Origin: *\r\nCache-Control: no-store\r\nConnection: close\r\n\r\n");
@@ -5665,7 +5677,7 @@ void initializeWeb(){
     const int l=web.arg("l").toInt();
     if(l<0||l>4){reply(false,"Invalid level",400);return;}
     if(cfg.txMode!=TX_AUTO){reply(false,"Only with transmit power on Auto",409);return;}
-    txLevel=l;WiFi.setTxPower(elTxPower[txLevel]);reply(true,elTxName[txLevel]);
+    txLevel=l;txTryAt=millis()?millis():1;WiFi.setTxPower(elTxPower[txLevel]);reply(true,elTxName[txLevel]);
   });
   // A download test measured by the phone; best= ends an auto sweep.
   web.on("/api/speedlog",HTTP_POST,[](){
@@ -5680,7 +5692,7 @@ void initializeWeb(){
     if(web.hasArg("best")&&cfg.txMode==TX_AUTO){
       const int b=web.arg("best").toInt();
       if(b>=0&&b<=4){
-        txLevel=b;phoneTuneBest=b;phoneTuneAt=millis()?millis():1;WiFi.setTxPower(elTxPower[txLevel]);
+        txLevel=b;phoneTuneBest=b;txTryAt=0;phoneTuneAt=millis()?millis():1;WiFi.setTxPower(elTxPower[txLevel]);
         Preferences tp;if(tp.begin("enginelink",false)){tp.putUChar("txal",txLevel);tp.end();}
       }
     }
