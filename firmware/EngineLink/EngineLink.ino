@@ -62,7 +62,7 @@ extern volatile uint32_t linkTuneAt;
 uint8_t runLinkTune(uint8_t current);
 volatile bool linkTuneWanted=false;  // the deflate compressor in the chip's ROM
 
-#define EL_VERSION "0.12.5"
+#define EL_VERSION "0.12.6"
 // Releases list published by the Pages workflow; firmware files come from
 // GitHub Releases of the same repository. Nothing else is downloaded.
 #define EL_RELEASES_URL "https://kaelor9.github.io/EngineLink/releases.json"
@@ -489,7 +489,7 @@ struct Settings {
   bool canListen=false;
   uint8_t portChannel=1; // 1=J7 port, 2=J6 port, 0=unassigned
   uint8_t apChannel=6;
-  uint8_t aggr=0;             // A-MPDU to the router: 0 off (default), 1 on
+  uint8_t aggr=1;             // A-MPDU to the router: 1 on (default), 0 off
   uint8_t txPower=1;          // 0 max (19.5 dBm), 1 medium (15), 2 low (11), 3 very low (8.5)
   String apPassword="12345678";
   String ssid="";
@@ -3088,18 +3088,26 @@ void serviceNetwork(){
     const uint32_t now=millis();
     const bool hasIp=WiFi.status()==WL_CONNECTED &&
                      WiFi.localIP()!=IPAddress(0,0,0,0);
-    if(hasIp){
+    // Signal, channel and IP are read from the Wi-Fi driver once a second,
+    // not on every pass of loop(): each read waits for the driver's own
+    // task, and about 1000 reads a second made every packet through the
+    // router wait (pings of 40-150 ms, downloads of a few kB/s).
+    static uint32_t staInfoAt=0;
+    const bool staInfoDue=staDownSince||!staInfoAt||(uint32_t)(now-staInfoAt)>=1000UL;
+    if(hasIp&&staInfoDue){
+       staInfoAt=now?now:1;
        lastRouterIp=WiFi.localIP().toString();
        lastRouterRssi=WiFi.RSSI();
        lastRouterChannel=WiFi.channel();
        if(staDownSince)Serial.printf("Router ready: %s RSSI=%d dBm\n",
-        WiFi.localIP().toString().c_str(),WiFi.RSSI());
+        lastRouterIp.c_str(),lastRouterRssi);
+       if(lastRouterChannel){staChannel=(uint8_t)lastRouterChannel;apChannelNow=(uint8_t)lastRouterChannel;}
+    }
+    if(hasIp){
       routerGuard.reset();
       routerLastSuccessMs=now;
       staDownSince=0;
       if(routerAutoReturning){routerAutoReturning=false;routerProbeEvery=600000UL;}
-      const uint8_t ch=(uint8_t)WiFi.channel();
-      if(ch){staChannel=ch;apChannelNow=ch;}
     }else{
       // A PMF SA Query timeout can leave Arduino's station idle because its
       // native reconnect list omits error 209. Run one retry ~2 s later,
@@ -3636,7 +3644,7 @@ void saveSettings(){
   pref.putUChar("port",cfg.portChannel);
   pref.putUChar("apch",cfg.apChannel);
   pref.putUChar("txp2",cfg.txPower);
-  pref.putUChar("aggr",cfg.aggr);
+  pref.putUChar("aggr2",cfg.aggr);
   pref.putString("appass",cfg.apPassword);
   pref.putString("ssid",cfg.ssid);
   pref.putString("wpass",cfg.wifiPassword);
@@ -3688,7 +3696,7 @@ void loadSettings(){
   cfg.canListen=pref.getBool("can",false);
   cfg.portChannel=pref.getUChar("port",1);
   cfg.apChannel=pref.getUChar("apch",6);
-  cfg.aggr=pref.getUChar("aggr",0)?1:0;
+  cfg.aggr=pref.getUChar("aggr2",1)?1:0;
   cfg.txPower=pref.getUChar("txp2",1);  // new key: everyone starts on Medium
   cfg.apPassword=pref.getString("appass","12345678");
   cfg.ssid=pref.getString("ssid","");
@@ -4354,7 +4362,7 @@ String buildNetworkReport(){
   s+=" · lowered automatically ";s+=txAutoSteps;s+=" time(s) this start\n";
   {wifi_ps_type_t ps=WIFI_PS_NONE;esp_wifi_get_ps(&ps);
    s+="Power save: ";s+=ps==WIFI_PS_NONE?"off":ps==WIFI_PS_MIN_MODEM?"ON (minimum modem sleep)":"ON (maximum modem sleep)";s+="\n";}
-  s+="Frame bundling (A-MPDU) to the router: ";s+=elAmpduTx?"on":"off";s+=cfg.aggr?" (turned on in Diagnostics)":" (default in router mode)";s+="\n";
+  s+="Frame bundling (A-MPDU) to the router: ";s+=elAmpduTx?"on":"off";s+=cfg.aggr?" (default)":" (turned off in Diagnostics)";s+="\n";
   if(WiFi.getMode()&WIFI_MODE_STA){
     wifi_phy_mode_t pm;
     if(esp_wifi_sta_get_negotiated_phymode(&pm)==ESP_OK){s+="Negotiated Wi-Fi standard: ";s+=pm==WIFI_PHY_MODE_11B?"802.11b (slow)":pm==WIFI_PHY_MODE_11G?"802.11g":pm==WIFI_PHY_MODE_HT20?"802.11n 20 MHz":pm==WIFI_PHY_MODE_HT40?"802.11n 40 MHz":pm==WIFI_PHY_MODE_HE20?"802.11ax":"other";s+="\n";}
