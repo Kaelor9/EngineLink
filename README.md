@@ -13,7 +13,7 @@
   <img src="https://img.shields.io/badge/Engines-2%C3%97%20J1708%20isolated-success" alt="2 × isolated J1708">
   <img src="https://img.shields.io/badge/Volvo%20Penta-KAD300%20%2F%20EDC%20I-0b5394" alt="Volvo Penta KAD300 / EDC I">
   <img src="https://img.shields.io/badge/NMEA%202000-listen--only-informational" alt="NMEA 2000 listen-only">
-  <img src="https://img.shields.io/badge/Firmware-0.12.2-orange" alt="Firmware 0.12.2">
+  <img src="https://img.shields.io/badge/Firmware-0.12.3-orange" alt="Firmware 0.12.3">
 </p>
 
 <p align="center">
@@ -207,6 +207,8 @@ The board's green indicator and `associated=true`/`hasRouterIp=true` describe **
 
 **0.12.1 report → 0.12.2:** WPA2 negotiated (switch active), associated in 2.7 s, but DHCP took 29.5 s, the link dropped, then ~1 Hz reason 2 (auth not answered) and 15, mixed with 201, while the router's beacons were strong (-45 dBm): an uplink (board → router) loss pattern. 0.12.2 defaults TX power to 15 dBm and steps down to 11/8.5 dBm after 12 unanswered logins, persisting the level (NVS txp2).
 
+**Field result, 0.12.2 (report #62):** WPA2 at 15 dBm: association 280 ms, DHCP 1.55 s, zero disconnects, HTTP self-check clean, router-mode HTTP reachable. Root causes were the router failing WPA3-SAE logins with this ESP32 and uplink loss at full TX power. 0.12.3 stops flipping security on generic fallbacks.
+
 ### Immediate diagnosis: isolate DNS, TCP/HTTP and browser rendering
 
 Run these from **the same Windows computer connected to the Zyxel LAN** while the board says it is on the router (replace the example IP if DHCP assigns a new one):
@@ -259,7 +261,7 @@ Record for each case the client device/network, whether **IP** and **hostname** 
 
 | Hardware | Firmware | Engine validation |
 |----------|----------|-------------------|
-| ✅ Revision 1 assembled | 🚧 0.12.2 | ⏳ Pending first KAD300 test |
+| ✅ Revision 1 assembled | 🚧 0.12.3 | ⏳ Pending first KAD300 test |
 
 | Area | Status |
 |------|--------|

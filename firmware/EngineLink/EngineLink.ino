@@ -53,7 +53,7 @@
 extern volatile bool elAllowSae;
 bool elSaeControlActive();  // the deflate compressor in the chip's ROM
 
-#define EL_VERSION "0.12.2"
+#define EL_VERSION "0.12.3"
 // Releases list published by the Pages workflow; firmware files come from
 // GitHub Releases of the same repository. Nothing else is downloaded.
 #define EL_RELEASES_URL "https://kaelor9.github.io/EngineLink/releases.json"
@@ -821,9 +821,8 @@ volatile uint16_t txNoAnswer=0;uint32_t txAutoSteps=0;
 // Router security, like most ESP32 products: 0 = WPA2 (the driver starts
 // without WPA3, see wifiwpa3.cpp), which works on WPA2 and WPA2/WPA3 mixed
 // routers; 1 = WPA3 allowed, only for a router that needs it (WPA3-only).
-// Chosen from the router's security in the network scan, switched to WPA3 on
-// "no compatible security" (codes 210/211) and flipped after a session that
-// never got in; the mode that works is kept (NVS smode).
+// Chosen from the router's security in the network scan and switched to WPA3
+// on "no compatible security" (codes 210/211); kept in NVS (smode).
 uint8_t staSecMode=0;
 volatile bool staSecSwitchPending=false;volatile uint8_t staSecSwitchTo=0;
 bool routerGotIpThisSession=false;
@@ -2784,8 +2783,9 @@ void parkRouter(const char *why){
   routerHold=true;
   ++routerFallbacks;
   routerHoldSince=millis()?millis():1;
-  // Never got in this time: try the other security next time.
-  if(!routerGotIpThisSession){staSecMode=staSecMode?0:1;++staSecSwitches;saveSecMode();}
+  // A fallback says nothing about security: the router may simply have been
+  // off or restarting. WPA3 is chosen only on clear evidence (WPA3-only in the
+  // scan, or codes 210/211); a router that needs WPA2 is never pushed to WPA3.
   if(routerAutoReturning){routerAutoReturning=false;routerProbeEvery=min<uint32_t>(routerProbeEvery*2,7200000UL);}
   routerProbeAt=millis()+routerProbeEvery;
   Preferences p;
@@ -4330,7 +4330,6 @@ String buildNetworkReport(){
   s+="Last router signal: ";if(lastRouterIp.isEmpty())s+="Not measured";else{s+=lastRouterRssi;s+=" dBm";}s+="\n";
   s+="Last router channel: ";s+=lastRouterChannel;s+="\n";
   s+="Last negotiated Wi-Fi security: ";s+=stationSecurityName(staNegotiatedAuth);s+="\n";
-  s+="Explicit SAE H2E+Hunt-and-Peck setup: ";s+=staSecurityConfigured?"Applied":"Not applied";s+="\n";
   s+="Security mode: ";s+=staSecMode?"WPA3 allowed (router needs WPA3)":"WPA2, like most IoT devices (works on WPA2 and WPA2/WPA3 routers)";s+="\n";
   s+="WPA3 switch in firmware: ";s+=elSaeControlActive()?"active":"NOT active (built without -Wl,--wrap=esp_wifi_init)";s+="\n";
   s+="Security switches: ";s+=staSecSwitches;s+="\n";
