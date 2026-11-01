@@ -48,11 +48,9 @@
 #include "diagrules.h"
 #include "otaheader.h"
 #include "routerguard.h"
-#include "miniz.h"
+#include "miniz.h"   // the deflate compressor in the chip's ROM
 // wifiwpa3.cpp: WPA3 on or off for the Wi-Fi driver (see there)
 extern volatile bool elAllowSae;
-extern volatile bool elAmpduTx;
-extern volatile bool elAmpduRx;
 bool elSaeControlActive();
 // netboost.cpp: more data in flight per TCP connection (see there)
 bool elBoostSocket(int fd,uint16_t extra);
@@ -74,23 +72,16 @@ extern String linkScanList;
 extern volatile uint8_t linkScanQuiet,linkScanCh;
 extern const wifi_power_t elTxPower[5];
 extern const char *const elTxName[5];
-uint8_t runLinkTune(uint8_t current,bool apply);
-bool linkPingRouter(uint8_t count,uint16_t size,uint16_t intervalMs,PingStat &out);
-// Frame bundling test: pings with bundling from the router on and off.
-PingStat bundleTestOn={},bundleTestOff={};uint32_t bundleTestAt=0;bool bundleTestRunning=false;
-// Transmit power: the owner's setting (0 very low .. 4 high, 5 auto) and the
-// step in use. In Auto the phone's download test picks the step.
-#define TX_AUTO 5
+uint8_t runLinkTune(uint8_t current);
+// Transmit power step in use (0 = 8.5 dBm .. 4 = 19.5 dBm), chosen by
+// linkTuneTask and kept in NVS ("txal").
 uint8_t txLevel=3;
 // Download tests measured by the phone (newest last), for the report.
-struct SpeedLogRec { uint32_t at; uint8_t level; uint16_t kbs10; uint16_t rttMs; uint8_t sweep; };
+struct SpeedLogRec { uint32_t at; uint8_t level; uint16_t kbs10; uint16_t rttMs; };
 #define SPEED_LOG_N 12
 SpeedLogRec speedLog[SPEED_LOG_N];uint8_t speedLogCount=0;
-uint32_t phoneTuneAt=0;uint8_t phoneTuneBest=255;
-uint32_t txTryAt=0;  // a sweep step is being tried; undone if the sweep never finishes
-volatile bool linkTuneWanted=false;volatile bool linkTuneManual=false;  // the deflate compressor in the chip's ROM
 
-#define EL_VERSION "0.12.14"
+#define EL_VERSION "0.12.15"
 // Releases list published by the Pages workflow; firmware files come from
 // GitHub Releases of the same repository. Nothing else is downloaded.
 #define EL_RELEASES_URL "https://kaelor9.github.io/EngineLink/releases.json"
@@ -525,10 +516,6 @@ struct Settings {
   bool canListen=false;
   uint8_t portChannel=1; // 1=J7 port, 2=J6 port, 0=unassigned
   uint8_t apChannel=6;
-  uint8_t aggr=1;             // A-MPDU to the router: 1 on (default), 0 off
-  uint8_t aggrRx=0;           // A-MPDU from the router: 0 off (default), 1 on
-  uint8_t aggrRxTested=0;     // the board has compared both ways
-  uint8_t txMode=TX_AUTO;     // 0 very low (8.5 dBm), 1 low (11), 2 moderate (13), 3 medium (15), 4 high (19.5), 5 auto
   String apPassword="12345678";
   String ssid="";
   String wifiPassword="";
@@ -2890,9 +2877,6 @@ void applyNetwork(){
   WiFi.mode(WIFI_OFF);
   // Read by wifiwpa3.cpp when the driver starts again below.
   elAllowSae=routerConfigured()&&!routerHold&&staSecMode==1;
-  // Frame bundling stays as the Wi-Fi driver ships it: on/off tests in the
-  // field (0.12.5, 0.12.8) showed only noise, and each switch costs a reconnect.
-  elAmpduTx=true;elAmpduRx=true;
   WiFi.persistent(false);
   WiFi.setHostname(cfg.hostName.c_str());
   apStarted=false;
@@ -3076,16 +3060,10 @@ void serviceNetwork(){
     txNoAnswer=0;
     if(txLevel>0){
       --txLevel;++txAutoSteps;
-      if(cfg.txMode!=TX_AUTO)cfg.txMode=txLevel;
-      {Preferences tp;if(tp.begin("enginelink",false)){tp.putUChar("txp3",cfg.txMode);tp.putUChar("txal",txLevel);tp.end();}}
+      {Preferences tp;if(tp.begin("enginelink",false)){tp.putUChar("txal",txLevel);tp.end();}}
       WiFi.setTxPower(elTxPower[txLevel]);
       Serial.printf("Router does not answer: transmit power lowered to %s\n",elTxName[txLevel]);
     }
-  }
-  if(txTryAt&&(uint32_t)(millis()-txTryAt)>90000UL){
-    // The phone left in the middle of an auto sweep: back to the saved step.
-    txTryAt=0;Preferences tp;if(tp.begin("enginelink",true)){txLevel=tp.getUChar("txal",txLevel);tp.end();}
-    if(txLevel>4)txLevel=3;WiFi.setTxPower(elTxPower[txLevel]);
   }
   if(staSecSwitchPending&&routerConfigured()&&!routerHold&&!pendingNetwork){
     staSecSwitchPending=false;
@@ -3691,9 +3669,6 @@ void saveSettings(){
   pref.putBool("can",cfg.canListen);
   pref.putUChar("port",cfg.portChannel);
   pref.putUChar("apch",cfg.apChannel);
-  pref.putUChar("txp3",cfg.txMode);
-  pref.putUChar("aggr2",cfg.aggr);
-  pref.putUChar("agrx",cfg.aggrRx);pref.putUChar("agrxt",cfg.aggrRxTested);
   pref.putString("appass",cfg.apPassword);
   pref.putString("ssid",cfg.ssid);
   pref.putString("wpass",cfg.wifiPassword);
@@ -3745,10 +3720,9 @@ void loadSettings(){
   cfg.canListen=pref.getBool("can",false);
   cfg.portChannel=pref.getUChar("port",1);
   cfg.apChannel=pref.getUChar("apch",6);
-  cfg.aggr=pref.getUChar("aggr2",1)?1:0;
-  cfg.aggrRx=pref.getUChar("agrx",0)?1:0;cfg.aggrRxTested=pref.getUChar("agrxt",0)?1:0;
-  cfg.txMode=pref.getUChar("txp3",TX_AUTO);  // new key: everyone starts on Auto
   txLevel=pref.getUChar("txal",3);
+  // Settings from earlier Wi-Fi experiments that no longer exist.
+  {Preferences old;if(old.begin("enginelink",false)){for(const char *k:{"txp","txp2","txp3","aggr","aggr2","agrx","agrxt"})if(old.isKey(k))old.remove(k);old.end();}}
   cfg.apPassword=pref.getString("appass","12345678");
   cfg.ssid=pref.getString("ssid","");
   cfg.wifiPassword=pref.getString("wpass","");
@@ -3793,9 +3767,7 @@ void loadSettings(){
   if(cfg.apPassword.length()<8)cfg.apPassword="12345678";
   if(cfg.portChannel>2)cfg.portChannel=0;
   if(cfg.apChannel<1||cfg.apChannel>13)cfg.apChannel=6;
-  cfg.txMode=TX_AUTO;  // transmit power is always chosen by EngineLink
   if(txLevel>4)txLevel=3;
-  if(cfg.txMode!=TX_AUTO)txLevel=cfg.txMode;
 }
 void jsonString(String &out,const String &v){
   out+='"';
@@ -3905,7 +3877,7 @@ void handleState(){
   s+=",\"protocol\":";s+=cfg.protocol==PROTO_KAD?"\"kad\"":"\"j1587\"";
   s+=",\"kadBigEndian\":";s+=cfg.kadBigEndian?"true":"false";
   s+=",\"kadFuelDiv\":";s+=cfg.kadFuelDiv;
-  s+=",\"kadVolt\":";s+=cfg.kadVolt;s+=",\"txPower\":";s+=cfg.txMode;s+=",\"txLevel\":";s+=txLevel;s+=",\"aggr\":";s+=cfg.aggr;s+=",\"aggrRx\":";s+=cfg.aggrRx;s+=",\"txAutoSteps\":";s+=txAutoSteps;
+  s+=",\"kadVolt\":";s+=cfg.kadVolt;s+=",\"txLevel\":";s+=txLevel;s+=",\"txAutoSteps\":";s+=txAutoSteps;
   s+=",\"fuelCorr\":[";s+=String(cfg.fuelCorr[0],4);s+=',';s+=String(cfg.fuelCorr[1],4);s+=']';
   s+=",\"apName\":";jsonString(s,cfg.apName);
   s+=",\"host\":";jsonString(s,cfg.hostName);
@@ -4365,7 +4337,7 @@ String makeNetworkHealthJson(){
   s+=",\"lastRouterChannel\":";s+=(unsigned)lastRouterChannel;
   s+=",\"lastSecurity\":";jsonString(s,stationSecurityName(staNegotiatedAuth));
   appendLinkJson(s);
-  s+=",\"secMode\":";s+=staSecMode?"\"wpa3\"":"\"wpa2\"";s+=",\"saeControl\":";s+=elSaeControlActive()?"true":"false";s+=",\"secSwitches\":";s+=staSecSwitches;{wifi_ps_type_t ps=WIFI_PS_NONE;esp_wifi_get_ps(&ps);s+=",\"powerSave\":";s+=(int)ps;}s+=",\"ampduTx\":";s+=elAmpduTx?"true":"false";
+  s+=",\"secMode\":";s+=staSecMode?"\"wpa3\"":"\"wpa2\"";s+=",\"saeControl\":";s+=elSaeControlActive()?"true":"false";s+=",\"secSwitches\":";s+=staSecSwitches;{wifi_ps_type_t ps=WIFI_PS_NONE;esp_wifi_get_ps(&ps);s+=",\"powerSave\":";s+=(int)ps;}
   s+=",\"saeConfigured\":";s+=staSecurityConfigured?"true":"false";
   s+=",\"saeSetupError\":";s+=(int)staSecurityConfigError;
   s+=",\"lastFailureDescription\":";jsonString(s,reasonText(routerFailureReason));
@@ -4409,7 +4381,7 @@ String buildNetworkReport(){
   s+="Security mode: ";s+=staSecMode?"WPA3 allowed (router needs WPA3)":"WPA2, like most IoT devices (works on WPA2 and WPA2/WPA3 routers)";s+="\n";
   s+="WPA3 switch in firmware: ";s+=elSaeControlActive()?"active":"NOT active (built without -Wl,--wrap=esp_wifi_init)";s+="\n";
   s+="Security switches: ";s+=staSecSwitches;s+="\n";
-  s+="Transmit power: ";s+=elTxName[txLevel<5?txLevel:3];s+=cfg.txMode==TX_AUTO?" (Auto)":" (fixed by the owner)";
+  s+="Transmit power: ";s+=elTxName[txLevel<5?txLevel:3];s+=" (chosen by EngineLink)";
   {int8_t q=0;if(esp_wifi_get_max_tx_power(&q)==ESP_OK){s+=" · driver reports ";s+=q/4.0f;s+=" dBm";}}
   s+=" · lowered automatically ";s+=txAutoSteps;s+=" time(s) this start\n";
   {wifi_ps_type_t ps=WIFI_PS_NONE;esp_wifi_get_ps(&ps);
@@ -4458,8 +4430,8 @@ String buildNetworkReport(){
    for(uint8_t i=0;i<speedLogCount;i++){const SpeedLogRec &x=speedLog[i];
     s+="  ";s+=(millis()-x.at)/1000UL;s+=" s ago · ";s+=x.level<5?nm[x.level]:"?";s+=" dBm · ";
     if(x.kbs10){s+=x.kbs10/10.0f;s+=" kB/s";}else s+="failed";
-    s+=" · request round trip ";s+=x.rttMs;s+=" ms";if(x.sweep)s+=" · auto sweep";s+="\n";}
-   if(phoneTuneBest<5){s+="Auto chose from the phone test: ";s+=nm[phoneTuneBest];s+=" dBm\n";}}
+    s+=" · request round trip ";s+=x.rttMs;s+=" ms";s+="\n";}
+  }
   s+="\n";
   if((WiFi.getMode()&WIFI_MODE_STA)&&WiFi.status()==WL_CONNECTED){
     s+="ROUTER (AS SEEN BY ENGINELINK)\n";
@@ -4648,11 +4620,10 @@ void appendLinkJson(String &s){
   s+=",\"channel\":";s+=(unsigned)lastRouterChannel;s+=",\"quiet\":";s+=(unsigned)linkScanQuiet;s+=",\"scanCh\":";s+=(unsigned)linkScanCh;
   if(linkScanDone){s+=",\"scan\":{\"total\":";s+=linkScanTotal;s+=",\"sameChannel\":";s+=linkScanSame;s+=",\"overlapping\":";s+=linkScanOverlap;s+=",\"sameBest\":";s+=(int)linkScanSameBest;s+='}';}
   s+='}';
-  s+=",\"txMode\":";s+=cfg.txMode;s+=",\"txLevel\":";s+=txLevel;
-  s+=",\"ampduRx\":";s+=elAmpduRx?"true":"false";
+  s+=",\"txLevel\":";s+=txLevel;
   s+=",\"phoneTests\":[";
-  for(uint8_t i=0;i<speedLogCount;i++){const SpeedLogRec &x=speedLog[i];if(i)s+=',';s+="{\"agoS\":";s+=(unsigned long)((millis()-x.at)/1000UL);s+=",\"level\":";s+=x.level;s+=",\"kbs\":";s+=x.kbs10/10.0f;s+=",\"rttMs\":";s+=x.rttMs;s+=",\"sweep\":";s+=x.sweep?"true":"false";s+='}';}
-  s+="],\"phoneBest\":";s+=phoneTuneBest<5?String(phoneTuneBest):String("null");
+  for(uint8_t i=0;i<speedLogCount;i++){const SpeedLogRec &x=speedLog[i];if(i)s+=',';s+="{\"agoS\":";s+=(unsigned long)((millis()-x.at)/1000UL);s+=",\"level\":";s+=x.level;s+=",\"kbs\":";s+=x.kbs10/10.0f;s+=",\"rttMs\":";s+=x.rttMs;s+='}';}
+  s+=']';
 }
 // Transmit power, fully automatic: a ping test 60 s after joining the router
 // and again every 30 minutes while nobody is downloading, keeping the
@@ -4665,10 +4636,10 @@ void linkTuneTask(void *){
     if(!online||otaActive||httpBusySince)continue;
     const bool fresh=staIpAt!=lastIp;                       // a new connection
     const bool due=lastRun&&(uint32_t)(millis()-lastRun)>=1800000UL;
-    if(!fresh&&!due&&!linkTuneWanted)continue;
-    if(!fresh&&!linkTuneWanted&&(uint32_t)(millis()-lastHttpMs)<20000UL)continue;  // the app is busy: later
-    linkTuneWanted=false;lastIp=staIpAt;lastRun=millis()?millis():1;
-    const uint8_t best=runLinkTune(txLevel,true);
+    if(!fresh&&!due)continue;
+    if(!fresh&&(uint32_t)(millis()-lastHttpMs)<20000UL)continue;  // the app is busy: later
+    lastIp=staIpAt;lastRun=millis()?millis():1;
+    const uint8_t best=runLinkTune(txLevel);
     if(best!=txLevel){
       txLevel=best;
       Preferences tp;if(tp.begin("enginelink",false)){tp.putUChar("txal",best);tp.end();}
@@ -4896,8 +4867,6 @@ void handleCfg(){
     }
     if(g){cfg.gearMaskR=m;cfg.gearValR=val;}else{cfg.gearMaskF=m;cfg.gearValF=val;}
   }
-  if(web.hasArg("txp")){const int v=web.arg("txp").toInt();if(v<0||v>TX_AUTO){reply(false,"Invalid transmit power",400);return;}
-    cfg.txMode=v;if(v!=TX_AUTO){txLevel=v;WiFi.setTxPower(elTxPower[txLevel]);}else{Preferences tp;if(tp.begin("enginelink",false)){tp.putUChar("txal",txLevel);tp.end();}}}
   if(web.hasArg("host")){
     String v=web.arg("host");v.trim();v.toLowerCase();v.replace(' ','-');
     if(v.endsWith(".local"))v.remove(v.length()-6);
@@ -5671,18 +5640,7 @@ void initializeWeb(){
   web.on("/api/health",HTTP_GET,[](){web.send(200,"text/plain","OK");});
   web.on("/api/network-health",HTTP_GET,handleNetworkHealth);
   web.on("/api/network-report",HTTP_GET,handleNetworkReport);
-  web.on("/api/linktune",HTTP_POST,[](){
-    if(!(routerConfigured()&&!routerHold&&WiFi.status()==WL_CONNECTED)){reply(false,"Only on the router",409);return;}
-    linkTuneWanted=true;linkTuneManual=true;reply(true,"Testing the Wi-Fi link, about a minute");
-  });
-  // Auto transmit power: the app tries each step with a download test.
-  web.on("/api/txtry",HTTP_POST,[](){
-    const int l=web.arg("l").toInt();
-    if(l<0||l>4){reply(false,"Invalid level",400);return;}
-    if(cfg.txMode!=TX_AUTO){reply(false,"Only with transmit power on Auto",409);return;}
-    txLevel=l;txTryAt=millis()?millis():1;WiFi.setTxPower(elTxPower[txLevel]);reply(true,elTxName[txLevel]);
-  });
-  // A download test measured by the phone; best= ends an auto sweep.
+  // A download test measured by the phone, kept for the network report.
   web.on("/api/speedlog",HTTP_POST,[](){
     if(web.hasArg("kbs")){
       if(speedLogCount==SPEED_LOG_N){memmove(speedLog,speedLog+1,sizeof(SpeedLogRec)*(SPEED_LOG_N-1));--speedLogCount;}
@@ -5690,14 +5648,6 @@ void initializeWeb(){
       x.at=millis();x.level=web.hasArg("l")?(uint8_t)web.arg("l").toInt():txLevel;
       x.kbs10=(uint16_t)constrain(web.arg("kbs").toFloat()*10.0f,0.0f,65000.0f);
       x.rttMs=(uint16_t)constrain(web.arg("rtt").toInt(),0,65000);
-      x.sweep=web.arg("sweep").toInt()?1:0;
-    }
-    if(web.hasArg("best")&&cfg.txMode==TX_AUTO){
-      const int b=web.arg("best").toInt();
-      if(b>=0&&b<=4){
-        txLevel=b;phoneTuneBest=b;txTryAt=0;phoneTuneAt=millis()?millis():1;WiFi.setTxPower(elTxPower[txLevel]);
-        Preferences tp;if(tp.begin("enginelink",false)){tp.putUChar("txal",txLevel);tp.end();}
-      }
     }
     reply(true,"ok");
   });

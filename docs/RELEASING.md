@@ -34,7 +34,7 @@ The workflow also publishes **`enginelink-update.bin`**, the application-only im
 
 When the workflow runs for a version that has no GitHub Release yet, it creates release `v<EL_VERSION>` with `enginelink-update.bin` and `firmware.bin` attached. A version with a hyphen (for example `0.5.1-beta`) is marked as a pre-release and only shows under **Test versions** in the app. Release notes are taken from `docs/releases/v<EL_VERSION>.md` when that file exists. An existing release is never replaced: bump `EL_VERSION` to publish new firmware.
 
-After that, the workflow writes `releases.json` to the Pages site from all releases that have `enginelink-update.bin`, newest first (at most 15):
+After that, the workflow writes `releases.json` to the Pages site from all releases that have `enginelink-update.bin`, newest first (at most 5):
 
 ```json
 {"releases":[{"v":"0.5.0","date":"2026-10-28","pre":false,"notes":"…","url":"https://github.com/Kaelor9/EngineLink/releases/download/v0.5.0/enginelink-update.bin","size":1471387}]}
