@@ -120,7 +120,7 @@ void handleState(){
   s+=",\"rawKeep\":";s+=cfg.rawKeepDays;
   s+=",\"ntp\":";s+=cfg.ntpOn?"true":"false";
   s+=",\"ntpServer\":";jsonString(s,cfg.ntpServer);
-  s+=",\"ghToken\":";s+=cfg.ghToken.length()?"true":"false";
+  s+=",\"ghToken\":";s+=cfg.ghToken.length()?"true":"false";s+=",\"engReports\":";s+=cfg.engReports?"true":"false";s+=",\"engReportPending\":";s+=engineReportTrip||engineReportNow?"true":"false";
   s+=",\"report\":{\"sent\":";s+=reportSent;s+=",\"lastIssue\":";s+=reportLastIssue;s+=",\"lastAgo\":";if(reportLastAt)s+=(unsigned long)((millis()-reportLastAt)/1000);else s+="null";s+=",\"error\":";jsonString(s,reportError);s+=",\"pending\":";s+=reportWanted?"true":"false";s+='}';
   s+=",\"scaleOk\":";s+=cfg.fuelScaleOk?"true":"false";
   s+=",\"voltOk\":";s+=cfg.voltOk?"true":"false";
@@ -709,6 +709,7 @@ void handleCfg(){
     if(!validHostName(v)){reply(false,"Use 1 to 32 letters, digits or hyphens, for example enginelink",400);return;}
     if(v!=cfg.hostName){cfg.hostName=v;WiFi.setHostname(v.c_str());startNameService();}
   }
+  if(web.hasArg("erep"))cfg.engReports=web.arg("erep").toInt()!=0;
   if(web.hasArg("ghtoken")){String v=web.arg("ghtoken");v.trim();if(v.length()>200){reply(false,"Token too long",400);return;}cfg.ghToken=v;reportError="";}
   if(web.hasArg("ntpServer")){String v=web.arg("ntpServer");v.trim();if(v.length()<3||v.length()>63){reply(false,"Invalid server",400);return;}cfg.ntpServer=v;ntpStarted=false;}
   if(web.hasArg("port")){const int p=web.arg("port").toInt();if(p<0||p>2){reply(false,"Invalid socket choice",400);return;}cfg.portChannel=p;}
@@ -958,6 +959,10 @@ void initializeWeb(){
       x.rttMs=(uint16_t)constrain(web.arg("rtt").toInt(),0,65000);
     }
     reply(true,"ok");
+  });
+  web.on("/api/report/engine",HTTP_POST,[](){
+    if(!cfg.ghToken.length()){reply(false,"Add a GitHub token first",409);return;}
+    engineReportNow=true;reply(true,"The engine report is sent as soon as EngineLink is on the router");
   });
   web.on("/api/report/send",HTTP_POST,[](){
     if(!cfg.ghToken.length()){reply(false,"Add a GitHub token first",409);return;}

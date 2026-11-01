@@ -48,7 +48,8 @@ program, so they share the globals in `EngineLink.ino`.
 | `webapi.ino` | JSON helpers, the app's API handlers and the route table |
 | `netreport.ino` | Network report, ports 81 and 82, web server self-check, transmit power task |
 | `downloads.ino`, `sdexport.ino` | Streaming (compressed) downloads, CSV exports, SD clean-up, backup |
-| `updates.ino` | Firmware updates from GitHub or a file, with rollback |
+| `updates.ino` | Firmware updates from GitHub or a file, with rollback; sends the GitHub reports |
+| `enginereport.ino` | Engine report after each trip: how well both engines were read, plus the diagnostics JSON |
 | `led.ino`, `nmea2000.ino`, `enginetest.ino` | Status LED, NMEA 2000 listener, engine test capture |
 | `wifiwpa3.cpp/.h` | Wraps `esp_wifi_init` to switch WPA3-SAE off unless the router needs it |
 | `linktune.cpp/.h` | Automatic transmit power, link measurements, channel scan |
@@ -116,7 +117,10 @@ growing intervals, and goes back by itself. WPA2 is used unless the router is
 WPA3-only. Transmit power is chosen by `linktune.cpp`. The network report
 (`/api/network-report`, also on port 81 at `/report`) holds everything needed
 to diagnose a connection; with a GitHub token saved, the board files it as an
-issue by itself after problems.
+issue by itself after problems. After each trip it also files an engine report
+("Engine report: trip N"): frames, KAD requests and replies, values held back or
+skipped, data coverage and the diagnostics JSON. A trip that ends away from the
+router is reported once the board is back on it.
 
 Lessons from the router work (late 2026): the prebuilt libraries' 4-packet TCP
 send window capped downloads through a router; the remaining slowness was a

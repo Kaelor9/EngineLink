@@ -26,7 +26,8 @@ void fwWorker(void *){
       }
     }else if(job==FW_REPORT){
       String body="{\"title\":";
-      jsonString(body,String("Device report: ")+reportReason+" (EngineLink " EL_VERSION ")");
+      jsonString(body,reportTitle.length()?reportTitle:String("Device report: ")+reportReason+" (EngineLink " EL_VERSION ")");
+      reportTitle="";
       body+=",\"body\":";
       jsonString(body,String("Sent automatically by EngineLink.\n\n```text\n")+reportBody+"\n```\n");
       body+="}";

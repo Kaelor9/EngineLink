@@ -291,6 +291,7 @@ struct PidSeen {
   uint64_t at=0;
 };
 struct Settings {
+  bool engReports=true;        // send an engine report to GitHub after each trip
   bool completed=false;
   bool router=false;
   bool canListen=false;

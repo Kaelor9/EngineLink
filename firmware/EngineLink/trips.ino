@@ -170,6 +170,10 @@ void endTrip(){
     saveTrips();
     writeTripCSV(r);
     if(totals.tripBoot==bootId)finishTripHealth();
+    if(cfg.engReports&&cfg.ghToken.length()){
+      engineReportTrip=r.id;
+      Preferences p;if(p.begin("enginelink",false)){p.putUInt("erpend",r.id);p.end();}
+    }
     tripSeriesClose(true);
     for(uint8_t c=0;c<2;c++)if(lifeTripMax[c]>0){life.wotRpm[c]=lifeTripMax[c];if(lifeTripMax[c]>life.wotRpmBest[c])life.wotRpmBest[c]=lifeTripMax[c];}
     lifeDirty=true;
