@@ -1360,7 +1360,7 @@ const PAGE_VIEWS={
       </div>
       <div class="s12 sub" style="margin-top:7px">The report includes event history, association and DHCP timing, driver errors and web diagnostics. It contains no Wi-Fi password.</div>
       ${reportBlock(c,lv)}
-      </div>${row('cycle','txp','Transmit power','EngineLink lowers it by itself if the router does not hear it',rv(['Maximum','Medium','Low','Very low'][(c&&c.txPower!=null)?c.txPower:1]))}${row('cycle','aggr','Frame bundling to the router','Off sends steadily through routers that drop bundled frames. EngineLink reconnects after a change.',rv(c&&c.aggr?'On':'Off (recommended)'))}${tuneBlock(d,lv)}${dlBlock(d.dl,d.sp)}<div class="rowx">
+      </div>${row('cycle','txp','Transmit power','EngineLink lowers it by itself if the router does not hear it',rv(['Maximum','Medium','Low','Very low'][(c&&c.txPower!=null)?c.txPower:1]))}${row('cycle','aggr','Frame bundling to the router','Normally on. Off can help a router that drops bundled frames. EngineLink reconnects after a change.',rv(c&&c.aggr===0?'Off':'On (normal)'))}${tuneBlock(d,lv)}${dlBlock(d.dl,d.sp)}<div class="rowx">
       <div class="s12 sub">"Missed here" counts the live updates this phone did not get since the app was opened. Up for ${dur(d.up||0)}${d.reset!=null?' · last restart: '+(RESET[d.reset]||'code '+d.reset):''}.</div></div></div>`;
     h+=restartsBlock(d);
     // Calibration
@@ -1675,7 +1675,7 @@ const A={
     if(CYCLE[v]){const [list,key]=CYCLE[v];await cfgSet({[key]:nextOf(list,v==='port'?c.portChannel:c[key])});render(true);return;}
     if(v==='can'){await cfgSet({can:c.canListen?0:1});render(true);return;}
     if(v==='ntp'){await cfgSet({ntp:c.ntp?0:1});render(true);return;}
-    if(v==='aggr'){await cfgSet({aggr:c&&c.aggr?0:1});toast('EngineLink reconnects to the router');load('diag');return;}
+    if(v==='aggr'){await cfgSet({aggr:c&&c.aggr===0?1:0});toast('EngineLink reconnects to the router');load('diag');return;}
     if(v==='txp'){await cfgSet({txp:(((c&&c.txPower!=null)?c.txPower:1)+1)%4});load('diag');return;}
     if(v==='proto'){
       const to=c.protocol==='kad'?'j1587':'kad';
