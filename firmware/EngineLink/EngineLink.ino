@@ -48,9 +48,12 @@
 #include "diagrules.h"
 #include "otaheader.h"
 #include "routerguard.h"
-#include "miniz.h"  // the deflate compressor in the chip's ROM
+#include "miniz.h"
+// wifiwpa3.cpp: WPA3 on or off for the Wi-Fi driver (see there)
+extern volatile bool elAllowSae;
+bool elSaeControlActive();  // the deflate compressor in the chip's ROM
 
-#define EL_VERSION "0.11.11"
+#define EL_VERSION "0.12.0"
 // Releases list published by the Pages workflow; firmware files come from
 // GitHub Releases of the same repository. Nothing else is downloaded.
 #define EL_RELEASES_URL "https://kaelor9.github.io/EngineLink/releases.json"
@@ -807,12 +810,12 @@ volatile bool staHadIp=false;
 // Arduino-ESP32 3.3.12 does not auto-retry WIFI_REASON_SA_QUERY_TIMEOUT.
 // Queue ONE non-disruptive retry for the normal loop; never reconnect in callbacks.
 volatile uint32_t saQueryRetryAt=0;
-// WPA3-SAE login method: 0 = Hunting-and-Pecking, 1 = Hash-to-Element (H2E,
-// with HnP allowed). The ESP32 Wi-Fi library always uses WPA3 on a WPA2/WPA3
-// router (PMF "capable" is ignored), so WPA2 cannot be chosen. Field reports
-// from a Zyxel show SAE logins timing out over and over (codes 2/4/202) with
-// H2E in use; HnP is the default now, and EngineLink switches method after a
-// session that never got in, and keeps the method that works.
+// Router security, like most ESP32 products: 0 = WPA2 (the driver starts
+// without WPA3, see wifiwpa3.cpp), which works on WPA2 and WPA2/WPA3 mixed
+// routers; 1 = WPA3 allowed, only for a router that needs it (WPA3-only).
+// Chosen from the router's security in the network scan, switched to WPA3 on
+// "no compatible security" (codes 210/211) and flipped after a session that
+// never got in; the mode that works is kept (NVS smode).
 uint8_t staSecMode=0;
 volatile bool staSecSwitchPending=false;volatile uint8_t staSecSwitchTo=0;
 bool routerGotIpThisSession=false;
@@ -930,6 +933,7 @@ struct ScanEntry {
   int32_t rssi=-127;
   uint8_t channel=0;
   bool locked=true;
+  uint8_t auth=0;   // wifi_auth_mode_t
   uint8_t bssid[6]={};
 };
 ScanEntry scanEntries[WIFI_SCAN_MAX_RESULTS];
@@ -1011,6 +1015,8 @@ void onWiFi(WiFiEvent_t e,WiFiEventInfo_t info){
       // Schedule an early one-shot attempt without resetting WPA/PMF state.
       if(staLastReason==WIFI_REASON_SA_QUERY_TIMEOUT && droppedOnline)
         saQueryRetryAt=millis()+2000UL;
+      // The router offers no WPA2 (WPA3-only): start the driver with WPA3.
+      if((staLastReason==210||staLastReason==211)&&staSecMode==0){staSecSwitchTo=1;staSecSwitchPending=true;}
 
     }
   }
@@ -2613,6 +2619,7 @@ void captureWifiScan(int16_t total){
     entry.rssi=rssi;
     entry.channel=(uint8_t)WiFi.channel(i);
     entry.locked=WiFi.encryptionType(i)!=WIFI_AUTH_OPEN;
+    entry.auth=(uint8_t)WiFi.encryptionType(i);
     const uint8_t *b=WiFi.BSSID(i);
     if(b)memcpy(entry.bssid,b,sizeof(entry.bssid));
     else memset(entry.bssid,0,sizeof(entry.bssid));
@@ -2689,7 +2696,7 @@ void connectRouter(){
     if(err==ESP_OK){
       staCfg.sta.pmf_cfg.capable=true;
       staCfg.sta.pmf_cfg.required=false;
-      staCfg.sta.sae_pwe_h2e=staSecMode==1?WPA3_SAE_PWE_BOTH:WPA3_SAE_PWE_HUNT_AND_PECK;
+      staCfg.sta.sae_pwe_h2e=WPA3_SAE_PWE_BOTH;
       memset(staCfg.sta.sae_h2e_identifier,0,sizeof(staCfg.sta.sae_h2e_identifier));
       // A threshold is a MINIMUM, NOT a forced WPA2 downgrade. WPA3 still wins
       // automatically whenever the router and station negotiate it successfully.
@@ -2767,7 +2774,7 @@ void parkRouter(const char *why){
   routerHold=true;
   ++routerFallbacks;
   routerHoldSince=millis()?millis():1;
-  // Never got in this time: try the other WPA3 login method next time.
+  // Never got in this time: try the other security next time.
   if(!routerGotIpThisSession){staSecMode=staSecMode?0:1;++staSecSwitches;saveSecMode();}
   if(routerAutoReturning){routerAutoReturning=false;routerProbeEvery=min<uint32_t>(routerProbeEvery*2,7200000UL);}
   routerProbeAt=millis()+routerProbeEvery;
@@ -2820,6 +2827,8 @@ void applyNetwork(){
   // A real mode change may drop old clients, but it must never happen in
   // normal operating loops or between two reconnect attempts.
   WiFi.mode(WIFI_OFF);
+  // Read by wifiwpa3.cpp when the driver starts again below.
+  elAllowSae=routerConfigured()&&!routerHold&&staSecMode==1;
   WiFi.persistent(false);
   WiFi.setHostname(cfg.hostName.c_str());
   apStarted=false;
@@ -3003,9 +3012,9 @@ void serviceNetwork(){
     staSecSwitchPending=false;
     if(staSecMode!=staSecSwitchTo){
       staSecMode=staSecSwitchTo;++staSecSwitches;saveSecMode();saQueryRetryAt=0;
-      Serial.printf("Router security switched to %s\n",staSecMode?"WPA3-SAE":"WPA2");
-      routerIntentionalShutdown=true;WiFi.disconnect(false);routerIntentionalShutdown=false;
-      connectRouter();
+      Serial.printf("Router security switched to %s\n",staSecMode?"WPA3 allowed":"WPA2");
+      // The driver must start again for the change: a normal network re-apply.
+      networkSwitchAt=millis();pendingNetwork=true;
     }
   }
   // Standalone after a router fallback: listen for the saved router now and
@@ -4254,7 +4263,7 @@ String makeNetworkHealthJson(){
   s+=",\"lastRouterRssi\":";if(lastRouterIp.length())s+=lastRouterRssi;else s+="null";
   s+=",\"lastRouterChannel\":";s+=(unsigned)lastRouterChannel;
   s+=",\"lastSecurity\":";jsonString(s,stationSecurityName(staNegotiatedAuth));
-  s+=",\"saeMethod\":";s+=staSecMode?"\"h2e\"":"\"hnp\"";s+=",\"secSwitches\":";s+=staSecSwitches;
+  s+=",\"secMode\":";s+=staSecMode?"\"wpa3\"":"\"wpa2\"";s+=",\"saeControl\":";s+=elSaeControlActive()?"true":"false";s+=",\"secSwitches\":";s+=staSecSwitches;
   s+=",\"saeConfigured\":";s+=staSecurityConfigured?"true":"false";
   s+=",\"saeSetupError\":";s+=(int)staSecurityConfigError;
   s+=",\"lastFailureDescription\":";jsonString(s,reasonText(routerFailureReason));
@@ -4296,8 +4305,9 @@ String buildNetworkReport(){
   s+="Last router channel: ";s+=lastRouterChannel;s+="\n";
   s+="Last negotiated Wi-Fi security: ";s+=stationSecurityName(staNegotiatedAuth);s+="\n";
   s+="Explicit SAE H2E+Hunt-and-Peck setup: ";s+=staSecurityConfigured?"Applied":"Not applied";s+="\n";
-  s+="WPA3 login method: ";s+=staSecMode?"Hash-to-Element (H2E)":"Hunting-and-Pecking";s+="\n";
-  s+="Login method switches: ";s+=staSecSwitches;s+="\n";
+  s+="Security mode: ";s+=staSecMode?"WPA3 allowed (router needs WPA3)":"WPA2, like most IoT devices (works on WPA2 and WPA2/WPA3 routers)";s+="\n";
+  s+="WPA3 switch in firmware: ";s+=elSaeControlActive()?"active":"NOT active (built without -Wl,--wrap=esp_wifi_init)";s+="\n";
+  s+="Security switches: ";s+=staSecSwitches;s+="\n";
   s+="Security configuration result: ";s+=esp_err_to_name(staSecurityConfigError);s+="\n\n";
   s+="CONNECTIVITY (COUNTERS SINCE BOOT)\n";
   s+="Successful Wi-Fi associations: ";s+=(unsigned long)staAssociatedEvents;s+="\n";
@@ -4767,6 +4777,9 @@ void handleWifiConnect(){
   routerAttempts=0;
   cfg.router=true;cfg.ssid=ssid;cfg.wifiPassword=pass;cfg.completed=true;
   saveSettings();
+  // WPA2 unless the scan shows a WPA3-only router.
+  {uint8_t want=0;for(uint8_t k=0;k<scanEntriesCount;k++)if(scanEntries[k].ssid==ssid){want=scanEntries[k].auth==WIFI_AUTH_WPA3_PSK?1:0;break;}
+   if(want!=staSecMode){staSecMode=want;saveSecMode();}}
   // The displayed scan is only for choosing the SSID. Never lock to its
   // cached BSSID/channel: it can change before the connection begins.
   staBssidKnown=false;

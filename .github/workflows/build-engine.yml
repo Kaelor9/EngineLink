@@ -52,7 +52,12 @@ jobs:
             --fqbn "esp32:esp32:esp32s3:FlashSize=8M,PartitionScheme=default_8MB,PSRAM=opi,USBMode=hwcdc,CDCOnBoot=cdc" \
             --output-dir build-app \
             --export-binaries \
+            --build-property "compiler.c.elf.extra_flags=-Wl,--wrap=esp_wifi_init" \
             firmware/EngineLink
+          # WPA3 must be switchable (firmware/EngineLink/wifiwpa3.cpp): fail if
+          # Arduino's Wi-Fi start does not go through the wrapper.
+          OBJDUMP=$(ls ~/.arduino15/packages/esp32/tools/esp-x32/*/bin/xtensa-esp32s3-elf-objdump | head -1)
+          "$OBJDUMP" -d build-app/*.elf --no-show-raw-insn | grep -q "call8.*<__wrap_esp_wifi_init>" || { echo "esp_wifi_init is not wrapped: WPA3 cannot be switched off"; exit 1; }
       - name: Verify merged image
         run: |
           python3 - <<'PY'
