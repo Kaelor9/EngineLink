@@ -53,7 +53,7 @@
 extern volatile bool elAllowSae;
 bool elSaeControlActive();  // the deflate compressor in the chip's ROM
 
-#define EL_VERSION "0.12.0"
+#define EL_VERSION "0.12.1"
 // Releases list published by the Pages workflow; firmware files come from
 // GitHub Releases of the same repository. Nothing else is downloaded.
 #define EL_RELEASES_URL "https://kaelor9.github.io/EngineLink/releases.json"
@@ -945,7 +945,7 @@ enum FwJob : uint8_t { FW_IDLE, FW_LIST, FW_INSTALL, FW_REPORT };
 // the EngineLink repository when it has internet, so nobody has to fetch it
 // by hand. Needs a token that may only create issues; the router name is
 // removed (the repository is public). At most one every 30 min, 10 a day.
-volatile bool reportWanted=false;bool reportManual=false;
+volatile bool reportWanted=false;bool reportManual=false,reportedThisBoot=false;
 String reportReason="",reportBody="",reportError="";
 uint32_t reportSent=0,reportLastIssue=0,reportLastAt=0,reportDayStart=0,reportDayCount=0;
 volatile uint8_t fwJob=FW_IDLE;
@@ -3152,6 +3152,13 @@ void serviceNetwork(){
     reportWanted=true;reportReason="web server stopped answering and was restarted";
     Serial.println("HTTP self-check failed: closing connections and restarting the web server");
     web.rebindNetwork();
+  }
+  // Once per start (also after an update): a report when the router link has
+  // held for 2 minutes, so it is known that this version connects.
+  if(!reportedThisBoot&&cfg.ghToken.length()&&routerConfigured()&&!routerHold&&staIpAt
+     &&WiFi.status()==WL_CONNECTED&&(uint32_t)(millis()-staIpAt)>=120000UL){
+    reportedThisBoot=true;
+    if(!reportWanted){reportWanted=true;reportManual=true;reportReason="connected after start";}
   }
   if(reportWanted&&cfg.ghToken.length()&&fwJob==FW_IDLE&&fwState!=3&&routerConfigured()&&!routerHold
      &&WiFi.status()==WL_CONNECTED&&WiFi.localIP()!=IPAddress(0,0,0,0)
