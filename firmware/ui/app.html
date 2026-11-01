@@ -1422,11 +1422,12 @@ function restartsBlock(d){
 // A strong signal but slow, jumpy answers from the router: the router's
 // 2.4 GHz channel is busy. EngineLink cannot change the router's channel.
 function busyHint(d,lv){
-  const t=d.linkTune||{},sm=t.small||{},sc=t.scan||{};
-  if(!sm.sent||!(lv.net.rssi>-67))return '';
-  if(sm.got===sm.sent&&sm.avg<=40)return '';
-  const ch=t.channel,alt=ch&&ch<=3?'6 or 11':ch>=9?'1 or 6':'1 or 11';
-  return `<div class="s12" style="margin-top:6px;color:var(--orange)">The router answers slowly (${sm.avg} ms on average${sm.got<sm.sent?', '+(sm.sent-sm.got)+' of '+sm.sent+' lost':''}) although the signal is strong: its Wi-Fi channel${ch?' '+ch:''} is busy${sc.sameChannel?' and shared with '+sc.sameChannel+' other network'+(sc.sameChannel>1?'s':''):''}. Set the router's 2.4 GHz channel to ${ch?alt:'6 or 11'} in its settings.</div>`;
+  const t=d.linkTune||{},sm=t.small||{},sc=t.scan||{},sp=S.speed;
+  if(!(lv.net.rssi>-67))return '';
+  const slowPing=sm.sent&&(sm.got<sm.sent||sm.avg>40),slowTest=sp&&!sp.busy&&(sp.err||sp.kbs<40||sp.rtt>300);
+  if(!slowPing&&!slowTest)return '';
+  const ch=t.channel,q=t.quiet&&t.quiet!==ch?t.quiet:(ch&&ch<=3?11:1);
+  return `<div class="s12" style="margin-top:6px;color:var(--orange)">Strong signal, but the router's Wi-Fi is slow${sc.sameChannel?`: ${sc.sameChannel} other network${sc.sameChannel>1?'s':''} share${sc.sameChannel>1?'':'s'} its channel ${ch||''}${sc.sameBest?' (strongest '+sc.sameBest+' dBm)':''}`:''}. Set the router's 2.4 GHz channel to ${q} in its settings, then test again.</div>`;
 }
 function speedDetail(){
   const sp=S.speed;if(!sp||sp.busy||sp.err)return '';

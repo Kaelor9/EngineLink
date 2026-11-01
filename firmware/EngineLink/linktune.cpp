@@ -61,6 +61,10 @@ bool pingHost(IPAddress ip, uint8_t count, uint16_t size, uint16_t intervalMs, P
   return true;
 }
 
+// Networks per channel and the ones on or near the router's channel (maker
+// prefix and signal, no names), for the report and the channel advice.
+String linkScanList;
+volatile uint8_t linkScanQuiet = 0;   // the 1/6/11 channel with the least around it
 static void surveyChannel() {
   const int ch = WiFi.channel();
   if (WiFi.scanComplete() == WIFI_SCAN_RUNNING) return;  // someone else is scanning
@@ -70,14 +74,34 @@ static void surveyChannel() {
   while ((n = WiFi.scanComplete()) == WIFI_SCAN_RUNNING && millis() - t0 < 8000) vTaskDelay(pdMS_TO_TICKS(100));
   if (n < 0) { WiFi.scanDelete(); return; }
   uint8_t same = 0, overlap = 0; int8_t best = -127;
-  const String own = WiFi.SSID();
+  const uint8_t *own = WiFi.BSSID();
+  uint8_t ownMac[6] = {0}; if (own) memcpy(ownMac, own, 6);
+  int load[14] = {0};   // signal-weighted use per channel
+  String list;
   for (int16_t i = 0; i < n; i++) {
-    const int c = WiFi.channel(i);
-    if (c == ch) {
-      if (WiFi.SSID(i) == own) continue;  // the router itself
-      ++same; if (WiFi.RSSI(i) > best) best = WiFi.RSSI(i);
-    } else if (abs(c - ch) <= 4) ++overlap;
+    const int c = WiFi.channel(i); const int r = WiFi.RSSI(i);
+    const uint8_t *b = WiFi.BSSID(i);
+    const bool router = b && memcmp(b, ownMac, 6) == 0;
+    const bool sameMaker = b && memcmp(b, ownMac, 3) == 0;
+    if (c >= 1 && c <= 13 && !router) {
+      const int w = r > -50 ? 4 : r > -65 ? 2 : 1;
+      for (int k = c - 4; k <= c + 4; k++) if (k >= 1 && k <= 13) load[k] += w;
+    }
+    if (router) continue;
+    if (c == ch) { ++same; if (r > best) best = r; }
+    else if (abs(c - ch) <= 4) ++overlap;
+    else continue;
+    char e[64];
+    snprintf(e, sizeof(e), "%s channel %d, %d dBm, maker %02X:%02X:%02X%s%s",
+             list.length() ? " | " : "", c, r, b ? b[0] : 0, b ? b[1] : 0, b ? b[2] : 0,
+             sameMaker ? " (same maker as the router: probably its own guest or mesh network)" : "",
+             WiFi.SSID(i).length() ? "" : ", hidden");
+    if (list.length() < 600) list += e;
   }
+  const int cand[3] = {1, 6, 11}; int q = 1;
+  for (int k = 0; k < 3; k++) if (load[cand[k]] < load[q]) q = cand[k];
+  linkScanQuiet = q;
+  linkScanList = list;
   linkScanTotal = n > 255 ? 255 : n; linkScanSame = same; linkScanOverlap = overlap;
   linkScanSameBest = same ? best : 0; linkScanDone = true;
   WiFi.scanDelete();
