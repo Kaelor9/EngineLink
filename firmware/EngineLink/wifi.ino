@@ -631,7 +631,7 @@ void serviceNetwork(){
   if(routerConfigured()&&!routerHold){
     const uint32_t now=millis();
     const bool hasIp=routerIpReady;
-    // RPM/IP updates are cached above; RSSI/channel read at most once a second.
+    // Wi-Fi mode/IP are cached above; RSSI/channel read once a second.
     static uint32_t staInfoAt=0;
     const bool staInfoDue=!staInfoAt||(uint32_t)(now-staInfoAt)>=1000UL;
     if(hasIp&&staInfoDue){
