@@ -27,14 +27,16 @@ uint8_t unackedEvents(){uint8_t n=0;for(uint8_t i=0;i<eventCount;i++)if(!events[
 void sampleNow(Sample &s,diag::Input &in){
   const uint64_t now=elapsedMs();
   s=Sample();s.up=(uint32_t)(now/1000ULL);
-  in=diag::Input();in.t=s.up;in.gearMask=cfg.gearMaskF|cfg.gearMaskR;
+  in=diag::Input();in.t=s.up;in.gearMask=cfg.gearMaskF|cfg.gearMaskR|cfg.compMask;
   for(uint8_t c=0;c<2;c++){
     diag::Eng &e=in.e[c];
     e.running=motor[c].running;e.polled=kad[c].polling;
     e.rpm=rpmFresh(c,now)?motor[c].rpm:NAN;
     e.lph=fuelFresh(c,now)?motor[c].fuelLph:NAN;
-    e.req=valueOr(c,291,12000);e.cool=valueOr(c,259,12000);e.air=valueOr(c,261,12000);
-    e.boost=valueOr(c,265,12000);e.volt=valueOr(c,293,15000);
+    // Slow values come about every 15 s while manoeuvring (the gear bits are
+    // read more often then), so they count as current for 20 s.
+    e.req=valueOr(c,291,12000);e.cool=valueOr(c,259,20000);e.air=valueOr(c,261,20000);
+    e.boost=valueOr(c,265,20000);e.volt=valueOr(c,293,25000);
     const float a=valueOr(c,263,15000),b=valueOr(c,264,15000);
     e.st263=isnan(a)?-1:(int32_t)a&0xFFFF;e.st264=isnan(b)?-1:(int32_t)b&0xFFFF;
     const int bk=isnan(e.rpm)?-1:bucketFor(e.rpm);
@@ -72,15 +74,18 @@ void tripSeriesOpen(){
   tripSeries.write((const uint8_t*)&h,sizeof(h));
   tripSeriesId=totals.nextTripId;
   tripCov=Coverage();
+  tripFastOpen(totals.nextTripId);
+  shiftTripStart();
 }
 // After the card was mounted again: carry on with the trip that is running.
 void tripSeriesReopen(){
   if(!totals.tripActive||tripSeries||!sdReady)return;
   char name[32];snprintf(name,sizeof(name),"/TRIPS/T%06lu.BIN",(unsigned long)totals.nextTripId);
-  if(SD.exists(name)){tripSeries=SD.open(name,FILE_APPEND);if(tripSeries)tripSeriesId=totals.nextTripId;return;}
+  if(SD.exists(name)){tripSeries=SD.open(name,FILE_APPEND);if(tripSeries)tripSeriesId=totals.nextTripId;if(!tripFast)tripFastOpen(totals.nextTripId);return;}
   const Coverage keep=tripCov;tripSeriesOpen();tripCov=keep;
 }
 void tripSeriesClose(bool keep){
+  tripFastClose(keep);
   if(!tripSeries)return;
   tripSeries.close();
   if(keep&&sdReady&&cardInserted()){
@@ -113,7 +118,8 @@ void addEvent(const diag::Event &d,uint32_t up){
   memmove(&events[1],&events[0],sizeof(EventRec)*eventCount);
   events[0]=r;++eventCount;
   if(r.box==1&&pendingBoxN<8)pendingBox[pendingBoxN++]=r.id;else if(r.box==1)events[0].box=3;
-  if(d.type<diag::T_COUNT)++life.eventsBy[d.type];
+  queueFastBox(r.id);
+  if(d.type<diag::LIFE_EV_N)++life.eventsBy[d.type];
   if(d.type==diag::T_LONG_IDLE&&d.eng<2)++life.longIdles[d.eng];
   lifeDirty=true;
   saveEvents();
@@ -345,7 +351,9 @@ void handleLife(){
   }
   s+="],\"events\":{";
   bool first=true;
-  for(uint8_t k=1;k<diag::T_COUNT;k++)if(life.eventsBy[k]){if(!first)s+=',';first=false;s+='"';s+=diag::TYPE_ID[k];s+="\":";s+=life.eventsBy[k];}
+  for(uint8_t k=1;k<diag::LIFE_EV_N;k++)if(life.eventsBy[k]){if(!first)s+=',';first=false;s+='"';s+=diag::TYPE_ID[k];s+="\":";s+=life.eventsBy[k];}
+  // Counted in the gear and clutch story (the stored array above is fixed).
+  for(uint8_t k=diag::LIFE_EV_N;k<diag::T_COUNT;k++){const uint32_t n=k==diag::T_PULL_NEUTRAL?shiftLife.pullNeutral[0]+shiftLife.pullNeutral[1]:shiftLife.hard[0]+shiftLife.hard[1];if(!n)continue;if(!first)s+=',';first=false;s+='"';s+=diag::TYPE_ID[k];s+="\":";s+=n;}
   s+="}}";
   sendJSON(200,s);
 }
@@ -411,6 +419,7 @@ String makeDiagJson(){
   appendLinkJson(s);
   s+=",\"engineTask\":";s+=engineTaskOn?"true":"false";
   s+=",\"engineWait\":{\"max\":";s+=engineMaxWaitMs;s+=",\"slow\":";s+=engineSlowWaits;s+='}';
+  s+=",\"gearbox\":{\"gl\":";s+=gearLearned()?"true":"false";s+=",\"cl\":";s+=cfg.compMask?"true":"false";s+=",\"e\":[";shiftLifeJson(s,0);s+=',';shiftLifeJson(s,1);s+="]}";
   s+=",\"reading\":[";
   for(uint8_t c=0;c<2;c++){
     const KadLink &k=kad[c];
@@ -421,7 +430,7 @@ String makeDiagJson(){
     s+=",\"skip\":[";bool f=true;for(uint8_t i=0;i<KAD_SLOW_N;i++)if(k.skip>>i&1){if(!f)s+=',';f=false;s+=KAD_POLL_SLOW[i];}
     s+="],\"disc\":{\"active\":";s+=k.discActive?"true":"false";s+=",\"done\":";s+=k.discDone?"true":"false";
     s+=",\"pos\":";s+=k.discPos;s+=",\"found\":[";f=true;
-    for(uint8_t i=0;i<64;i++)if(k.discFound>>i&1){if(!f)s+=',';f=false;s+=KAD_DISC_FIRST+i;}
+    for(uint16_t i=0;i<=KAD_DISC_LAST-KAD_DISC_FIRST;i++)if(k.discFound[i>>6]>>(i&63)&1){if(!f)s+=',';f=false;s+=KAD_DISC_FIRST+i;}
     s+="]}}";
   }
   s+="]";
@@ -501,22 +510,24 @@ String makeDiagJson(){
 void handleDiag(){sendJSON(200,makeDiagJson());}
 // 30 s read test on one connector. Polls (read requests only) unless the
 // connector is already being polled, then counts the answers.
-// "Discover more values": asks once for every index from 256 to 319 with the
+// "Discover more values": asks once for every index from 256 to 447 with the
 // same read request, in the slow slot, and lists the ones that are answered.
 void handleKadDiscover(){
   const int ch=web.arg("ch").toInt();
   if(ch<0||ch>1){reply(false,"Choose an engine",400);return;}
   KadLink &k=kad[ch];
   if(!k.polling){reply(false,"Start reading this engine first",409);return;}
-  k.discActive=true;k.discPos=0;k.discFound=0;k.discDone=false;
-  reply(true,"Asking for 64 values, about a minute");
+  k.discActive=true;k.discPos=0;memset(k.discFound,0,sizeof(k.discFound));k.discDone=false;
+  reply(true,"Asking for 192 values, about a minute and a half");
 }
 // The app studies one value closely (learning the gear bits): ask for it in
 // every slow slot for up to 90 seconds.
+// The drive test studies two values in turn (?idx2=, e.g. gear bits and boost).
 void handleDiagFocus(){
-  const int idx=web.arg("idx").toInt(),secs=constrain(web.arg("secs").toInt(),0,90);
-  if(!kadParam((uint16_t)idx)){reply(false,"Unknown value",400);return;}
-  kadFocusIndex=(uint16_t)idx;kadFocusUntil=millis()+(uint32_t)secs*1000UL;
+  const int idx=web.arg("idx").toInt(),secs=constrain(web.arg("secs").toInt(),0,180);
+  const int idx2=web.hasArg("idx2")?web.arg("idx2").toInt():0;
+  if(!kadParam((uint16_t)idx)||(idx2&&!kadParam((uint16_t)idx2))){reply(false,"Unknown value",400);return;}
+  kadFocusIndex=(uint16_t)idx;kadFocusIndex2=(uint16_t)idx2;kadFocusUntil=millis()+(uint32_t)secs*1000UL;
   reply(true,"OK");
 }
 void handleDiagTest(){
