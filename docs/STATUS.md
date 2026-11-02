@@ -30,10 +30,15 @@ to engines.
 | Fuel figures | First fill-ups within about ±8 % before calibration |
 | microSD, status LED | Bench tested |
 | Own Wi-Fi (standalone) | Phones connect at 192.168.4.1; about 650 kB/s |
-| Router mode | Zyxel EX3600 (WPA2/WPA3 mixed): 500–630 kB/s, about 20 ms round trip on a free channel; fallback to own Wi-Fi and return tested |
+| Router mode | Zyxel EX3600 (WPA2/WPA3 mixed): previously 500–630 kB/s on free channel. Field report [#126](https://github.com/Kaelor9/EngineLink/issues/126), v0.13.4: 12 test average 584.6 kB/s (457.8–665.3), round trip 18–20 ms. Still 95 Wi-Fi disconnect events / 48 pre-connection failures and about 50 seconds reconnecting, so long-term stability is NOT verified. |
 | Firmware updates | Over Wi-Fi from GitHub and from a file, with rollback |
 
 ## Not yet checked
+
+- v0.13.4 long-term stability across automatic router channel changes; #126 shows recovery after outage but does not prove why it occurred.
+- Whether the channel survey can complete while the app is in regular use.
+- Whether the small Trip summary CSV fix in PR #123 resolves Chrome/iPhone download failures.
+- Whether retained crash history reflects any new crashes during extended v0.13.4 operation.
 
 - KAD reply layout for every value: verified for the values above, not for all
   indexes ("Discover more values" should be re-run).
