@@ -13,7 +13,7 @@
   <img src="https://img.shields.io/badge/Engines-2%C3%97%20J1708%20isolated-success" alt="2 × isolated J1708">
   <img src="https://img.shields.io/badge/Volvo%20Penta-KAD300%20%2F%20EDC%20I-0b5394" alt="Volvo Penta KAD300 / EDC I">
   <img src="https://img.shields.io/badge/NMEA%202000-listen--only-informational" alt="NMEA 2000 listen-only">
-  <img src="https://img.shields.io/badge/Firmware-0.13.4-orange" alt="Firmware 0.13.4">
+  <img src="https://img.shields.io/badge/Firmware-0.14.0-orange" alt="Firmware 0.14.0">
 </p>
 
 <p align="center">
@@ -77,6 +77,10 @@ EngineLink combines both on one board:
 - **Two Wi-Fi modes:** EngineLink's own network at `192.168.4.1` (factory default), or on the boat router at the address the router gives it. If the router is lost, EngineLink brings its own network back within two minutes and returns to the router by itself. Transmit power is tuned automatically.
 - **Firmware updates from GitHub** over the boat router, with automatic rollback, or from a file
 - **Reports to GitHub (optional):** with a token saved, EngineLink files an engine report after each trip and a Wi-Fi report after connection problems, so issues can be found without copying anything. No position, router name or password is ever included
+- **Gear and clutch (DP drives):** every shift at idle is timed, from the gear bits to the propeller taking or losing load; a propeller that keeps pulling in neutral is listed under Events, and hard shifts (forward to reverse without a pause, shifts above idle) are counted
+- **Guided drive test** at the dock or on open water, with small animations and safety steps: learns the gear and compressor bits and measures each drive
+- **Four readings a second** of rpm, fuel, lever, boost and gear for each trip and around every event, with a report for the mechanic
+- **Side by side:** idle fuel, compressor, boost, warm-up time and charging per engine
 - **Diagnostics** with a setup check, connection tests and calibration
 
 ---
@@ -169,7 +173,7 @@ See [KAD300 / EDC I](docs/KAD300_EDC1.md), [status and safety](docs/STATUS.md) a
 
 | Hardware | Firmware | Engine validation |
 |----------|----------|-------------------|
-| ✅ Revision 1 assembled | 🚧 0.13.3 | 🚧 Both KAD300 engines read on the boat; tank-to-tank pending |
+| ✅ Revision 1 assembled | 🚧 0.14.0 | 🚧 Both KAD300 engines read on the boat; tank-to-tank pending |
 
 | Area | Status |
 |------|--------|
@@ -201,7 +205,8 @@ See [KAD300 / EDC I](docs/KAD300_EDC1.md), [status and safety](docs/STATUS.md) a
 - [x] Router mode validated on real hardware (WPA2, WPA3-capable routers)
 - [x] Volvo Penta KAD / EDC I decoding and opt-in polling
 - [x] KAD reply layout confirmed on the boat for the main values
-- [ ] Remaining KAD values and status bits (263/264) decoded
+- [x] Gear and clutch timing from the propeller load (DP drives)
+- [ ] Remaining KAD values and status bits (263/264) decoded (gear and compressor bits learned per boat)
 - [x] Engine and Wi-Fi reports to GitHub
 - [ ] Fuel factor and corrections confirmed tank to tank
 - [ ] NMEA 2000 output of engine and fuel data

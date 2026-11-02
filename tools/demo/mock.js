@@ -9,7 +9,7 @@ history.back=function(){hs.pop();dispatchEvent(new PopStateEvent('popstate',{sta
 try{localStorage.getItem('x');}catch(e){Object.defineProperty(window,'localStorage',{value:{getItem(){return null;},setItem(){},removeItem(){}}});}
 const cfg={router:true,portChannel:1,apChannel:6,timePref:'auto',canListen:false,defaultPassword:true,protocol:'kad',kadBigEndian:true,
   kadFuelDiv:128,kadVolt:0,fuelCorr:[1,1],apName:'EngineLink',host:'enginelink',ssid:'Boat router',tankL:575,reserve:10,price:20.03,
-  tripEnd:5,autoPoll:true,rawKeep:90,ntp:true,ntpServer:'pool.ntp.org',scaleOk:false,voltOk:false,fineTunes:1,gear:[0,0,0,0]};
+  tripEnd:5,autoPoll:true,rawKeep:90,ntp:true,ntpServer:'pool.ntp.org',scaleOk:false,voltOk:false,fineTunes:1,gear:[0,0,0,0],comp:[0,0]};
 let prefs='{}',gearStep=-1,odd=false;
 let lastSp=null,lastDl={what:'raw engine data',raw:1690000,z:true,bytes:287000,ms:362000,findMs:2100,sdMs:3400,netMs:356000,ap:false,rssi:-81,active:false};
 // "Discover more values": position per engine, -1 not started; found values.
@@ -34,7 +34,7 @@ const trips0=[
 function live(){
   const c=cal(),t=(Date.now()-t0)/1000,f=c.f;
   const e=(ch)=>{const rpm=2850+ch*30+Math.round(Math.sin(t/3+ch)*6),raw=(41.2-ch*0.6+Math.sin(t/4)*0.4);
-    return {run:true,rpm,lph:+(raw*f).toFixed(1),seen:0,poll:true,why:'',hrs:772.3+ch*0.8,
+    return {run:true,rpm,lph:+(raw*f).toFixed(1),seen:0,poll:true,why:'',hrs:772.3+ch*0.8,g:cfg.gear[0]?'G':'?',ld:true,cp:cfg.comp[0]?false:null,
       x:{256:rpm,291:2900,259:79+ch,260:31+ch,261:47+ch,265:92-ch*4,258:194,288:61,289:+(raw*f).toFixed(2),293:13.9,264:cfg.gear[0]?0x0955|(ch?0x4000:0):0x0945|(ch?0x4000:0),266:772.3+ch*0.8,295:63,263:0x24}};};
   const tripRaw=0.48+(1500+t)/3600*82;
   const used=(0.48+tripRaw-0.48)*f,since=used;
@@ -102,6 +102,30 @@ const LEDS={colours:{green:'#00E020',blue:'#0030FF',red:'#FF0000',orange:'#FF5A0
 ].map(([id,name,meaning,br,steps])=>({id,name,meaning,breathe:!!br,steps}))};
 let ledDemoStart=0;
 const ledNow=()=>unacked()?'warning':'live';
+// Gear and clutch: a season of shifts at idle, and the drive test simulated
+// from the step the app is on (S.dt): bits follow the lever two seconds after
+// Start, the propeller pulls about 0.6 s later, and lets go 0.8 s after neutral.
+const shiftLife=c=>({eng:412+c*9,dis:410+c*9,hard:3-c,quick:2,high:1-c,pull:0,engAvg:640+c*80,disAvg:820+c*140,engFirst:610+c*70,disFirst:760+c*90,engN:300,disN:300,
+  idleLph:[2.21,1.87][c],idleRpm:[612,606][c],accels:58,compOn:57-c,boostPeak:[88,84][c],warmLast:[540,610][c],warmAvg:[560,600][c],warmN:12,voltRun:[14.1,14.0][c],voltMin:[13.8,13.6][c],gear:cfg.gear[0]?'N':'?',load:false});
+function shiftList(){const L=[];let t=now()-600;for(let i=0;i<40;i++){const c=i%3?0:1;L.push([t,1000+i*20,c,1+(i%2),cfg.gear[0]?4:0,0,(i%2?820:640)+c*140+Math.round(Math.sin(i)*90),600]);t-=37;}return L;}
+const IN_GEAR=0x4845,NEUT=0x4945,COMP=0x0020;
+function fastData(since,secs){
+  const nowMs=Math.round((Date.now()-t0)+1800000),from=since!=null?since+1:nowMs-secs*1000,o={ms0:0,utc0:now(),now:nowMs,port:0,gl:!!cfg.gear[0],cl:!!cfg.comp[0],t:[],rpm:[[],[]],lph:[[],[]],req:[[],[]],boost:[[],[]],st:[[],[]],gear:[[],[]],fl:[[],[]]};
+  const d=typeof S!=='undefined'&&S.dt,st=d&&d.phase==='run'&&d.busy?d.steps[d.step]:null,el=st?st.s-d.left:0;
+  const first=Math.ceil(Math.max(from,nowMs-120000)/250)*250;o.ms0=first;
+  for(let ms=first;ms<=nowMs;ms+=250){
+    o.t.push(ms-first);const age=(nowMs-ms)/1000,e2=el-age;
+    for(let c=0;c<2;c++){
+      const mine=st&&(st.ch==null||st.ch===c),k=mine?st.k:'N',prev=mine&&e2<2,target=k==='F'||k==='R'||/^S|^A/.test(k)?'G':k;
+      const pos=prev?(k==='N'?'G':'N'):target;const bits=pos==='G'?IN_GEAR:NEUT;
+      const pull=(pos==='G'&&(prev||e2>2.6))||(mine&&k==='N'&&!prev&&e2<2.8&&st.s>9),rev=mine&&(k==='V'||/^S|^A/.test(k))&&e2>2.5;
+      const rpm=rev?({S1:1000,S2:1500,S3:2000,A:2000,V:1500}[k]||600)+c*12:600+Math.round(Math.sin(ms/700+c)*8);
+      o.rpm[c].push(rpm);o.req[c].push(rev?rpm:600);o.lph[c].push(+((rev?2.2+(rpm-600)/100:pull?3.15:[2.2,1.87][c])+Math.sin(ms/900)*0.08).toFixed(2));
+      o.boost[c].push(rev?+(40+(rpm-600)/30).toFixed(1):0);o.st[c].push(bits|(rev?COMP:0)|(c?0x4000:0));o.gear[c].push(cfg.gear[0]?(pos==='G'?4:1):0);o.fl[c].push(pull?3:2);
+    }
+  }
+  return o;
+}
 // A 1 Hz recording like the board's: req(s) gives the lever at second s.
 function series(id,n,step,req,extra){
   const T=[],col=()=>[[],[]],o={rpm:col(),req:col(),lph:col(),cool:col(),air:col(),boost:col(),volt:col()};let cool=[60,61];
@@ -138,6 +162,9 @@ window.fetch=function(url,opt){
     if(p==='/api/trip/series'){const id=+u.searchParams.get('id'),tr=trips0.find(x=>x.id===id);if(!tr)return reply({ok:false,message:'Not found'},404);
       const len=tr.e-tr.s,st=Math.max(1,Math.ceil(len/600)),mx=tr.max;
       return reply(Object.assign(series(id,Math.floor(len/st),st,mx>2000?lever([[180,650],[120,1200],[60,2000],[len-560,2900],[60,1200],[140,650]]):lever([[len,Math.min(mx,1000)]])),{start:tr.s,cov:[{good:len-4,missing:2,fuel:len-6,longest:2,gaps:0},{good:len-60,missing:58,fuel:len-70,longest:41,gaps:2}]}));}
+    if(p==='/api/shifts')return reply({port:0,gl:!!cfg.gear[0],cl:!!cfg.comp[0],e:[shiftLife(0),shiftLife(1)],list:shiftList()});
+    if(p==='/api/fast'){const since=u.searchParams.get('since');return reply(fastData(since!=null?+since:null,+u.searchParams.get('secs')||5));}
+    if(p==='/api/event/fast'){const f=fastData(null,120);f.ms0=0;return reply(Object.assign(f,{now:0}));}
     if(p==='/api/wifi/scan')return reply({busy:false,nets:[{s:'Boat router',r:-42,lock:true,ch:1}]});
     return reply({ok:false},404);
   }
@@ -151,8 +178,8 @@ window.fetch=function(url,opt){
   if(p==='/api/led/test'){ledDemoStart=Date.now();return reply({ok:true,message:'Showing each pattern for 3 seconds'});}
   if(p==='/api/kad/discover'){const c=+b.get('ch');disc[c]=0;return reply({ok:true,message:'Asking for 64 values, about a minute'});}
   if(p==='/api/diag/focus'){gearStep++;return reply({ok:true,message:'OK'});}
-  if(p==='/api/cfg'){for(const [k,v] of b){if(k==='gearF'||k==='gearR'){const [gm,gv]=String(v).split(':').map(Number);cfg.gear[k==='gearF'?0:2]=gm||0;cfg.gear[k==='gearF'?1:3]=gv||0;}}return reply({ok:true,message:'Saved'});}
+  if(p==='/api/cfg'){for(const [k,v] of b){if(k==='gearF'||k==='gearR'){const [gm,gv]=String(v).split(':').map(Number);cfg.gear[k==='gearF'?0:2]=gm||0;cfg.gear[k==='gearF'?1:3]=gv||0;}if(k==='comp'){const [cm,cv]=String(v).split(':').map(Number);cfg.comp=[cm||0,cv||0];}}return reply({ok:true,message:'Saved'});}
   return reply({ok:true,message:'Demo: nothing is changed'});
 };
-window.__demo={setOdd(v){odd=v;},resetGear(){gearStep=-1;cfg.gear=[0,0,0,0];},resetFuel(){fuel[0].q=1;fuel[1].q=1;fuel[0].use=0;odd=false;}};
+window.__demo={setOdd(v){odd=v;},resetGear(){gearStep=-1;cfg.gear=[0,0,0,0];cfg.comp=[0,0];},resetFuel(){fuel[0].q=1;fuel[1].q=1;fuel[0].use=0;odd=false;}};
 })();
