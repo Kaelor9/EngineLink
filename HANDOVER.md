@@ -146,3 +146,15 @@ because a report shows a problem, not on a guess.
 - The status LED language in `ledpatterns.h` is fixed.
 - No "Recommended" labels pushing a choice, no fast animations, no manual trip
   start/stop, nothing to tune by hand that the board can work out itself.
+
+## Field observations — 2026-11-02 (v0.13.4)
+
+Source: [#116](https://github.com/Kaelor9/EngineLink/issues/116) (v0.13.3), [#125](https://github.com/Kaelor9/EngineLink/issues/125) and [#126](https://github.com/Kaelor9/EngineLink/issues/126) (v0.13.4). These are actual board measurements.
+
+- **Router configuration should remain default**: Zyxel 2.4 GHz, channel Auto, 20/40 MHz bandwidth, mixed WPA3-SAE/WPA2-PSK. An ESP32 station must follow the router channel, not change it. Channel 6 appears in #125 and channel 11 in #126; their timing/cause is unconfirmed.
+- **Throughput improved**: #116's 12 tests averaged 83.0 kB/s (14.8–288.3 kB/s, round trip 44–259 ms). #126's latest 12 tests averaged 584.6 kB/s (457.8–665.3 kB/s, round trip 18–20 ms), about 7x faster in these tests.
+- **Still not a fully stable connection**: #126 after 4,833 s uptime had 95 disconnect events, 48 pre-connection failures, one dropped active router connection, and approximately 50 seconds of repeated reason 201 (router not found) and reason 36 (station left during mode change) before reconnecting around uptime 4,753 s. One automatic beacon-loss transmit-power recovery to 15 dBm was logged. Do not attribute this definitively to the router changing channel.
+- **Diagnostic gaps**: automatic channel survey/link tuning did not complete in #125/#126, likely because active app use defers tests. #125 shows a mismatch between selected TX level (11 dBm) and driver-reported output (20 dBm); investigate rather than assume the selected level was actually applied. #126 includes a crash history and reset-reason 4; the report does not establish a new crash during its 80-minute session.
+- **Export problem**: Chrome intermittently fails to download a ~1 KB Trip summary CSV, while a ~104 KB second-by-second CSV downloaded successfully. [PR #123](https://github.com/Kaelor9/EngineLink/pull/123) proposes a normal known-length response instead of chunked/deflate. Confirm merge, release and field results before claiming fixed.
+
+**Next priorities:** Preserve the v0.13.4 speed gain, investigate the repeated router reconnect attempts with Auto channel, improve safe survey visibility, verify sustained performance and crashes, and validate the tiny-CSV fix in Chrome/iOS. Do not demand router configuration changes from users.
