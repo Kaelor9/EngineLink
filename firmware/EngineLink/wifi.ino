@@ -80,6 +80,7 @@ void ntpCallback(struct timeval *tv){(void)tv;ntpNotification=true;}
 static volatile bool beaconPowerRecoveryPending=false;
 static uint32_t beaconPowerRecoveryLastAt=0;
 static uint32_t beaconPowerRecoveryCount=0;
+uint32_t beaconPowerRecoveryAttempts(){return beaconPowerRecoveryCount;}
 void onWiFi(WiFiEvent_t e,WiFiEventInfo_t info){
   if(e==ARDUINO_EVENT_WIFI_AP_START){
     const uint32_t now=millis();
