@@ -171,10 +171,10 @@ String buildNetworkReport(){
       if(linkScanCh!=lastRouterChannel){s+="Note: the scan and ping tests were made while the router was on channel ";s+=linkScanCh;s+="; they repeat a minute after reconnecting.\n";}
       s+="Networks on or next to the router's channel: ";s+=linkScanList.length()?linkScanList:String("none");s+="\n";
       s+="Survey age: ";s+=(unsigned long)((millis()-linkScanAt)/1000UL);s+=" s; scan duration ";s+=(unsigned long)linkScanDurationMs;s+=" ms; failed scans ";s+=(unsigned)linkScanFailures;s+="\n";
-      s+="Detected APs by channel (total / strong >= -65 dBm):\\n";
+      s+="Detected APs by channel (total / strong >= -65 dBm):\n";
       for(uint8_t c=1;c<=13;++c){s+="  Ch ";s+=c;s+=": ";s+=(unsigned)linkChannelCounts[c];s+=" / ";s+=(unsigned)linkChannelStrong[c];s+="\n";}
-      s+="Note: as a router client EngineLink must stay on the router channel; channel counts do not measure airtime or non-Wi-Fi interference.\\n";
-      s+="Quietest of channels 1, 6 and 11 around EngineLink: ";s+=linkScanQuiet;s+=linkScanQuiet==lastRouterChannel?" (the router already uses it)":" (setting the router to it may help)";s+="\n";
+      s+="Note: as a router client EngineLink must stay on the router channel; channel counts do not measure airtime or non-Wi-Fi interference.\n";
+      s+="Quietest of channels 1, 6 and 11 around EngineLink: ";s+=linkScanQuiet;s+=linkScanQuiet==lastRouterChannel?" (the router already uses it)":" (other channels may be less crowded, but EngineLink cannot change the router channel)";s+="\n";
     }
     s+="\n";
   }
