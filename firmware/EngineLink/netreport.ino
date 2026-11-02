@@ -341,7 +341,11 @@ void linkTuneTask(void *){
     const bool fresh=staIpAt!=lastIp;                       // a new connection
     const bool due=lastRun&&(uint32_t)(millis()-lastRun)>=1800000UL;
     if(!fresh&&!due)continue;
-    if(!fresh&&(uint32_t)(millis()-lastHttpMs)<20000UL)continue;  // the app is busy: later
+    // Defer ALL active radio testing while the phone app is in use, even
+    // the first test after joining. The test changes TX power five times,
+    // runs dozens of pings and scans every 2.4 GHz channel; doing that under
+    // live HTTP traffic can stall the very link being measured.
+    if(lastHttpMs&&(uint32_t)(millis()-lastHttpMs)<20000UL)continue;
     lastIp=staIpAt;lastRun=millis()?millis():1;
     const uint8_t best=runLinkTune(txLevel);
     if(best!=txLevel){
