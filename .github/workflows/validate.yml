@@ -32,6 +32,8 @@ jobs:
           print("UI JS size:",end-start)
           PY2
           node --check /tmp/enginelink-ui.js
+      - name: Check mobile navigation and router text fields
+        run: python3 tools/test_mobile_ui_contract.py
       - name: Build the app demo
         run: |
           python3 tools/build_demo.py
