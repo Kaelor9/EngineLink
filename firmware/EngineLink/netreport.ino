@@ -224,6 +224,7 @@ void speedHttpTask(void *){
     refreshWorkerListener(speedServer,boundEpoch);
     NetworkClient c=speedServer.accept();
     if(!c){vTaskDelay(pdMS_TO_TICKS(15));continue;}
+    lastHttpMs=millis();  // speed downloads count as active app traffic
     c.setNoDelay(true);c.setTimeout(300);
     elBoostSocket(c.fd(),17232);     // 16 packets in flight instead of 4
     const String req=c.readStringUntil('\n');
@@ -269,6 +270,7 @@ void liveHttpTask(void *){
     refreshWorkerListener(liveServer,boundEpoch);
     NetworkClient c=liveServer.accept();
     if(!c){vTaskDelay(pdMS_TO_TICKS(10));continue;}
+    lastHttpMs=millis();  // live API calls keep radio calibration idle
     c.setNoDelay(true);
     c.setTimeout(250);
     const String request=c.readStringUntil('\n');
