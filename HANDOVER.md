@@ -9,6 +9,9 @@ tested on hardware is in [docs/STATUS.md](docs/STATUS.md).
 English. The owner has asked for pull requests to be merged without asking once
 CI is green.
 
+Never ask for, repeat or store secrets (GitHub tokens, passwords) in chats,
+code or reports. The owner's GitHub token for reports lives only on the board.
+
 ## What EngineLink is
 
 A custom ESP32-S3 board on a Fairline Targa 34 with two Volvo Penta KAD300
@@ -126,6 +129,14 @@ Lessons from the router work (late 2026): the prebuilt libraries' 4-packet TCP
 send window capped downloads through a router; the remaining slowness was a
 crowded 2.4 GHz channel on the router (channel 1), fixed by moving the router to
 channel 11. A-MPDU on/off and power save made no measurable difference.
+
+## Field data
+
+The board files its reports as GitHub issues in this repository: "Engine report:
+trip N" after each trip and "Device report: …" for Wi-Fi problems and after each
+start. Read them with `gh issue list` / `gh issue view N`. They are the first
+place to look before changing engine reading or Wi-Fi behaviour: change things
+because a report shows a problem, not on a guess.
 
 ## Owner's preferences
 
