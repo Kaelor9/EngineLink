@@ -170,6 +170,10 @@ String buildNetworkReport(){
     if(linkScanDone){
       if(linkScanCh!=lastRouterChannel){s+="Note: the scan and ping tests were made while the router was on channel ";s+=linkScanCh;s+="; they repeat a minute after reconnecting.\n";}
       s+="Networks on or next to the router's channel: ";s+=linkScanList.length()?linkScanList:String("none");s+="\n";
+      s+="Survey age: ";s+=(unsigned long)((millis()-linkScanAt)/1000UL);s+=" s; scan duration ";s+=(unsigned long)linkScanDurationMs;s+=" ms; failed scans ";s+=(unsigned)linkScanFailures;s+="\n";
+      s+="Detected APs by channel (total / strong >= -65 dBm):\\n";
+      for(uint8_t c=1;c<=13;++c){s+="  Ch ";s+=c;s+=": ";s+=(unsigned)linkChannelCounts[c];s+=" / ";s+=(unsigned)linkChannelStrong[c];s+="\n";}
+      s+="Note: as a router client EngineLink must stay on the router channel; channel counts do not measure airtime or non-Wi-Fi interference.\\n";
       s+="Quietest of channels 1, 6 and 11 around EngineLink: ";s+=linkScanQuiet;s+=linkScanQuiet==lastRouterChannel?" (the router already uses it)":" (setting the router to it may help)";s+="\n";
     }
     s+="\n";
@@ -325,6 +329,15 @@ void appendLinkJson(String &s){
   appendPingJson(s,"internet",linkNet.sent,linkNet.got,linkNet.minMs,linkNet.avgMs,linkNet.maxMs);
   s+=",\"channel\":";s+=(unsigned)lastRouterChannel;s+=",\"quiet\":";s+=(unsigned)linkScanQuiet;s+=",\"scanCh\":";s+=(unsigned)linkScanCh;
   if(linkScanDone){s+=",\"scan\":{\"total\":";s+=linkScanTotal;s+=",\"sameChannel\":";s+=linkScanSame;s+=",\"overlapping\":";s+=linkScanOverlap;s+=",\"sameBest\":";s+=(int)linkScanSameBest;s+='}';}
+  s+=",\"channelSurvey\":{\"completed\":";s+=linkScanDone?"true":"false";
+  s+=",\"failures\":";s+=(unsigned)linkScanFailures;
+  s+=",\"durationMs\":";s+=(unsigned long)linkScanDurationMs;
+  s+=",\"ageSeconds\":";if(linkScanAt)s+=(unsigned long)((millis()-linkScanAt)/1000UL);else s+="null";
+  s+=",\"otherAPsPerChannel\":[";
+  for(uint8_t c=1;c<=13;++c){if(c>1)s+=',';s+=(unsigned)linkChannelCounts[c];}
+  s+="],\"strongAPsPerChannel\":[";
+  for(uint8_t c=1;c<=13;++c){if(c>1)s+=',';s+=(unsigned)linkChannelStrong[c];}
+  s+="]}";
   s+='}';
   s+=",\"txLevel\":";s+=txLevel;
   s+=",\"phoneTests\":[";
