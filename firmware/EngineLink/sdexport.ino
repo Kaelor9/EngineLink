@@ -95,9 +95,12 @@ void handleExportTrips(){
     String note=String(r->note);note.replace("\"","'");
     s+='"';s+=note;s+="\"\n";
   }
-  ChunkOut &out=beginDownload("trip summary","text/csv","EngineLink-trips.csv");
-  out.add(s);
-  endDownload(out);
+  // Small, in-memory CSV: send with a fixed Content-Length rather than
+  // chunked transfer/deflate. Browsers can finish the download reliably even
+  // on a router link with slow or delayed packet acknowledgements.
+  web.sendHeader("Content-Disposition","attachment; filename=EngineLink-trips.csv");
+  web.sendHeader("Cache-Control","no-store");
+  web.send(200,"text/csv; charset=utf-8",s);
 }
 // Uptime (ms) of the raw row that starts at or after pos; false at the end.
 bool rowAt(File &f,uint32_t pos,uint64_t &ms,uint32_t &lineStart){
