@@ -25,6 +25,13 @@ assert "&&routerIpReady&&staIpAt" in network
 # It must not start during active app traffic.
 assert "if(lastHttpMs&&(uint32_t)(millis()-lastHttpMs)<20000UL)continue;" in tune
 assert "if(!fresh&&(uint32_t)(millis()-lastHttpMs)<20000UL)continue;" not in tune
+# All HTTP listeners, including the live API on port 81 and speed test on
+# port 82, must mark actual app traffic so auto-calibration stays out of the way.
+assert "lastHttpMs=millis();  // live API calls" in ino
+assert "lastHttpMs=millis();  // speed downloads" in ino
+assert "if (webBusyNow()) { interrupted=true; break; }" in ino
+assert "WiFi.setTxPower(elTxPower[current]);" in ino
+
 # The 0.13.2 crash backtrace repeatedly reached ChunkOut::flush via
 # handleExportRaw's compressed transfer on a slow link. Keep this particular
 # export uncompressed until the compressor path is repaired and tested.
