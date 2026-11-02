@@ -75,6 +75,11 @@ bool allowTime(const String &source){
   return cfg.timePreference==source;
 }
 void ntpCallback(struct timeval *tv){(void)tv;ntpNotification=true;}
+// One-shot power recovery after losing AP beacons. Never touch radio settings
+// inside the Wi-Fi event callback; service it from the main loop instead.
+static volatile bool beaconPowerRecoveryPending=false;
+static uint32_t beaconPowerRecoveryLastAt=0;
+static uint32_t beaconPowerRecoveryCount=0;
 void onWiFi(WiFiEvent_t e,WiFiEventInfo_t info){
   if(e==ARDUINO_EVENT_WIFI_AP_START){
     const uint32_t now=millis();
@@ -115,6 +120,7 @@ void onWiFi(WiFiEvent_t e,WiFiEventInfo_t info){
       // Schedule an early one-shot attempt without resetting WPA/PMF state.
       if(staLastReason==WIFI_REASON_SA_QUERY_TIMEOUT && droppedOnline)
         saQueryRetryAt=millis()+2000UL;
+      if(staLastReason==200 && droppedOnline) beaconPowerRecoveryPending=true;
       if(staLastReason==2||staLastReason==15){if(txNoAnswer<65535)++txNoAnswer;}
       // The router offers no WPA2 (WPA3-only): start the driver with WPA3.
       if((staLastReason==210||staLastReason==211)&&staSecMode==0){staSecSwitchTo=1;staSecSwitchPending=true;}
@@ -572,6 +578,21 @@ void serviceNetwork(){
       apStarted=false;
       if(!modeOk)WiFi.mode(WIFI_AP);
       startAP();
+    }
+  }
+  // Beacon loss can be caused by interference or a marginal downlink.
+  // A previously selected low transmit level may also hurt the uplink.
+  // Try 15 dBm only after the station reconnects, with a 5-minute cooldown;
+  // normal idle link tuning can subsequently choose a different level.
+  if(beaconPowerRecoveryPending&&routerConfigured()&&!routerHold&&!pendingNetwork&&routerIpReady){
+    beaconPowerRecoveryPending=false;
+    if(txLevel<3&&(!beaconPowerRecoveryLastAt||(uint32_t)(millis()-beaconPowerRecoveryLastAt)>=300000UL)){
+      if(WiFi.setTxPower(elTxPower[3])){
+        txLevel=3;
+        beaconPowerRecoveryLastAt=millis()?millis():1;
+        ++beaconPowerRecoveryCount;
+        Serial.println("Beacon-loss recovery: testing 15 dBm TX power after reconnect");
+      }
     }
   }
   if(txNoAnswer>=12&&routerConfigured()&&!routerHold&&!pendingNetwork){
