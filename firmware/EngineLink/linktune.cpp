@@ -68,19 +68,25 @@ static bool pingHost(IPAddress ip, uint8_t count, uint16_t size, uint16_t interv
 // Networks per channel and the ones on or near the router's channel (maker
 // prefix and signal, no names), for the report and the channel advice.
 String linkScanList;
+volatile uint32_t linkScanAt = 0, linkScanDurationMs = 0;
+volatile uint16_t linkScanFailures = 0;
+volatile uint8_t linkChannelCounts[14] = {}, linkChannelStrong[14] = {};
 volatile uint8_t linkScanQuiet = 0, linkScanCh = 0;  // ... and the router's channel at the scan   // the 1/6/11 channel with the least around it
 static void surveyChannel() {
   const int ch = WiFi.channel();
-  if (WiFi.scanComplete() == WIFI_SCAN_RUNNING) return;  // someone else is scanning
-  if (WiFi.scanNetworks(true, true, false, 120) == WIFI_SCAN_FAILED) return;
+  if (ch < 1 || ch > 13 || WiFi.status() != WL_CONNECTED) return;
+  if (WiFi.scanComplete() == WIFI_SCAN_RUNNING) return;
+  const uint32_t scanStart = millis();
+  if (WiFi.scanNetworks(true, true, false, 120) == WIFI_SCAN_FAILED) { ++linkScanFailures; return; }
   const uint32_t t0 = millis();
   int16_t n;
   while ((n = WiFi.scanComplete()) == WIFI_SCAN_RUNNING && millis() - t0 < 8000) vTaskDelay(pdMS_TO_TICKS(100));
-  if (n < 0) { WiFi.scanDelete(); return; }
+  if (n < 0 || WiFi.status() != WL_CONNECTED || WiFi.channel() != ch) { ++linkScanFailures; WiFi.scanDelete(); return; }
   uint8_t same = 0, overlap = 0; int8_t best = -127;
   const uint8_t *own = WiFi.BSSID();
   uint8_t ownMac[6] = {0}; if (own) memcpy(ownMac, own, 6);
   int load[14] = {0};   // signal-weighted use per channel
+  uint8_t counts[14] = {}, strong[14] = {};
   String list;
   for (int16_t i = 0; i < n; i++) {
     const int c = WiFi.channel(i); const int r = WiFi.RSSI(i);
@@ -88,6 +94,8 @@ static void surveyChannel() {
     const bool router = b && memcmp(b, ownMac, 6) == 0;
     const bool sameMaker = b && memcmp(b, ownMac, 3) == 0;
     if (c >= 1 && c <= 13 && !router) {
+      if (counts[c] < 255) ++counts[c];
+      if (r >= -65 && strong[c] < 255) ++strong[c];
       const int w = r > -50 ? 4 : r > -65 ? 2 : 1;
       for (int k = c - 4; k <= c + 4; k++) if (k >= 1 && k <= 13) load[k] += w;
     }
@@ -104,6 +112,9 @@ static void surveyChannel() {
   }
   const int cand[3] = {1, 6, 11}; int q = 1;
   for (int k = 0; k < 3; k++) if (load[cand[k]] < load[q]) q = cand[k];
+  for (int k = 1; k <= 13; ++k) { linkChannelCounts[k] = counts[k]; linkChannelStrong[k] = strong[k]; }
+  linkScanDurationMs = millis() - scanStart;
+  linkScanAt = millis() ? millis() : 1;
   linkScanQuiet = q; linkScanCh = ch;
   linkScanList = list;
   linkScanTotal = n > 255 ? 255 : n; linkScanSame = same; linkScanOverlap = overlap;
