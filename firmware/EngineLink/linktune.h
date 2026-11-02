@@ -21,6 +21,9 @@ extern volatile uint8_t linkScanTotal, linkScanSame, linkScanOverlap;
 extern volatile int8_t linkScanSameBest;
 extern String linkScanList;
 extern volatile uint8_t linkScanQuiet, linkScanCh;
+extern volatile uint32_t linkScanAt, linkScanDurationMs;
+extern volatile uint16_t linkScanFailures;
+extern volatile uint8_t linkChannelCounts[14], linkChannelStrong[14];
 
 // Tests every step against the router; returns the step to use and leaves the
 // radio on it. Blocks for about half a minute: call it from a task.
