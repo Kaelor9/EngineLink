@@ -12,6 +12,13 @@ CI is green.
 Never ask for, repeat or store secrets (GitHub tokens, passwords) in chats,
 code or reports. The owner's GitHub token for reports lives only on the board.
 
+## Collect, then release
+
+Small fixes and wishes go into [docs/TODO.md](docs/TODO.md) first. Release
+them together when the owner asks for an update, not one version per fix
+(every release costs the owner time and tokens). When an update is made,
+push and merge it once CI is green so it shows under "Check for updates".
+
 ## What EngineLink is
 
 A custom ESP32-S3 board on a Fairline Targa 34 with two Volvo Penta KAD300
