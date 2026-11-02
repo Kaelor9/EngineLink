@@ -123,6 +123,7 @@ String buildNetworkReport(){
   s+="Successful Wi-Fi associations: ";s+=(unsigned long)staAssociatedEvents;s+="\n";
   s+="Successful router IP assignments: ";s+=(unsigned long)staIpEvents;s+="\n";
   s+="Router IP losses: ";s+=(unsigned long)staIpLostEvents;s+="\n";
+  s+="Beacon-loss TX recovery attempts: ";s+=(unsigned long)beaconPowerRecoveryAttempts();s+=" (temporary 15 dBm after reconnect, 5-minute cooldown)\n";
   s+="Wi-Fi disconnect events: ";s+=(unsigned long)staDisconnects;s+="\n";
   s+="Dropped active router connections: ";s+=(unsigned long)staUnexpectedDisconnects;s+="\n";
   s+="Pre-connection failures: ";s+=(unsigned long)staAssociationFailures;s+="\n";
@@ -340,6 +341,7 @@ void appendLinkJson(String &s){
   s+="]}";
   s+='}';
   s+=",\"txLevel\":";s+=txLevel;
+  s+=",\"beaconPowerRecoveryCount\":";s+=(unsigned long)beaconPowerRecoveryAttempts();
   s+=",\"phoneTests\":[";
   for(uint8_t i=0;i<speedLogCount;i++){const SpeedLogRec &x=speedLog[i];if(i)s+=',';s+="{\"agoS\":";s+=(unsigned long)((millis()-x.at)/1000UL);s+=",\"level\":";s+=x.level;s+=",\"kbs\":";s+=x.kbs10/10.0f;s+=",\"rttMs\":";s+=x.rttMs;s+='}';}
   s+=']';
