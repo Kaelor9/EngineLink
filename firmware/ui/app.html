@@ -1056,14 +1056,14 @@ function twinCard(es){
 // lets go. At the dock one engine at a time and only at idle; on open water
 // the same, plus steady rpm steps for the compressor and the sync.
 const DT_SAFE={
-  dock:[['lines','Moored securely','Bow, stern and both spring lines, fenders out. The boat will pull on the lines in gear.'],
-        ['swim','Nobody in the water','No one swimming or working near the drives. The propellers turn in gear.'],
-        ['stop','Know how to stop','If a drive does not go to neutral: stop that engine with the key or stop button. Find it now.'],
-        ['warm','Engines at idle','Both engines running at idle for a few minutes, levers in neutral.']],
+  dock:[['swim','Nobody in the water','No one swimming, diving or working near the drives. In gear the propellers turn. Ask anyone in the water to come aboard first.'],
+        ['lines','Moored properly, fenders out','However you lie, stern to the quay between piles or alongside: all lines on and tight, springs too, and fenders out where the boat can touch. In gear the boat pulls on the lines.'],
+        ['stop','Know how to stop','If a drive does not go to neutral, stop that engine with the key or the stop button. Find both now, before you start.'],
+        ['warm','Engines at idle','Both engines running at idle for a few minutes, both levers in neutral.']],
   sea:[['space','Open water','Room in every direction, no boats close by, calm water.'],
        ['look','Someone keeps a lookout','A second person watches ahead while you look at the phone.'],
-       ['swim','Nobody in the water','Swim ladder up, no one near the stern.'],
-       ['stop','Know how to stop','If a drive does not go to neutral: stop that engine with the key or stop button.']]};
+       ['swim','Nobody in the water','Swim ladder up, everyone aboard, no one near the stern.'],
+       ['stop','Know how to stop','If a drive does not go to neutral, stop that engine with the key or the stop button.']]};
 function dtSteps(place,es){
   const st=[];
   for(const e of es){
@@ -1087,50 +1087,142 @@ function dtSteps(place,es){
   return st;
 }
 const rmo='@media (prefers-reduced-motion:reduce){.anim *{animation:none!important}}';
-// Small looping scenes, slow and calm. Colours come from the theme.
-function dtAnim(kind){
-  const W=240,Hh=120;
-  const wrap=(body,kf)=>`<div class="anim" style="background:var(--track);border-radius:18px;padding:8px;display:flex;justify-content:center"><style>${kf}${rmo}</style><svg viewBox="0 0 ${W} ${Hh}" width="100%" style="max-width:320px;display:block" role="img" aria-hidden="true">${body}</svg></div>`;
-  const water='<path d="M0 96 Q15 90 30 96 T60 96 T90 96 T120 96 T150 96 T180 96 T210 96 T240 96 V120 H0Z" fill="var(--blue)" opacity=".22"/>';
-  if(kind==='lines')return wrap(`<rect x="10" y="12" width="220" height="16" rx="3" fill="var(--sub)" opacity=".45"/>
-      <path d="M50 44 H178 Q206 44 216 62 Q206 80 178 80 H50 Q40 62 50 44Z" fill="var(--card)" stroke="var(--text)" stroke-width="2"/>
-      ${[[60,44,40,28],[196,48,214,28],[110,44,150,28],[150,44,110,28]].map((l,i)=>`<path d="M${l[0]} ${l[1]} L${l[2]} ${l[3]}" stroke="var(--teal)" stroke-width="2.6" stroke-linecap="round" class="ln${i}"/>`).join('')}
-      <circle cx="70" cy="34" r="4" fill="var(--orange)"/><circle cx="170" cy="34" r="4" fill="var(--orange)"/>`,
-      [0,1,2,3].map(i=>`.ln${i}{stroke-dasharray:60;stroke-dashoffset:60;animation:draw 6s ${i*0.9}s ease-in-out infinite}`).join('')+'@keyframes draw{0%{stroke-dashoffset:60}25%,80%{stroke-dashoffset:0}100%{stroke-dashoffset:60}}');
-  if(kind==='swim')return wrap(`${water}<rect x="96" y="18" width="20" height="62" rx="6" fill="var(--sub)"/><rect x="88" y="74" width="40" height="12" rx="5" fill="var(--sub)"/>
-      <g class="prop"><ellipse cx="140" cy="80" rx="5" ry="16" fill="var(--text)"/><ellipse cx="140" cy="80" rx="16" ry="5" fill="var(--text)"/></g>
-      <g transform="translate(184 52)"><circle r="24" fill="none" stroke="var(--red)" stroke-width="4"/><circle cx="0" cy="-8" r="5" fill="var(--text)"/><path d="M-10 6 Q0 -2 10 6" stroke="var(--text)" stroke-width="4" fill="none" stroke-linecap="round"/><path d="M-17 -17 L17 17" stroke="var(--red)" stroke-width="4"/></g>`,
-      '.prop{transform-origin:140px 80px;animation:spin 3s linear infinite}@keyframes spin{to{transform:rotate(360deg)}}');
-  if(kind==='stop')return wrap(`<circle cx="80" cy="60" r="34" fill="var(--card)" stroke="var(--text)" stroke-width="2"/>
-      <text x="80" y="24" font-size="10" text-anchor="middle" fill="var(--sub)">ON</text><text x="44" y="64" font-size="10" text-anchor="middle" fill="var(--red)">STOP</text>
-      <g class="key"><rect x="76" y="34" width="8" height="40" rx="3" fill="var(--text)"/><circle cx="80" cy="80" r="9" fill="var(--text)"/></g>
-      <g class="btn"><circle cx="180" cy="60" r="24" fill="var(--red)"/><text x="180" y="64" font-size="11" font-weight="700" text-anchor="middle" fill="#fff">STOP</text></g>`,
-      '.key{transform-origin:80px 60px;animation:turn 5s ease-in-out infinite}@keyframes turn{0%,30%{transform:rotate(0)}50%,80%{transform:rotate(-70deg)}100%{transform:rotate(0)}}.btn{transform-origin:180px 60px;animation:press 5s ease-in-out infinite}@keyframes press{0%,40%{transform:scale(1)}55%{transform:scale(.88)}70%,100%{transform:scale(1)}}');
-  if(kind==='warm')return wrap(`<rect x="104" y="14" width="18" height="74" rx="9" fill="var(--card)" stroke="var(--text)" stroke-width="2"/><circle cx="113" cy="94" r="14" fill="var(--orange)"/>
-      <rect class="fill" x="108" y="30" width="10" height="60" rx="5" fill="var(--orange)"/>
-      <text x="150" y="40" font-size="12" fill="var(--sub)">idle</text><text x="150" y="58" font-size="20" font-weight="700" fill="var(--text)">600</text><text x="150" y="72" font-size="11" fill="var(--sub)">rpm</text>`,
-      '.fill{transform-origin:113px 90px;animation:rise 6s ease-in-out infinite}@keyframes rise{0%{transform:scaleY(.15)}70%,100%{transform:scaleY(1)}}');
-  if(kind==='space')return wrap(`${water}<circle class="zone" cx="120" cy="60" r="44" fill="none" stroke="var(--teal)" stroke-width="2" stroke-dasharray="5 6"/>
-      <path d="M102 54 H132 Q144 54 150 60 Q144 66 132 66 H102 Q98 60 102 54Z" fill="var(--card)" stroke="var(--text)" stroke-width="2"/>`,
-      '.zone{transform-origin:120px 60px;animation:grow 5s ease-in-out infinite}@keyframes grow{0%{transform:scale(.6);opacity:.2}60%{transform:scale(1.15);opacity:1}100%{transform:scale(.6);opacity:.2}}');
-  if(kind==='look')return wrap(`<ellipse cx="120" cy="58" rx="56" ry="30" fill="var(--card)" stroke="var(--text)" stroke-width="2"/><circle class="eye" cx="120" cy="58" r="14" fill="var(--teal)"/><circle class="eye" cx="120" cy="58" r="6" fill="var(--text)"/>`,
-      '.eye{animation:scan 6s ease-in-out infinite}@keyframes scan{0%,100%{transform:translateX(-30px)}50%{transform:translateX(30px)}}');
-  // The control lever: N straight up, forward ahead, reverse back; F1-F3 further ahead.
-  const ang={N:0,F:24,R:-24,F1:34,F2:44,F3:54,V:44}[kind];
-  if(ang!=null){
-    const label=kind==='V'?'neutral + throttle':kind==='N'?'neutral':kind==='R'?'reverse':kind==='F'?'forward, idle':'forward';
-    return wrap(`<path d="M60 100 Q120 62 180 100" fill="none" stroke="var(--line)" stroke-width="8" stroke-linecap="round"/>
-      <text x="48" y="114" font-size="10" fill="var(--sub)">R</text><text x="116" y="58" font-size="10" fill="var(--sub)">N</text><text x="186" y="114" font-size="10" fill="var(--sub)">F</text>
-      <rect x="92" y="96" width="56" height="18" rx="6" fill="var(--sub)"/>
-      <g class="lev"><rect x="116" y="38" width="8" height="64" rx="4" fill="var(--text)"/><rect x="104" y="28" width="32" height="16" rx="8" fill="${kind==='R'?'var(--orange)':kind==='N'?'var(--sub)':'var(--teal)'}"/></g>
-      <text x="12" y="20" font-size="11" fill="var(--text)">${label}</text>
-      ${kind==='V'?'<g class="rpm"><circle cx="40" cy="36" r="22" fill="var(--card)" stroke="var(--text)" stroke-width="2"/><path class="ndl" d="M40 36 L40 18" stroke="var(--orange)" stroke-width="3" stroke-linecap="round"/></g>':''}`,
-      `.lev{transform-origin:120px 104px;animation:lv 6s ease-in-out infinite}@keyframes lv{0%,15%{transform:rotate(0)}45%,85%{transform:rotate(${ang}deg)}100%{transform:rotate(0)}}`+
-      (kind==='V'?'.ndl{transform-origin:40px 36px;animation:nd 6s ease-in-out infinite}@keyframes nd{0%,20%{transform:rotate(-60deg)}55%{transform:rotate(40deg)}85%,100%{transform:rotate(-60deg)}}':''));
-  }
-  return '';
+// Small, calm scenes in one style: flat shapes, the theme's colours, one
+// accent (teal) for what to do, orange for fenders, red for "not like this".
+// Each scene is its own SVG with its own animation names (prefix per scene).
+const SC={hull:'var(--card)',edge:'var(--text)',line:'var(--teal)',fender:'var(--orange)'};
+// Tinted areas as a colour over the background (no color-mix: older phones).
+const tint=(x,y,w,h,c,o)=>`<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="var(--track)"/><rect x="${x}" y="${y}" width="${w}" height="${h}" fill="${c}" opacity="${o}"/>`;
+const sea=(x,y,w,h)=>tint(x,y,w,h,'var(--blue)',.22);
+const quay=(x,y,w,h)=>tint(x,y,w,h,'var(--sub)',.5);
+// The boat from above, bow to the right, about 150 x 44, origin at the transom centre.
+const boatTop=(extra='')=>`<path d="M0 -21 H92 Q132 -21 152 0 Q132 21 92 21 H0 Q-4 0 0 -21Z" fill="${SC.hull}" stroke="${SC.edge}" stroke-width="2" stroke-linejoin="round"/>
+  <path d="M58 -15 Q74 0 58 15" fill="none" stroke="${SC.edge}" stroke-width="1.6" opacity=".55"/>
+  <rect x="10" y="-13" width="40" height="26" rx="6" fill="none" stroke="${SC.edge}" stroke-width="1.4" opacity=".35"/>${extra}`;
+const fender=(x,y,v=true)=>`<rect x="${x-(v?3:8)}" y="${y-(v?8:3)}" width="${v?6:16}" height="${v?16:6}" rx="3" fill="${SC.fender}"/>`;
+const bollard=(x,y)=>`<circle cx="${x}" cy="${y}" r="4" fill="var(--sub)"/>`;
+function sceneWrap(id,body,css,h=180){
+  return `<div class="anim" style="border-radius:18px;overflow:hidden;background:var(--track)"><style>${css}${rmo}</style><svg viewBox="0 0 320 ${h}" width="100%" style="display:block" role="img" aria-hidden="true">${body}</svg></div>`;
 }
-function dtState(){return S.dt||(S.dt={phase:'intro',place:null,checks:{},step:0,rec:[],busy:false,left:0,res:null});}
+// Lines drawn one after the other inside a phase of the loop (fractions of it).
+function lineKf(name,from,to,hideAt,len){
+  const p=v=>(v*100).toFixed(1)+'%';
+  return `@keyframes ${name}{0%,${p(from)}{stroke-dashoffset:${len}}${p(to)},${p(hideAt)}{stroke-dashoffset:0}${p(Math.min(1,hideAt+0.03))},100%{stroke-dashoffset:${len}}}`;
+}
+function fadeKf(name,a,b,c,d){const p=v=>(v*100).toFixed(1)+'%';return `@keyframes ${name}{0%,${p(a)}{opacity:0}${p(b)},${p(c)}{opacity:1}${p(d)},100%{opacity:0}}`;}
+// Two ways of mooring, one after the other in a 20 s loop.
+function sceneMoor(){
+  const T=20,L=120;
+  // Stern-to between piles: quay above, bow out towards open water.
+  const A=[[146,40,118,20],[174,40,202,20],[150,128,98,146],[170,128,222,146]];
+  // Alongside: bow line, stern line and two springs.
+  const B=[[232,70,292,40],[86,64,30,40],[176,62,124,40],[134,62,196,40]];
+  const ln=(arr,ph)=>arr.map((l,i)=>`<path d="M${l[0]} ${l[1]} L${l[2]} ${l[3]}" stroke="${SC.line}" stroke-width="2.4" stroke-linecap="round" fill="none" style="stroke-dasharray:${L};animation:mo${ph}${i} ${T}s ease-in-out infinite"/>`).join('');
+  const css=fadeKf('moA',0,0.02,0.46,0.5)+fadeKf('moB',0.5,0.52,0.96,1)+fadeKf('moFa',0.03,0.07,0.46,0.5)+fadeKf('moFb',0.53,0.57,0.96,1)
+    +A.map((_,i)=>lineKf('moa'+i,0.08+i*0.07,0.13+i*0.07,0.46,L)).join('')+B.map((_,i)=>lineKf('mob'+i,0.58+i*0.07,0.63+i*0.07,0.96,L)).join('');
+  const body=`${sea(0,0,320,180)}
+    <g style="animation:moA ${T}s linear infinite">${quay(0,0,320,22)}
+      ${bollard(118,14)}${bollard(202,14)}
+      <circle cx="98" cy="146" r="7" fill="var(--sub)"/><circle cx="222" cy="146" r="7" fill="var(--sub)"/>
+      <g transform="translate(160 32) rotate(90) scale(.8)">${boatTop()}</g>
+      <g style="animation:moFa ${T}s linear infinite">${fender(136,58)}${fender(184,58)}${fender(136,92)}${fender(184,92)}${fender(150,28,false)}${fender(170,28,false)}</g>
+      ${ln(A,'a')}
+      <text x="12" y="172" font-size="11" fill="var(--sub)">Stern to the quay, bow between piles</text></g>
+    <g style="animation:moB ${T}s linear infinite">${quay(0,0,320,50)}
+      ${bollard(30,40)}${bollard(124,40)}${bollard(196,40)}${bollard(292,40)}
+      <g transform="translate(84 83)">${boatTop()}</g>
+      <g style="animation:moFb ${T}s linear infinite">${fender(110,56)}${fender(146,56)}${fender(182,56)}${fender(214,56)}</g>
+      ${ln(B,'b')}
+      <text x="12" y="172" font-size="11" fill="var(--sub)">Alongside: bow, stern and two spring lines</text></g>`;
+  return sceneWrap('moor',body,css);
+}
+// The same boat on open water: wide space, a soft wake, waves drifting by.
+function sceneSea(){
+  const waves=[[30,30],[210,44],[90,150],[250,140],[150,24],[20,120]].map(([x,y],i)=>`<path d="M${x} ${y} q8 -5 16 0 t16 0" fill="none" stroke="var(--blue)" stroke-width="1.6" stroke-linecap="round" opacity=".45" style="animation:seW ${6+i}s linear infinite"/>`).join('');
+  const body=`${tint(0,0,320,180,'var(--blue)',.3)}${waves}
+    <path d="M86 90 L28 70 M86 90 L28 110" stroke="var(--text)" stroke-width="2" opacity=".18" stroke-linecap="round"/>
+    <circle cx="160" cy="90" r="78" fill="none" stroke="${SC.line}" stroke-width="1.6" stroke-dasharray="4 7" style="transform-origin:160px 90px;animation:seZ 6s ease-in-out infinite"/>
+    <g transform="translate(86 90)">${boatTop()}</g>`;
+  const css='@keyframes seW{from{transform:translateX(0)}to{transform:translateX(-60px)}}@keyframes seZ{0%,100%{opacity:.35;transform:scale(.92)}50%{opacity:1;transform:scale(1.04)}}';
+  return sceneWrap('sea',body,css);
+}
+// Nobody in the water: someone swims by the drive, a red cross, then the
+// person climbs the ladder onto the swim platform. 12 s loop.
+function sceneSwim(){
+  const T=12;
+  const body=`<rect width="320" height="180" fill="var(--track)"/>
+    <path d="M0 60 Q80 56 150 64 L162 64 L150 124 Q70 132 0 128Z" fill="${SC.hull}" stroke="${SC.edge}" stroke-width="2" stroke-linejoin="round"/>
+    <path d="M28 60 L52 40 H104 L118 62" fill="none" stroke="${SC.edge}" stroke-width="1.8" stroke-linejoin="round" opacity=".7"/>
+    <path d="M150 108 H170 L178 150 H160Z" fill="var(--sub)"/><g fill="var(--text)" opacity=".8"><ellipse cx="182" cy="149" rx="2.6" ry="9"/><ellipse cx="188" cy="149" rx="2.6" ry="9"/></g>
+    <g stroke="var(--sub)" stroke-linecap="round"><path d="M206 102 V152 M216 102 V152" stroke-width="3"/><path d="M206 114 H216 M206 126 H216 M206 138 H216" stroke-width="2.4"/></g>
+    <rect y="104" width="320" height="76" fill="var(--blue)" opacity=".3"/>
+    <rect x="150" y="98" width="68" height="6" rx="2" fill="var(--sub)"/>
+    <path d="M206 88 V100 M216 88 V100" stroke="var(--sub)" stroke-width="3" stroke-linecap="round"/>
+    <g style="animation:swP ${T}s ease-in-out infinite"><circle cx="0" cy="-13" r="7" fill="var(--text)"/><path d="M-10 6 Q0 -6 10 6 V18 H-10Z" fill="var(--text)"/></g>
+    <g style="transform-origin:246px 112px;animation:swX ${T}s ease-in-out infinite"><circle cx="246" cy="112" r="24" fill="none" stroke="var(--red)" stroke-width="4"/><path d="M229 95 L263 129" stroke="var(--red)" stroke-width="4" stroke-linecap="round"/></g>
+    <path d="M0 104 q10 -4 20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0" fill="none" stroke="var(--blue)" stroke-width="1.6" opacity=".7"/>`;
+  // Swimming by the drive, a red cross, then to the ladder, up and onto the platform.
+  const css=`@keyframes swP{0%{transform:translate(272px,112px)}14%{transform:translate(246px,114px)}28%{transform:translate(254px,112px)}42%{transform:translate(246px,114px)}55%{transform:translate(222px,112px)}72%{transform:translate(222px,82px)}86%,100%{transform:translate(184px,80px)}}
+    @keyframes swX{0%,26%{opacity:0;transform:scale(.6)}32%,50%{opacity:1;transform:scale(1)}56%,100%{opacity:0;transform:scale(1)}}`;
+  return sceneWrap('swim',body,css);
+}
+// Know how to stop: the key turns to STOP and the stop button is pressed.
+function sceneStop(){
+  const body=`<rect width="320" height="180" fill="var(--track)"/>
+    <rect x="40" y="30" width="240" height="120" rx="18" fill="${SC.hull}" stroke="${SC.edge}" stroke-width="1.6" opacity=".95"/>
+    <circle cx="112" cy="90" r="34" fill="var(--track)" stroke="${SC.edge}" stroke-width="2"/>
+    <text x="112" y="50" font-size="10" text-anchor="middle" fill="var(--sub)">ON</text><text x="72" y="94" font-size="10" text-anchor="end" fill="var(--red)" font-weight="700">STOP</text>
+    <g style="transform-origin:112px 90px;animation:stK 6s ease-in-out infinite"><rect x="107" y="60" width="10" height="40" rx="4" fill="${SC.edge}"/><circle cx="112" cy="100" r="11" fill="${SC.edge}"/></g>
+    <g style="transform-origin:216px 90px;animation:stB 6s ease-in-out infinite"><circle cx="216" cy="90" r="30" fill="var(--red)"/><text x="216" y="94" font-size="12" font-weight="700" text-anchor="middle" fill="#fff">STOP</text></g>
+    <text x="160" y="170" font-size="11" text-anchor="middle" fill="var(--sub)">Key to stop, or the stop button, for each engine</text>`;
+  const css='@keyframes stK{0%,25%{transform:rotate(0)}45%,75%{transform:rotate(-80deg)}95%,100%{transform:rotate(0)}}@keyframes stB{0%,50%{transform:scale(1)}60%{transform:scale(.86)}70%,100%{transform:scale(1)}}';
+  return sceneWrap('stop',body,css);
+}
+// Engines at idle: the rev counter settles at about 600 rpm, coolant rises.
+function sceneWarm(){
+  const body=`<rect width="320" height="180" fill="var(--track)"/>
+    <circle cx="120" cy="96" r="56" fill="${SC.hull}" stroke="${SC.edge}" stroke-width="2"/>
+    ${[...Array(9)].map((_,i)=>{const a=(-210+i*30)*Math.PI/180;return `<path d="M${(120+Math.cos(a)*46).toFixed(1)} ${(96+Math.sin(a)*46).toFixed(1)} L${(120+Math.cos(a)*52).toFixed(1)} ${(96+Math.sin(a)*52).toFixed(1)}" stroke="var(--sub)" stroke-width="2"/>`;}).join('')}
+    <g style="transform-origin:120px 96px;animation:waN 7s ease-in-out infinite"><path d="M120 96 L120 54" stroke="${SC.fender}" stroke-width="3.5" stroke-linecap="round"/></g><circle cx="120" cy="96" r="6" fill="${SC.edge}"/>
+    <text x="120" y="132" font-size="13" font-weight="700" text-anchor="middle" fill="${SC.edge}">600</text><text x="120" y="145" font-size="9" text-anchor="middle" fill="var(--sub)">rpm · neutral</text>
+    <rect x="222" y="40" width="20" height="96" rx="10" fill="${SC.hull}" stroke="${SC.edge}" stroke-width="2"/><circle cx="232" cy="142" r="15" fill="${SC.fender}"/>
+    <rect x="227" y="50" width="10" height="88" rx="5" fill="${SC.fender}" style="transform-origin:232px 138px;animation:waT 7s ease-in-out infinite"/>`;
+  const css='@keyframes waN{0%{transform:rotate(-120deg)}25%{transform:rotate(-40deg)}40%,100%{transform:rotate(-78deg)}}@keyframes waT{0%{transform:scaleY(.15)}80%,100%{transform:scaleY(.8)}}';
+  return sceneWrap('warm',body,css);
+}
+// Someone keeps a lookout: a view cone sweeps ahead of the boat.
+function sceneLook(){
+  const body=`${tint(0,0,320,180,'var(--blue)',.3)}
+    <g style="transform-origin:150px 90px;animation:loC 6s ease-in-out infinite"><path d="M150 90 L310 40 A170 170 0 0 1 310 140 Z" fill="${SC.line}" opacity=".18"/></g>
+    <g transform="translate(40 90)">${boatTop(`<circle cx="44" cy="0" r="6" fill="${SC.line}"/>`)}</g>`;
+  const css='@keyframes loC{0%,100%{transform:rotate(-22deg)}50%{transform:rotate(22deg)}}';
+  return sceneWrap('look',body,css);
+}
+// The control lever from the side: N up, forward ahead, reverse back.
+function sceneLever(kind){
+  const ang={N:0,F:24,R:-24,F1:34,F2:44,F3:54,V:44}[kind];
+  const label=kind==='V'?'Neutral, with throttle':kind==='N'?'Neutral':kind==='R'?'Reverse, idle':kind==='F'?'Forward, idle':'Forward, more rpm';
+  const col=kind==='R'?SC.fender:kind==='N'?'var(--sub)':SC.line;
+  const body=`<rect width="320" height="180" fill="var(--track)"/>
+    <path d="M96 140 Q160 92 224 140" fill="none" stroke="var(--line)" stroke-width="10" stroke-linecap="round"/>
+    <text x="84" y="160" font-size="11" fill="var(--sub)">R</text><text x="156" y="88" font-size="11" fill="var(--sub)">N</text><text x="228" y="160" font-size="11" fill="var(--sub)">F</text>
+    <rect x="124" y="134" width="72" height="22" rx="8" fill="${SC.hull}" stroke="${SC.edge}" stroke-width="1.6"/>
+    <g style="transform-origin:160px 144px;animation:lv${kind} 6s ease-in-out infinite"><rect x="155" y="66" width="10" height="80" rx="5" fill="${SC.edge}"/><rect x="138" y="54" width="44" height="20" rx="10" fill="${col}"/></g>
+    <text x="16" y="26" font-size="13" font-weight="600" fill="${SC.edge}">${label}</text>
+    ${kind==='V'?`<circle cx="262" cy="70" r="28" fill="${SC.hull}" stroke="${SC.edge}" stroke-width="2"/><g style="transform-origin:262px 70px;animation:lvNd 6s ease-in-out infinite"><path d="M262 70 L262 48" stroke="${SC.fender}" stroke-width="3" stroke-linecap="round"/></g>`:''}`;
+  const css=`@keyframes lv${kind}{0%,15%{transform:rotate(0)}45%,85%{transform:rotate(${ang}deg)}100%{transform:rotate(0)}}@keyframes lvNd{0%,20%{transform:rotate(-70deg)}55%{transform:rotate(40deg)}85%,100%{transform:rotate(-70deg)}}`;
+  return sceneWrap('lev',body,css);
+}
+function dtAnim(kind){
+  if(kind==='lines')return sceneMoor();
+  if(kind==='space')return sceneSea();
+  if(kind==='swim')return sceneSwim();
+  if(kind==='stop')return sceneStop();
+  if(kind==='warm')return sceneWarm();
+  if(kind==='look')return sceneLook();
+  return sceneLever(kind);
+}
+function dtState(){return S.dt||(S.dt={phase:'intro',place:null,safe:0,step:0,rec:[],busy:false,left:0,res:null});}
 function dtView(){
   const d=dtState(),es=engines(),lv=S.live;
   let h=backPill();
@@ -1139,21 +1231,21 @@ function dtView(){
       <div class="s14" style="margin-top:6px">You shift, EngineLink reads. In about ${es.length>1?'5':'3'} minutes it learns how your control units report neutral, forward and reverse, and the compressor, and measures how quickly each drive engages and lets go. Afterwards it can tell when a propeller keeps pulling in neutral.</div>
       <div class="s13 sub" style="margin-top:8px">EngineLink only sends read requests. It never shifts, never changes the throttle and never sends commands.</div></div>
       <div class="hd" style="margin-top:18px">Where are you?</div>
-      <div class="grid2" style="gap:10px">
-        <button class="card" style="text-align:left" data-a="dtPlace" data-v="dock">${dtAnim('lines')}<div class="rt" style="font-weight:600;margin-top:10px">At the dock</div><div class="rh">Moored. Gears at idle, one engine at a time.</div></button>
-        <button class="card" style="text-align:left" data-a="dtPlace" data-v="sea">${dtAnim('space')}<div class="rt" style="font-weight:600;margin-top:10px">On open water</div><div class="rh">The same, plus steady rpm steps for the compressor and the sync.</div></button>
+      <div class="stack" style="gap:12px">
+        <button class="card" style="text-align:left;padding:12px" data-a="dtPlace" data-v="dock">${dtAnim('lines')}<div class="rt" style="font-weight:650;margin-top:12px;padding:0 4px">At the dock</div><div class="rh" style="padding:0 4px 4px">Moored, in gear only at idle, one engine at a time.</div></button>
+        <button class="card" style="text-align:left;padding:12px" data-a="dtPlace" data-v="sea">${dtAnim('space')}<div class="rt" style="font-weight:650;margin-top:12px;padding:0 4px">On open water</div><div class="rh" style="padding:0 4px 4px">The same, plus steady rpm for the compressor and the sync.</div></button>
       </div>
       <div class="s12 sub" style="padding:12px 6px 0">Both give the same gear results. The open-water test also checks the compressor under way and whether the two engines keep the same rpm.</div>`;
     if(P.dtest&&P.dtest.t)h+=`<div class="s12 sub" style="padding:10px 6px 0">Last test: ${new Date(P.dtest.t*1000).toLocaleDateString(LOC)} (${P.dtest.place==='sea'?'open water':'dock'}).</div>`;
     return h;
   }
   if(d.phase==='safety'){
-    const list=DT_SAFE[d.place],all=list.every(x=>d.checks[x[0]]);
-    h+=`<div class="hd">Before you start · ${d.place==='sea'?'open water':'at the dock'}</div>`;
-    h+=list.map(([k,t,txt])=>`<div class="card" style="margin-bottom:12px">${dtAnim(k)}<div class="cth" style="margin-top:12px;align-items:center"><span><span class="rt" style="font-weight:600">${t}</span><span class="rh">${txt}</span></span><button data-a="dtCheck" data-v="${k}" aria-label="${t}" style="width:34px;height:34px;flex:none;border-radius:50%;display:flex;align-items:center;justify-content:center;background:${d.checks[k]?'var(--teal)':'var(--card)'};border:2px solid ${d.checks[k]?'var(--teal)':'var(--sub)'}">${d.checks[k]?svg(IC.check,18,'var(--onteal)',2.6):''}</button></span></div></div>`).join('');
+    const list=DT_SAFE[d.place],k=Math.min(d.safe||0,list.length-1),[id,t,txt]=list[k],last=k===list.length-1;
     const ready=es.length&&es.every(e=>e.run);
-    h+=`${!ready?'<div class="s13" style="color:var(--orange);padding:0 6px 10px">Start both engines first. They must run at idle.</div>':''}
-      <button class="btn pri" style="width:100%" data-a="dtGo" ${all&&ready?'':'disabled'}>${all?'Start the test':'Tick all '+list.length+' first'}</button>`;
+    h+=`<div class="cth" style="padding:0 6px 10px;align-items:center"><span class="s13 sub">Before you start · ${d.place==='sea'?'open water':'at the dock'}</span><span style="display:flex;gap:6px">${list.map((_,i)=>`<i style="width:8px;height:8px;border-radius:50%;background:${i<=k?'var(--teal)':'var(--line)'}"></i>`).join('')}</span></div>
+      <div class="card">${dtAnim(id)}<div class="s13 sub" style="margin-top:14px">${k+1} of ${list.length}</div><div style="font-size:22px;font-weight:700;margin-top:2px">${t}</div><div class="s14" style="margin-top:6px">${txt}</div>
+      ${last&&!ready?'<div class="s13" style="color:var(--orange);margin-top:10px">Start both engines first. They must run at idle.</div>':''}
+      <div class="grid2" style="gap:10px;margin-top:16px"><button class="btn" data-a="dtSafe" data-v="-1">${k?'Back':'Change place'}</button>${last?`<button class="btn pri" data-a="dtGo" ${ready?'':'disabled'}>Start the test</button>`:'<button class="btn pri" data-a="dtSafe" data-v="1">Done, next</button>'}</div></div>`;
     return h;
   }
   if(d.phase==='run'){
@@ -1689,11 +1781,11 @@ function readingBlock(d,es){
     return `<div class="rowx"><div class="cth"><span class="rt">${esc(e.name)}</span><span class="rv">${r.polling?NF(r.rate,1)+' requests/s':'Not reading'}</span></div>
       <div class="s12 sub" style="margin-top:3px">${r.polling?`A request every ${NF(r.interval,0)} ms${fin(r.answered)?' · '+NF(r.answered*100,0)+' % answered':''}`:'Turn on reading the engines to see the speed.'}${r.skip&&r.skip.length?' · skipped (no answer): '+r.skip.join(', '):''}</div>
       ${d.cov&&d.cov[e.ch]&&d.cov[e.ch].good+d.cov[e.ch].missing>0?`<div class="s12" style="margin-top:4px">Read since start: <b style="color:${covPct(d.cov[e.ch])<97?'var(--orange)':'var(--text)'}">${covText(d.cov[e.ch])}</b> of the running time${d.cov[e.ch].gaps?` · ${d.cov[e.ch].gaps} gap${d.cov[e.ch].gaps>1?'s':''}, longest ${dur2(d.cov[e.ch].longest)}`:' · no gaps'}</div>`:''}
-      ${ds.active?`<div class="s12" style="margin-top:8px">Looking for more values · at ${256+ds.pos} of 256–447${(ds.found||[]).length?' · found so far:':''}</div><div class="s12" style="margin-top:6px">${found}</div>`
+      ${ds.active?`<div class="s12" style="margin-top:8px">${r.polling?'Looking for more values':'Looking for more values, paused: it carries on by itself when the engine answers again (ignition on)'} · at ${256+ds.pos} of 256–447${(ds.found||[]).length?' · found so far:':''}</div><div class="s12" style="margin-top:6px">${found}</div>`
         :ds.done?`<div class="s12" style="margin-top:8px">${(ds.found||[]).length?'This engine answers:':'No values found.'}</div><div class="s12" style="margin-top:6px">${found}</div>`:''}
       ${r.polling&&!ds.active?`<button class="btn" style="width:100%;margin-top:10px" data-a="discover" data-v="${e.ch}">Discover more values</button>`:''}</div>`;}).join('');
   const ew=d.engineWait;
-  return `<div class="hd">Reading speed</div><div class="sec">${rows}${d.engineTask?`<div class="rowx"><div class="cth"><span class="rt">Engine reading</span><span class="rv">Own task</span></div><div class="s12 sub" style="margin-top:3px">Runs on its own processor core. ${ew?`Longest wait for the rest of EngineLink: ${NF(ew.max,0)} ms${ew.slow?` · ${ew.slow} waits over 0.1 s`:''}.`:''}</div></div>`:''}<div class="rowx"><div class="s12 sub">EngineLink asks as fast as the engine answers and slows down when answers go missing. Values an engine never answers are skipped. "Discover more values" asks once for every value number from 256 to 319, with the same read request as always: nothing is changed in the engine.</div></div></div>`;
+  return `<div class="hd">Reading speed</div><div class="sec">${rows}${d.engineTask?`<div class="rowx"><div class="cth"><span class="rt">Engine reading</span><span class="rv">Own task</span></div><div class="s12 sub" style="margin-top:3px">Runs on its own processor core. ${ew?`Longest wait for the rest of EngineLink: ${NF(ew.max,0)} ms${ew.slow?` · ${ew.slow} waits over 0.1 s`:''}.`:''}</div></div>`:''}<div class="rowx"><div class="s12 sub">EngineLink asks as fast as the engine answers and slows down when answers go missing. Values an engine never answers are skipped. "Discover more values" asks once for every value number from 256 to 447 while the engine is read (about a minute and a half), with the same read request as always: nothing is changed in the engine.</div></div></div>`;
 }
 // Download speed: a test from memory (network only), and the last big
 // download split into finding the trip, reading the SD card and sending.
@@ -1829,6 +1921,7 @@ function renderSheet(){
       rep=`<button class="exopt" data-a="exReport" data-v="trips&ids=${ids}"><span class="exic">${svg(IC.doc,24,'currentColor',2)}</span><span><b>Trip report</b><span>Fuel, curves and events in a clear document. Save it as a PDF, print it or send it.</span></span></button>`;
       files=rowF('/api/export/trips.csv?ids='+ids,'Trip summary','One row per trip · about '+kb(0.4*ts.length+0.5))
         +rowF('/api/export/series.csv?ids='+ids,'Second by second','Every value of both engines, one row per second · about '+kb(sec*0.11))
+        +rowF('/api/export/fast.csv?ids='+ids,'Four times a second','Rpm, fuel, lever, boost, gear and clutch, from version 0.14.0 · about '+kb(sec*0.45))
         +rowF('/api/export/raw.csv?ids='+ids,'Raw engine messages','Every message from both engines, for analysis · about '+kb(sec/60*430));
     }else{
       const st=S.state,tst=st&&st.test;
@@ -2121,8 +2214,8 @@ const A={
   chartM:v=>{const [k,m]=v.split(':');S.chartM[k]=m;render(true);},
   mark:async()=>{const r=await act('/api/mark',{});if(r.ok)setTimeout(()=>load('events'),1500);},
   // Drive test
-  dtPlace:v=>{const d=dtState();d.place=v;d.phase='safety';d.checks={};render(true);$('#main').scrollTop=0;},
-  dtCheck:v=>{const d=dtState();d.checks[v]=!d.checks[v];render(true);},
+  dtPlace:v=>{const d=dtState();d.place=v;d.phase='safety';d.safe=0;render(true);$('#main').scrollTop=0;},
+  dtSafe:v=>{const d=dtState(),n=(d.safe||0)+(+v);if(n<0){d.phase='intro';}else d.safe=Math.min(n,DT_SAFE[d.place].length-1);render(true);$('#main').scrollTop=0;},
   dtGo:()=>{const d=dtState();d.steps=dtSteps(d.place,engines());d.step=0;d.rec=[];d.phase='run';render(true);$('#main').scrollTop=0;},
   dtRec:()=>dtRecord(),
   dtSkip:()=>{const d=dtState();d.step++;if(d.step>=d.steps.length){d.phase='done';d.res=dtResult(d);}render(true);},
