@@ -76,6 +76,7 @@ EngineLink combines both on one board:
 - **Guided engine test:** record steady RPM stages with your own reference readings, export CSV
 - **Two Wi-Fi modes:** EngineLink's own network at `192.168.4.1` (factory default), or on the boat router at the address the router gives it. If the router is lost, EngineLink brings its own network back within two minutes and returns to the router by itself. Transmit power is tuned automatically.
 - **Firmware updates from GitHub** over the boat router, with automatic rollback, or from a file
+- **Reports to GitHub (optional):** with a token saved, EngineLink files an engine report after each trip and a Wi-Fi report after connection problems, so issues can be found without copying anything. No position, router name or password is ever included
 - **Diagnostics** with a setup check, connection tests and calibration
 
 ---
@@ -124,7 +125,7 @@ The firmware is written for the ESP32-S3 with the Arduino framework. The complet
 | **Engines** | Every value per engine, engine sync, health trend, service |
 | **Settings** | Units, currency, EngineLink Wi-Fi and boat router, firmware, diagnostics, SD card, backup and reset |
 
-The app source is [`firmware/ui/app.html`](firmware/ui/app.html); `tools/build_ui.py` packs it gzip-compressed into `firmware/EngineLink/ui.h`.
+The app source is [`firmware/ui/app.html`](firmware/ui/app.html); `tools/build_ui.py` packs it gzip-compressed into `firmware/EngineLink/ui.h`. The firmware has one file per area (engines, fuel, trips, diagnosis, Wi-Fi, web API and so on); [HANDOVER.md](HANDOVER.md) describes the layout.
 
 ---
 
@@ -151,12 +152,12 @@ Settings, trips, the fuel log and fuel totals are kept with Wi-Fi application up
 
 > [!IMPORTANT]
 >
-> EngineLink is **alpha firmware** and has not been validated on real engines yet.
+> EngineLink is **alpha firmware**. It has read both engines on the owner's boat, but it is not a validated product.
 >
 > - Disconnect the engine networks and NMEA 2000 during first flashing and bring-up
 > - Measure **both** isolated 5 V supplies against **their own** isolated grounds (4.75–5.25 V) before connecting an engine
 > - EngineLink only listens by default. **Reading the engines** (KAD polling) is a deliberate step: close the connector's jumper (SJ1/SJ2) and switch it on in Settings → Diagnostics with a confirmation. "Read engines automatically" is off until you turn it on. Only the read request `01 43 21` can be sent.
-> - The KAD request format is reconstructed from Volvo's PC tool, and the reply layout is not yet wire-verified. Do the voltage check first.
+> - The KAD request format is reconstructed from Volvo's PC tool. The main values are confirmed on the boat; do the voltage check first on a new installation.
 > - Do not poll while a Volvo diagnostic tool (VODIA) is connected
 > - Change the factory Wi-Fi password `12345678` in Settings
 
@@ -168,7 +169,7 @@ See [KAD300 / EDC I](docs/KAD300_EDC1.md), [status and safety](docs/STATUS.md) a
 
 | Hardware | Firmware | Engine validation |
 |----------|----------|-------------------|
-| ✅ Revision 1 assembled | 🚧 0.13.1 | ⏳ Pending first KAD300 test |
+| ✅ Revision 1 assembled | 🚧 0.13.1 | 🚧 Both KAD300 engines read on the boat; tank-to-tank pending |
 
 | Area | Status |
 |------|--------|
@@ -178,7 +179,7 @@ See [KAD300 / EDC I](docs/KAD300_EDC1.md), [status and safety](docs/STATUS.md) a
 | Firmware build | CI compiled on every change |
 | Router Wi-Fi | Tested on a Zyxel EX3600 (WPA2/WPA3 mixed): 500–630 kB/s, about 20 ms round trip on a free 2.4 GHz channel |
 | KAD300 scaling (VODIA, M_902) | Confirmed from the database, fuel ×1/128 confirmed three ways |
-| KAD request/reply on the wire | Reconstructed, verify with the voltage check |
+| KAD request/reply on the wire | Works on both engines for rpm, fuel rate, temperatures, boost and battery; other values still to confirm |
 | Fuel factor on the boat | Pending tank-to-tank |
 | NMEA 2000 bus | Not yet validated |
 
@@ -199,7 +200,9 @@ See [KAD300 / EDC I](docs/KAD300_EDC1.md), [status and safety](docs/STATUS.md) a
 - [x] Own Wi-Fi or boat router, with automatic fallback and return
 - [x] Router mode validated on real hardware (WPA2, WPA3-capable routers)
 - [x] Volvo Penta KAD / EDC I decoding and opt-in polling
-- [ ] KAD reply layout confirmed on the wire
+- [x] KAD reply layout confirmed on the boat for the main values
+- [ ] Remaining KAD values and status bits (263/264) decoded
+- [x] Engine and Wi-Fi reports to GitHub
 - [ ] Fuel factor and corrections confirmed tank to tank
 - [ ] NMEA 2000 output of engine and fuel data
 - [ ] Settings authorization and unique device credentials
@@ -210,7 +213,7 @@ See [KAD300 / EDC I](docs/KAD300_EDC1.md), [status and safety](docs/STATUS.md) a
 - [x] Isolated J1708 and NMEA 2000 interfaces
 - [ ] Isolated supply verification on assembled boards
 - [ ] NMEA 2000 isolated ground review (`GND_N2K_ISO`)
-- [ ] Field test on board
+- [x] First field test on the boat
 
 ---
 
