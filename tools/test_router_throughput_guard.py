@@ -25,4 +25,10 @@ assert "&&routerIpReady&&staIpAt" in network
 # It must not start during active app traffic.
 assert "if(lastHttpMs&&(uint32_t)(millis()-lastHttpMs)<20000UL)continue;" in tune
 assert "if(!fresh&&(uint32_t)(millis()-lastHttpMs)<20000UL)continue;" not in tune
-print("Router throughput guard source checks passed")
+# The 0.13.2 crash backtrace repeatedly reached ChunkOut::flush via
+# handleExportRaw's compressed transfer on a slow link. Keep this particular
+# export uncompressed until the compressor path is repaired and tested.
+export=body(ino,"void handleExportRaw(){")
+assert 'beginDownload("raw engine data","text/csv","EngineLink-raw-trips.csv",false)' in export
+
+print("Router throughput and export stability source checks passed")
