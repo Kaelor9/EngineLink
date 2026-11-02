@@ -58,6 +58,14 @@ jobs:
           # Arduino's Wi-Fi start does not go through the wrapper.
           OBJDUMP=$(ls ~/.arduino15/packages/esp32/tools/esp-x32/*/bin/xtensa-esp32s3-elf-objdump | head -1)
           "$OBJDUMP" -d build-app/*.elf --no-show-raw-insn | grep -q "call8.*<__wrap_esp_wifi_init>" || { echo "esp_wifi_init is not wrapped: WPA3 cannot be switched off"; exit 1; }
+      - name: Decode v0.13.2 loopTask crash report
+        run: |
+          ELF=$(find build-app -maxdepth 1 -name '*.elf' -type f | head -1)
+          ADDR2LINE=$(find ~/.arduino15/packages/esp32/tools/esp-x32 -name xtensa-esp32s3-elf-addr2line -type f | head -1)
+          echo 'Reconstructed build checksum:'
+          sha256sum "$ELF"
+          echo 'PCs from EngineLink device report #109 (ELF prefix 426c041e1):'
+          "$ADDR2LINE" -e "$ELF" -a -f -C 0x400570e5 0x4002fd81 0x4003020a 0x40030879 0x40032629 0x4003270d 0x42020ced 0x42020d16 0x42021ae6 0x420f31a9 0x4202d3d2 0x4202d3f6 0x4202c4a1 0x4202d48b 0x4202417d 0x4202449a
       - name: Verify merged image
         run: |
           python3 - <<'PY'
