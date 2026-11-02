@@ -212,7 +212,7 @@ void decodeKad(const Frame &f,Decoded &d){
   if(k.ownPending){
     k.ownPending=false;++k.replies;k.unanswered=0;++k.winRep;
     for(uint8_t i=0;i<KAD_SLOW_N;i++)if(KAD_POLL_SLOW[i]==k.pendingIndex)k.miss[i]=0;
-    if(k.pendingIndex>=KAD_DISC_FIRST&&k.pendingIndex<=KAD_DISC_LAST)k.discFound|=1ULL<<(k.pendingIndex-KAD_DISC_FIRST);
+    if(k.pendingIndex>=KAD_DISC_FIRST&&k.pendingIndex<=KAD_DISC_LAST){const uint16_t b=k.pendingIndex-KAD_DISC_FIRST;k.discFound[b>>6]|=1ULL<<(b&63);}
     if(f.bootMs>=k.pendingAt){k.replyMsSum+=f.bootMs-k.pendingAt;++k.replyCount;}
   }
   k.lastReplyAt=f.bootMs;
@@ -332,6 +332,11 @@ void writeTxRecord(uint8_t ch,const uint8_t *req,uint16_t index){
   writeRecord(f,d,true,hex);
   appendCalibrationFrame(f,d,true,hex);
 }
+// True when this engine does not answer a slow value (skipped after misses).
+bool slowSkipped(const KadLink &k,uint16_t index){
+  for(uint8_t i=0;i<KAD_SLOW_N;i++)if(KAD_POLL_SLOW[i]==index)return k.skip>>i&1;
+  return false;
+}
 void serviceKad(){
   if(cfg.protocol!=PROTO_KAD)return;
   // Handle what has already arrived first: after a busy moment (a download,
@@ -375,12 +380,24 @@ void serviceKad(){
     const bool moving=(int32_t)(kadTransientUntil[ch]-millis())>0;
     const uint8_t slot=moving?k.seq%4:k.seq%3;
     const bool slowSlot=moving?slot==3:slot==2;
+    // Manoeuvring (running below 1300 rpm): the gear bits every other slow
+    // slot and the lever value every sixth, so a shift is timed to about
+    // 0.7 s. The other slow values then come about every 15 s.
+    const bool manoeuvre=motor[ch].running&&motor[ch].rpm<1300&&!moving;
+    uint8_t &mp=kadManPos[ch];
     if(!slowSlot)index=moving?(slot==1?256:289):KAD_POLL_FAST[slot];
-    else if(kadFocusIndex&&(int32_t)(kadFocusUntil-millis())>0)index=kadFocusIndex;
+    else if(kadFocusIndex&&(int32_t)(kadFocusUntil-millis())>0){
+      // The drive test studies one or two values: they take turns.
+      index=kadFocusIndex2&&(mp++&1)?kadFocusIndex2:kadFocusIndex;
+    }
+    else if(manoeuvre&&!k.discActive&&(mp%2==0||mp%6==3)&&!slowSkipped(k,mp%6==3?291:264)){
+      index=mp%6==3?291:264;++mp;
+    }
     else if(k.discActive){
       index=KAD_DISC_FIRST+k.discPos;
       if(++k.discPos>KAD_DISC_LAST-KAD_DISC_FIRST){k.discActive=false;k.discDone=true;}
     }else{
+      if(manoeuvre)++mp;
       index=KAD_POLL_SLOW[k.slowPos];
       for(uint8_t tries=0;tries<KAD_SLOW_N&&(k.skip>>k.slowPos&1);tries++){k.slowPos=(k.slowPos+1)%KAD_SLOW_N;index=KAD_POLL_SLOW[k.slowPos];}
       k.slowPos=(k.slowPos+1)%KAD_SLOW_N;
@@ -459,6 +476,7 @@ void engineTask(void *){
     while(handled<128&&xQueueReceive(framesQueue,&f,0)==pdTRUE){processFrame(f);handled++;}
     serviceKad();
     serviceAutoPoll();
+    serviceFast();
     serviceEngines();
     engineBeat=millis();
     xSemaphoreGive(engineMx);

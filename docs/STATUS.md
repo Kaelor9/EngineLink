@@ -42,8 +42,9 @@ to engines.
 
 - KAD reply layout for every value: verified for the values above, not for all
   indexes ("Discover more values" should be re-run).
-- Status bits in values 263/264 are not decoded yet.
-- Fault codes: need a VODIA capture.
+- Status bits in values 263/264 are not decoded yet. The gear and compressor bits are learned per boat by the drive test (0.14.0); their meaning is a hypothesis (see KAD300 / EDC I).
+- Gear and clutch timing (0.14.0): checked against two recorded trips (replayed on a PC), not yet on the boat with the faster gear readings.
+- Fault codes: no read command found among the PC tool's commands; "Discover more values" now covers 256–447.
 - Fuel factor confirmed tank to tank.
 - NMEA 2000 interface: isolation, termination and traffic not validated. Do not
   enable it until verified.

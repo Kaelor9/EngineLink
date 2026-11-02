@@ -50,6 +50,7 @@
 #include "fuelcal.h"
 #include "ledpatterns.h"
 #include "diagrules.h"
+#include "shiftrules.h"
 #include "otaheader.h"
 #include "routerguard.h"
 #include "miniz.h"   // the deflate compressor in the chip's ROM
@@ -63,7 +64,7 @@
 uint8_t txLevel=3;
 SpeedLogRec speedLog[SPEED_LOG_N];uint8_t speedLogCount=0;
 
-#define EL_VERSION "0.13.4"
+#define EL_VERSION "0.14.0"
 // Releases list published by the Pages workflow; firmware files come from
 // GitHub Releases of the same repository. Nothing else is downloaded.
 #define EL_RELEASES_URL "https://kaelor9.github.io/EngineLink/releases.json"
@@ -228,6 +229,26 @@ bool lifeColdChecked[2]={false,false};
 float lifeStartMinV[2]={99,99},lifeTripMax[2]={0,0};
 Health health;
 bool healthDirty=false;
+// ---- 0.14.0: gear and clutch, four readings a second (gearbox.ino) ----
+FastSample *fastRing=nullptr;
+uint16_t fastHead=0,fastCount=0;
+uint32_t lastFastMs=0;
+shift::Tracker shiftTr[2];
+shift::Accel accelTr[2];
+ShiftLife shiftLife;
+bool shiftLifeDirty=false;
+ShiftRec shiftLog[SHIFT_N];
+uint8_t shiftCount=0;              // shiftLog[0] is the newest
+bool shiftLogDirty=false;
+uint32_t shiftLogSavedAt=0;
+File tripFast;                     // the running trip, four readings a second
+uint32_t tripFastId=0;
+FastSample fastBuf[40];uint8_t fastBufN=0;
+uint32_t pendingFastBox[8];uint8_t pendingFastBoxN=0;
+uint32_t lastPullEventMs[2]={0,0},lastHardEventMs[2]={0,0};
+uint8_t kadManPos[2]={0,0};        // slow-slot pattern while manoeuvring
+uint16_t kadFocusIndex2=0;         // a second value studied with kadFocusIndex (the drive test)
+bool warmTiming[2]={false,false};uint32_t warmStartUp[2]={0,0};
 // Per-trip sums for the health comparison: [engine][bucket][metric] and samples.
 float tripHealthSum[2][RPM_BUCKETS][HEALTH_METRICS];
 uint16_t tripHealthN[2][RPM_BUCKETS];
@@ -439,7 +460,7 @@ void setup(){
   if(fsReady)storageMeta.putBool("mounted",true);
   storageMeta.end();
   if(!fsReady)Serial.println("LittleFS mount failed - storage preserved, NOT formatted");
-  for(const char *p:{"/prefs.json","/trips.bin","/fuel.bin","/health.bin","/events.bin","/life.bin","/diag.bin"})fsRecover(p);
+  for(const char *p:{"/prefs.json","/trips.bin","/fuel.bin","/health.bin","/events.bin","/life.bin","/diag.bin","/shiftlife.bin","/shifts.bin"})fsRecover(p);
   loadPrefs();
   loadTrips();
   loadFuel();
@@ -448,6 +469,9 @@ void setup(){
   loadEvents();
   loadLife();
   ring=(Sample*)ps_malloc(sizeof(Sample)*RING_N);
+  fastRing=(FastSample*)ps_malloc(sizeof(FastSample)*FAST_N);
+  loadShiftLife();
+  loadShifts();
   loadDiag();
   lastEngineOnMs=millis();
   // A trip that was still open when power went is closed with its last values.
@@ -511,7 +535,7 @@ void loop(){
   serviceSD();
   if(!engineTaskOn){serviceKad();serviceAutoPoll();}
   serviceDiag();
-  if(!engineTaskOn)serviceEngines();
+  if(!engineTaskOn){serviceFast();serviceEngines();}
   serviceRawCleanup();
   serviceHistory();
   serviceNetwork();

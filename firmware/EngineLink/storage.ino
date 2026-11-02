@@ -70,6 +70,8 @@ void restartLogDate(){
 }
 void saveTotals(){
   if(lifeDirty)saveLife();
+  if(shiftLifeDirty)saveShiftLife();
+  if(shiftLogDirty)saveShifts();
   pref.begin("totals",false);
   pref.putBytes("t",&totals,sizeof(totals));
   pref.end();
@@ -323,6 +325,7 @@ void saveSettings(){
   pref.putBytes("badj",cfg.bandAdj,sizeof(cfg.bandAdj));
   pref.putFloat("calsig",cfg.calSig);pref.putUChar("calfills",cfg.calFills);pref.putFloat("call",cfg.calLitres);
   {uint16_t g[4]={cfg.gearMaskF,cfg.gearValF,cfg.gearMaskR,cfg.gearValR};pref.putBytes("gear",g,sizeof(g));}
+  {uint16_t g[2]={cfg.compMask,cfg.compVal};pref.putBytes("comp",g,sizeof(g));}
   pref.putString("apname",cfg.apName);
   pref.putString("host",cfg.hostName);
   pref.putFloat("tank",cfg.tankL);
@@ -379,6 +382,7 @@ void loadSettings(){
   cfg.calSig=pref.getFloat("calsig",0);cfg.calFills=pref.getUChar("calfills",0);cfg.calLitres=pref.getFloat("call",0);
   {uint16_t g[4]={0,0,0,0};if(pref.getBytesLength("gear")==sizeof(g))pref.getBytes("gear",g,sizeof(g));
    cfg.gearMaskF=g[0];cfg.gearValF=g[1];cfg.gearMaskR=g[2];cfg.gearValR=g[3];}
+  {uint16_t g[2]={0,0};if(pref.getBytesLength("comp")==sizeof(g))pref.getBytes("comp",g,sizeof(g));cfg.compMask=g[0];cfg.compVal=g[1];}
   cfg.fuelCorr[1]=pref.getFloat("corr1",1.0f);
   cfg.apName=pref.getString("apname","EngineLink");
   cfg.hostName=pref.getString("host","enginelink");

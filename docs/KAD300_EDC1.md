@@ -23,6 +23,36 @@ EngineLink 0.4.0 was connected to the port KAD300 on J6. It polled for about 6 m
 | 289 fuel rate | About 407 raw at idle → **3.2 L/h** (× 1/128) or 1.6 L/h (× 1/256) | Tank to tank |
 | 288 relative load / 295 rod position | 79–91 % / 50–55 % at idle | Meaning unclear; off by default and labelled unconfirmed in the app |
 
+## Gear, clutch and compressor (two trips, 2026-11-02)
+
+Two trips with both engines read about 8 times a second (raw log of every
+answer). Value 264 was read about every 4.5 s then; from 0.14.0 it is read
+about every 0.7 s while an engine runs below 1,300 rpm.
+
+| Finding | Evidence | Status |
+|---|---|---|
+| The propeller load shows in the fuel rate | At ~600 rpm: port 2.2 L/h in neutral, 3.0–3.3 L/h in gear; starboard 1.9 / 2.8 L/h. Each shift into gear raises the fuel within about a second at the same rpm | **CONFIRMED** (both engines, ~25 shifts) |
+| A short flare when the clutch lets go | Out of gear: rpm 740–775 for 0.5–1 s while the fuel drops to ~2.0 L/h, then back to idle | **CONFIRMED** |
+| 264 bit 0x100 | Set at idle in neutral (`0x4945`, `0x0945`), clear while the propeller pulls (`0x4845`, `0x0845`) | HYPOTHESIS: "in neutral". Learned per boat by the drive test |
+| 264 bits 0x08 / 0x10 | Seen on port during manoeuvring, mostly for one reading around a shift (`0x484D`, `0x4855`); once 0x10 for ~9 s before the load came | HYPOTHESIS: forward / reverse request or actuator. The 0x18 meaning from VODIA is not confirmed |
+| 264 bit 0x20 | Set together with ~40–50 kPa on 265 at a cold idle (trip 1) and on both engines during a rev in neutral; clear and ~0 kPa at a warm idle | HYPOTHESIS: compressor clutch on. Learned by the drive test (rev step) |
+| 263 bit 0x04 | Follows 0x100 in 264 within a few seconds | Unknown |
+| Port uses more fuel at idle | Port 2.2–2.4 L/h against starboard 1.8–2.0 L/h in neutral at the same rpm, all of trip 2 | Observation; same scale on both engines |
+
+The status rule (an event when 263/264 bits change) fired on these gear bits
+before they were learned; after the drive test the gear and compressor bits
+are left out of it.
+
+### Fault codes
+
+The VODIA analysis lists the commands the PC tool uses: `01 42 10` (info),
+`01 42 1D` (calibration), `01 42 4D` (read memory), `01 42 08` (write memory),
+`01 42 2D` (timer) and `01 43 21` (read a live value). None of them is a
+"read fault codes" command, and EngineLink only ever sends `01 43 21`. If the
+control unit keeps its fault codes as live values, "Discover more values" can
+find them: from 0.14.0 it asks for every index from 256 to 447 (it was 319).
+What an index that answers means still has to be worked out.
+
 ## Evidence levels
 
 | Level | Meaning |
@@ -125,4 +155,5 @@ If no combination in step 5 matches within 8 %, the reply layout differs from th
 - The reply layout on the wire: header length, value position and byte order (step 5).
 - The fuel factor, 1/128 or 1/256 (step 8).
 - The voltage factor, 0.01308 or 0.0125 (step 5).
-- Whether index 264 distinguishes forward from reverse.
+- Whether index 264 distinguishes forward from reverse (the drive test shows it per boat).
+- What bit 0x100 and 0x20 in 264 mean (hypotheses above).

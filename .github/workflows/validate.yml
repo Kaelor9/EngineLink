@@ -71,5 +71,9 @@ jobs:
         run: |
           g++ -O2 -std=c++17 -Wall -I firmware/EngineLink tools/test_diagrules.cpp -o /tmp/test_diagrules
           /tmp/test_diagrules
+      - name: Test the gear and clutch analysis on simulated shifts
+        run: |
+          g++ -O2 -std=c++17 -Wall -I firmware/EngineLink tools/test_shiftrules.cpp -o /tmp/test_shiftrules
+          /tmp/test_shiftrules
       - name: Check version is defined once in firmware
         run: grep -E '^#define EL_VERSION "[0-9]+\.[0-9]+\.[0-9]+(-[a-z]+)?"' firmware/EngineLink/EngineLink.ino

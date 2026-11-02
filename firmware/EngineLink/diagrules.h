@@ -25,14 +25,19 @@ namespace diag {
 enum Type : uint8_t {
   T_NONE = 0, T_COOL_HIGH, T_COOL_CRIT, T_AIR_HIGH, T_VOLT_LOW, T_VOLT_HIGH, T_RPM_SHORT, T_RPM_HUNT,
   T_DEV_COOL, T_DEV_BOOST, T_DEV_AIR, T_DEV_FUEL, T_IMB_FUEL, T_IMB_BOOST, T_COMM_LOST, T_STOPPED,
-  T_OVERSPEED, T_COLD_LOAD, T_STATUS, T_LONG_IDLE, T_STAYS_COLD, T_MARK, T_COUNT
+  T_OVERSPEED, T_COLD_LOAD, T_STATUS, T_LONG_IDLE, T_STAYS_COLD, T_MARK,
+  // 0.14.0, raised by the gear and clutch analysis (shiftrules.h), not by Rules:
+  T_PULL_NEUTRAL, T_HARD_SHIFT, T_COUNT
 };
+// The life story counts events by type in a stored array of this size; types
+// added later are counted in the gear and clutch story instead.
+constexpr uint8_t LIFE_EV_N = 22;
 enum Sev : uint8_t { INFO = 0, WARN = 1, ALARM = 2 };
 constexpr uint8_t SEVERITY[T_COUNT] = {INFO, WARN, ALARM, WARN, WARN, WARN, WARN, WARN, WARN, WARN, WARN, WARN,
-                                       WARN, WARN, WARN, ALARM, ALARM, WARN, INFO, INFO, WARN, INFO};
+                                       WARN, WARN, WARN, ALARM, ALARM, WARN, INFO, INFO, WARN, INFO, WARN, INFO};
 constexpr const char *TYPE_ID[T_COUNT] = {"", "cool-high", "cool-crit", "air-high", "volt-low", "volt-high", "rpm-short",
   "rpm-hunt", "dev-cool", "dev-boost", "dev-air", "dev-fuel", "imb-fuel", "imb-boost", "comm-lost", "stopped",
-  "overspeed", "cold-load", "status", "long-idle", "stays-cold", "mark"};
+  "overspeed", "cold-load", "status", "long-idle", "stays-cold", "mark", "pull-neutral", "hard-shift"};
 
 // What one engine reported this second. NAN = not known.
 struct Eng {
@@ -238,8 +243,9 @@ struct Life {
   float lowStartVolt[2] = {0, 0};       // lowest battery voltage seen in the first 20 s after the last start
   float wotRpm[2] = {0, 0};             // highest rpm on the last trip (full throttle reach)
   float wotRpmBest[2] = {0, 0};         // and the best ever
-  uint32_t eventsBy[T_COUNT] = {};
+  uint32_t eventsBy[LIFE_EV_N] = {};
 };
+static_assert(T_MARK < LIFE_EV_N, "the stored life story counts the first 22 event types");
 inline int lifeBucket(float rpm) {
   if (rpm < 1000) return 0;
   const int b = 1 + (int)((rpm - 1000) / 250);

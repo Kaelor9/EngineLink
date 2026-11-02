@@ -111,6 +111,7 @@ void handleState(){
   s+=",\"apName\":";jsonString(s,cfg.apName);
   s+=",\"host\":";jsonString(s,cfg.hostName);
   s+=",\"gear\":[";s+=cfg.gearMaskF;s+=',';s+=cfg.gearValF;s+=',';s+=cfg.gearMaskR;s+=',';s+=cfg.gearValR;s+=']';
+  s+=",\"comp\":[";s+=cfg.compMask;s+=',';s+=cfg.compVal;s+=']';
   s+=",\"ssid\":";jsonString(s,cfg.ssid);
   s+=",\"tankL\":";s+=String(cfg.tankL,0);
   s+=",\"reserve\":";s+=cfg.reserve;
@@ -459,6 +460,10 @@ String makeLiveJson(){
     s+=",\"poll\":";s+=k.polling?"true":"false";
     s+=",\"why\":";jsonString(s,k.stopReason);
     s+=",\"hrs\":";jnum(s,totals.lastEcuHours[c],1);
+    {uint32_t age;const uint8_t g=gearNow(c,age);
+     s+=",\"g\":\"";s+=motor[c].running&&age<=shift::GEAR_FRESH_MS*2?gearCode(g):"?";s+='"';
+     s+=",\"ld\":";s+=motor[c].running&&shiftTr[c].known?(shiftTr[c].loaded?"true":"false"):"null";
+     s+=",\"cp\":";const int8_t cp=motor[c].running?compNow(c):-1;s+=cp<0?"null":cp?"true":"false";}
     s+=",\"x\":{";
     bool first=true;
     for(uint8_t i=0;i<KAD_N;i++){
@@ -703,6 +708,17 @@ void handleCfg(){
     }
     if(g){cfg.gearMaskR=m;cfg.gearValR=val;}else{cfg.gearMaskF=m;cfg.gearValF=val;}
   }
+  // Compressor clutch bit learned in the drive test: "mask:value", "" to forget.
+  if(web.hasArg("comp")){
+    const String v=web.arg("comp");
+    uint16_t m=0,val=0;
+    if(v.length()){
+      const int c=v.indexOf(':');
+      if(c<1){reply(false,"Invalid compressor pattern",400);return;}
+      m=(uint16_t)strtoul(v.substring(0,c).c_str(),nullptr,0);val=(uint16_t)strtoul(v.substring(c+1).c_str(),nullptr,0)&m;
+    }
+    cfg.compMask=m;cfg.compVal=val;
+  }
   if(web.hasArg("host")){
     String v=web.arg("host");v.trim();v.toLowerCase();v.replace(' ','-');
     if(v.endsWith(".local"))v.remove(v.length()-6);
@@ -937,7 +953,7 @@ void initializeWeb(){
     for(const char *f:{"/prefs.json","/health.bin","/diag.bin"})LittleFS.remove(f);
     if(!keep){
       pref.begin("totals",false);pref.clear();pref.end();
-      for(const char *f:{"/trips.bin","/fuel.bin"})LittleFS.remove(f);
+      for(const char *f:{"/trips.bin","/fuel.bin","/shiftlife.bin","/shifts.bin"})LittleFS.remove(f);
       if(sdReady&&cardInserted()){if(sdLogging)stopLog();removeTree("/");}
     }
     reply(true,keep?"Factory settings restored. Trips and the fuel log were kept. EngineLink restarts with Wi-Fi EngineLink, password 12345678.":"Everything erased. EngineLink restarts with Wi-Fi EngineLink, password 12345678.");
@@ -992,6 +1008,11 @@ void initializeWeb(){
   web.on("/api/diag/focus",HTTP_POST,handleDiagFocus);
   web.on("/api/kad/discover",HTTP_POST,handleKadDiscover);
   web.on("/api/events",HTTP_GET,handleEvents);
+  web.on("/api/fast",HTTP_GET,handleFastRecent);
+  web.on("/api/event/fast",HTTP_GET,handleEventFast);
+  web.on("/api/trip/fast",HTTP_GET,handleTripFast);
+  web.on("/api/shifts",HTTP_GET,handleShifts);
+  web.on("/api/export/fast.csv",HTTP_GET,handleExportFast);
   web.on("/api/events/ack",HTTP_POST,handleEventsAck);
   web.on("/api/mark",HTTP_POST,handleMark);
   web.on("/api/event/series",HTTP_GET,handleEventSeries);

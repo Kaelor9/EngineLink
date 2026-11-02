@@ -201,7 +201,7 @@ const svg=(d,w=20,color='currentColor',sw=1.9)=>`<svg class="ico" width="${w}" h
 // ---------- State ----------
 const S={tab:'trip',page:null,back:null,backScroll:0,live:null,liveAt:0,fails:0,conn:true,
   trips:null,fuel:null,econ:null,diag:null,sd:null,state:null,fw:null,scan:null,hist:[],lastHist:0,
-  chartM:{},evSeries:{},tripSeries:{},evOpen:null,tripView:null,
+  chartM:{},evSeries:{},evFast:{},tripSeries:{},evOpen:null,tripView:null,shifts:null,shiftsAt:0,dt:null,
   open:null,selMode:null,sel:[],raw:false,quick:null,sheet:null,d:{},info:null,
   warm:{phase:'idle',seen:0,samples:[],startedAt:0},healthOpen:null,svcOpen:null,advOpen:false,editTank:false,tankDraft:'',
   wifiPick:null,wifiPass:'',wifiManualSsid:'',wifiManualPass:'',newPlace:'',newNm:'',voltMeas:'',timeSentAt:0,fuelOpen:null,firstLive:true};
@@ -211,7 +211,7 @@ const P={theme:'dark',night:'off',units:'metric',cur:'DKK',start:'trip',keepOn:f
   warmOn:true,warmTarget:60,warmClose:30,
   pv:0,
   vals:{load:0,req:1,cool:1,boost:1,air:1,ftemp:1,batt:1,gear:1,hours:1,rate:0,inlet:0,rack:0,inj:0,start:0,ms:0},
-  service:{}};
+  service:{},boat:{},dtest:null};
 let prefsLoaded=false,prefsTimer=0;
 function savePrefs(){clearTimeout(prefsTimer);prefsTimer=setTimeout(()=>post('/api/prefs',{p:JSON.stringify(P)}),400);}
 
@@ -428,6 +428,7 @@ async function load(what){
     if(what==='fw')S.fw=await get('/api/fw/status',4000);
     if(what==='events')S.events=await get('/api/events',5000);
     if(what==='life')S.life=await get('/api/life',5000);
+    if(what==='shifts'){S.shiftsAt=Date.now();S.shifts=await get('/api/shifts?n=120',5000);}
     if(what==='led')S.led=await get('/api/led',4000);
     if(what==='recent'){S.recentAt=Date.now();S.recent=await get('/api/series/recent?secs=600',8000);}
   }catch(e){}
@@ -451,6 +452,7 @@ const gearName=v=>{
   if(!fin(v))return '—';
   const c=cfgv(),g=c&&c.gear;
   if(!g||!(g[0]||g[2]))return 'Not learned';
+  if(g[0]&&g[0]===g[2]&&g[1]===g[3])return (v&g[0])===g[1]?'In gear':'Neutral';
   if(g[0]&&(v&g[0])===g[1])return 'Forward';
   if(g[2]&&(v&g[2])===g[3])return 'Reverse';
   return 'Neutral';
@@ -476,6 +478,7 @@ function onLive(){
   if(le&&le.id!==S.lastEvId&&(S.page==='events'||S.events))load('events');
   S.lastEvId=le?le.id:0;
   if(S.tab==='engines'&&!S.page&&(!S.recentAt||Date.now()-S.recentAt>10000))load('recent');
+  if(S.tab==='engines'&&!S.page&&Date.now()-S.shiftsAt>8000)load('shifts');
   if(S.page==='led'&&(!S.ledAt||Date.now()-S.ledAt>1000)){S.ledAt=Date.now();load('led');}
   if(!S.page&&(S.tab==='trip'||S.tab==='engines'||S.tab==='tank'))render();
 }
@@ -526,7 +529,7 @@ function warmBox(){
 
 // ---------- Header, nav ----------
 const TITLES={trip:'Trip',economy:'Economy',tank:'Tank',history:'History',engines:'Engines',more:'Settings'};
-const PAGES={dest:'Saved places',vals:'Engine values',ap:'EngineLink Wi-Fi',router:'Boat router',fw:'Firmware',diag:'Diagnostics',events:'Events',trip:'Trip timeline',led:'Status light'};
+const PAGES={dest:'Saved places',vals:'Engine values',ap:'EngineLink Wi-Fi',router:'Boat router',fw:'Firmware',diag:'Diagnostics',events:'Events',trip:'Trip timeline',led:'Status light',dtest:'Drive test',boat:'My boat'};
 function header(){
   const title=S.page?PAGES[S.page]:TITLES[S.tab];
   return `<div class="top"><h1>${title}</h1>${S.tab!=='more'&&!S.page?`<button class="gear" data-a="tab" data-v="more" aria-label="Settings">${svg(IC.gear,20,'var(--sub)',1.8)}</button>`:''}</div>`;
@@ -588,6 +591,7 @@ function vTrip(){
     if(es.some(e=>fin(e.rpm)))h+=burnCard(null);
   }
   h+=rangeCard();
+  if(es.some(e=>e.run))h+=`<button class="btn" style="width:100%" data-a="mark">${svg(IC.flag,15)}Mark this moment</button><div class="s12 sub" style="text-align:center;padding:0 20px">Felt or heard something odd? Tap it while it happens: the engine data around it is kept.</div>`;
   return h+'</div>';
 }
 function lastTripLine(){
@@ -785,10 +789,9 @@ function fuelEntryDetail(r,i){
 function gearBlock(c){
   const g=c.gear||[0,0,0,0],ok=g[0]||g[2];
   return `<div class="rowx"><div class="cth"><span class="rt">Gear</span><span class="s12" style="font-weight:600;color:${ok?'var(--green)':'var(--orange)'}">${ok?'Learned':'Not learned'}</span></div>
-    <div class="s12 sub" style="margin-top:3px">${ok?'EngineLink knows which bits mean forward'+(g[2]?' and reverse':'')+'.':'The engines report the gear as a set of bits whose meaning differs between installations. Learn it once at the dock: about a minute, shifting when asked.'}</div>
-    <button class="btn sm" style="margin-top:10px" data-a="sheet" data-v="gear">${ok?'Learn again':'Learn the gear'}</button></div>`;
+    <div class="s12 sub" style="margin-top:3px">${ok?(g[0]===g[2]&&g[1]===g[3]?'EngineLink knows which bits mean in gear and neutral.':'EngineLink knows which bits mean forward'+(g[2]?' and reverse':'')+'.')+(c.comp&&c.comp[0]?' The compressor bit is known too.':''):'The engines report the gear as a set of bits whose meaning differs between installations. The guided drive test learns it, at the dock or on open water.'}</div>
+    <button class="btn sm" style="margin-top:10px" data-a="page" data-v="dtest" data-b="more">${ok?'Run the drive test again':'Start the drive test'}</button></div>`;
 }
-const GEARSTEPS=[['N','Neutral','Both levers in neutral.'],['F','Forward','Both levers into forward, at idle.'],['N','Neutral','Back to neutral.'],['R','Reverse','Both levers into reverse, at idle.'],['N','Neutral','Back to neutral. Last step.']];
 // Bits that are steady within each state and differ between them.
 function learnBits(a,b){
   if(a.length<2||b.length<2)return null;
@@ -800,27 +803,6 @@ function learnBits(a,b){
 function joinBits(x,y){
   if(x&&y){const m=x[0]&y[0]&~(x[1]^y[1])&0xFFFF;return m?[m,x[1]&m]:null;}
   return x||y;
-}
-function gearResult(){
-  const g=S.gear,per=[0,1].map(ch=>{const by=k=>g.samples.filter(s=>s.k===k).flatMap(s=>s.v[ch]);const n=by('N');return [learnBits(n,by('F')),learnBits(n,by('R'))];});
-  let f=joinBits(per[0][0],per[1][0]),r=joinBits(per[0][1],per[1][1]);
-  if(f&&r&&f[0]===r[0]&&f[1]===r[1])r=null;
-  return {f,r};
-}
-async function gearRecord(){
-  const g=S.gear;if(g.busy)return;
-  g.busy=true;g.prog=0;renderSheet();
-  for(const e of engines())if(!e.poll)await post('/api/diag/test',{ch:e.ch});
-  await post('/api/diag/focus',{idx:264,secs:30});
-  const v=[[],[]];
-  for(let i=0;i<14;i++){
-    await new Promise(r=>setTimeout(r,450));
-    try{const d=await get('/api/diag',2000);for(const ch of [0,1]){const x=d.t[ch].raw&&d.t[ch].raw[264];if(x&&x[2]<1500)v[ch].push(x[0]&0xFFFF);}}catch(e){}
-    g.prog=Math.round((i+1)/14*100);renderSheet();
-  }
-  g.samples.push({k:GEARSTEPS[g.step][0],v});g.step++;g.busy=false;
-  if(g.step>=GEARSTEPS.length)g.res=gearResult();
-  renderSheet();
 }
 function fuelFiguresBlock(){
   const f=S.fuel;if(!f||!f.cal)return '';
@@ -942,7 +924,7 @@ function vEngines(){
   }
   if(lv.proto==='kad'&&es.every(e=>!e.poll))h+=`<div class="card s14 sub">EngineLink only listens right now. Switch on "Read engines automatically" in Settings, or start reading under Diagnostics.</div>`;
   h+=`<div style="display:flex;justify-content:center;gap:18px;flex-wrap:wrap"><button data-a="page" data-v="vals" data-b="engines" style="color:var(--teal);font-size:13.5px">Choose which values to show</button><button data-a="mark" style="color:var(--teal);font-size:13.5px;display:inline-flex;gap:6px;align-items:center">${svg(IC.flag,15,'var(--teal)',2)}Something's odd</button></div>`;
-  h+=recentCard()+syncCard(es)+balanceCard(es)+healthCard(es)+lifeCard(es)+serviceCard(es);
+  h+=recentCard()+gearCard(es)+syncCard(es)+twinCard(es)+balanceCard(es)+healthCard(es)+lifeCard(es)+serviceCard(es);
   return h+'</div>';
 }
 function syncCard(es){
@@ -993,7 +975,8 @@ function healthCard(es){
       return `<button data-a="healthOpen" data-v="${r.id}" style="width:100%;text-align:left;display:flex;gap:12px;padding:12px 0;border-top:1px solid var(--line)"><span class="dot" style="width:8px;height:8px;background:${c};margin-top:7px"></span><span style="flex:1;display:block"><span class="cth"><span style="font-size:14.5px">${r.status==='learn'?'Normal values':t}</span><span class="s13" style="color:${r.status==='look'?'var(--orange)':'var(--sub)'};white-space:nowrap">${r.status==='look'?'Worth a look':r.status==='learn'?'':'Normal'} ${r.status==='learn'?'':open?'⌃':'⌄'}</span></span><span class="s12 sub" style="display:block;margin-top:3px">${esc(r.now)}</span>${r.text?`<span class="s13" style="display:block;margin-top:6px">${r.text}</span>`:''}
         ${open&&r.status!=='learn'?`<span style="display:block;background:var(--track);border-radius:12px;padding:10px 12px;margin-top:8px"><span class="s12 sub" style="display:block;font-weight:600">What it tells you</span><span class="s13" style="display:block;margin-top:2px">${why}</span><span class="s12 sub" style="display:block;font-weight:600;margin-top:8px">${r.status==='look'?'What to do':'If it changes'}</span><span class="s13" style="display:block;margin-top:2px">${todo}</span></span>`:''}</span></button>`;}).join('')}</div>`;
 }
-const SERVICE=[['oil','Oil and oil filter','Every 100 h or yearly',100],['air','Air filter','Every 400 h',400],['imp','Impeller','Yearly',0],['ff','Fuel filters','Every 200 h',200]];
+const SERVICE=[['oil','Oil and oil filter','Every 100 h or yearly',100],['air','Air filter','Every 400 h',400],['imp','Impeller','Yearly',0],['ff','Fuel filters','Every 200 h',200],
+  ['doil','Drive oil (DP-G)','Yearly',0],['anode','Anodes on the drives','Yearly',0],['belt','Belts: compressor and alternator','Check yearly',0],['bell','Drive bellows and joints','Check yearly',0]];
 function serviceCard(es){
   const hrs=es.map(e=>e.hrs).filter(h=>fin(h)&&h>0),cur=hrs.length?Math.max(...hrs):null;
   return `<div class="card" style="padding:6px 20px 8px"><div class="cth" style="padding:14px 0 6px"><span class="ct">Service</span><span class="s12 sub">${cur!=null?'engine hours '+NF(cur,1):'from engine hours'}</span></div>
@@ -1005,7 +988,320 @@ function serviceCard(es){
         if(id==='oil'&&last.t&&last.t+365*86400<Date.now()/1000){due='yearly · due';soon=true;}
       }
       return `<div style="border-top:1px solid var(--line)"><button class="row" data-a="svcOpen" data-v="${id}"><span><span class="rt">${t}</span><span class="rh">${every}</span></span><span style="font-size:14px;font-weight:600;white-space:nowrap;color:${soon?'var(--orange)':'var(--sub)'}">${due}</span></button>
-        ${open?`<div class="cth" style="align-items:center;padding:0 0 12px"><span class="s12 sub">${last?'Last done '+(last.t?new Date(last.t*1000).toLocaleDateString(LOC):'')+(fin(last.h)?' at '+NF(last.h,1)+' h':''):'Not set yet. Tap when it is done, or after the next service.'}</span><button class="btn sm pri" data-a="svcDone" data-v="${id}">Done today</button></div>`:''}</div>`;}).join('')}</div>`;
+        ${open?`<div class="cth" style="align-items:center;padding:0 0 12px"><span class="s12 sub">${last?'Last done '+(last.t?new Date(last.t*1000).toLocaleDateString(LOC):'')+(fin(last.h)?' at '+NF(last.h,1)+' h':''):'Not set yet. Tap when it is done, or after the next service.'}</span><button class="btn sm pri" data-a="svcDone" data-v="${id}">Done today</button></div>`:''}</div>`;}).join('')}
+    <div class="s12 sub" style="border-top:1px solid var(--line);padding:10px 0 6px">Reminders only: the Volvo Penta service book for the KAD300 and the DP-G drive decides what is due.</div></div>`;
+}
+
+// ---------- Gear and clutch ----------
+// A KAD300/DP shifts electrically (the EDC drives a shift actuator); a cone
+// clutch in the drive couples the propeller. EngineLink times each shift at
+// idle from the gear bits and from the fuel the propeller costs.
+const GEARN={N:'Neutral',F:'Forward',R:'Reverse',G:'In gear','?':'—'};
+const msTxt=v=>fin(v)?NF(v/1000,1)+' s':'—';
+function shiftsFor(ch){return S.shifts&&S.shifts.e?S.shifts.e[ch]:null;}
+// Lags of the newest shifts of one kind, oldest first.
+function lagSeries(ch,kind,n=40){return ((S.shifts&&S.shifts.list)||[]).filter(r=>r[2]===ch&&r[3]===kind&&r[6]>=0).slice(0,n).map(r=>r[6]).reverse();}
+function spark(vals,color,maxV){
+  if(vals.length<2)return '<span class="s12 sub">Needs a few shifts</span>';
+  const W=120,H=28,mx=Math.max(maxV||0,...vals,500);
+  const pts=vals.map((v,i)=>(i/(vals.length-1)*W).toFixed(1)+','+(H-2-v/mx*(H-4)).toFixed(1)).join(' ');
+  return `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" style="display:block;width:100%;max-width:${W}px;height:${H}px" aria-hidden="true"><polyline points="${pts}" fill="none" stroke="${color}" stroke-width="1.8" stroke-linejoin="round" vector-effect="non-scaling-stroke"/></svg>`;
+}
+function gearCard(es){
+  const sh=S.shifts,lv=S.live;
+  const learned=sh?sh.gl:!!(cfgv()&&cfgv().gear&&(cfgv().gear[0]||cfgv().gear[2]));
+  let h=`<div class="card"><div class="cth"><span class="ct">Gear and clutch</span><span class="s12 sub">${learned?'shifts at idle':'drive test not done yet'}</span></div>`;
+  h+=`<div class="grid2" style="gap:10px;margin-top:12px">${es.map(e=>{
+    const g=e.run?(e.g||'?'):'?',ld=e.run?e.ld:null;
+    const st=!e.run?'Not running':ld===true?(g==='N'?'In neutral, but the propeller pulls':'Propeller pulls'):ld===false?'Propeller free':'—';
+    const warn=ld===true&&g==='N';
+    return `<div style="background:var(--track);border-radius:14px;padding:10px 12px;min-width:0"><div class="lbl" style="color:${e.color}"><span class="dot" style="background:${e.color}"></span>${e.name}</div>
+      <div style="font-size:20px;font-weight:650;margin-top:6px">${learned?GEARN[g]||'—':'—'}</div><div class="s12" style="margin-top:2px;color:${warn?'var(--orange)':'var(--sub)'}">${st}</div></div>`;}).join('')}</div>`;
+  if(sh&&sh.e){
+    h+=`<div style="display:grid;grid-template-columns:auto repeat(2,minmax(0,1fr));gap:8px 12px;margin-top:14px;font-size:13px;align-items:center">
+      <span></span>${es.map(e=>`<span style="color:${e.color};font-weight:600">${e.name}</span>`).join('')}
+      <span class="sub">Shifts</span>${es.map(e=>`<span>${NF(sh.e[e.ch].eng,0)}</span>`).join('')}
+      <span class="sub">Lever to clutch in</span>${es.map(e=>`<span>${msTxt(sh.e[e.ch].engAvg)}</span>`).join('')}
+      <span class="sub">Neutral to clutch out</span>${es.map(e=>{const x=sh.e[e.ch],slow=fin(x.disAvg)&&fin(x.disFirst)&&x.disN>=25&&x.disAvg>x.disFirst*1.5+300;return `<span style="color:${slow?'var(--orange)':'var(--text)'}">${msTxt(x.disAvg)}${fin(x.disFirst)&&x.disN>=25?` <span class="sub">(first ${msTxt(x.disFirst)})</span>`:''}</span>`;}).join('')}
+      <span class="sub">Hard shifts</span>${es.map(e=>`<span style="color:${sh.e[e.ch].hard?'var(--orange)':'var(--text)'}">${NF(sh.e[e.ch].hard,0)}</span>`).join('')}
+      <span class="sub">Pulled in neutral</span>${es.map(e=>`<span style="color:${sh.e[e.ch].pull?'var(--red)':'var(--text)'}">${NF(sh.e[e.ch].pull,0)}</span>`).join('')}
+      <span class="sub">Clutch out, last shifts</span>${es.map(e=>`<span style="min-width:0">${spark(lagSeries(e.ch,2),e.color,3000)}</span>`).join('')}</div>`;
+  }
+  h+=`<div class="s12 sub" style="margin-top:12px">When the lever goes to neutral, the clutch should let go within about a second. If the propeller keeps pulling, EngineLink lists it under Events. Fast shifts from forward to reverse, or shifts above idle, wear the cone clutch: pause in neutral.</div>`;
+  h+=`<div class="grid2" style="gap:8px;margin-top:12px"><button class="btn sm" data-a="page" data-v="dtest" data-b="engines">${learned?'Run the drive test again':'Start the drive test'}</button><button class="btn sm" data-a="mechReport">For the mechanic</button></div></div>`;
+  return h;
+}
+// The two engines side by side: idle, compressor, warm-up and charging.
+function twinCard(es){
+  const sh=S.shifts;if(!sh||!sh.e||es.length<2)return '';
+  const row=(label,f,hint)=>`<span class="sub">${label}</span>${es.map(e=>`<span>${f(sh.e[e.ch],e)}</span>`).join('')}`;
+  const idle=es.map(e=>sh.e[e.ch].idleLph),idleDiff=fin(idle[0])&&fin(idle[1])&&Math.min(...idle)>0?(Math.max(...idle)/Math.min(...idle)-1):null;
+  return `<div class="card"><div class="ct">Side by side</div><div class="s12 sub" style="margin-top:2px">What each engine shows under the same conditions. Two healthy engines of the same kind stay close.</div>
+    <div style="display:grid;grid-template-columns:auto repeat(2,minmax(0,1fr));gap:8px 12px;margin-top:12px;font-size:13px;align-items:center">
+    <span></span>${es.map(e=>`<span style="color:${e.color};font-weight:600">${e.name}</span>`).join('')}
+    ${row('Idle in neutral',x=>fin(x.idleLph)?L(x.idleLph,2)+' '+U.ru():'—')}
+    ${row('Idle rpm',x=>fin(x.idleRpm)?NF(x.idleRpm,0):'—')}
+    ${row('Compressor came on',x=>x.accels?NF(x.compOn,0)+' of '+NF(x.accels,0):sh.cl?'No accelerations yet':'Not learned')}
+    ${row('Boost on accelerating',x=>fin(x.boostPeak)?NF(U.press(x.boostPeak),imp()?1:2)+' '+U.pu():'—')}
+    ${row('Warm-up to '+NF(U.temp(60),0)+' '+U.tu(),x=>fin(x.warmLast)?dur(x.warmLast)+(fin(x.warmAvg)&&x.warmN>2?' <span class="sub">(usually '+dur(x.warmAvg)+')</span>':''):'—')}
+    ${row('Charge air now',(x,e)=>fin(ev(e,261))?TT(ev(e,261)):'—')}
+    ${row('Charging',x=>fin(x.voltRun)?NF(x.voltRun,1)+' V':'—')}
+    ${row('Lowest this trip',x=>fin(x.voltMin)?NF(x.voltMin,1)+' V':'—')}</div>
+    ${idleDiff!=null&&idleDiff>0.12?`<div class="s12" style="margin-top:10px;color:var(--orange)">One engine uses ${NF(idleDiff*100,0)} % more fuel at idle in neutral. Worth a look if it stays: alternator load, injectors or the idle setting.</div>`:''}</div>`;
+}
+
+// ---------- Drive test ----------
+// Guided: the owner shifts, EngineLink reads and learns what the gear and
+// compressor bits mean on this boat, and how quickly each drive engages and
+// lets go. At the dock one engine at a time and only at idle; on open water
+// the same, plus steady rpm steps for the compressor and the sync.
+const DT_SAFE={
+  dock:[['lines','Moored securely','Bow, stern and both spring lines, fenders out. The boat will pull on the lines in gear.'],
+        ['swim','Nobody in the water','No one swimming or working near the drives. The propellers turn in gear.'],
+        ['stop','Know how to stop','If a drive does not go to neutral: stop that engine with the key or stop button. Find it now.'],
+        ['warm','Engines at idle','Both engines running at idle for a few minutes, levers in neutral.']],
+  sea:[['space','Open water','Room in every direction, no boats close by, calm water.'],
+       ['look','Someone keeps a lookout','A second person watches ahead while you look at the phone.'],
+       ['swim','Nobody in the water','Swim ladder up, no one near the stern.'],
+       ['stop','Know how to stop','If a drive does not go to neutral: stop that engine with the key or stop button.']]};
+function dtSteps(place,es){
+  const st=[];
+  for(const e of es){
+    const n=e.name,o=es.find(x=>x!==e);
+    const other=o?' Leave '+o.name.toLowerCase()+' in neutral.':'';
+    st.push({k:'N',ch:e.ch,lever:'N',s:8,t:n+': neutral',d:'Both levers in neutral, engines at idle.',now:'Keep both levers in neutral'});
+    st.push({k:'F',ch:e.ch,lever:'F',s:11,t:n+': forward',d:'The '+n.toLowerCase()+' lever goes into forward and stays at idle.'+other,now:'Now: '+n.toLowerCase()+' lever into forward, at idle'});
+    st.push({k:'N',ch:e.ch,lever:'N',s:11,t:n+': neutral',d:'The '+n.toLowerCase()+' lever goes back to neutral.',now:'Now: back to neutral'});
+    st.push({k:'R',ch:e.ch,lever:'R',s:11,t:n+': reverse',d:'Into reverse, at idle.'+other,now:'Now: into reverse, at idle'});
+    st.push({k:'N',ch:e.ch,lever:'N',s:11,t:n+': neutral',d:'Back to neutral.',now:'Now: back to neutral'});
+    st.push({k:'V',ch:e.ch,lever:'V',s:12,opt:true,t:n+': a rev in neutral',d:'Only if your control can give throttle in neutral (warm-up mode): a short, smooth rev to about 1,500 rpm, then back to idle. Skip it if you are not sure how.',now:'Now: a short rev to about 1,500 rpm, then idle'});
+  }
+  if(place==='sea'){
+    st.push({k:'S1',lever:'F1',s:16,t:'Both: 1,000 rpm',d:'Both levers forward, to about 1,000 rpm, side by side.',now:'Now: both to about 1,000 rpm and hold'});
+    st.push({k:'S2',lever:'F2',s:16,t:'Both: 1,500 rpm',d:'Both levers to about 1,500 rpm.',now:'Now: both to about 1,500 rpm and hold'});
+    st.push({k:'S3',lever:'F3',s:16,t:'Both: 2,000 rpm',d:'Both levers to about 2,000 rpm.',now:'Now: both to about 2,000 rpm and hold'});
+    st.push({k:'A0',lever:'F',s:8,t:'Both: back to idle',d:'Back to idle, still in forward.',now:'Now: both back to idle'});
+    st.push({k:'A',lever:'F3',s:12,t:'Both: accelerate',d:'From idle, accelerate smoothly to about 2,000 rpm, the way you would leave harbour.',now:'Now: accelerate smoothly to about 2,000 rpm'});
+    st.push({k:'E',lever:'N',s:10,t:'Both: idle and neutral',d:'Back to idle, then both levers to neutral.',now:'Now: idle, then neutral'});
+  }
+  return st;
+}
+const rmo='@media (prefers-reduced-motion:reduce){.anim *{animation:none!important}}';
+// Small looping scenes, slow and calm. Colours come from the theme.
+function dtAnim(kind){
+  const W=240,Hh=120;
+  const wrap=(body,kf)=>`<div class="anim" style="background:var(--track);border-radius:18px;padding:8px;display:flex;justify-content:center"><style>${kf}${rmo}</style><svg viewBox="0 0 ${W} ${Hh}" width="100%" style="max-width:320px;display:block" role="img" aria-hidden="true">${body}</svg></div>`;
+  const water='<path d="M0 96 Q15 90 30 96 T60 96 T90 96 T120 96 T150 96 T180 96 T210 96 T240 96 V120 H0Z" fill="var(--blue)" opacity=".22"/>';
+  if(kind==='lines')return wrap(`<rect x="10" y="12" width="220" height="16" rx="3" fill="var(--sub)" opacity=".45"/>
+      <path d="M50 44 H178 Q206 44 216 62 Q206 80 178 80 H50 Q40 62 50 44Z" fill="var(--card)" stroke="var(--text)" stroke-width="2"/>
+      ${[[60,44,40,28],[196,48,214,28],[110,44,150,28],[150,44,110,28]].map((l,i)=>`<path d="M${l[0]} ${l[1]} L${l[2]} ${l[3]}" stroke="var(--teal)" stroke-width="2.6" stroke-linecap="round" class="ln${i}"/>`).join('')}
+      <circle cx="70" cy="34" r="4" fill="var(--orange)"/><circle cx="170" cy="34" r="4" fill="var(--orange)"/>`,
+      [0,1,2,3].map(i=>`.ln${i}{stroke-dasharray:60;stroke-dashoffset:60;animation:draw 6s ${i*0.9}s ease-in-out infinite}`).join('')+'@keyframes draw{0%{stroke-dashoffset:60}25%,80%{stroke-dashoffset:0}100%{stroke-dashoffset:60}}');
+  if(kind==='swim')return wrap(`${water}<rect x="96" y="18" width="20" height="62" rx="6" fill="var(--sub)"/><rect x="88" y="74" width="40" height="12" rx="5" fill="var(--sub)"/>
+      <g class="prop"><ellipse cx="140" cy="80" rx="5" ry="16" fill="var(--text)"/><ellipse cx="140" cy="80" rx="16" ry="5" fill="var(--text)"/></g>
+      <g transform="translate(184 52)"><circle r="24" fill="none" stroke="var(--red)" stroke-width="4"/><circle cx="0" cy="-8" r="5" fill="var(--text)"/><path d="M-10 6 Q0 -2 10 6" stroke="var(--text)" stroke-width="4" fill="none" stroke-linecap="round"/><path d="M-17 -17 L17 17" stroke="var(--red)" stroke-width="4"/></g>`,
+      '.prop{transform-origin:140px 80px;animation:spin 3s linear infinite}@keyframes spin{to{transform:rotate(360deg)}}');
+  if(kind==='stop')return wrap(`<circle cx="80" cy="60" r="34" fill="var(--card)" stroke="var(--text)" stroke-width="2"/>
+      <text x="80" y="24" font-size="10" text-anchor="middle" fill="var(--sub)">ON</text><text x="44" y="64" font-size="10" text-anchor="middle" fill="var(--red)">STOP</text>
+      <g class="key"><rect x="76" y="34" width="8" height="40" rx="3" fill="var(--text)"/><circle cx="80" cy="80" r="9" fill="var(--text)"/></g>
+      <g class="btn"><circle cx="180" cy="60" r="24" fill="var(--red)"/><text x="180" y="64" font-size="11" font-weight="700" text-anchor="middle" fill="#fff">STOP</text></g>`,
+      '.key{transform-origin:80px 60px;animation:turn 5s ease-in-out infinite}@keyframes turn{0%,30%{transform:rotate(0)}50%,80%{transform:rotate(-70deg)}100%{transform:rotate(0)}}.btn{transform-origin:180px 60px;animation:press 5s ease-in-out infinite}@keyframes press{0%,40%{transform:scale(1)}55%{transform:scale(.88)}70%,100%{transform:scale(1)}}');
+  if(kind==='warm')return wrap(`<rect x="104" y="14" width="18" height="74" rx="9" fill="var(--card)" stroke="var(--text)" stroke-width="2"/><circle cx="113" cy="94" r="14" fill="var(--orange)"/>
+      <rect class="fill" x="108" y="30" width="10" height="60" rx="5" fill="var(--orange)"/>
+      <text x="150" y="40" font-size="12" fill="var(--sub)">idle</text><text x="150" y="58" font-size="20" font-weight="700" fill="var(--text)">600</text><text x="150" y="72" font-size="11" fill="var(--sub)">rpm</text>`,
+      '.fill{transform-origin:113px 90px;animation:rise 6s ease-in-out infinite}@keyframes rise{0%{transform:scaleY(.15)}70%,100%{transform:scaleY(1)}}');
+  if(kind==='space')return wrap(`${water}<circle class="zone" cx="120" cy="60" r="44" fill="none" stroke="var(--teal)" stroke-width="2" stroke-dasharray="5 6"/>
+      <path d="M102 54 H132 Q144 54 150 60 Q144 66 132 66 H102 Q98 60 102 54Z" fill="var(--card)" stroke="var(--text)" stroke-width="2"/>`,
+      '.zone{transform-origin:120px 60px;animation:grow 5s ease-in-out infinite}@keyframes grow{0%{transform:scale(.6);opacity:.2}60%{transform:scale(1.15);opacity:1}100%{transform:scale(.6);opacity:.2}}');
+  if(kind==='look')return wrap(`<ellipse cx="120" cy="58" rx="56" ry="30" fill="var(--card)" stroke="var(--text)" stroke-width="2"/><circle class="eye" cx="120" cy="58" r="14" fill="var(--teal)"/><circle class="eye" cx="120" cy="58" r="6" fill="var(--text)"/>`,
+      '.eye{animation:scan 6s ease-in-out infinite}@keyframes scan{0%,100%{transform:translateX(-30px)}50%{transform:translateX(30px)}}');
+  // The control lever: N straight up, forward ahead, reverse back; F1-F3 further ahead.
+  const ang={N:0,F:24,R:-24,F1:34,F2:44,F3:54,V:44}[kind];
+  if(ang!=null){
+    const label=kind==='V'?'neutral + throttle':kind==='N'?'neutral':kind==='R'?'reverse':kind==='F'?'forward, idle':'forward';
+    return wrap(`<path d="M60 100 Q120 62 180 100" fill="none" stroke="var(--line)" stroke-width="8" stroke-linecap="round"/>
+      <text x="48" y="114" font-size="10" fill="var(--sub)">R</text><text x="116" y="58" font-size="10" fill="var(--sub)">N</text><text x="186" y="114" font-size="10" fill="var(--sub)">F</text>
+      <rect x="92" y="96" width="56" height="18" rx="6" fill="var(--sub)"/>
+      <g class="lev"><rect x="116" y="38" width="8" height="64" rx="4" fill="var(--text)"/><rect x="104" y="28" width="32" height="16" rx="8" fill="${kind==='R'?'var(--orange)':kind==='N'?'var(--sub)':'var(--teal)'}"/></g>
+      <text x="12" y="20" font-size="11" fill="var(--text)">${label}</text>
+      ${kind==='V'?'<g class="rpm"><circle cx="40" cy="36" r="22" fill="var(--card)" stroke="var(--text)" stroke-width="2"/><path class="ndl" d="M40 36 L40 18" stroke="var(--orange)" stroke-width="3" stroke-linecap="round"/></g>':''}`,
+      `.lev{transform-origin:120px 104px;animation:lv 6s ease-in-out infinite}@keyframes lv{0%,15%{transform:rotate(0)}45%,85%{transform:rotate(${ang}deg)}100%{transform:rotate(0)}}`+
+      (kind==='V'?'.ndl{transform-origin:40px 36px;animation:nd 6s ease-in-out infinite}@keyframes nd{0%,20%{transform:rotate(-60deg)}55%{transform:rotate(40deg)}85%,100%{transform:rotate(-60deg)}}':''));
+  }
+  return '';
+}
+function dtState(){return S.dt||(S.dt={phase:'intro',place:null,checks:{},step:0,rec:[],busy:false,left:0,res:null});}
+function dtView(){
+  const d=dtState(),es=engines(),lv=S.live;
+  let h=backPill();
+  if(d.phase==='intro'){
+    h+=`<div class="card"><div class="ct" style="font-size:17px">What the test does</div>
+      <div class="s14" style="margin-top:6px">You shift, EngineLink reads. In about ${es.length>1?'5':'3'} minutes it learns how your control units report neutral, forward and reverse, and the compressor, and measures how quickly each drive engages and lets go. Afterwards it can tell when a propeller keeps pulling in neutral.</div>
+      <div class="s13 sub" style="margin-top:8px">EngineLink only sends read requests. It never shifts, never changes the throttle and never sends commands.</div></div>
+      <div class="hd" style="margin-top:18px">Where are you?</div>
+      <div class="grid2" style="gap:10px">
+        <button class="card" style="text-align:left" data-a="dtPlace" data-v="dock">${dtAnim('lines')}<div class="rt" style="font-weight:600;margin-top:10px">At the dock</div><div class="rh">Moored. Gears at idle, one engine at a time.</div></button>
+        <button class="card" style="text-align:left" data-a="dtPlace" data-v="sea">${dtAnim('space')}<div class="rt" style="font-weight:600;margin-top:10px">On open water</div><div class="rh">The same, plus steady rpm steps for the compressor and the sync.</div></button>
+      </div>
+      <div class="s12 sub" style="padding:12px 6px 0">Both give the same gear results. The open-water test also checks the compressor under way and whether the two engines keep the same rpm.</div>`;
+    if(P.dtest&&P.dtest.t)h+=`<div class="s12 sub" style="padding:10px 6px 0">Last test: ${new Date(P.dtest.t*1000).toLocaleDateString(LOC)} (${P.dtest.place==='sea'?'open water':'dock'}).</div>`;
+    return h;
+  }
+  if(d.phase==='safety'){
+    const list=DT_SAFE[d.place],all=list.every(x=>d.checks[x[0]]);
+    h+=`<div class="hd">Before you start · ${d.place==='sea'?'open water':'at the dock'}</div>`;
+    h+=list.map(([k,t,txt])=>`<div class="card" style="margin-bottom:12px">${dtAnim(k)}<div class="cth" style="margin-top:12px;align-items:center"><span><span class="rt" style="font-weight:600">${t}</span><span class="rh">${txt}</span></span><button data-a="dtCheck" data-v="${k}" aria-label="${t}" style="width:34px;height:34px;flex:none;border-radius:50%;display:flex;align-items:center;justify-content:center;background:${d.checks[k]?'var(--teal)':'var(--card)'};border:2px solid ${d.checks[k]?'var(--teal)':'var(--sub)'}">${d.checks[k]?svg(IC.check,18,'var(--onteal)',2.6):''}</button></span></div></div>`).join('');
+    const ready=es.length&&es.every(e=>e.run);
+    h+=`${!ready?'<div class="s13" style="color:var(--orange);padding:0 6px 10px">Start both engines first. They must run at idle.</div>':''}
+      <button class="btn pri" style="width:100%" data-a="dtGo" ${all&&ready?'':'disabled'}>${all?'Start the test':'Tick all '+list.length+' first'}</button>`;
+    return h;
+  }
+  if(d.phase==='run'){
+    const st=d.steps[d.step],e=st.ch!=null?es.find(x=>x.ch===st.ch):null;
+    h+=`<div class="cth" style="padding:0 6px 8px"><span class="s13 sub">Step ${d.step+1} of ${d.steps.length}</span><button class="s13" style="color:var(--red)" data-a="dtStop">Stop the test</button></div>
+      <div class="bar" style="height:6px;margin-bottom:14px"><i style="width:${d.step/d.steps.length*100}%;background:var(--teal)"></i></div>
+      <div class="card">${dtAnim(st.lever)}<div style="font-size:24px;font-weight:700;margin-top:12px;color:${e?e.color:'var(--text)'}">${esc(st.t)}</div><div class="s14" style="margin-top:4px">${esc(st.d)}</div>
+      <div class="grid2" style="gap:10px;margin-top:14px">${es.map(x=>`<div style="background:var(--track);border-radius:12px;padding:8px 10px"><div class="s12" style="color:${x.color}">${x.name}</div><div style="font-weight:600">${fin(x.rpm)?NF(x.rpm,0)+' rpm':'—'} · ${fin(x.lph)?L(x.lph,1)+' '+U.ru():'—'}</div></div>`).join('')}</div>
+      ${d.busy?(()=>{const el=st.s-d.left,now=el>=2;return `<div class="bar" style="height:8px;margin-top:14px"><i style="width:${(1-d.left/st.s)*100}%;background:var(--teal);transition:width .9s linear"></i></div>
+        <div style="font-size:19px;font-weight:650;margin-top:10px;color:${now?'var(--teal)':'var(--sub)'}">${now?esc(st.now):'Get ready…'}</div><div class="s13 sub" style="margin-top:2px">Recording, ${Math.ceil(d.left)} s left.</div>`;})():''}
+      <div class="grid2" style="gap:10px;margin-top:14px">${st.opt?`<button class="btn" data-a="dtSkip" ${d.busy?'disabled':''}>Skip</button>`:'<span></span>'}<button class="btn pri" data-a="dtRec" ${d.busy?'disabled':''}>${d.busy?'Recording…':'Start'}</button></div>
+      ${d.busy?'':'<div class="s12 sub" style="margin-top:8px">Press Start first. After two seconds the app says when to move the lever.</div>'}</div>`;
+    return h;
+  }
+  // Results
+  const r=d.res;if(!r)return h+waiting('Working it out…');
+  const fmt=x=>x?'0x'+x[0].toString(16).toUpperCase()+' = 0x'+x[1].toString(16).toUpperCase():'not found';
+  h+=`<div class="card"><div class="ct" style="font-size:17px">${r.f?'Gear learned':'Gear not found'}</div>
+    <div class="s14" style="margin-top:6px">${r.f?(r.same?'The control units tell neutral from in gear (bits '+fmt(r.f)+'), not forward from reverse.':'Forward: '+fmt(r.f)+'. Reverse: '+fmt(r.r)+'.'):'No bits changed steadily between neutral and gear. Check that both engines were read (Diagnostics › Connection) and that the levers were really shifted.'}</div>
+    <div class="s14" style="margin-top:6px">${r.comp?'Compressor bit found: '+fmt(r.comp)+'.':'Compressor bit: '+(r.revDone?'not seen.':'needs the rev step.')}</div></div>`;
+  h+=`<div class="card" style="margin-top:12px"><div class="ct">Each drive</div>
+    <div style="display:grid;grid-template-columns:auto repeat(${es.length},minmax(0,1fr));gap:8px 12px;margin-top:10px;font-size:13px">
+    <span></span>${es.map(e=>`<span style="color:${e.color};font-weight:600">${e.name}</span>`).join('')}
+    <span class="sub">Idle fuel, neutral</span>${es.map(e=>`<span>${fin(r.e[e.ch].n)?L(r.e[e.ch].n,2)+' '+U.ru():'—'}</span>`).join('')}
+    <span class="sub">Idle fuel, in gear</span>${es.map(e=>`<span>${fin(r.e[e.ch].g)?L(r.e[e.ch].g,2)+' '+U.ru():'—'}</span>`).join('')}
+    <span class="sub">Lever to clutch in</span>${es.map(e=>`<span>${msTxt(r.e[e.ch].engMs)}</span>`).join('')}
+    <span class="sub">Neutral to clutch out</span>${es.map(e=>{const v=r.e[e.ch].disMs;return `<span style="color:${fin(v)&&v>2500?'var(--orange)':'var(--text)'}">${msTxt(v)}</span>`;}).join('')}
+    ${r.sync&&r.sync.length?`<span class="sub">Sync</span>${es.map((e,i)=>i===0?`<span style="grid-column:span ${es.length}">${r.sync.map(s=>NF(s.rpm,0)+' rpm: '+NF(Math.abs(s.d),0)+' apart').join(' · ')}</span>`:'').join('')}`:''}</div>
+    <div class="s12 sub" style="margin-top:10px">Clutch out over about 2.5 s is slow: the propeller keeps pulling after the lever is in neutral. Worth showing a mechanic.</div></div>`;
+  h+=`<div class="grid2" style="gap:10px;margin-top:12px"><button class="btn" data-a="dtAgain">Start over</button><button class="btn pri" data-a="dtSave" ${r.f||r.comp?'':'disabled'}>Save</button></div>`;
+  return h;
+}
+// Samples of one step and engine, without the first seconds (lever moving).
+function dtSamples(rec,ch,skipMs){
+  const out=[];if(!rec||!rec.t)return out;
+  const t0=rec.t[0]||0;
+  rec.t.forEach((t,i)=>{if(t-t0<skipMs)return;out.push({t:rec.ms0+t,rpm:rec.rpm[ch][i],lph:rec.lph[ch][i],st:rec.st[ch][i],boost:rec.boost[ch][i],req:rec.req[ch][i]});});
+  return out;
+}
+const mean=a=>{const v=a.filter(fin);return v.length?v.reduce((x,y)=>x+y,0)/v.length:null;};
+// Time from the gear bits changing to the clutch, within one step's samples.
+function dtLag(all,isTarget,loadedWanted,base){
+  if(!fin(base))return null;
+  const ld=s=>fin(s.lph)&&s.lph>base*1.22&&s.lph-base>0.35;
+  let tb=null;
+  for(const s of all){if(tb==null&&s.st!=null&&isTarget(s.st))tb=s.t;if(tb!=null&&s.t>=tb-200&&fin(s.lph)){const idx=all.indexOf(s),nx=all[idx+1];if(ld(s)===loadedWanted&&(!nx||ld(nx)===loadedWanted))return Math.max(0,s.t-tb);}}
+  return null;
+}
+function dtResult(d){
+  const es=engines(),res={e:{},sync:[]};
+  const by=(k,ch,skip=5000)=>d.rec.filter(x=>x.k===k&&(x.ch===ch||x.ch==null)).flatMap(x=>dtSamples(x.data,ch,skip));
+  const per=[0,1].map(ch=>{const n=by('N',ch).map(s=>s.st).filter(v=>v!=null);return [learnBits(n,by('F',ch).map(s=>s.st).filter(v=>v!=null)),learnBits(n,by('R',ch).map(s=>s.st).filter(v=>v!=null))];});
+  let f=joinBits(per[0][0],per[1][0]),r=joinBits(per[0][1],per[1][1]);
+  res.same=!!(f&&r&&f[0]===r[0]&&f[1]===r[1]);
+  if(f&&!r){r=f;res.same=true;}
+  res.f=f;res.r=r;
+  const gm=(f?f[0]:0)|(r?r[0]:0);
+  const inG=v=>v!=null&&((f&&(v&f[0])===f[1])||(r&&(v&r[0])===r[1]));
+  // Compressor: steady in neutral idle, on while revving (rpm over 1,200).
+  const comp=[0,1].map(ch=>{const idle=by('N',ch).map(s=>s.st).filter(v=>v!=null),hi=by('V',ch,0).concat(by('A',ch,0)).filter(s=>fin(s.rpm)&&s.rpm>1200).map(s=>s.st).filter(v=>v!=null);const b=learnBits(idle,hi);return b&&(b[0]&~gm)?[b[0]&~gm,b[1]&~gm]:null;});
+  res.comp=joinBits(comp[0],comp[1]);
+  res.revDone=d.rec.some(x=>x.k==='V'||x.k==='A');
+  for(const e of es){
+    const ch=e.ch,n=mean(by('N',ch).map(s=>s.lph)),g=mean(by('F',ch).concat(by('R',ch)).map(s=>s.lph));
+    // Transitions: into gear (F, R steps from their start) and out (the N step after them).
+    const engL=[],disL=[];
+    d.rec.forEach((x,i)=>{
+      if(x.ch!==ch)return;
+      const all=dtSamples(x.data,ch,0);
+      if(x.k==='F'||x.k==='R'){const v=dtLag(all,inG,true,n);if(v!=null)engL.push(v);}
+      if(x.k==='N'&&i>0&&(d.rec[i-1].k==='F'||d.rec[i-1].k==='R')){const v=dtLag(all,s=>!inG(s),false,n);if(v!=null)disL.push(v);}
+    });
+    res.e[ch]={n,g,engMs:mean(engL),disMs:mean(disL)};
+  }
+  for(const k of ['S1','S2','S3']){
+    const x=d.rec.find(y=>y.k===k);if(!x)continue;
+    const a=mean(dtSamples(x.data,0,6000).map(s=>s.rpm)),b=mean(dtSamples(x.data,1,6000).map(s=>s.rpm));
+    if(fin(a)&&fin(b))res.sync.push({rpm:(a+b)/2,d:a-b});
+  }
+  return res;
+}
+async function dtRecord(){
+  const d=dtState();if(d.busy)return;
+  const st=d.steps[d.step];
+  d.busy=true;d.left=st.s;render(true);
+  for(const e of engines())if(!e.poll)await post('/api/diag/test',{ch:e.ch});
+  await post('/api/diag/focus',{idx:264,idx2:265,secs:Math.min(180,st.s+20)});
+  let since=null;const data={ms0:null,t:[],rpm:[[],[]],lph:[[],[]],st:[[],[]],boost:[[],[]],req:[[],[]]};
+  const until=Date.now()+st.s*1000;
+  while(Date.now()<until&&S.dt===d&&d.phase==='run'){
+    await new Promise(r=>setTimeout(r,1000));
+    try{
+      const f=await get('/api/fast?'+(since==null?'secs=5':'since='+since),3000);
+      if(f&&f.t&&f.t.length){
+        if(since==null){data.ms0=f.ms0;}
+        f.t.forEach((t,i)=>{const ms=f.ms0+t;if(since==null&&f.now-ms>1500)return;data.t.push(ms-data.ms0);for(const c of [0,1]){data.rpm[c].push(f.rpm[c][i]);data.lph[c].push(f.lph[c][i]);data.st[c].push(f.st[c][i]);data.boost[c].push(f.boost[c][i]);data.req[c].push(f.req[c][i]);}});
+        since=f.ms0+f.t[f.t.length-1];
+      }
+    }catch(e){}
+    d.left=Math.max(0,(until-Date.now())/1000);render(true);
+  }
+  if(S.dt!==d||d.phase!=='run')return;
+  d.rec.push({k:st.k,ch:st.ch,data});
+  d.busy=false;d.step++;
+  if(d.step>=d.steps.length){d.phase='done';d.res=dtResult(d);}
+  render(true);$('#main').scrollTop=0;
+}
+// Four readings a second around an event: rpm on top, fuel below, and a band
+// where the propeller pulls (from the fuel) and where the bits say neutral.
+function fastChart(f,markMs){
+  if(!f||!f.t||!f.t.length)return '<div class="empty">No fast recording.</div>';
+  const W=320,H=210,P=[34,8,8,18],t=f.t,t1=t[t.length-1]||1;
+  const X=s=>P[0]+s/Math.max(1,t1)*(W-P[0]-P[1]);
+  const pane=(key,y0,h,minSpan,dec,conv)=>{
+    const vals=[0,1].map(c=>(f[key]||[[],[]])[c].map(v=>v==null?null:conv(v)));
+    const all=vals.flat().filter(v=>v!=null);if(!all.length)return '';
+    let lo=Math.min(...all),hi=Math.max(...all);if(hi-lo<minSpan){const m=(hi+lo)/2;lo=m-minSpan/2;hi=m+minSpan/2;}
+    const Y=v=>y0+(hi-v)/(hi-lo)*h;
+    const line=c=>{let d='',on=false;vals[c].forEach((v,i)=>{if(v==null){on=false;return;}d+=(on?'L':'M')+X(t[i]).toFixed(1)+' '+Y(v).toFixed(1);on=true;});return d;};
+    return [lo,hi].map(v=>`<text x="${P[0]-4}" y="${Y(v)+3.5}" text-anchor="end" font-size="9.5" fill="var(--sub)">${NF(v,dec)}</text>`).join('')+
+      `<line x1="${P[0]}" x2="${W-P[1]}" y1="${y0+h}" y2="${y0+h}" stroke="var(--line)"/>`+[0,1].map(c=>`<path d="${line(c)}" fill="none" stroke="${engCol(c)}" stroke-width="1.7" stroke-linejoin="round"/>`).join('');
+  };
+  // Bands: for each engine a strip, teal where the propeller pulls, grey where neutral.
+  const band=(c,y)=>{let h='';const fl=f.fl?f.fl[c]:[],g=f.gear?f.gear[c]:[];
+    for(let i=0;i<t.length-1;i++){const x=X(t[i]),w=Math.max(0.6,X(t[i+1])-x);
+      if(fl[i]&1)h+=`<rect x="${x.toFixed(1)}" y="${y}" width="${w.toFixed(1)}" height="5" fill="${engCol(c)}"/>`;
+      else if(g[i]===1)h+=`<rect x="${x.toFixed(1)}" y="${y+1.5}" width="${w.toFixed(1)}" height="2" fill="var(--sub)" opacity=".6"/>`;}
+    return h;};
+  const mk=markMs!=null&&markMs>=0&&markMs<=t1?`<line x1="${X(markMs)}" x2="${X(markMs)}" y1="${P[2]}" y2="${H-P[3]}" stroke="var(--orange)" stroke-dasharray="3 3"/>`:'';
+  return `<svg viewBox="0 0 ${W} ${H}" width="100%" style="display:block" role="img" aria-label="Rpm and fuel four times a second">
+    ${pane('rpm',P[2],70,200,0,v=>v)}${pane('lph',P[2]+86,56,2,1,v=>imp()?v*0.264172:v)}
+    ${band(0,P[2]+156)}${band(1,P[2]+166)}${mk}
+    <text x="${P[0]}" y="${H-3}" font-size="9.5" fill="var(--sub)">${f.utc0?hm(f.utc0):'0 s'}</text><text x="${W-P[1]}" y="${H-3}" font-size="9.5" fill="var(--sub)" text-anchor="end">+${NF(t1/1000,0)} s</text></svg>
+    <div class="s12 sub" style="margin-top:4px">Top: rpm. Middle: fuel (${U.ru()}). Bands: <span style="color:${engCol(0)}">${engName(0)}</span> and <span style="color:${engCol(1)}">${engName(1)}</span>, solid where the propeller pulls, a thin line where the gear bits say neutral.</div>`;
+}
+// The boat: what is known for this installation, and the owner's own notes.
+const BOAT_SPEC=[['Boat','Fairline Targa 34'],['Engines','2 × Volvo Penta KAD300, 6 cylinders, 3.6 L'],['Power','210 kW (285 hp) each at 3,800 rpm'],['Air','Belt-driven compressor and turbo with aftercooler, both run by the EDC'],['Control','EDC I: electronic throttle and electrical shift, twin-engine sync'],['Drive','Volvo Penta DP-G Duoprop, ratio 1.68:1, cone clutch'],['Electrics','12 V, 14 V / 60 A alternator per engine']];
+const BOAT_FIELDS=[['engP','Engine serial, port'],['engS','Engine serial, starboard'],['drvP','Drive serial, port'],['drvS','Drive serial, starboard'],['notes','Notes (propellers, last service, anything)']];
+function boatView(){
+  const b=P.boat||{},t=P.dtest;
+  let h=backPill();
+  h+=`<div class="hd">The boat</div><div class="sec">${BOAT_SPEC.map(([k,v])=>`<div class="row"><span class="rt">${k}</span><span class="rv" style="white-space:normal;text-align:right;max-width:62%">${esc(v)}</span></div>`).join('')}</div>`;
+  h+=`<div class="hd">Your notes</div><div class="sec" style="padding:12px 18px"><div class="stack" style="gap:10px">${BOAT_FIELDS.map(([k,l])=>`<label class="s12 sub">${l}<input class="field" style="margin-top:4px" data-i="boat" data-k="${k}" value="${esc(b[k]||'')}" autocapitalize="off" autocorrect="off" spellcheck="false" aria-label="${l}"></label>`).join('')}
+    <div class="s12 sub">Kept on EngineLink only. Never sent in reports.</div></div></div>`;
+  h+=`<div class="hd">Drive test</div><div class="sec"><div class="rowx"><div class="rt">${t&&t.t?'Last done '+new Date(t.t*1000).toLocaleDateString(LOC)+' · '+(t.place==='sea'?'open water':'at the dock'):'Not done yet'}</div>
+    ${t&&t.e?`<div class="s12 sub" style="margin-top:4px">${engines().map(e=>{const x=t.e[e.ch];return x?e.name+': clutch in '+msTxt(x.engMs)+', out '+msTxt(x.disMs):'';}).filter(Boolean).join(' · ')}</div>`:''}
+    <button class="btn sm" style="margin-top:10px" data-a="page" data-v="dtest" data-b="more">${t&&t.t?'Run it again':'Start the drive test'}</button></div></div>`;
+  return h;
 }
 
 // ---------- Settings ----------
@@ -1020,6 +1316,7 @@ function vSettings(){
   let h='';
   // Boat
   h+=`<div class="hd">Boat</div><div class="sec">
+    ${row('page','boat','My boat','Engines, drives, serial numbers, drive test',rv(P.dtest&&P.dtest.t?'Tested':'Open'))}
     ${row('tankEdit','','Fuel tank size','Both tanks together · set once',rv(c.tankL>0?L(c.tankL,0)+' '+U.vu():'Not set'))}
     ${S.editTank?`<div class="rowx"><div style="background:var(--track);border-radius:16px;padding:14px" class="stack"><div class="s13 sub">Only needs setting once. Changing it later resets the estimate of fuel aboard until the next full tank.</div><label style="display:flex;gap:10px;align-items:center"><input class="field" style="background:var(--card);font-size:20px" inputmode="numeric" data-i="tankDraft" value="${esc(S.tankDraft)}" aria-label="Fuel tank size in litres">${U.vu()}</label><div class="grid2" style="gap:8px"><button class="btn" style="background:var(--card)" data-a="tankEdit">Cancel</button><button class="btn pri" data-a="tankSave">Save</button></div></div></div>`:''}
     ${row('cycle','reserve','Reserve to keep',c.reserve?'Range and planning stop here':'Off · range and planning run to empty',rv(c.reserve?c.reserve+' %':'Off'))}
@@ -1105,7 +1402,9 @@ const EVT={
   'status':[e=>`Status bits changed`,e=>`From ${HEX(e.ref)} to ${HEX(e.v)}. A lamp, relay or switch changed. Note what you saw on the panel: it helps to decode these bits.`],
   'long-idle':[e=>`Idled for 20 minutes`,e=>`Long idling makes a diesel soot up. Run it under load now and then.`],
   'stays-cold':[e=>`Coolant only ${TT(e.v)} after 20 minutes`,e=>`The engine does not warm up under load. The thermostat may be stuck open.`],
-  'mark':[e=>`You marked this moment`,e=>`The two minutes before and after are saved. The curves below show what both engines did.`]
+  'mark':[e=>`You marked this moment`,e=>`The two minutes before and after are saved. The curves below show what both engines did.`],
+  'pull-neutral':[e=>`Propeller still pulled ${NF(e.v,1)} s after neutral`,e=>`The gear bits said neutral, but the engine kept working as if in gear (more fuel at the same idle rpm) for more than ${NF(e.ref,1)} s. The clutch in the drive did not let go in time. Have the shift actuator, its cable and the drive's cone clutch checked before manoeuvring close to anything. Until then: stop the engine with the key if a drive does not go to neutral.`],
+  'hard-shift':[e=>e.ref===2?`Shift at ${NF(e.v,0)} rpm`:`Fast shift between forward and reverse`,e=>e.ref===2?`A shift above idle loads the cone clutch hard. Bring the rpm down to idle first, then shift.`:`Forward to reverse (or back) with ${e.v>0?'only '+NF(e.v/1000,1)+' s':'no pause'} in neutral. This wears the cone clutch in the drive: pause a second or two in neutral.`]
 };
 const SEVC=['var(--blue)','var(--orange)','var(--red)'];
 function evTitle(e){const d=EVT[e.t];return (e.eng<2?engName(e.eng)+': ':'')+(d?d[0](e):e.t);}
@@ -1189,7 +1488,8 @@ function eventsView(){
     h+=`<div style="${i?'border-top:1px solid var(--line)':''}"><button class="row" data-a="evOpen" data-v="${e.id}" style="align-items:flex-start"><span style="display:flex;gap:10px;align-items:flex-start;min-width:0"><span class="dot" style="margin-top:6px;background:${SEVC[e.sev]}"></span><span style="min-width:0"><span class="rt" style="font-weight:${e.ack?400:600}">${esc(evTitle(e))}</span><span class="rh">${evWhen(e)}${e.sev===2?' · alarm':e.sev===1?' · warning':''}</span></span></span><span class="sub">${open?'⌃':'⌄'}</span></button>
       ${open?`<div style="padding:0 0 14px" class="stack"><div class="s13">${d?d[1](e):''}</div>
         ${e.box===3?'<div class="s12 sub">The data around it was not saved (no SD card, or EngineLink restarted).</div>':S.evSeries[e.id]?chartBlock('ev'+e.id,S.evSeries[e.id],e.up-S.evSeries[e.id].up0):'<div class="empty">Loading the recording…</div>'}
-        ${!e.ack?`<button class="btn sm" data-a="evAck" data-v="${e.id}">Seen</button>`:''}</div>`:''}</div>`;
+        ${S.evFast[e.id]&&S.evFast[e.id].t&&S.evFast[e.id].t.length?`<div class="s12 sub" style="font-weight:600;margin-top:4px">Four times a second, a minute before and after</div>${fastChart(S.evFast[e.id],e.up*1000-S.evFast[e.id].ms0)}`:''}
+        <div style="display:flex;gap:8px;flex-wrap:wrap">${!e.ack?`<button class="btn sm" data-a="evAck" data-v="${e.id}">Seen</button>`:''}<button class="btn sm" data-a="evReport" data-v="${e.id}">${svg(IC.doc,15)}For the mechanic</button></div></div>`:''}</div>`;
   });
   return h+'</div>';
 }
@@ -1232,6 +1532,8 @@ const FILLQ=[[1,'Nozzle clicked off','Tank full the normal way'],[2,'Topped up t
 const CALST={1:['var(--green)','Used for calibration'],2:['var(--orange)','Looks odd. Was the tank really full?'],3:['var(--sub)','Not used for calibration'],4:['var(--sub)','Too little fuel since the last full tank to calibrate'],5:['var(--sub)','Starting point for the next full tank']};
 const PAGE_VIEWS={
   events:()=>eventsView(),
+  dtest:()=>dtView(),
+  boat:()=>boatView(),
   trip:()=>tripTimelineView(),
   led:()=>ledView(),
   dest(){
@@ -1387,7 +1689,7 @@ function readingBlock(d,es){
     return `<div class="rowx"><div class="cth"><span class="rt">${esc(e.name)}</span><span class="rv">${r.polling?NF(r.rate,1)+' requests/s':'Not reading'}</span></div>
       <div class="s12 sub" style="margin-top:3px">${r.polling?`A request every ${NF(r.interval,0)} ms${fin(r.answered)?' · '+NF(r.answered*100,0)+' % answered':''}`:'Turn on reading the engines to see the speed.'}${r.skip&&r.skip.length?' · skipped (no answer): '+r.skip.join(', '):''}</div>
       ${d.cov&&d.cov[e.ch]&&d.cov[e.ch].good+d.cov[e.ch].missing>0?`<div class="s12" style="margin-top:4px">Read since start: <b style="color:${covPct(d.cov[e.ch])<97?'var(--orange)':'var(--text)'}">${covText(d.cov[e.ch])}</b> of the running time${d.cov[e.ch].gaps?` · ${d.cov[e.ch].gaps} gap${d.cov[e.ch].gaps>1?'s':''}, longest ${dur2(d.cov[e.ch].longest)}`:' · no gaps'}</div>`:''}
-      ${ds.active?`<div class="s12" style="margin-top:8px">Looking for more values · at ${256+ds.pos} of 256–319${(ds.found||[]).length?' · found so far:':''}</div><div class="s12" style="margin-top:6px">${found}</div>`
+      ${ds.active?`<div class="s12" style="margin-top:8px">Looking for more values · at ${256+ds.pos} of 256–447${(ds.found||[]).length?' · found so far:':''}</div><div class="s12" style="margin-top:6px">${found}</div>`
         :ds.done?`<div class="s12" style="margin-top:8px">${(ds.found||[]).length?'This engine answers:':'No values found.'}</div><div class="s12" style="margin-top:6px">${found}</div>`:''}
       ${r.polling&&!ds.active?`<button class="btn" style="width:100%;margin-top:10px" data-a="discover" data-v="${e.ch}">Discover more values</button>`:''}</div>`;}).join('');
   const ew=d.engineWait;
@@ -1552,21 +1854,6 @@ function renderSheet(){
         <div class="s14 sub">A home-screen app on iPhone cannot save this file directly. Copy it and paste it into a mail or a note.</div>
         <textarea id="filetext" class="field" readonly style="height:180px;font:12px/1.35 ui-monospace,Menlo,monospace">${esc(f.text||'')}</textarea>
         <div class="grid2" style="gap:10px"><button class="btn" data-a="close">Close</button><button class="btn pri" data-a="fileCopy">Copy</button></div>`;
-  }else if(k==='gear'){
-    const g=S.gear||(S.gear={step:0,samples:[],busy:false,prog:0,res:null});
-    if(g.res){
-      const fmt=x=>x?'bits 0x'+x[0].toString(16).toUpperCase()+' = 0x'+x[1].toString(16).toUpperCase():'not found';
-      h=`${grab}<div style="font-size:22px;font-weight:600">${g.res.f?'Gear learned':'Gear not found'}</div>
-        <div class="s14 sub">${g.res.f?'Forward: '+fmt(g.res.f)+'. Reverse: '+fmt(g.res.r)+'.':'No bits changed steadily between neutral and forward. Check that both engines were read (Diagnostics > Connection) and that the levers were really shifted.'}</div>
-        <div class="grid2" style="gap:10px"><button class="btn" data-a="gearAgain">Start over</button><button class="btn ${g.res.f?'pri':''}" ${g.res.f?'':'disabled'} data-a="gearSave">Save</button></div>`;
-    }else{
-      const s=GEARSTEPS[g.step];
-      h=`${grab}<div class="cth" style="align-items:center"><span style="font-size:22px;font-weight:600">Learn the gear</span><span class="s13 sub">Step ${g.step+1} of ${GEARSTEPS.length}</span></div>
-        ${g.step===0?'<div class="s13" style="background:var(--osoft);color:var(--orange);border-radius:12px;padding:10px 12px">Only at the dock with the boat moored securely, engines at idle. EngineLink only reads; you shift.</div>':''}
-        <div style="font-size:30px;font-weight:700;margin-top:4px">${s[1]}</div><div class="s14 sub">${s[2]} Then press Record and wait about 6 seconds.</div>
-        ${g.busy?`<div class="bar" style="height:8px"><i style="width:${g.prog}%;background:var(--teal)"></i></div>`:''}
-        <div class="grid2" style="gap:10px"><button class="btn" data-a="close">Cancel</button><button class="btn pri" ${g.busy?'disabled':''} data-a="gearRec">${g.busy?'Recording…':'Record'}</button></div>`;
-    }
   }else if(k==='fuel'){
     const d=S.d,price=S.live?S.live.price:0;
     if(d.fPrice==null){d.fPrice=price>0?NF(price,2):'';d.fLitres='';d.fQ=1;d.fWhen=null;}
@@ -1634,6 +1921,7 @@ function goPage(p,back){S.backScroll=$('#main').scrollTop;S.back=back||null;S.pa
   if(p==='diag'){load('diag');load('fuel');load('state');}
   if(p==='events')load('events');
   if(p==='led')load('led');
+  if(p==='dtest'&&!(S.dt&&S.dt.phase==='run'))S.dt=null;
   if(p==='fw')load('fw');
   if(p==='ap'||p==='router')load('state');
   history.pushState({page:1},'');
@@ -1644,7 +1932,7 @@ function goTab(t){
   S.tab=t;S.page=null;S.back=null;S.selMode=null;S.sel=[];S.open=null;
   if(t==='economy'){load('econ');if(!S.trips)load('trips');}
   if(t==='history')load('trips');
-  if(t==='engines'){load('life');load('recent');}
+  if(t==='engines'){load('life');load('recent');load('shifts');}
   if(t==='tank')load('fuel');
   if(t==='engines')load('econ');
   if(t==='more'){load('state');load('sd');load('diag');}
@@ -1818,9 +2106,6 @@ const A={
   fNow:()=>{S.d.fWhen=null;S.d.fPick=false;renderSheet();},
   fOther:()=>{S.d.fWhen=S.d.fWhen||Date.now();renderSheet();},
   fQ:v=>{S.d.fQ=+v;renderSheet();},
-  gearRec:()=>gearRecord(),
-  gearAgain:()=>{S.gear=null;renderSheet();},
-  gearSave:async()=>{const r=S.gear.res,f=x=>x?x[0]+':'+x[1]:'';const ok=await cfgSet({gearF:f(r.f),gearR:f(r.r)});if(ok.ok){S.gear=null;history.back();toast('Gear learned');render(true);}},
   fuelQ:async v=>{const [i,q]=v.split(':');await act('/api/fuel/edit',{i,q});load('fuel');},
   fuelUse:async v=>{const [i,u]=v.split(':');await act('/api/fuel/edit',{i,use:u});load('fuel');},
   fuelSave:async()=>{const d=S.d,l=parseFloat(String(d.fLitres).replace(',','.'))||0,p=parseFloat(String(d.fPrice).replace(',','.'))||0;
@@ -1835,8 +2120,29 @@ const A={
   tripPart:v=>{S.tripView.id=+v;render(true);loadTripSeries(+v);},
   chartM:v=>{const [k,m]=v.split(':');S.chartM[k]=m;render(true);},
   mark:async()=>{const r=await act('/api/mark',{});if(r.ok)setTimeout(()=>load('events'),1500);},
+  // Drive test
+  dtPlace:v=>{const d=dtState();d.place=v;d.phase='safety';d.checks={};render(true);$('#main').scrollTop=0;},
+  dtCheck:v=>{const d=dtState();d.checks[v]=!d.checks[v];render(true);},
+  dtGo:()=>{const d=dtState();d.steps=dtSteps(d.place,engines());d.step=0;d.rec=[];d.phase='run';render(true);$('#main').scrollTop=0;},
+  dtRec:()=>dtRecord(),
+  dtSkip:()=>{const d=dtState();d.step++;if(d.step>=d.steps.length){d.phase='done';d.res=dtResult(d);}render(true);},
+  dtStop:()=>{if(!confirm('Stop the drive test? Nothing is saved.'))return;S.dt=null;post('/api/diag/focus',{idx:264,secs:0});render(true);},
+  dtAgain:()=>{S.dt=null;render(true);$('#main').scrollTop=0;},
+  dtSave:async()=>{
+    const d=S.dt,r=d&&d.res;if(!r)return;
+    const f=x=>x?x[0]+':'+x[1]:'';
+    const data={};if(r.f){data.gearF=f(r.f);data.gearR=f(r.r||r.f);}if(r.comp)data.comp=f(r.comp);
+    const ok=await cfgSet(data);if(!ok.ok)return;
+    P.dtest={t:Math.round(Date.now()/1000),place:d.place,same:r.same,e:r.e,sync:r.sync,comp:!!r.comp};savePrefs();
+    post('/api/diag/focus',{idx:264,secs:0});
+    S.dt=null;toast('Drive test saved');goBack();
+  },
+  mechReport:()=>openWin(reportUrl('engines')),
+  evReport:v=>openWin(reportUrl('event&id='+v)),
   evAck:async v=>{await post('/api/events/ack',{id:v});await load('events');if(S.live&&S.live.ev){if(v==='all')S.live.ev.n=0;}render(true);},
-  evOpen:async v=>{const id=+v;S.evOpen=S.evOpen===id?null:id;render(true);if(S.evOpen&&!S.evSeries[id]){try{S.evSeries[id]=await get('/api/event/series?id='+id,10000);}catch(e){S.evSeries[id]=null;}render(true);}},
+  evOpen:async v=>{const id=+v;S.evOpen=S.evOpen===id?null:id;render(true);
+    if(S.evOpen&&!S.evSeries[id]){try{S.evSeries[id]=await get('/api/event/series?id='+id,10000);}catch(e){S.evSeries[id]=null;}render(true);}
+    if(S.evOpen&&S.evFast[id]===undefined){try{S.evFast[id]=await get('/api/event/fast?id='+id,10000);}catch(e){S.evFast[id]=null;}render(true);}},
   ledTest:async()=>{await act('/api/led/test',{});load('led');},
   discover:async v=>{await act('/api/kad/discover',{ch:v});setTimeout(()=>load('diag'),2000);},
   combine:async()=>{const us=units().filter(u=>S.sel.includes(u.key)),ids=us.flatMap(u=>u.ids).join(',');const r=await act('/api/trip/combine',{ids});if(r.ok){S.selMode=null;S.sel=[];load('trips');}},
@@ -1852,6 +2158,7 @@ const A={
   svcDone:v=>{const hrs=engines().map(e=>e.hrs).filter(h=>fin(h)&&h>0);P.service[v]={h:hrs.length?Math.max(...hrs):null,t:Math.round(Date.now()/1000)};savePrefs();S.svcOpen=null;toast(SERVICE.find(s=>s[0]===v)[1]+' logged as done');render(true);}
 };
 const I={
+  boat:(v,el)=>{P.boat=Object.assign({},P.boat,{[el.dataset.k]:v.slice(0,80)});savePrefs();},
   tankDraft:v=>S.tankDraft=v,
   price:v=>{clearTimeout(I._p);I._p=setTimeout(()=>{const p=parseFloat(v.replace(',','.'));if(p>=0)post('/api/cfg',{price:p});},700);},
   ntpServer:v=>{clearTimeout(I._n);I._n=setTimeout(()=>{if(v.trim().length>=3)post('/api/cfg',{ntpServer:v.trim()});},900);},
@@ -1985,10 +2292,33 @@ function reportEngines(){
   h+=`<div class="r-kpis">${es.map(e=>kpi(e.name+' hours',fin(e.hrs)?NF(e.hrs,1):'—','h')).join('')}${kpi('Events',ev.length)}${kpi('Not seen yet',S.events?S.events.n:'—')}</div>`;
   h+=`<div class="r-sec"><h2>Events</h2><div class="r-sub">What EngineLink noticed, newest first, with what it usually means.</div><div style="margin-top:6px">${rEvents(ev.slice(0,40))}</div></div>`;
   const bal=balanceCard(es),life=lifeCard(es);
+  h+=`<div class="r-sec">${gearCard(es)}</div>`;
+  const tw=twinCard(es);if(tw)h+=`<div class="r-sec">${tw}</div>`;
+  h+=`<div class="r-sec">${rBoat()}</div>`;
   if(bal)h+=`<div class="r-sec">${bal}</div>`;
   if(life)h+=`<div class="r-sec">${life}</div>`;
   if(S.diag&&S.diag.reading)h+=`<div class="r-sec">${readingBlock(S.diag,es)}</div>`;
   h+=`<div class="r-sec r-noprint"><h2>For help</h2><div class="r-sub">A technical file with the settings and recent data, if someone helps you with EngineLink.</div><button class="rtool" style="margin-top:10px;min-height:44px;padding:0 16px;border-radius:99px;background:var(--track);font-weight:600" data-a="report">${svg(IC.down,16)}Download technical file (JSON)</button></div>`;
+  return h;
+}
+// The boat and the last drive test, for the mechanic.
+function rBoat(){
+  const b=P.boat||{},t=P.dtest;
+  return `<h2>The boat</h2><div style="display:grid;grid-template-columns:auto 1fr;gap:4px 14px;margin-top:8px;font-size:13px">${BOAT_SPEC.concat(BOAT_FIELDS.filter(([k])=>b[k]).map(([k,l])=>[l,b[k]])).map(([k,v])=>`<span class="sub">${esc(k)}</span><span>${esc(v)}</span>`).join('')}</div>
+    <div class="r-sub" style="margin-top:8px">${t&&t.t?'Drive test '+new Date(t.t*1000).toLocaleDateString(LOC)+' ('+(t.place==='sea'?'open water':'at the dock')+'): '+engines().map(e=>{const x=t.e&&t.e[e.ch];return x?e.name+' clutch in '+msTxt(x.engMs)+', out '+msTxt(x.disMs):'';}).filter(Boolean).join(' · '):'No drive test done yet.'}</div>`;
+}
+// One event for the mechanic: what happened, the curves, the gear story.
+function reportEvent(id){
+  const e=S.events&&S.events.list.find(x=>x.id===id),es=engines();
+  if(!e)return rHead('Event','This event is no longer on EngineLink.');
+  const d=EVT[e.t];
+  document.title='EngineLink event '+evWhen(e);
+  let h=rHead(evTitle(e),evWhen(e)+(e.sev===2?' · alarm':e.sev===1?' · warning':''));
+  h+=`<div class="r-sec"><h2>What it means</h2><div style="margin-top:6px">${d?d[1](e):''}</div></div>`;
+  const sr=S.evSeries[id],fs=S.evFast[id];
+  if(fs&&fs.t&&fs.t.length)h+=`<div class="r-sec"><h2>Four times a second</h2><div class="r-sub">A minute before and after; the dashed line is the moment.</div><div class="r-chart" style="margin-top:8px">${fastChart(fs,e.up*1000-fs.ms0)}</div></div>`;
+  if(sr&&sr.t&&sr.t.length)h+=`<div class="r-sec"><h2>Every second</h2><div class="r-charts" style="margin-top:8px">${[['rpm','Rpm'],['req','Lever'],['lph','Fuel'],['cool','Coolant'],['boost','Boost'],['volt','Battery']].map(([m,t])=>`<div class="r-chart"><div class="ct">${t}</div>${chartSvg(sr,m,e.up-sr.up0)}</div>`).join('')}</div></div>`;
+  h+=`<div class="r-sec">${gearCard(es)}</div><div class="r-sec">${rBoat()}</div>`;
   return h;
 }
 async function renderReport(kind){
@@ -1997,9 +2327,11 @@ async function renderReport(kind){
   await loadPrefs();de.dataset.theme='light';
   const g=(u,ms)=>get(u,ms).catch(()=>null);
   [S.live,S.trips,S.fuel,S.events]=await Promise.all([g('/api/live',5000),g('/api/trips',6000),g('/api/fuel',6000),g('/api/events',6000)]);
-  if(kind==='engines')[S.life,S.diag,S.state]=await Promise.all([g('/api/life',6000),g('/api/diag',6000),g('/api/state',6000)]);
+  if(kind==='engines'||kind==='event')[S.life,S.diag,S.state,S.shifts]=await Promise.all([g('/api/life',6000),g('/api/diag',6000),g('/api/state',6000),g('/api/shifts?n=120',6000)]);
+  const evId=+(RQ.get('id')||0);
+  if(kind==='event'&&evId)[S.evSeries[evId],S.evFast[evId]]=await Promise.all([g('/api/event/series?id='+evId,10000),g('/api/event/fast?id='+evId,10000)]);
   if(!S.live){r.innerHTML=rTools()+rHead('Report','EngineLink could not be reached. Connect to its Wi-Fi and try again.');return;}
-  const body=kind==='engines'?reportEngines():await reportTrips((RQ.get('ids')||'').split(',').map(Number).filter(Boolean));
+  const body=kind==='engines'?reportEngines():kind==='event'?reportEvent(evId):await reportTrips((RQ.get('ids')||'').split(',').map(Number).filter(Boolean));
   r.innerHTML=rTools()+body+rFoot();
 }
 

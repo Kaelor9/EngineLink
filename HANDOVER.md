@@ -45,6 +45,7 @@ program, so they share the globals in `EngineLink.ino`.
 | `fuel.ino` | Fuel integration per rpm band, calibration from fill-ups, fuel log, tank estimate |
 | `trips.ino` | Trip start/end, trip logs, data coverage, history, per-second learning |
 | `diagnosis.ino` | Sample ring, rules, events and black boxes, engine life story, series downloads |
+| `gearbox.ino` | Gear and clutch: four readings a second (ring, trip and event files), shift timing per engine, compressor, warm-up and charging, `/api/shifts` and `/api/fast` |
 | `storage.ino` | SD card, LittleFS, NVS settings and totals, restart log, raw logging |
 | `wifi.ino` | Own access point or router, fallback and return, scans, mDNS |
 | `webserver.h` | The port 80 web server (connection pool) |
@@ -58,7 +59,7 @@ program, so they share the globals in `EngineLink.ino`.
 | `linktune.cpp/.h` | Automatic transmit power, link measurements, channel scan |
 | `netboost.cpp/.h` | Raises the TCP send window per connection |
 | `crashinfo.cpp/.h` | The last crash from the core dump, for the report |
-| `fuelcal.h`, `diagrules.h`, `ledpatterns.h`, `routerguard.h`, `otaheader.h` | Logic without Arduino, tested on a PC in CI |
+| `fuelcal.h`, `diagrules.h`, `shiftrules.h`, `ledpatterns.h`, `routerguard.h`, `otaheader.h` | Logic without Arduino, tested on a PC in CI |
 
 Elsewhere:
 
@@ -111,6 +112,20 @@ for a set number of minutes. Each trip has a 1 Hz log on the SD card.
 
 **Diagnosis.** Limits, drift (CUSUM) and port/starboard imbalance rules in
 `diagrules.h`; events keep a ±2 minute black box on the SD card.
+
+**Gear and clutch.** The KAD300/DP shifts electrically (EDC, shift actuator,
+cone clutch in the drive). Four times a second `shiftrules.h` compares the
+learned gear bits in 264 with the propeller load, seen as fuel above the
+engine's neutral idle at the same rpm (about 2.2 against 3.1 L/h on the boat).
+It times each shift, raises `pull-neutral` when the propeller keeps pulling
+2.5 s after neutral and `hard-shift` for fast reversals or shifts above
+1,000 rpm. While an engine runs below 1,300 rpm, 264 takes every other slow
+slot (about 0.7 s) and the other slow values come about every 15 s. The gear
+and compressor bits are learned by the guided drive test in the app (page
+`dtest`), which reads `/api/fast` while the owner shifts. Fast samples
+(`FastSample`) go to `/TRIPS/Tnnnnnn.FST` and `/EVENTS/Ennnnnn.FST`. The
+stored life story counts only the first 22 event types (`LIFE_EV_N`); newer
+types are counted in `ShiftLife`.
 
 **Wi-Fi.** Two exclusive modes. Standalone: access point only, `EngineLink` at
 192.168.4.1. Router: station only, reachable at the router's address. If the

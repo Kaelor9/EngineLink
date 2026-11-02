@@ -329,6 +329,8 @@ struct Settings {
   uint8_t calFills=0;        // fill-ups used by the calibration
   float calLitres=0;         // pump litres those fill-ups cover
   uint16_t gearMaskF=0,gearValF=0,gearMaskR=0,gearValR=0; // mask 0 = not learned
+  // ---- 0.14.0: compressor clutch bit in 264, learned in the drive test ----
+  uint16_t compMask=0,compVal=0;
 };
 constexpr uint8_t PROTO_J1587=0, PROTO_KAD=1;
 struct Counters {
@@ -370,7 +372,8 @@ constexpr uint16_t KAD_POLL_FAST[]={256,289};
 constexpr uint16_t KAD_POLL_SLOW[]={293,259,258,265,260,261,288,291,264,266,295,263,296,267};
 constexpr uint8_t KAD_SLOW_N=sizeof(KAD_POLL_SLOW)/sizeof(KAD_POLL_SLOW[0]);
 constexpr uint32_t KAD_MIN_POLL_MS=80;    // fastest pace: about 12 requests a second
-constexpr uint16_t KAD_DISC_FIRST=256,KAD_DISC_LAST=319;
+// 0.14.0: up to 447, looking for more values (fault codes among them, perhaps).
+constexpr uint16_t KAD_DISC_FIRST=256,KAD_DISC_LAST=447;
 constexpr uint32_t KAD_POLL_MS=220;       // <= ~4.5 requests/s per channel
 constexpr uint32_t KAD_REPLY_MS=300;      // reply must follow its request
 constexpr uint32_t KAD_BUS_IDLE_MS=20;    // never start a request on a busy bus
@@ -412,7 +415,7 @@ struct KadLink {
   uint8_t foreignBurst=0;uint64_t foreignFirstAt=0;
   bool discActive=false;        // "Discover more values" running
   uint16_t discPos=0;
-  uint64_t discFound=0;         // answered indices KAD_DISC_FIRST.. (bits)
+  uint64_t discFound[3]={0,0,0}; // answered indices KAD_DISC_FIRST.. (bits)
   bool discDone=false;
 };
 struct SdCounts { uint32_t files=0; uint64_t rawBytes=0; uint32_t rawFiles=0; uint32_t exports=0; };
@@ -505,6 +508,46 @@ constexpr uint32_t LED_DEMO_STEP_MS=3000;
 // Standard J1587 parameters shown on the overview when an ECU sends them.
 // Scaling is applied in the UI and is labelled as unverified for the ECU.
 constexpr uint8_t OVERVIEW_PIDS[]={91,92,94,96,100,102,105,110,168,174,175,247,250};
+
+// ---- 0.14.0: gear and clutch, four readings a second ----
+// Both engines four times a second (physical channels J7, J6): what is needed
+// to time a shift. Kept for the last 10 minutes in PSRAM, for each trip on the
+// SD card (/TRIPS/Tnnnnnn.FST) and around every event (/EVENTS/Ennnnnn.FST).
+constexpr uint32_t FAST_MS=250;
+constexpr uint16_t FAST_N=2400;              // 10 minutes
+constexpr uint32_t FAST_MAGIC=0x31545346;    // "FST1"
+constexpr uint32_t FAST_BOX_MS=60000;        // a minute before and after an event
+struct FastSample {
+  uint32_t ms=0;                             // uptime
+  int16_t rpm[2]={NA16,NA16},lph100[2]={NA16,NA16},req[2]={NA16,NA16},boost10[2]={NA16,NA16};
+  uint16_t st264[2]={0xFFFF,0xFFFF};
+  uint8_t gear[2]={0,0};                     // shift::Gear
+  uint8_t flags[2]={0,0};                    // FF_* below
+};
+constexpr uint8_t FF_LOAD=1,FF_LOADKNOWN=2,FF_COMP=4,FF_COMPKNOWN=8;
+// One shift at idle, kept in LittleFS (/shifts.bin, the newest SHIFT_N).
+struct ShiftRec {
+  uint32_t utc=0,up=0;
+  uint8_t eng=0,kind=0,gear=0,flags=0;       // shift::Kind, shift::Gear, shift::Flag
+  int16_t lagMs=-1;                          // gear bits to clutch, -1 = not known
+  uint16_t rpm=0;
+};
+constexpr uint8_t SHIFT_N=200;
+// Per engine since EngineLink was installed: shifts, clutch timing, the
+// compressor, warm-up and charging (/shiftlife.bin).
+struct ShiftLife {
+  uint32_t magic=0x5F4C4853;                 // "SHL_"
+  uint32_t engages[2]={},disengages[2]={},hard[2]={},pullNeutral[2]={},quick[2]={},highRpm[2]={};
+  float engAvg[2]={NAN,NAN},disAvg[2]={NAN,NAN};       // slow averages of the lag, ms
+  float engFirst[2]={NAN,NAN},disFirst[2]={NAN,NAN};   // average of the first 20, the reference
+  uint16_t engN[2]={},disN[2]={};
+  float idleLph[2]={NAN,NAN},idleRpm[2]={NAN,NAN};     // neutral idle, learned
+  uint32_t accels[2]={},compOn[2]={};
+  float boostPeak[2]={NAN,NAN};                        // slow average over accelerations, kPa
+  float warmLast[2]={NAN,NAN},warmAvg[2]={NAN,NAN};    // seconds from start to 60 °C
+  uint16_t warmN[2]={};
+  float voltRun[2]={NAN,NAN},voltMin[2]={NAN,NAN};     // while running: slow average, lowest on the last trip
+};
 
 // Download tests measured by the phone (newest last), for the network report.
 struct SpeedLogRec { uint32_t at; uint8_t level; uint16_t kbs10; uint16_t rttMs; };
