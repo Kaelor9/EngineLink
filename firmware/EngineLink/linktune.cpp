@@ -12,6 +12,15 @@
 #include "ping/ping_sock.h"
 #include "linktune.h"
 
+// The live API is served by a different task from the main web server.
+// Avoid changing TX power or scanning across Wi-Fi channels while any app
+// connection is actively requesting data.
+extern volatile uint32_t lastHttpMs;
+static bool webBusyNow(){
+  const uint32_t at=lastHttpMs;
+  return at&&(uint32_t)(millis()-at)<3000UL;
+}
+
 // Transmit power steps, lowest to highest (index = level).
 const wifi_power_t elTxPower[5] = {WIFI_POWER_8_5dBm, WIFI_POWER_11dBm, WIFI_POWER_13dBm, WIFI_POWER_15dBm, WIFI_POWER_19_5dBm};
 const char *const elTxName[5] = {"very low (8.5 dBm)", "low (11 dBm)", "moderate (13 dBm)", "medium (15 dBm)", "high (19.5 dBm)"};
@@ -107,17 +116,25 @@ static void surveyChannel() {
 uint8_t runLinkTune(uint8_t current) {
   linkTuneRunning = true; linkTuneCount = 0;
   uint8_t best = current; int32_t bestScore = INT32_MAX, curScore = INT32_MAX;
+  bool interrupted=false;
   for (int8_t lv = 4; lv >= 0; lv--) {
-    if (WiFi.status() != WL_CONNECTED) break;
+    if (WiFi.status() != WL_CONNECTED || webBusyNow()) { interrupted=true; break; }
     WiFi.setTxPower(elTxPower[lv]);
     vTaskDelay(pdMS_TO_TICKS(1500));       // let rate control settle
     PingStat p;
     if (!pingHost(WiFi.gatewayIP(), 20, 1400, 60, p)) break;
+    if (webBusyNow()) { interrupted=true; break; }
     linkTuneSteps[linkTuneCount++] = {(uint8_t)lv, p};
     // Every lost packet costs as much as 100 ms of extra round trip.
     const int32_t score = (int32_t)(20 - p.got) * 100 + p.avgMs;
     if (p.got >= 10 && score < bestScore) { bestScore = score; best = lv; }
     if (lv == current) curScore = p.got >= 10 ? score : INT32_MAX;
+  }
+  if(interrupted){
+    // Do not persist a choice from a partial test under app traffic.
+    WiFi.setTxPower(elTxPower[current]);
+    linkTuneCount=0;linkTuneChosen=255;linkTuneRunning=false;
+    return current;
   }
   // Stay on the current step unless another one is clearly (20 %) better:
   // a busy channel makes single measurements jump around.
@@ -125,9 +142,9 @@ uint8_t runLinkTune(uint8_t current) {
   WiFi.setTxPower(elTxPower[best]);
   if (WiFi.status() == WL_CONNECTED) {
     vTaskDelay(pdMS_TO_TICKS(1000));
-    pingHost(WiFi.gatewayIP(), 20, 64, 100, linkSmall);
-    pingHost(IPAddress(1, 1, 1, 1), 10, 64, 200, linkNet);
-    surveyChannel();
+    if(!webBusyNow())pingHost(WiFi.gatewayIP(), 20, 64, 100, linkSmall);
+    if(!webBusyNow())pingHost(IPAddress(1, 1, 1, 1), 10, 64, 200, linkNet);
+    if(!webBusyNow())surveyChannel();
   }
   linkTuneChosen = best; linkTuneAt = millis() ? millis() : 1;
   linkTuneRunning = false;
