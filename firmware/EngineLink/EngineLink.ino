@@ -63,7 +63,7 @@
 uint8_t txLevel=3;
 SpeedLogRec speedLog[SPEED_LOG_N];uint8_t speedLogCount=0;
 
-#define EL_VERSION "0.13.2"
+#define EL_VERSION "0.13.3"
 // Releases list published by the Pages workflow; firmware files come from
 // GitHub Releases of the same repository. Nothing else is downloaded.
 #define EL_RELEASES_URL "https://kaelor9.github.io/EngineLink/releases.json"

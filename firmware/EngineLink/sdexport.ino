@@ -119,7 +119,11 @@ void handleExportRaw(){
   if(!parseIds(web.arg("ids"),ids,n)){web.send(400,"text/plain","No trips selected");return;}
   if(!sdReady){web.send(409,"text/plain","No SD card");return;}
   if(sdLogging)logFile.flush();
-  ChunkOut &out=beginDownload("raw engine data","text/csv","EngineLink-raw-trips.csv");
+  // Crash reports on 0.13.2 traced to tdefl_compress_buffer() from this
+  // raw-trip route while streaming over a weak Wi-Fi connection. Until that
+  // compressor path is independently validated, send raw CSV uncompressed.
+  // This protects the board and engine readings; large exports can take longer.
+  ChunkOut &out=beginDownload("raw engine data","text/csv","EngineLink-raw-trips.csv",false);
   out.add("trip_id,boot_id,uptime_ms,utc_epoch,channel,mid,checksum,raw_hex,engine,fuel_lph,rpm,direction,kad_index,kad_value\n");
   char line[400];
   for(uint8_t j=0;j<n;j++){

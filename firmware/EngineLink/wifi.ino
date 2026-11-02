@@ -539,6 +539,24 @@ void serviceNetwork(){
     pendingNetwork=false;
     applyNetwork();
   }
+  // Sample Wi-Fi getters once per second, or after the interface gets a new IP.
+  // Repeated driver queries on every fast main-loop iteration can starve TCP.
+  static uint32_t radioCheckedAt=0,radioCheckedEpoch=UINT32_MAX;
+  static bool staInterfaceReady=false,apInterfaceReady=false;
+  static bool routerIpReady=false,apIpReady=false;
+  static IPAddress routerIp;
+  const uint32_t radioNow=millis();
+  if(!radioCheckedAt||(uint32_t)(radioNow-radioCheckedAt)>=1000UL||radioCheckedEpoch!=networkIpEpoch){
+    radioCheckedAt=radioNow?radioNow:1;
+    radioCheckedEpoch=networkIpEpoch;
+    const wifi_mode_t mode=WiFi.getMode();
+    staInterfaceReady=(mode&WIFI_MODE_STA)!=0;
+    apInterfaceReady=(mode&WIFI_MODE_AP)!=0;
+    routerIpReady=staInterfaceReady&&WiFi.status()==WL_CONNECTED;
+    routerIp=routerIpReady?WiFi.localIP():IPAddress(0,0,0,0);
+    routerIpReady=routerIpReady&&routerIp!=IPAddress(0,0,0,0);
+    apIpReady=apInterfaceReady&&WiFi.softAPIP()==IPAddress(192,168,4,1);
+  }
   // AP recovery should never cause a reset loop on transient event timing.
   // Only act on a sustained stopped/missing-interface state. Do not call
   // esp_wifi_start() from here: softAP() establishes the interface itself.
@@ -546,9 +564,9 @@ void serviceNetwork(){
   // must not pre-empt it by starting SoftAP as soon as cfg.router changes.
   if(!pendingNetwork&&(!routerConfigured()||routerHold)&&(uint32_t)(millis()-lastApCheck)>=15000){
     lastApCheck=millis();
-    const bool modeOk=(WiFi.getMode()&WIFI_MODE_AP)!=0;
+    const bool modeOk=apInterfaceReady;
     const bool stopped=apLastEvent==2&&(uint32_t)(millis()-apLastEventMs)>=10000;
-    const bool missingIp=WiFi.softAPIP()!=IPAddress(192,168,4,1);
+    const bool missingIp=!apIpReady;
     if(!modeOk||stopped||missingIp){
       ++apRestarts;
       apStarted=false;
@@ -612,17 +630,13 @@ void serviceNetwork(){
   // very infrequent last-resort reconnect if the STA becomes stuck idle.
   if(routerConfigured()&&!routerHold){
     const uint32_t now=millis();
-    const bool hasIp=WiFi.status()==WL_CONNECTED &&
-                     WiFi.localIP()!=IPAddress(0,0,0,0);
-    // Signal, channel and IP are read from the Wi-Fi driver once a second,
-    // not on every pass of loop(): each read waits for the driver's own
-    // task, and about 1000 reads a second made every packet through the
-    // router wait (pings of 40-150 ms, downloads of a few kB/s).
+    const bool hasIp=routerIpReady;
+    // Wi-Fi mode/IP are cached above; RSSI/channel read once a second.
     static uint32_t staInfoAt=0;
-    const bool staInfoDue=staDownSince||!staInfoAt||(uint32_t)(now-staInfoAt)>=1000UL;
+    const bool staInfoDue=!staInfoAt||(uint32_t)(now-staInfoAt)>=1000UL;
     if(hasIp&&staInfoDue){
        staInfoAt=now?now:1;
-       lastRouterIp=WiFi.localIP().toString();
+       lastRouterIp=routerIp.toString();
        lastRouterRssi=WiFi.RSSI();
        lastRouterChannel=WiFi.channel();
        if(staDownSince)Serial.printf("Router ready: %s RSSI=%d dBm\n",
@@ -689,7 +703,7 @@ void serviceNetwork(){
       }
     }
   }
-  if(routerConfigured()&&WiFi.status()==WL_CONNECTED&&!ntpStarted&&cfg.ntpOn&&allowTime("ntp")){
+  if(routerConfigured()&&routerIpReady&&!ntpStarted&&cfg.ntpOn&&allowTime("ntp")){
     configTime(0,0,cfg.ntpServer.c_str(),"pool.ntp.org");
     ntpStarted=true;
   }
@@ -703,11 +717,7 @@ void serviceNetwork(){
   // Debounce network events and never reset the Wi-Fi interface to fix mDNS.
   // Avoid restarting mDNS in the middle of a radio scan.
   const uint32_t mdnsNow=millis();
-  const bool mdnsInterfaceReady=
-    (routerConfigured()&&!routerHold)
-      ? (WiFi.status()==WL_CONNECTED && (WiFi.getMode()&WIFI_MODE_STA))
-      : ((WiFi.getMode()&WIFI_MODE_AP) &&
-         WiFi.softAPIP()==IPAddress(192,168,4,1));
+  const bool mdnsInterfaceReady=(routerConfigured()&&!routerHold)?routerIpReady:apIpReady;
   // A listener opened on the previous interface may retain stale lwIP
   // socket state when we deliberately change AP -> STA or receive a new
   // router DHCP address. Rebind only AFTER the IP interface is ready, from
@@ -721,12 +731,12 @@ void serviceNetwork(){
   // Once per start (also after an update): a report when the router link has
   // held for 2 minutes, so it is known that this version connects.
   if(!reportedThisBoot&&cfg.ghToken.length()&&routerConfigured()&&!routerHold&&staIpAt
-     &&WiFi.status()==WL_CONNECTED&&(uint32_t)(millis()-staIpAt)>=120000UL){
+     &&routerIpReady&&(uint32_t)(millis()-staIpAt)>=120000UL){
     reportedThisBoot=true;
     if(!reportWanted){reportWanted=true;reportManual=true;reportReason="connected after start";}
   }
   if(reportWanted&&cfg.ghToken.length()&&fwJob==FW_IDLE&&fwState!=3&&routerConfigured()&&!routerHold
-     &&WiFi.status()==WL_CONNECTED&&WiFi.localIP()!=IPAddress(0,0,0,0)
+     &&routerIpReady
      &&staIpAt&&(uint32_t)(millis()-staIpAt)>=60000UL){  // let the link settle first
     if(!reportDayStart||(uint32_t)(millis()-reportDayStart)>=86400000UL){reportDayStart=millis()?millis():1;reportDayCount=0;}
     if(reportManual||(reportDayCount<10&&(!reportLastAt||(uint32_t)(millis()-reportLastAt)>=1800000UL))){
@@ -739,7 +749,7 @@ void serviceNetwork(){
   // Engine report: after a trip (also one that ended away from the router)
   // or when asked for in the app. Waits for a free moment on the router.
   if((engineReportTrip||engineReportNow)&&!reportWanted&&cfg.ghToken.length()&&fwJob==FW_IDLE&&fwState!=3
-     &&routerConfigured()&&!routerHold&&WiFi.status()==WL_CONNECTED&&staIpAt&&(uint32_t)(millis()-staIpAt)>=60000UL){
+     &&routerConfigured()&&!routerHold&&routerIpReady&&staIpAt&&(uint32_t)(millis()-staIpAt)>=60000UL){
     // Runs in loop(), which already holds the engine lock.
     const TripRec *t=engineReportTrip?tripById(engineReportTrip):nullptr;
     reportBody=buildEngineReport(t);
