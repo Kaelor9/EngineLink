@@ -12,6 +12,8 @@ jobs:
       - uses: actions/checkout@v4
       - name: Check page JavaScript
         run: node --check site/app.js
+      - name: Validate older USB installer archive contracts
+        run: python3 tools/test_installer_archive.py
       - name: Check required assets
         run: |
           test -s site/index.html
