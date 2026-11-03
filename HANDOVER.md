@@ -204,6 +204,19 @@ Git commit SHA in `app.js` / `styles.css` asset URLs: site-only updates
 must not rely on the firmware version for cache invalidation. No firmware
 version bump is needed for this website-only hotfix.
 
+**Older USB image verification hotfix (2026-11-03).** The version
+selector worked but could display "The USB firmware is not a complete 8 MB
+image" after selecting a valid older release. The browser had compared
+`HEAD Content-Length` to the original 8 MiB file size. An HTTP proxy/CDN
+may compress the response, so this header can describe transferred (encoded)
+bytes instead of the actual decoded firmware. The installer now uses HEAD
+only to check file availability; `tools/build_installer_archive.py` already
+verifies each archived image's uncompressed 8 MiB size, ESP header and
+release asset SHA-256 before publishing its manifest. The Pages build also
+checks the latest merged image's size. Browser tests exercise a misleading
+compressed HEAD size. No new firmware version is needed; browser USB flashing
+still requires physical verification.
+
 ## Drive test scenes (in progress, 2026-11-03)
 
 The drive test (app page `dtest`, `dtAnim` and the `scene*` functions in
