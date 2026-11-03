@@ -5,10 +5,11 @@ version instead of one update each. Newest at the bottom of each section.
 
 ## App
 
-- **Drive test, "At the dock" with animations turned off.** When the phone
-  or PC limits animations (reduced motion), both mooring scenes show at once
-  on top of each other, with the captions overlapping. Show only the first
-  scene then (hide the alongside group under `prefers-reduced-motion`).
+- **Drive test, animation continuity — fixed in source, awaiting next firmware release.**
+  [PR #131](https://github.com/Kaelor9/EngineLink/pull/131) keeps the scene mounted
+  while 1 Hz `/api/fast` samples arrive, updates numbers in place, and hides
+  the second mooring scene under reduced motion. Confirm smooth playback on
+  iPhone and dock safety-step behavior once a new release is installed.
 - **Drive test scenes, new look.** The owner is choosing boat, water, fenders,
   lines, quay points and piles on the options page (Køretest-scener
   artifact). Build the chosen combination into `dtAnim` when the choice is in.
