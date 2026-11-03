@@ -215,6 +215,18 @@ a plate) · pile 6 (with shadow) · quay 2 (wooden jetty). He still finds it too
 minimal; the next step offered is a slanted (three-quarter) perspective, real
 daylight colours and small movements (boat rocking, lines tightening).
 
+## Drive test animation fix — 2026-11-03
+
+[PR #131](https://github.com/Kaelor9/EngineLink/pull/131) was merged to
+`main` after UI validation and ESP32-S3 compilation passed. During recording,
+`dtRecord()` previously called `render(true)` for every ~1 Hz fast-sample
+fetch, replacing the SVG and restarting its animation. It now calls
+`dtPaint()` to update progress, countdown and live readings in place; the
+second dock scene is hidden when reduced motion is enabled. **No version bump
+or firmware release was made**. Verify on a real iPhone/board in the next
+release. The owner's new visual scene style still needs approval before
+replacing the old `scene*` artwork.
+
 ## Field observations — 2026-11-02 (v0.13.4)
 
 Source: [#116](https://github.com/Kaelor9/EngineLink/issues/116) (v0.13.3), [#125](https://github.com/Kaelor9/EngineLink/issues/125) and [#126](https://github.com/Kaelor9/EngineLink/issues/126) (v0.13.4). These are actual board measurements.
