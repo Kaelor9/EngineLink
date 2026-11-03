@@ -4,3 +4,11 @@
 .specs{width:100%;border-collapse:collapse;font-size:13px;margin-top:22px}.specs td{padding:11px 4px;border-bottom:1px solid #263d4d;vertical-align:top}.specs td:first-child{color:#93adbb;width:38%}.specs tr:last-child td{border-bottom:0}
 .updatecard{margin-top:14px;padding:22px 24px;border:1px solid #344c5e;background:#162737;border-radius:14px;display:flex;justify-content:space-between;align-items:center;gap:18px;flex-wrap:wrap}.updatecard p{margin:4px 0 0;color:#abc0ca;font-size:12.5px;max-width:520px}.cards.six{grid-template-columns:repeat(3,1fr)}
 @media(max-width:920px){.board img{width:100%;margin:0}}@media(max-width:650px){.cards.six{grid-template-columns:1fr}.hero .board{order:-1;margin-bottom:22px}.board .float{display:none}.specs td:first-child{width:45%}}
+
+/* USB firmware archive picker */
+.version-picker{margin:16px 0 12px}
+.version-picker label{display:block;margin-bottom:7px;font-size:12px;font-weight:700;color:#d4e7ea}
+.version-picker select{display:block;width:100%;max-width:100%;min-height:47px;padding:10px 13px;background:#102332;color:var(--text);border:1px solid #52727d;border-radius:10px;font:inherit;font-size:14px;cursor:pointer}
+.version-picker select:disabled{opacity:.6;cursor:default}
+.version-picker select:focus-visible{outline:2px solid #5cdbc8;outline-offset:2px}
+.version-picker .hint{margin-top:8px}
