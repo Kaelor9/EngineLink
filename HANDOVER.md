@@ -168,6 +168,52 @@ because a report shows a problem, not on a guess.
 - The status LED language in `ledpatterns.h` is fixed.
 - No "Recommended" labels pushing a choice, no fast animations, no manual trip
   start/stop, nothing to tune by hand that the board can work out itself.
+- **Visual work: show options first.** For pictures and animations the owner
+  wants to choose before anything goes into the app: build a page of live,
+  clickable options (an artifact), let him pick, put the choice in
+  `docs/TODO.md`, and only build it into the app with the next update. He
+  likes many options and finds plain flat drawings too minimal.
+- Slow, calm animations are fine (the drive test uses them); they must also
+  look right with reduced motion turned on (show one still scene, nothing
+  overlapping).
+
+## Drive test scenes (in progress, 2026-11-03)
+
+The drive test (app page `dtest`, `dtAnim` and the `scene*` functions in
+`firmware/ui/app.html`) was released in 0.14.0/0.14.1 with simple top-down
+scenes. The owner is choosing a new look on an options page (artifact
+"Køretest-scener"; its source is not in the repository). What he has asked
+for so far:
+
+- A boat with swim platform and cleats (also one on the bow); lines tied to
+  those cleats. Choices for hull shape, colour, foredeck, cockpit, lounge,
+  platform and the cleats (count, placement, direction, look).
+- Open water without the dashed circle and the wake triangle; waves that fade
+  in and glide out, never popping up.
+- At the dock: two ways of mooring in turn, stern-to between piles (piles just
+  outside the boat's beam, more empty berths with piles beside it) and
+  alongside with bow line, stern line and two springs. Fenders out first, with
+  a hint where they belong (where the hull is widest, towards the quay or the
+  neighbours), then the lines one by one.
+- Lines that end properly: figure-of-eight on cleats, a bowline (pælestik)
+  around piles, an eye over a bollard.
+- Fenders: his are standard ones (dark blue body, black tapered ends, an eye
+  at each end) hanging vertically from one end. Choice of count per side and
+  placement, always kept where the hull is near full beam.
+- Choice of quay (concrete, wooden jetty, stone, rubber strip, steel sheet
+  piling) and of line colour and type.
+- Safety steps one at a time with "Done, next" (already in 0.14.1), dock order:
+  nobody in the water, moored with fenders out, how to stop, engines at idle.
+
+His latest choice on the page: Form 5 (wide) · Colour 1 (white) · Foredeck 6
+(sunpad and rail) · Cockpit 2 (windscreen and helm bench) · Lounge 1 (empty) ·
+Platform 5 (teak with ladder) · 4 cleats · at the rail · along the boat ·
+cleat look 4 (polished steel) · Water A (drifting swells) · Fender 19 (navy
+ball, but his real ones are the standard type, hanging from one end) · 3 per
+side · evenly spread · line colour 6 (red) · braided · quay point 7 (cleat on
+a plate) · pile 6 (with shadow) · quay 2 (wooden jetty). He still finds it too
+minimal; the next step offered is a slanted (three-quarter) perspective, real
+daylight colours and small movements (boat rocking, lines tightening).
 
 ## Field observations — 2026-11-02 (v0.13.4)
 
