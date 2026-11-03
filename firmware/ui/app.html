@@ -480,6 +480,7 @@ function onLive(){
   if(S.tab==='engines'&&!S.page&&(!S.recentAt||Date.now()-S.recentAt>10000))load('recent');
   if(S.tab==='engines'&&!S.page&&Date.now()-S.shiftsAt>8000)load('shifts');
   if(S.page==='led'&&(!S.ledAt||Date.now()-S.ledAt>1000)){S.ledAt=Date.now();load('led');}
+  if(S.page==='dtest')dtPaint();
   if(!S.page&&(S.tab==='trip'||S.tab==='engines'||S.tab==='tank'))render();
 }
 
@@ -1086,7 +1087,7 @@ function dtSteps(place,es){
   }
   return st;
 }
-const rmo='@media (prefers-reduced-motion:reduce){.anim *{animation:none!important}}';
+const rmo='@media (prefers-reduced-motion:reduce){.anim *{animation:none!important}.anim .mo-alongside{display:none!important}}';
 // Small, calm scenes in one style: flat shapes, the theme's colours, one
 // accent (teal) for what to do, orange for fenders, red for "not like this".
 // Each scene is its own SVG with its own animation names (prefix per scene).
@@ -1128,7 +1129,7 @@ function sceneMoor(){
       <g style="animation:moFa ${T}s linear infinite">${fender(136,58)}${fender(184,58)}${fender(136,92)}${fender(184,92)}${fender(150,28,false)}${fender(170,28,false)}</g>
       ${ln(A,'a')}
       <text x="12" y="172" font-size="11" fill="var(--sub)">Stern to the quay, bow between piles</text></g>
-    <g style="animation:moB ${T}s linear infinite">${quay(0,0,320,50)}
+    <g class="mo-alongside" style="animation:moB ${T}s linear infinite">${quay(0,0,320,50)}
       ${bollard(30,40)}${bollard(124,40)}${bollard(196,40)}${bollard(292,40)}
       <g transform="translate(84 83)">${boatTop()}</g>
       <g style="animation:moFb ${T}s linear infinite">${fender(110,56)}${fender(146,56)}${fender(182,56)}${fender(214,56)}</g>
@@ -1253,9 +1254,9 @@ function dtView(){
     h+=`<div class="cth" style="padding:0 6px 8px"><span class="s13 sub">Step ${d.step+1} of ${d.steps.length}</span><button class="s13" style="color:var(--red)" data-a="dtStop">Stop the test</button></div>
       <div class="bar" style="height:6px;margin-bottom:14px"><i style="width:${d.step/d.steps.length*100}%;background:var(--teal)"></i></div>
       <div class="card">${dtAnim(st.lever)}<div style="font-size:24px;font-weight:700;margin-top:12px;color:${e?e.color:'var(--text)'}">${esc(st.t)}</div><div class="s14" style="margin-top:4px">${esc(st.d)}</div>
-      <div class="grid2" style="gap:10px;margin-top:14px">${es.map(x=>`<div style="background:var(--track);border-radius:12px;padding:8px 10px"><div class="s12" style="color:${x.color}">${x.name}</div><div style="font-weight:600">${fin(x.rpm)?NF(x.rpm,0)+' rpm':'—'} · ${fin(x.lph)?L(x.lph,1)+' '+U.ru():'—'}</div></div>`).join('')}</div>
-      ${d.busy?(()=>{const el=st.s-d.left,now=el>=2;return `<div class="bar" style="height:8px;margin-top:14px"><i style="width:${(1-d.left/st.s)*100}%;background:var(--teal);transition:width .9s linear"></i></div>
-        <div style="font-size:19px;font-weight:650;margin-top:10px;color:${now?'var(--teal)':'var(--sub)'}">${now?esc(st.now):'Get ready…'}</div><div class="s13 sub" style="margin-top:2px">Recording, ${Math.ceil(d.left)} s left.</div>`;})():''}
+      <div class="grid2" style="gap:10px;margin-top:14px">${es.map(x=>`<div style="background:var(--track);border-radius:12px;padding:8px 10px"><div class="s12" style="color:${x.color}">${x.name}</div><div data-dt-engine="${x.ch}" style="font-weight:600">${fin(x.rpm)?NF(x.rpm,0)+' rpm':'—'} · ${fin(x.lph)?L(x.lph,1)+' '+U.ru():'—'}</div></div>`).join('')}</div>
+      ${d.busy?(()=>{const el=st.s-d.left,now=el>=2;return `<div class="bar" style="height:8px;margin-top:14px"><i data-dt-progress style="width:${(1-d.left/st.s)*100}%;background:var(--teal);transition:width .9s linear"></i></div>
+        <div data-dt-now style="font-size:19px;font-weight:650;margin-top:10px;color:${now?'var(--teal)':'var(--sub)'}">${now?esc(st.now):'Get ready…'}</div><div data-dt-left class="s13 sub" style="margin-top:2px">Recording, ${Math.ceil(d.left)} s left.</div>`;})():''}
       <div class="grid2" style="gap:10px;margin-top:14px">${st.opt?`<button class="btn" data-a="dtSkip" ${d.busy?'disabled':''}>Skip</button>`:'<span></span>'}<button class="btn pri" data-a="dtRec" ${d.busy?'disabled':''}>${d.busy?'Recording…':'Start'}</button></div>
       ${d.busy?'':'<div class="s12 sub" style="margin-top:8px">Press Start first. After two seconds the app says when to move the lever.</div>'}</div>`;
     return h;
@@ -1277,6 +1278,28 @@ function dtView(){
     <div class="s12 sub" style="margin-top:10px">Clutch out over about 2.5 s is slow: the propeller keeps pulling after the lever is in neutral. Worth showing a mechanic.</div></div>`;
   h+=`<div class="grid2" style="gap:10px;margin-top:12px"><button class="btn" data-a="dtAgain">Start over</button><button class="btn pri" data-a="dtSave" ${r.f||r.comp?'':'disabled'}>Save</button></div>`;
   return h;
+}
+// Keep the SVG scene alive while recording: rebuilding #main every second
+// restarts its CSS keyframes, which looks like a jerky / frozen animation.
+function dtPaint(){
+  if(S.page!=='dtest')return;
+  const d=S.dt;
+  if(!d||d.phase!=='run')return;
+  const m=$('#main');
+  for(const e of engines()){
+    const node=m.querySelector('[data-dt-engine="'+e.ch+'"]');
+    if(node)node.textContent=(fin(e.rpm)?NF(e.rpm,0)+' rpm':'—')+' · '+(fin(e.lph)?L(e.lph,1)+' '+U.ru():'—');
+  }
+  if(!d.busy)return;
+  const st=d.steps&&d.steps[d.step];if(!st)return;
+  const progress=m.querySelector('[data-dt-progress]'),now=m.querySelector('[data-dt-now]'),left=m.querySelector('[data-dt-left]');
+  if(progress)progress.style.width=(100*(1-d.left/st.s)).toFixed(1)+'%';
+  if(now){
+    const go=d.left<=st.s-2;
+    now.textContent=go?st.now:'Get ready…';
+    now.style.color=go?'var(--teal)':'var(--sub)';
+  }
+  if(left)left.textContent='Recording, '+Math.ceil(d.left)+' s left.';
 }
 // Samples of one step and engine, without the first seconds (lever moving).
 function dtSamples(rec,ch,skipMs){
@@ -1345,7 +1368,7 @@ async function dtRecord(){
         since=f.ms0+f.t[f.t.length-1];
       }
     }catch(e){}
-    d.left=Math.max(0,(until-Date.now())/1000);render(true);
+    d.left=Math.max(0,(until-Date.now())/1000);dtPaint();
   }
   if(S.dt!==d||d.phase!=='run')return;
   d.rec.push({k:st.k,ch:st.ch,data});
