@@ -14,6 +14,8 @@ jobs:
         run: node --check site/app.js
       - name: Validate older USB installer archive contracts
         run: python3 tools/test_installer_archive.py
+      - name: Exercise firmware version picker without USB/CDN support
+        run: node tools/test_firmware_selector.js
       - name: Check required assets
         run: |
           test -s site/index.html

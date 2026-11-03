@@ -191,6 +191,19 @@ internal settings and history just like the existing USB installer. This
 does not change the device's separate five-item OTA release feed. See
 `docs/RELEASING.md` and `tools/test_installer_archive.py`.
 
+**Installer selector hotfix (2026-11-03).** The previous implementation
+left the `#firmware-version` element disabled until the external
+`esp-web-tools` JavaScript module had loaded and the latest manifest was
+verified. If either failed (browser, CDN, Web Serial, network), older
+versions could never be selected. `site/app.js` now enables the selector
+before any network calls, loads `versions/index.json` independently, and
+loads the USB library only when a selected firmware image is verified.
+`tools/test_firmware_selector.js` simulates blocked CDN, failed latest
+manifest and normal installation. The Pages build now includes the
+Git commit SHA in `app.js` / `styles.css` asset URLs: site-only updates
+must not rely on the firmware version for cache invalidation. No firmware
+version bump is needed for this website-only hotfix.
+
 ## Drive test scenes (in progress, 2026-11-03)
 
 The drive test (app page `dtest`, `dtAnim` and the `scene*` functions in

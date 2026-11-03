@@ -1,5 +1,6 @@
-// EngineLink USB installer. Only offer firmware that was compiled and
-// published: never turn a GitHub release tag into an unchecked flash URL.
+// EngineLink USB installer. The firmware selector is independent of USB support:
+// selecting historical releases must work even if the Web Serial library/CDN
+// cannot load. Only verified, complete, same-origin merged images can be flashed.
 (async () => {
   const status = document.querySelector('#release-status');
   const waiting = document.querySelector('#installer-wait');
@@ -11,10 +12,12 @@
 
   const VERSION_RE = /^\d+\.\d+\.\d+(?:-[a-z0-9.-]+)?$/;
   const IMAGE_BYTES = 8 * 1024 * 1024;
+  const versions = new Map(); // version -> same-origin manifest path
   let latestVersion = '';
+  let latestBuild = null;
   let selectedReady = false;
   let requestId = 0;
-  const versions = new Map(); // version -> same-origin manifest path
+  let installerLibraryPromise = null;
 
   function unavailable(message) {
     selectedReady = false;
@@ -34,7 +37,7 @@
   consent.addEventListener('change', updateConsent);
 
   // A full 8 MB merged image at offset zero always overwrites internal data.
-  // Never offer an OTA/app-only .bin to this USB installer.
+  // Never offer an OTA/app-only .bin to the USB installer.
   async function inspectManifest(path, expectedVersion) {
     const url = new URL(path, document.baseURI);
     const siteRoot = new URL('.', document.baseURI);
@@ -63,10 +66,23 @@
     return { version: manifest.version, url: url.toString() };
   }
 
+  // Only the actual flashing button requires ESP Web Tools. Loading this
+  // module must never block listing or choosing historical firmware.
+  function loadInstallerLibrary() {
+    if (!installerLibraryPromise) {
+      installerLibraryPromise = import('https://unpkg.com/esp-web-tools@10/dist/web/install-button.js?module')
+        .catch(error => {
+          installerLibraryPromise = null; // allow a later retry
+          throw error;
+        });
+    }
+    return installerLibraryPromise;
+  }
+
   function showInstaller(build, older) {
     const button = document.createElement('esp-web-install-button');
     button.setAttribute('manifest', build.url);
-    // Version strings come from a strictly validated manifest, not HTML input.
+    // Version strings come from a strictly validated manifest, not user input.
     button.innerHTML = '<button slot="activate" class="installbutton">Install EngineLink v' +
       build.version + '</button>' +
       '<span slot="unsupported" class="hint">Use Chrome or Edge with Web Serial on a desktop.</span>' +
@@ -93,8 +109,18 @@
       const older = choice !== 'latest';
       const path = older ? versions.get(choice) : 'manifest.json';
       if (!path) throw Error('This version is not in the published firmware archive.');
-      const build = await inspectManifest(path, older ? choice : latestVersion);
-      if (req !== requestId) return; // User changed versions while checking.
+      const build = !older && latestBuild ? latestBuild : await inspectManifest(path, older ? choice : null);
+      if (req !== requestId) return; // Ignore stale requests after a new selection.
+      status.textContent = 'EngineLink v' + build.version + ' verified · Loading USB installer…';
+      try {
+        await loadInstallerLibrary();
+      } catch (error) {
+        if (req !== requestId) return;
+        unavailable('EngineLink v' + build.version +
+          ' is available, but the USB installer library could not load. Check your connection or try Chrome/Edge.');
+        return;
+      }
+      if (req !== requestId) return;
       showInstaller(build, older);
     } catch (error) {
       if (req !== requestId) return;
@@ -102,48 +128,23 @@
     }
   }
 
-  try {
-    // The latest image remains usable even if the optional archive is down.
-    const latest = await inspectManifest('manifest.json');
-    latestVersion = latest.version;
-    document.querySelectorAll('[data-version]').forEach(
-      e => { e.textContent = latestVersion.replace('-', ' '); }
-    );
+  // Register the selector before ANY network operation. A failed CDN import,
+  // a missing manifest, or unsupported Web Serial must not freeze this control.
+  selector.disabled = false;
+  selector.options[0].textContent = 'Latest firmware · Checking…';
+  selector.addEventListener('change', () => chooseVersion(selector.value));
 
-    const option = selector.options[0];
-    option.textContent = 'v' + latestVersion + ' · Latest build';
-    option.value = 'latest';
-
-    fetch(new URL('release.json', document.baseURI), { cache: 'no-store' })
-      .then(r => r.ok ? r.json() : null)
-      .then(info => {
-        const el = document.querySelector('#ota-info');
-        if (info && el && VERSION_RE.test(info.version || '')) {
-          el.textContent = 'enginelink-update.bin · v' + info.version +
-            ' · ' + Math.round(info.updateBytes / 1024) +
-            ' KB · install from Settings → Firmware update';
-        }
-      }).catch(() => {});
-
-    await import('https://unpkg.com/esp-web-tools@10/dist/web/install-button.js?module');
-
-    selector.disabled = false;
-    selector.addEventListener('change', () => chooseVersion(selector.value));
-    showInstaller(latest, false);
-
-    // This JSON lists only full 8 MB images successfully copied from GitHub
-    // Releases to GitHub Pages. Every old manifest + binary is same-origin,
-    // avoiding cross-origin firmware download failures in ESP Web Tools.
+  // Load the archive separately from the latest image and the flash library.
+  // This way the dropdown still fills on browsers without Web Serial support.
+  async function loadArchive() {
     try {
-      const url = new URL('versions/index.json', document.baseURI);
-      const response = await fetch(url.toString(), { cache: 'no-store' });
+      const response = await fetch(new URL('versions/index.json', document.baseURI), { cache: 'no-store' });
       if (!response.ok) throw Error('Archive index unavailable');
       const catalog = await response.json();
       if (!Array.isArray(catalog.versions)) throw Error('Invalid archive index');
       for (const item of catalog.versions) {
         const version = item.v;
-        if (!VERSION_RE.test(version || '') || version === latestVersion ||
-            versions.has(version)) continue;
+        if (!VERSION_RE.test(version || '') || version === latestVersion || versions.has(version)) continue;
         const path = 'versions/v' + version + '/manifest.json';
         versions.set(version, path);
         const date = /^\d{4}-\d{2}-\d{2}$/.test(item.date || '') ? ' · ' + item.date : '';
@@ -154,10 +155,43 @@
         : 'The latest build is selected. There are no older USB images in this archive.';
     } catch (error) {
       console.warn('Older firmware archive unavailable:', error);
-      hint.textContent = 'Latest firmware is available. Older versions are temporarily unavailable.';
+      hint.textContent = 'Older versions could not be listed. Try reloading the page; the latest version is still available.';
     }
-  } catch (error) {
-    console.warn('EngineLink installer unavailable:', error);
-    unavailable(error.message || 'The firmware installer could not be loaded.');
   }
+
+  async function loadLatest() {
+    try {
+      const latest = await inspectManifest('manifest.json');
+      latestVersion = latest.version;
+      latestBuild = latest;
+      document.querySelectorAll('[data-version]').forEach(
+        e => { e.textContent = latestVersion.replace('-', ' '); }
+      );
+      selector.options[0].textContent = 'v' + latestVersion + ' · Latest build';
+
+      // Do not overwrite the user's older-version choice when the latest
+      // manifest finishes loading in the background.
+      if (selector.value === 'latest') await chooseVersion('latest');
+    } catch (error) {
+      console.warn('Latest EngineLink firmware unavailable:', error);
+      if (selector.value === 'latest') unavailable(
+        'Latest firmware could not be verified. You can still select a listed older release.'
+      );
+      selector.options[0].textContent = 'Latest firmware · Currently unavailable';
+    }
+  }
+
+  fetch(new URL('release.json', document.baseURI), { cache: 'no-store' })
+    .then(r => r.ok ? r.json() : null)
+    .then(info => {
+      const el = document.querySelector('#ota-info');
+      if (info && el && VERSION_RE.test(info.version || '')) {
+        el.textContent = 'enginelink-update.bin · v' + info.version +
+          ' · ' + Math.round(info.updateBytes / 1024) +
+          ' KB · install from Settings → Firmware update';
+      }
+    }).catch(() => {});
+
+  loadArchive();
+  loadLatest();
 })();
