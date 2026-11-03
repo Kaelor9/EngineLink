@@ -1,0 +1,578 @@
+<!doctype html><html lang="da"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Båden i stregstil</title>
+<style>
+:root{--bg:#f3f1ec;--card:#fff;--ink:#1c2328;--mute:#66707a;--line:#e1ddd4;--acc:#1f4f73;--accbg:#e6eef5}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#12171b;--card:#1b2227;--ink:#e8ecef;--mute:#98a2ab;--line:#2b343b;--acc:#8cc0e6;--accbg:#1d3242}}
+:root[data-theme="dark"]{--bg:#12171b;--card:#1b2227;--ink:#e8ecef;--mute:#98a2ab;--line:#2b343b;--acc:#8cc0e6;--accbg:#1d3242}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif}
+.wrap{max-width:980px;margin:0 auto;padding:16px}h1{font-size:22px;margin:6px 0 2px}p{color:var(--mute);margin:0 0 14px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px;margin:12px 0}
+.card h2{font-size:15px;margin:0 0 10px}
+.big svg,.full svg{display:block;width:100%;height:auto;border-radius:10px}
+.row{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px}
+.opt{all:unset;cursor:pointer;border:2px solid transparent;border-radius:10px;overflow:hidden;background:var(--bg)}
+.opt svg{display:block;width:100%;height:auto}.opt b{display:block;font-size:13px;padding:6px 8px}
+.opt[aria-pressed="true"]{border-color:var(--acc);background:var(--accbg)}.opt:focus-visible{outline:2px solid var(--acc)}
+.app{display:flex;gap:16px;flex-wrap:wrap;align-items:center}.app .s{width:260px}.app .s svg{display:block;width:100%;height:auto;border-radius:8px}
+</style></head><body><div class="wrap">
+<h1>Båden i stregstil</h1>
+<p>Din båd med samme form som i værkstedet, tegnet som i appen: flade farver og få, kraftige streger for de store ting.</p>
+<div class="card big" id="big"></div>
+<div class="card"><h2>Farver</h2><div class="row" id="pal"></div></div>
+<div class="card"><h2>I appens størrelse</h2><div class="app"><div class="s" id="small"></div><div class="s" id="small2" style="width:110px"></div></div></div>
+<div class="card full"><h2>Til sammenligning: den fulde tegning</h2><div id="full"></div></div>
+</div><script>
+// Brochure-style deck plan of a sport cruiser, bow up. Drawn along the boat
+// (x from transom 0 to bow L, y across, starboard positive) and turned -90°.
+const O={form:0,plat:0,cock:0,fore:0,screen:0,roof:0,roofc:0,canvas:0,frame:0,style:0,side:0,deck:0,cush:0,floor:0,glass:0};
+const SIDE=[['Grøn','#2f8a78'],['Hvid','#eef1f1'],['Marineblå','#22385a'],['Grafit','#4b535a'],['Sølv','#aeb7bd'],['Sort','#1f2226'],['Bordeaux','#6e2633']];
+const DECKC=[['Hvid','#f6f7f6'],['Elfenben','#f2ede2'],['Lys grå','#e4e7e7']];
+const CUSHC=[['Hvid','#fbfbfa'],['Creme','#efe5d2'],['Sand','#d9c6a5'],['Lysegrå','#cfd3d5'],['Marineblå','#2e4059'],['Terracotta','#b9684f']];
+const FLOORC=[['Grå prikket','#cdd2d4'],['Teak','#b77a45'],['Hvidt','#eceeee'],['Mørkegrå','#8d9397']];
+const GLASS=[['Mørk','#1d2a33'],['Blågrøn','#24484f'],['Røgfarvet','#3c3f44'],['Lys','#6f8c9c']];
+const ROOFC=[['Hvid','#f3f5f5'],['Lys grå','#c9cfd3'],['Grafit','#4a5258'],['Sort','#23272b']];
+const CANVAS=[['Marineblå','#2e3c52'],['Grå','#8a9095'],['Sand','#cdbb98'],['Sort','#2a2c2f'],['Hvid','#eef0ef']];
+const FRAME=[['Lys grå','#d2d8db'],['Blankt stål','#e8edf0'],['Sort','#2a2f33'],['Hvid','#f6f7f7']];
+const FORMS=[
+ ['Som tegningen',{L:340,B:112,s:.5,pw:2,q:.62,tr:.95}],
+ ['Spidsere stævn',{L:346,B:110,s:.46,pw:1.6,q:.8,tr:.94}],
+ ['Rundere stævn',{L:336,B:114,s:.54,pw:2.4,q:.5,tr:.96}],
+ ['Lang og smal',{L:362,B:104,s:.5,pw:1.9,q:.66,tr:.94}],
+ ['Kort og bred',{L:318,B:122,s:.52,pw:2,q:.6,tr:.96}]];
+const pk=(a,k)=>a[O[k]][1];const F=()=>FORMS[O.form][1];const FL=()=>F().L;
+const P=(x,y)=>x.toFixed(1)+' '+y.toFixed(1);
+function hb(x){const f=F(),t=x/f.L;if(t<=f.s)return f.B/2*(f.tr+(1-f.tr)*Math.sin(t/f.s*Math.PI/2));
+  const u=(t-f.s)/(1-f.s);return f.B/2*Math.pow(Math.max(0,1-Math.pow(u,f.pw)),f.q);}
+const rr=(x,y,w,h,r)=>{r=Math.min(r,w/2,h/2);return `M${P(x+r,y)} H${(x+w-r).toFixed(1)} Q${P(x+w,y)} ${P(x+w,y+r)} V${(y+h-r).toFixed(1)} Q${P(x+w,y+h)} ${P(x+w-r,y+h)} H${(x+r).toFixed(1)} Q${P(x,y+h)} ${P(x,y+h-r)} V${(y+r).toFixed(1)} Q${P(x,y)} ${P(x+r,y)}Z`;};
+function inset(x0,x1,d,r=8,n=40){
+  const D=typeof d==='function'?d:()=>d,y=x=>Math.max(0,hb(x)-D(x)),toBow=x1>=FL()-2,xe=toBow?x1:x1-r;
+  let s=`M${P(x0,-y(x0)+r)} Q${P(x0,-y(x0))} ${P(x0+r,-y(x0+r))}`;
+  for(let i=1;i<=n;i++){const x=x0+r+(xe-x0-r)*i/n;s+=` L${P(x,-y(x))}`;}
+  if(!toBow)s+=` Q${P(x1,-y(x1))} ${P(x1,-y(x1)+r)} L${P(x1,y(x1)-r)} Q${P(x1,y(x1))} ${P(xe,y(xe))}`;
+  for(let i=n;i>=1;i--){const x=x0+r+(xe-x0-r)*(i-1)/n;s+=` L${P(x,y(x))}`;}
+  return s+` Q${P(x0,y(x0))} ${P(x0,y(x0)-r)}Z`;}
+function hullOutline(){const L=FL(),n=90,r=Math.min(12,hb(0)*.22);let top='',bot='';
+  for(let i=1;i<=n;i++){const x=r+(L-r)*i/n;top+=` L${P(x,-hb(x))}`;bot=` L${P(x,hb(x))}`+bot;}
+  return `M${P(0,-hb(0)+r)} Q${P(0,-hb(0))} ${P(r,-hb(r))}`+top+bot+` L${P(r,hb(r))} Q${P(0,hb(0))} ${P(0,hb(0)-r)}Z`;}
+let CID=0;const cid=n=>n+(++CID);
+const ln=(w=.7,c='#8b959b')=>O.style?` stroke="${c}" stroke-width="${w}"`:'';
+function moulded(d,fill,{lift=2,shade='mould'}={}){
+  return `<path d="${d}" fill="#26323a" opacity=".22" transform="translate(${lift*.6} ${lift})" filter="url(#b2)"/><path d="${d}" fill="${fill}"${ln()}/><path d="${d}" fill="url(#${shade})"/>`;}
+function recess(d,fill,kind){const id=cid('r');let g=`<clipPath id="${id}"><path d="${d}"/></clipPath><g clip-path="url(#${id})"><path d="${d}" fill="${fill}"/>`;
+  if(kind==='teak')for(let y=-80;y<80;y+=3.4)g+=`<path d="M-60 ${y.toFixed(1)} H420" stroke="#6d4524" stroke-width=".55" opacity=".55"/>`;
+  if(kind==='speck')g+=`<rect x="-60" y="-80" width="480" height="160" fill="url(#speck)"/>`;
+  g+=`<path d="${d}" fill="none" stroke="#1c262d" stroke-width="12" opacity=".26" transform="translate(-3 2.5)" filter="url(#b3)"/></g>`;
+  return g+`<path d="${d}" fill="none" stroke="#fff" stroke-width="1.6" opacity=".9"/>`+(O.style?`<path d="${d}" fill="none" stroke="#7d878d" stroke-width=".7"/>`:'');}
+const glassFill=()=>pk(GLASS,'glass');
+const glass=d=>`<path d="${d}" fill="${glassFill()}"/><path d="${d}" fill="url(#glassHi)"/>`;
+// Upholstery drawn as a thick stroke along a centreline, with a piped groove.
+function seat(d,w=S){const c=pk(CUSHC,'cush'),j='stroke-linecap="butt" stroke-linejoin="round"';
+  return `<path d="${d}" fill="none" stroke="#26323a" stroke-width="${w}" ${j} opacity=".28" transform="translate(-2.4 2.4)" filter="url(#b2)"/>`+
+   `<path d="${d}" fill="none" stroke="${O.style?'#8b959b':'#c9ced1'}" stroke-width="${w}" ${j}/>`+
+   `<path d="${d}" fill="none" stroke="${c}" stroke-width="${w-1.2}" ${j}/>`+
+   `<path d="${d}" fill="none" stroke="#000" stroke-width="${w-6}" ${j} opacity=".14"/>`+
+   `<path d="${d}" fill="none" stroke="${c}" stroke-width="${w-7.4}" ${j}/>`+
+   `<path d="${d}" fill="none" stroke="#fff" stroke-width="${(w-7.4)*.5}" ${j} opacity=".18" transform="translate(.8 -.8)"/>`;}
+function pad(d){const c=pk(CUSHC,'cush');return moulded(d,c,{lift:2.2,shade:'cushion'});}
+const deckIn=x=>2.8+9*Math.max(0,1-x/80)**1.3;
+// ---------- Hull ----------
+function hull(){const p=hullOutline(),L=FL(),dk=pk(DECKC,'deck');
+  let g=`<path d="${p}" fill="#04111b" opacity=".38" transform="translate(-7 8)" filter="url(#b6)"/>`;
+  g+=`<path d="${p}" fill="${pk(SIDE,'side')}"/><path d="${p}" fill="url(#sideGloss)"/>`;
+  const dd=inset(0,L,deckIn,10);
+  g+=`<path d="${dd}" fill="${dk}"/><path d="${dd}" fill="url(#crown)"/><path d="${dd}" fill="none" stroke="#fff" stroke-width="1" opacity=".8"/>`;
+  // A raised gunwale line along the side decks.
+  g+=`<path d="${inset(6,L*.86,x=>deckIn(x)+4.5,10)}" fill="none" stroke="#9aa4aa" stroke-width=".8" opacity=".55"/>`;
+  if(O.style)g+=`<path d="${p}" fill="none" stroke="#56626a" stroke-width=".9"/>`;
+  return g;}
+// ---------- Platform ----------
+function platform(len,kind){if(!len)return '';const w=hb(0)-8,d=rr(-len,-w,len+6,2*w,5);
+  let g=`<path d="${d}" fill="#04111b" opacity=".3" transform="translate(-3 5)" filter="url(#b3)"/>`;
+  if(kind==='white')return g+moulded(d,pk(DECKC,'deck'),{lift:0});
+  const id=cid('pl');g+=`<clipPath id="${id}"><path d="${d}"/></clipPath><g clip-path="url(#${id})"><path d="${d}" fill="#c0824b"/>`;
+  for(let y=-w;y<w;y+=3.2)g+=`<path d="M${-len} ${y.toFixed(1)} H6" stroke="#7a4e2a" stroke-width=".5" opacity=".55"/>`;
+  g+=`<path d="${d}" fill="url(#teakGloss)"/></g>`;
+  if(kind==='hatch')g+=`<path d="${rr(-len+5,-w*.45,len-9,w*.9,2)}" fill="none" stroke="#f4efe6" stroke-width="1.3"/>`;
+  if(kind==='two')g+=[-1,1].map(s=>`<path d="${rr(-len+4,s<0?-w+4:4,len-6,w-8,2)}" fill="none" stroke="#f4efe6" stroke-width="1.3"/>`).join('');
+  return g;}
+const PLAT=[['Teak med luge',()=>platform(28,'hatch')],['Teak med to luger',()=>platform(28,'two')],['Hel teak',()=>platform(28,'teak')],['Hvid platform',()=>platform(24,'white')],['Kort teak',()=>platform(14,'teak')],['Ingen platform',()=>'']];
+// ---------- Cockpit ----------
+const WX=()=>FL()*.56;            // windscreen line
+const CK={x0:12};const cIn=x=>deckIn(x)+10;const yi=x=>hb(x)-cIn(x);
+function well(){const x1=WX()-4,d=inset(CK.x0,x1,cIn,10),k=O.floor;
+  return recess(d,pk(FLOORC,'floor'),k===1?'teak':k===0||k===3?'speck':'');}
+const pl=pts=>pts.map((p,i)=>(i?'L':'M')+P(...p)).join(' ');
+function smooth(pts){let s=`M${P(...pts[0])}`;for(let i=1;i<pts.length-1;i++){const m=[(pts[i][0]+pts[i+1][0])/2,(pts[i][1]+pts[i+1][1])/2];s+=` Q${P(...pts[i])} ${P(...m)}`;}return s+` L${P(...pts[pts.length-1])}`;}
+function table(x,y,r){return `<circle cx="${x-1}" cy="${y+2}" r="${r}" fill="#000" opacity=".22" filter="url(#b2)"/><circle cx="${x}" cy="${y}" r="${r}" fill="#e9ecec"/><circle cx="${x}" cy="${y}" r="${r}" fill="url(#mould)"/>`;}
+function wetbar(x,y,w=30,h=13){return moulded(rr(x,y,w,h,4),pk(DECKC,'deck'),{lift:1.4})+`<circle cx="${x+8}" cy="${y+h/2}" r="3.4" fill="#c7cdd1"/><circle cx="${x+8}" cy="${y+h/2}" r="1.5" fill="#7c868c"/><path d="${rr(x+16,y+3,10,h-6,2)}" fill="#cfd5d8"/>`;}
+// A polyline with rounded corners of radius r (for seat centrelines).
+function rp(pts,r=10){let s=`M${P(...pts[0])}`;
+  for(let i=1;i<pts.length-1;i++){const [x0,y0]=pts[i-1],[x1,y1]=pts[i],[x2,y2]=pts[i+1];
+    const l1=Math.hypot(x1-x0,y1-y0),l2=Math.hypot(x2-x1,y2-y1),k=Math.min(r,l1/2,l2/2);
+    s+=` L${P(x1-(x1-x0)/l1*k,y1-(y1-y0)/l1*k)} Q${P(x1,y1)} ${P(x1+(x2-x1)/l2*k,y1+(y2-y1)/l2*k)}`;}
+  return s+` L${P(...pts[pts.length-1])}`;}
+const S=20;                                  // seat depth
+const xa=CK.x0+S/2+1;                        // centreline of the aft bench
+const wv=x=>yi(x)-S/2-1;                     // centreline of a side seat
+function tableR(x0,y0,w,h){return `<path d="${rr(x0-1,y0+2,w,h,5)}" fill="#000" opacity=".2" filter="url(#b2)"/><path d="${rr(x0,y0,w,h,5)}" fill="#eef0f0"/><path d="${rr(x0,y0,w,h,5)}" fill="url(#mould)"/><path d="${rr(x0+2,y0+2,w-4,h-4,4)}" fill="none" stroke="#c3c9cc" stroke-width=".7"/>`;}
+function sink(x,y){return `<circle cx="${x}" cy="${y}" r="6" fill="#d3d8db"/><circle cx="${x}" cy="${y}" r="4.6" fill="#b8c0c4"/><circle cx="${x+1}" cy="${y-1}" r="1.3" fill="#7c868c"/>`;}
+function wetbar(x,len){const y=wv(x)+2,d=rr(x,y-S/2,len,S-1,4);return moulded(d,pk(DECKC,'deck'),{lift:1.4})+sink(x+len*.35,y)+`<path d="${rr(x+len*.62,y-4,len*.26,8,2)}" fill="#cfd5d8"/>`;}
+const COCK=[
+ ['Sofa med knæk som tegningen',()=>{const w=wv(60),xF=WX()-44,xJ1=xa+82,xJ2=xa+60,J=17;
+   return well()+seat(rp([[xF,-wv(xF)],[xJ1,-wv(xJ1)],[xJ1,-w+J],[xJ2,-w+J],[xJ2,-w],[xa,-w],[xa,w*.45]],10))
+    +tableR(xa+S/2+5,-w+S/2+3,xJ2-xa-S-8,24)+wetbar(xa+40,46);}],
+ ['U-sofa og bord',()=>{const w=wv(60),x1=xa+66;return well()+seat(rp([[x1,-w],[xa,-w],[xa,w],[x1,w]],10))+tableR(xa+S/2+8,-w+S/2+5,x1-xa-S-6,2*w-S-10);}],
+ ['Solseng agter og sofa',()=>{const w=yi(40)-1;return well()+pad(rr(CK.x0+2,-w,44,2*w,9))+`<path d="M${CK.x0+24} ${-w+4} V${w-4}" stroke="#000" stroke-width=".8" opacity=".12"/>`+seat(rp([[xa+44,-wv(80)],[xa+100,-wv(110)]]))+tableR(xa+52,-wv(80)+S/2+4,36,22)+wetbar(xa+46,44);}],
+ ['To sofaer over for hinanden',()=>{const w=wv(70);return well()+seat(rp([[xa+4,-w],[xa+82,-w]]))+seat(rp([[xa+4,w],[xa+82,w]]))+tableR(xa+20,-w+S/2+5,46,2*w-S-10);}],
+ ['L-sofa og stor wetbar',()=>{const w=wv(60);return well()+seat(rp([[xa,w*.2],[xa,-w],[xa+86,-w]],10))+tableR(xa+S/2+8,-w+S/2+5,40,24)+wetbar(xa+20,70);}],
+ ['Åbent med bord',()=>{const w=wv(60);return well()+tableR(xa+20,-16,40,32)+wetbar(xa+40,50);}]];
+// ---------- Helm and companionway ----------
+function helm(){const x=WX()-46,y=wv(x)-2,xc=WX()-32,yc=-wv(xc);
+  return seat(rp([[x,y-12],[x,y+4]]),S)+
+   `<circle cx="${x+19}" cy="${y-4}" r="6.5" fill="none" stroke="#2d363c" stroke-width="2.2"/><circle cx="${x+19}" cy="${y-4}" r="1.5" fill="#2d363c"/>`+
+   `<path d="${rr(x+26,y-13,6,20,2)}" fill="#20292f"/>`+
+   // Steps down to the cabin on the port side.
+   `<path d="${rr(xc,yc-8,26,22,3)}" fill="#c6ccd0"/><path d="M${xc+7} ${yc-8} V${yc+14} M${xc+14} ${yc-8} V${yc+14} M${xc+21} ${yc-8} V${yc+14}" stroke="#9aa3a8" stroke-width=".8"/>`;}
+// ---------- Windscreens ----------
+const SY=x=>hb(x)-deckIn(x)-1.5;
+function screenPts({ahead=14,back=12,p=2,wings=30}){const W=WX(),xf=W+ahead,xs=W-back,pts=[];
+  for(let i=0;i<=8;i++){const x=xs-wings*(1-i/8);pts.push([x,-SY(x),0]);}
+  for(let i=1;i<40;i++){const s=-1+2*i/40,x=xf-(xf-xs)*Math.pow(Math.abs(s),p);pts.push([x,s*SY(x),1]);}
+  for(let i=0;i<=8;i++){const x=xs-wings*i/8;pts.push([x,SY(x),0]);}return pts;}
+// Corner cutting, so bends come out round (endpoints stay put).
+function chaikin(pts,it=3){for(let k=0;k<it;k++){const o=[pts[0]];for(let i=0;i<pts.length-1;i++){const [x0,y0]=pts[i],[x1,y1]=pts[i+1];o.push([x0*.75+x1*.25,y0*.75+y1*.25],[x0*.25+x1*.75,y0*.25+y1*.75]);}o.push(pts[pts.length-1]);pts=o;}return pts;}
+// Offset a polyline by t towards the inside of the boat (aft and to the centre).
+function offsetIn(pts,t){const c=[WX()-60,0];return pts.map((q,i)=>{const a=pts[Math.max(0,i-1)],b=pts[Math.min(pts.length-1,i+1)];
+  let nx=-(b[1]-a[1]),ny=b[0]-a[0];const l=Math.hypot(nx,ny)||1;nx/=l;ny/=l;if(nx*(c[0]-q[0])+ny*(c[1]-q[1])<0){nx=-nx;ny=-ny;}return [q[0]+nx*t,q[1]+ny*t];});}
+// A band of glass along a curve, with rounded ends.
+function screenBand(pts,t){const o=chaikin(pts.map(p=>[p[0],p[1]])),i=offsetIn(o,t).reverse();
+  const cap=(a,b)=>{const m=[(a[0]+b[0])/2-t*.45,(a[1]+b[1])/2];return ` Q${P(...m)} ${P(...b)}`;};
+  return `M${P(...o[0])}`+o.slice(1).map(q=>' L'+P(...q)).join('')+cap(o[o.length-1],i[0])+i.slice(1).map(q=>' L'+P(...q)).join('')+cap(i[i.length-1],o[0])+'Z';}
+const outerLine=q=>{const o=chaikin(q.map(p=>[p[0],p[1]]));return `M${P(...o[0])}`+o.slice(1).map(v=>' L'+P(...v)).join('');};
+function screen(opt){const pts=screenPts(opt),t=opt.t||8,fr=pk(FRAME,'frame');let parts=[pts];
+  if(opt.gap){const n=pts.length;parts=[pts.slice(0,n/2-3|0),pts.slice(n/2+3|0)];}
+  return parts.map(q=>{const d=screenBand(q,t);return `<path d="${d}" fill="#04111b" opacity=".25" transform="translate(-2 4)" filter="url(#b2)"/>`+
+    `<path d="${d}" fill="${glassFill()}" opacity="${opt.clear?.75:1}"/><path d="${d}" fill="url(#glassHi)"/>`+
+    (opt.clear?'':`<path d="${outerLine(q)}" fill="none" stroke="${fr}" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>`);}).join('')+
+    (opt.dash!==false?(()=>{const f=offsetIn(chaikin(pts.filter(p=>p[2]).map(q=>[q[0],q[1]])),t+.5);const k=Math.round(f.length*.06);return `<path d="${screenBand(f.slice(k,f.length-k),6)}" fill="#dde2e4" opacity=".9"/>`;})():'');}
+const SCREEN=[
+ ['Buet i fuld bredde',()=>screen({ahead:14,back:10,p:2,wings:28,t:8})],
+ ['Spids V-rude',()=>screen({ahead:22,back:6,p:1.05,wings:24,t:8})],
+ ['Lav sportsrude',()=>screen({ahead:8,back:4,p:2.4,wings:0,t:4.5,dash:false})],
+ ['Med gennemgang i midten',()=>screen({ahead:14,back:10,p:2,wings:28,t:8,gap:true})],
+ ['Rammeløs',()=>screen({ahead:14,back:10,p:2,wings:20,t:7,clear:true})],
+ ['Høj med lange vinger',()=>screen({ahead:16,back:12,p:1.8,wings:56,t:12})],
+ ['Ingen rude',()=>'']];
+// ---------- Roofs ----------
+const rc=()=>pk(ROOFC,'roofc'),cv=()=>pk(CANVAS,'canvas');
+function roofShape(d,fill,shade='roof'){return `<path d="${d}" fill="#04111b" opacity=".3" transform="translate(-8 10)" filter="url(#b3)"/><path d="${d}" fill="${fill}"${ln(.8,'#5f6a70')}/><path d="${d}" fill="url(#${shade})"/>`;}
+function canvasTop(x0,x1,d=6,r=16,bows=3){const sh=inset(x0,x1,x=>deckIn(x)+d,r);let g=roofShape(sh,cv(),'canvasSh');
+  for(let i=1;i<=bows;i++){const x=x0+(x1-x0)*i/(bows+1);g+=`<path d="M${P(x,-(hb(x)-deckIn(x)-d))} Q${P(x+5,0)} ${P(x,hb(x)-deckIn(x)-d)}" fill="none" stroke="#000" stroke-width="1.2" opacity=".28"/>`;}return g;}
+function arch(x,col=rc(),w=12){const y=hb(x)-deckIn(x)-w/2-1,d=`M${P(x-12,-y)} Q${P(x+18,0)} ${P(x-12,y)}`;
+  const foot=s=>`<path d="${rr(x-19,s*y-4,14,8,3)}" fill="${col}"/><path d="${rr(x-19,s*y-4,14,8,3)}" fill="#000" opacity=".15"/>`;
+  return `<path d="${d}" fill="none" stroke="#04111b" stroke-width="${w}" opacity=".22" transform="translate(-7 8)" filter="url(#b3)"/>`+foot(-1)+foot(1)+`<path d="${d}" fill="none" stroke="${col}" stroke-width="${w}" stroke-linecap="butt"/><path d="${d}" fill="none" stroke="url(#tube)" stroke-width="${w}" stroke-linecap="butt"/><path d="${d}" fill="none" stroke="#fff" stroke-width="${w*.3}" stroke-linecap="butt" opacity=".45" transform="translate(1.5 -1)"/>`;}
+// A hardtop whose front follows the windscreen and whose sides sit on the side decks.
+function hardtopPath(x0){const W=WX(),y=x=>SY(x)-7,xs=W-10,r=14,xe=xs-7,n=16;
+  const front=screenPts({ahead:14,back:10,p:2,wings:0}).filter(p=>p[2]).map(([x,yy])=>[x-7,Math.sign(yy)*Math.max(0,Math.abs(yy)-7)]);
+  const side=[];for(let i=0;i<=n;i++)side.push(x0+r+(xe-x0-r)*i/n);
+  const line=chaikin([...side.map(x=>[x,-y(x)]),...front,...side.slice().reverse().map(x=>[x,y(x)])],3);
+  return `M${P(x0,-y(x0)+r)} Q${P(x0,-y(x0))} ${P(...line[0])}`+line.slice(1).map(q=>' L'+P(...q)).join('')+` Q${P(x0,y(x0))} ${P(x0,y(x0)-r)}Z`;}
+function hardtop(x0,kind){const W=WX(),d=hardtopPath(x0);let g=roofShape(d,rc(),'roofTop');
+  const m=(x0+W)/2-4,len=(W-x0)*.48,yw=Math.min(24,(hb(m)-deckIn(m))*.55);
+  if(kind==='glass')g+=`<path d="${rr(m-len/2,-yw,len,2*yw,8)}" fill="#aab3b8"/>`+glass(rr(m-len/2+1.5,-yw+1.5,len-3,2*yw-3,7));
+  if(kind==='two')g+=[-1,1].map(s=>glass(rr(m-len/2,s<0?-yw:3,len,yw-3,6))).join('');
+  if(kind==='canvas'){g+=`<path d="${rr(m-len/2,-yw,len,2*yw,6)}" fill="${cv()}"/>`;for(let i=1;i<6;i++)g+=`<path d="M${(m-len/2+len*i/6).toFixed(1)} ${-yw} V${yw}" stroke="#000" stroke-width=".8" opacity=".25"/>`;}
+  if(kind==='open')g+=`<path d="${rr(m-len/2,-yw,len,2*yw,8)}" fill="${pk(FLOORC,'floor')}"/><path d="${rr(m-len/2,-yw,len,2*yw,8)}" fill="none" stroke="#000" stroke-width="3" opacity=".18" filter="url(#b2)"/>`;
+  return g;}
+function ttop(){const W=WX(),x0=W-48,yw=(hb(W)-deckIn(W))*.62;return roofShape(rr(x0,-yw,46,2*yw,10),rc())+`<path d="${rr(x0+10,-yw*.5,22,yw,5)}" fill="#000" opacity=".08"/>`;}
+function sunshade(){const w=hb(0)-6,d=rr(4,-w+2,62,2*w-4,4);return `<path d="M2 ${-w} L10 ${-w+6} M2 ${w} L10 ${w-6} M68 ${-w+2} L60 ${-w+8} M68 ${w-2} L60 ${w-8}" stroke="#555" stroke-width=".6"/>`+roofShape(d,cv(),'canvasSh');}
+const ROOF=[
+ ['Intet tag',()=>''],
+ ['Radarbøjle',()=>arch(WX()-46)],
+ ['Bøjle med kaleche frem',()=>canvasTop(WX()-50,WX()+4,2,10,2)+arch(WX()-46)],
+ ['Kaleche over cockpittet',()=>canvasTop(22,WX()-2,6,18,3)],
+ ['Hardtop med glassoltag',()=>hardtop(WX()-76,'glass')],
+ ['Hardtop med to glasluger',()=>hardtop(WX()-76,'two')],
+ ['Hardtop med stoftag',()=>hardtop(WX()-76,'canvas')],
+ ['Hardtop med åbning',()=>hardtop(WX()-76,'open')],
+ ['Lang hardtop til agter',()=>hardtop(40,'two')],
+ ['T-top over førerpladsen',()=>ttop()],
+ ['Sort sportsbøjle',()=>arch(WX()-46,'#2a2e32',10)],
+ ['Bøjle og solsejl agter',()=>arch(WX()-46)+sunshade()]];
+// ---------- Foredeck ----------
+const round=(x,r)=>`<circle cx="${x}" cy="0" r="${r+1.8}" fill="#c9cfd2"/><circle cx="${x}" cy="0" r="${r}" fill="${glassFill()}"/><circle cx="${x}" cy="0" r="${r}" fill="url(#glassHi)"/>`;
+const sq=(x,s)=>`<path d="${rr(x-s/2-1.5,-s/2-1.5,s+3,s+3,4)}" fill="#c9cfd2"/>`+glass(rr(x-s/2,-s/2,s,s,3));
+const anchor=()=>'';
+function sunpad(x0,x1,pleats,head){const a=x=>(hb(x)-deckIn(x)-7);let d=`M${P(x0,-a(x0))}`;
+  for(let i=1;i<=14;i++){const x=x0+(x1-x0)*i/14;d+=` L${P(x,-a(x))}`;}d+=` Q${P(x1+10,0)} ${P(x1,a(x1))}`;
+  for(let i=14;i>=0;i--){const x=x0+(x1-x0)*i/14;d+=` L${P(x,a(x))}`;}d+=` Q${P(x0-5,0)} ${P(x0,-a(x0))}Z`;
+  let g=pad(d);const c=pk(CUSHC,'cush');
+  if(pleats){const id=cid('sp');g+=`<clipPath id="${id}"><path d="${d}"/></clipPath><g clip-path="url(#${id})">`;
+    for(let k=-6;k<=6;k++){const y=k*7;g+=`<path d="M${x0} ${y*1.0} Q${(x0+x1)/2} ${y*.95} ${x1+12} ${y*.35}" fill="none" stroke="#000" stroke-width="1" opacity=".12"/><path d="M${x0} ${y+1.2} Q${(x0+x1)/2} ${y*.95+1.2} ${x1+12} ${y*.35+1}" fill="none" stroke="#fff" stroke-width=".8" opacity=".5"/>`;}g+='</g>';}
+  if(head)g+=pad(`M${P(x0-2,-a(x0)+6)} Q${P(x0-10,0)} ${P(x0-2,a(x0)-6)} L${P(x0+6,a(x0)-8)} Q${P(x0,0)} ${P(x0+6,-a(x0)+8)}Z`);
+  return g;}
+const FORE=[
+ ['Stribet solseng og rund luge',()=>sunpad(WX()+30,FL()*.84,true,true)+round(FL()*.87,6)+anchor()],
+ ['Glat solseng',()=>sunpad(WX()+30,FL()*.84,false,false)+round(FL()*.87,6)+anchor()],
+ ['Rent dæk med rund luge',()=>round(FL()*.82,8)+anchor()],
+ ['To runde luger',()=>round(FL()*.82,8)+round(FL()*.7,6)+anchor()],
+ ['Firkantede luger',()=>sq(FL()*.72,22)+sq(FL()*.86,12)+anchor()],
+ ['Kort solseng og luge',()=>sunpad(WX()+30,FL()*.72,true,false)+round(FL()*.84,7)+anchor()]];
+// ---------- Boat ----------
+function boat(){return PLAT[O.plat][1]()+hull()+FORE[O.fore][1]()+COCK[O.cock][1]()+helm()+SCREEN[O.screen][1]()+ROOF[O.roof][1]();}
+const DEFS=()=>`<defs>
+<linearGradient id="sea" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#4b8aa6"/><stop offset="1" stop-color="#2b5d79"/></linearGradient>
+<linearGradient id="sideGloss" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#000" stop-opacity=".25"/><stop offset=".2" stop-color="#fff" stop-opacity="0"/><stop offset=".8" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#fff" stop-opacity=".4"/></linearGradient>
+<linearGradient id="crown" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3f4b53" stop-opacity=".3"/><stop offset=".2" stop-color="#fff" stop-opacity=".05"/><stop offset=".5" stop-color="#fff" stop-opacity=".45"/><stop offset=".8" stop-color="#fff" stop-opacity=".1"/><stop offset="1" stop-color="#5d6a72" stop-opacity=".25"/></linearGradient>
+<linearGradient id="mould" x1="0" y1="1" x2=".3" y2="0"><stop offset="0" stop-color="#fff" stop-opacity=".7"/><stop offset=".55" stop-color="#fff" stop-opacity="0"/><stop offset="1" stop-color="#6c7880" stop-opacity=".28"/></linearGradient>
+<linearGradient id="cushion" x1="0" y1="1" x2=".2" y2="0"><stop offset="0" stop-color="#fff" stop-opacity=".5"/><stop offset=".5" stop-color="#fff" stop-opacity=".05"/><stop offset="1" stop-color="#5f6a72" stop-opacity=".28"/></linearGradient>
+<linearGradient id="roof" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#55626a" stop-opacity=".3"/><stop offset=".5" stop-color="#fff" stop-opacity=".55"/><stop offset="1" stop-color="#7a868d" stop-opacity=".35"/></linearGradient>
+<linearGradient id="roofTop" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#6b777e" stop-opacity=".28"/><stop offset=".14" stop-color="#fff" stop-opacity=".1"/><stop offset=".5" stop-color="#fff" stop-opacity=".5"/><stop offset=".86" stop-color="#fff" stop-opacity=".1"/><stop offset="1" stop-color="#6b777e" stop-opacity=".28"/></linearGradient>
+<linearGradient id="canvasSh" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#000" stop-opacity=".25"/><stop offset=".5" stop-color="#fff" stop-opacity=".18"/><stop offset="1" stop-color="#000" stop-opacity=".25"/></linearGradient>
+<linearGradient id="tube" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#000" stop-opacity=".25"/><stop offset=".5" stop-color="#fff" stop-opacity=".2"/><stop offset="1" stop-color="#000" stop-opacity=".1"/></linearGradient>
+<linearGradient id="teakGloss" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".25"/><stop offset=".5" stop-color="#fff" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".18"/></linearGradient>
+<linearGradient id="glassHi" x1="0" y1="1" x2=".7" y2="0"><stop offset=".25" stop-color="#fff" stop-opacity="0"/><stop offset=".4" stop-color="#fff" stop-opacity=".28"/><stop offset=".5" stop-color="#fff" stop-opacity="0"/></linearGradient>
+<radialGradient id="fendG" cx=".35" cy=".35" r=".75"><stop offset="0" stop-color="#fff" stop-opacity=".55"/><stop offset=".5" stop-color="#fff" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".3"/></radialGradient>
+<pattern id="speck" width="5" height="5" patternUnits="userSpaceOnUse"><circle cx="1" cy="1" r=".45" fill="#7f878c" opacity=".55"/><circle cx="3.6" cy="3.2" r=".35" fill="#fff" opacity=".8"/></pattern>
+<filter id="b2" x="-20%" y="-30%" width="140%" height="160%"><feGaussianBlur stdDeviation="1.6"/></filter>
+<filter id="b3" x="-20%" y="-30%" width="140%" height="160%"><feGaussianBlur stdDeviation="3"/></filter>
+<filter id="b6" x="-10%" y="-30%" width="120%" height="160%"><feGaussianBlur stdDeviation="6"/></filter></defs>`;
+function water(x,y,w,h){let g=`<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="url(#sea)"/>`,s=7;const r=()=>{s=(s*9301+49297)%233280;return s/233280;};
+  for(let i=0;i<16;i++){const px=x+r()*w,py=y+r()*h,l=12+r()*22;g+=`<path d="M${P(px,py)} q-2 ${l/2} 0 ${l}" fill="none" stroke="#eaf5fb" stroke-width="1.1" stroke-linecap="round" opacity="${(.1+r()*.15).toFixed(2)}"/>`;}return g;}
+let svgN=0;
+function uniq(svg){const n=++svgN,ids=new Set();svg.replace(/id="([^"]+)"/g,(m,i)=>ids.add(i));ids.forEach(i=>{svg=svg.split(`id="${i}"`).join(`id="${i}_${n}"`).split(`url(#${i})`).join(`url(#${i}_${n})`);});return svg;}
+// crop is [x0,y0,w,h] along the boat; the picture is turned so the bow points up.
+function boatSvg(crop){const L=FL(),c=crop?crop(L):[-40,-84,L+64,168],vb=[c[1],-(c[0]+c[2]),c[3],c[2]];
+  return uniq(`<svg viewBox="${vb.join(' ')}" role="img" aria-label="Sportscruiser set oppefra med stævnen op">${DEFS()}${water(vb[0],vb[1],vb[2],vb[3])}<g transform="rotate(-90)">${boat()}</g></svg>`);}
+
+// ---------- The owner's build so far ----------
+Object.assign(O,{form:4,screen:5,roof:8,cock:5,fore:4,plat:0,roofc:1,canvas:2,frame:0,glass:0,side:2,deck:0,floor:1,cush:2,style:1,
+  cleatn:1,cleatpos:0,cleatt:0,cleato:0,metal:0,rail:1,ladder:6,lside:0,bow:0,ftie:0,fline:0,fendn:2,fends:0,fendh:0,fendt:0,fendc:0});
+const METAL=[['Blankt stål','#e6ebee','#8b959d'],['Sort','#3a3e42','#16181a'],['Messing','#dcbc70','#8f7336']];
+const mt=()=>METAL[O.metal];
+// ---------- Cleats ----------
+// Each set lists positions along the boat; pairs sit port and starboard.
+const CLEATN=[
+ ['4: agter og midtskibs',L=>[14,L*.63]],
+ ['6: agter, midt og for',L=>[14,L*.63,L*.87]],
+ ['7: også en stævnklampe',L=>[14,L*.63,L*.87,'bow']],
+ ['8: også springklamper',L=>[14,L*.3,L*.63,L*.87]],
+ ['10: to agter i hver side',L=>[8,26,L*.3,L*.63,L*.87]]];
+const CLEATPOS=[['Yderst ved kanten',5.6],['Midt på sidedækket',8.4],['Agterklamper på hækken',5.6]];
+function cleatShape(k){const [ , a,b]=mt();
+  const horn=s=>`<path d="M${-7.5*s} 0 Q${-7*s} -1.7 ${-4*s} -1.9 L${4*s} -1.9 Q${7*s} -1.7 ${7.5*s} 0 Q${7*s} 1.7 ${4*s} 1.9 L${-4*s} 1.9 Q${-7*s} 1.7 ${-7.5*s} 0Z" fill="${a}" stroke="${b}" stroke-width=".7"/><path d="M${-5*s} -.7 H${5*s}" stroke="#fff" stroke-width=".7" opacity=".6"/>`;
+  if(k===0)return `<path d="${rr(-3.2,-2.6,6.4,5.2,1.6)}" fill="${b}"/>`+horn(1);
+  if(k===1)return `<path d="${rr(-4,-3,8,6,2)}" fill="${b}"/>`+horn(1.4);
+  if(k===2)return `<circle r="4.4" fill="${b}"/><circle r="3.6" fill="${a}"/><path d="${rr(-2.6,-.7,5.2,1.4,.7)}" fill="${b}"/>`;
+  if(k===3)return `<circle r="4.6" fill="${b}"/><circle r="3.5" fill="${a}"/><circle cx="-.9" cy="-.9" r="1.3" fill="#fff" opacity=".55"/>`;
+  return `<path d="${rr(-6.5,-1.6,13,3.2,1.4)}" fill="${a}" stroke="${b}" stroke-width=".7"/><path d="${rr(-1.6,-4.5,3.2,9,1.4)}" fill="${a}" stroke="${b}" stroke-width=".7"/><circle r="1.4" fill="${b}"/>`;}
+const CLEATT=[['Klassisk klampe',0],['Stor klampe',1],['Nedfældet (pop-up)',2],['Pullert',3],['Krydspullert',4]];
+const CLEATO=[['Langskibs',0],['Skrå 20°',20],['Skrå 45°',45],['Tværskibs',90]];
+function cleatAt(x,y,rot){return `<g transform="translate(${P(x,y)}) rotate(${rot.toFixed(1)})"><ellipse cx="-1.4" cy="1.6" rx="7" ry="3" fill="#000" opacity=".22" filter="url(#b2)"/>${cleatShape(O.cleatt)}</g>`;}
+function cleats(){const L=FL(),d=CLEATPOS[O.cleatpos][1],o=CLEATO[O.cleato][1];let g='';
+  CLEATN[O.cleatn][1](L).forEach(x=>{
+    if(x==='bow'){g+=cleatAt(BOWS[O.bow][2]?L-46:L-30,0,90);return;}
+    if(x<30&&typeof PEDGE!=='undefined'&&PEDGE[O.pedge][2]&&PLEN[O.plat]){[-1,1].forEach(s=>g+=cleatAt(-PLEN[O.plat]*.5,s*(hb(0)-5.5),0));return;}
+    if(O.cleatpos===2&&x<30){[-1,1].forEach(s=>g+=cleatAt(5,s*(hb(5)-deckIn(5)-6),s*(45+o)));return;}
+    const t=Math.atan2(hb(x+2)-hb(x-2),4)*180/Math.PI;
+    [-1,1].forEach(s=>{const y=s*(hb(x)-deckIn(x)-d);g+=cleatAt(x,y,s*(t+o));});});
+  return g;}
+// ---------- Rail ----------
+function steelLine(d,w=1.6){const [,a,b]=mt();return `<path d="${d}" fill="none" stroke="#04111b" stroke-width="${w+.6}" opacity=".25" transform="translate(-2.5 3)" filter="url(#b2)" stroke-linecap="round"/><path d="${d}" fill="none" stroke="${b}" stroke-width="${w+1}" stroke-linecap="round" stroke-linejoin="round"/><path d="${d}" fill="none" stroke="${a}" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round"/>`;}
+function railPath(x0,d=1.5){const L=FL(),xb=L-10,y=x=>hb(x)-deckIn(x)-d;let a='',b='';const n=30;
+  for(let i=0;i<=n;i++){const x=x0+(xb-x0)*i/n;a+=(i?' L':'M')+P(x,-y(x));b=` L${P(x,y(x))}`+b;}
+  return {d:a+` Q${P(xb+6,0)} ${P(xb,y(xb))}`+b.replace(/^ L[^L]*/,''),pts:Array.from({length:Math.floor((xb-x0)/26)+1},(_,i)=>x0+i*26)};}
+function rail(x0){const r=railPath(x0),[,a,b]=mt();let g=steelLine(r.d);
+  r.pts.forEach(x=>[-1,1].forEach(s=>{const y=s*(hb(x)-deckIn(x)-1.5);g+=`<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="1.9" fill="${b}"/><circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="1.1" fill="${a}"/>`;}));return g;}
+const RAIL=[['Fuld ræling fra cockpittet',()=>rail(WX()-60)],['Fra ruden og frem',()=>rail(WX()+4)],['Kun forude',()=>rail(FL()*.76)],
+ ['Håndlister på fordækket',()=>[-1,1].map(s=>{const x0=WX()+34,x1=FL()*.78,y=x=>s*(hb(x)-deckIn(x)-9);return steelLine(`M${P(x0,y(x0))} Q${P((x0+x1)/2,y((x0+x1)/2))} ${P(x1,y(x1))}`,1.4);}).join('')],
+ ['Ingen gelænder',()=>'']];
+// ---------- Swim ladder ----------
+const PLEN=[28,28,28,24,14,0];
+const LSIDE=[['Styrbord',1],['Bagbord',-1],['Midt',0]];
+const ladY=()=>{const s=LSIDE[O.lside][1];return s*(hb(0)-24);};
+// Parts below the waterline fade into the sea.
+const sub=(g,k)=>`<g opacity="${Math.max(.18,1-k*.22).toFixed(2)}">${g}</g>`;
+function tube(d,w=1.6){return steelLine(d,w);}
+function rungs(x0,yc,hw,n,step,teak){let g='';for(let i=0;i<n;i++){const x=x0-step*(i+.6);
+  const r=teak?`<path d="${rr(x-2,yc-hw,4,2*hw,1.2)}" fill="#b77a45" stroke="#6d4524" stroke-width=".5"/>`:tube(`M${P(x,yc-hw)} L${P(x,yc+hw)}`,1.4);g+=sub(r,i);}return g;}
+function ladder({hw=5,n=4,step=5,teak=false,handles=0,grab=false,start}){const x0=-PLEN[O.plat]+1,yc=ladY();let g='';
+  // side rails going down into the water
+  if(start!==undefined)g+=tube(`M${P(start,yc-hw)} L${P(x0,yc-hw)} M${P(start,yc+hw)} L${P(x0,yc+hw)}`,1.5);
+  for(let i=0;i<n;i++)g+=sub(tube(`M${P(x0-step*i,yc-hw)} L${P(x0-step*(i+1),yc-hw)} M${P(x0-step*i,yc+hw)} L${P(x0-step*(i+1),yc+hw)}`,1.5),i);
+  g+=rungs(x0,yc,hw,n,step,teak);
+  if(grab)g+=tube(`M${P(x0+2,yc-hw)} Q${P(x0+12,yc-hw)} ${P(x0+12,yc)} Q${P(x0+12,yc+hw)} ${P(x0+2,yc+hw)}`,1.7);
+  if(handles)[-1,1].forEach(s=>{const y=yc+s*(hw+3);g+=tube(`M${P(x0+16,y)} Q${P(x0-2,y+s*3)} ${P(x0-8,y)}`,1.7)+`<circle cx="${x0+16}" cy="${y}" r="2" fill="${mt()[2]}"/>`;});
+  return g;}
+function steps(teak){const x0=-PLEN[O.plat],yc=ladY(),w=12;let g='';
+  for(let k=0;k<4;k++){const x=x0-3-k*7;const st=`<path d="${rr(x-6,yc-w,7,2*w,2)}" fill="${teak?'#c0824b':pk(DECKC,'deck')}" stroke="${teak?'#7a4e2a':'#9aa4aa'}" stroke-width=".6"/>`+(teak?`<path d="M${x-6} ${yc} H${x+1}" stroke="#7a4e2a" stroke-width=".5"/>`:'');g+=sub(st,k);}
+  return g+tube(`M${P(x0+6,yc-w-2)} Q${P(x0-6,yc-w-3)} ${P(x0-16,yc-w-2)}`,1.6)+tube(`M${P(x0+6,yc+w+2)} Q${P(x0-6,yc+w+3)} ${P(x0-16,yc+w+2)}`,1.6);}
+// A ladder stowed under a hatch in the platform: closed, or with the lid
+// folded forward and the ladder run out into the water.
+function hatchLadder(open){const x0=-PLEN[O.plat]+3,yc=ladY(),w=7.5,l=16,d=rr(x0,yc-w,l,2*w,2);
+  if(!open)return `<path d="${d}" fill="#000" opacity=".06"/><path d="${d}" fill="none" stroke="#f4efe6" stroke-width="1.2"/><path d="${rr(x0+l-5,yc-2,3,4,1)}" fill="${mt()[1]}" stroke="${mt()[2]}" stroke-width=".5"/>`;
+  // lid folded over sideways onto the platform, well open, ladder run out aft
+  const dir=yc>0?-1:1,ly=yc+dir*2*w;
+  let g=`<path d="${rr(x0,ly-w,l,2*w,2)}" fill="#04111b" opacity=".25" transform="translate(-1.5 2)" filter="url(#b2)"/><path d="${rr(x0,ly-w,l,2*w,2)}" fill="#b07444"/><path d="${rr(x0+1,ly-w+1,l-2,2*w-2,1.5)}" fill="none" stroke="#7a4e2a" stroke-width=".6"/>`;
+  g+=`<path d="${d}" fill="#2a3237"/><path d="${d}" fill="none" stroke="#000" stroke-width="3" opacity=".35" filter="url(#b2)"/>`;
+  return g+ladder({hw:5,n:4,step:5,start:x0+l-2,teak:true});}
+const LADDER=[
+ ['Teleskopstige med gribebøjle',()=>ladder({hw:5,n:4,step:5,grab:true})],
+ ['Stige med teaktrin',()=>ladder({hw:6,n:4,step:5.5,teak:true,grab:true})],
+ ['Bred stige med to håndtag',()=>ladder({hw:8,n:4,step:5.5,teak:true,handles:1})],
+ ['Smal stige med håndtag',()=>ladder({hw:4,n:5,step:4.5,handles:1})],
+ ['Badetrappe i teak',()=>steps(true)],
+ ['Hvid badetrappe',()=>steps(false)],
+ ['Under luge, lukket',()=>hatchLadder(false)],
+ ['Under luge, foldet ud',()=>hatchLadder(true)],
+ ['Ingen badestige',()=>'']];
+// ---------- Fenders ----------
+const FENDN=[['Ingen',0],['2 i hver side',2],['3 i hver side',3],['4 i hver side',4],['6 i hver side',6]];
+const FENDS=[['Begge sider',[-1,1]],['Kun styrbord',[1]],['Kun bagbord',[-1]]];
+const FENDH=[['Lodret',0],['Vandret',1]];
+const FENDT=[['Cylinder',0],['Kugle',1],['Flad fender',2],['Med fendersok',3]];
+const FENDC=[['Hvid','#f2f3f1'],['Marineblå','#24365a'],['Sort','#25282b'],['Grå','#9aa1a6'],['Blå','#2f6db5'],['Rød','#b5372e']];
+const FTIE=[['Til gelænderet',0],['Til klamperne',1],['I fenderholdere',2],['Gennem øjer i skandækket',3]];
+const FLINE=[['Hvid','#f1ede2'],['Marineblå','#2b3d5c'],['Rød','#b23b30'],['Sort','#2a2c2f'],['Sand','#cdb98f']];
+const R=7.5;                                       // fender radius, the same for all round types
+function attach(x,s){const t=FTIE[O.ftie][1],L=FL(),yd=d=>s*(hb(x)-deckIn(x)-d);
+  if(t===0&&RAIL[O.rail][0]!=='Ingen gelænder'&&O.rail!==3){const r=railPath(railStart());let best=r.pts[0];r.pts.forEach(q=>{if(Math.abs(q-x)<Math.abs(best-x))best=q;});return {x:best,y:s*(hb(best)-deckIn(best)-1.5),k:'rail'};}
+  if(t===1){const xs=CLEATN[O.cleatn][1](L).filter(v=>v!=='bow');let best=xs[0];xs.forEach(q=>{if(Math.abs(q-x)<Math.abs(best-x))best=q;});return {x:best,y:s*(hb(best)-deckIn(best)-CLEATPOS[O.cleatpos][1]),k:'cleat'};}
+  if(t===3)return {x,y:yd(3),k:'eye'};
+  return {x,y:yd(1.2),k:'holder'};}
+const railStart=()=>[WX()-60,WX()+4,FL()*.76][O.rail]??WX();
+function rope(x1,y1,x2,y2){const c=FLINE[O.fline][1],mx=(x1+x2)/2,my=(y1+y2)/2+(x2-x1)*.06;
+  return `<path d="M${P(x1,y1)} Q${P(mx,my)} ${P(x2,y2)}" fill="none" stroke="#000" stroke-width="1.6" opacity=".18" transform="translate(-1.5 2)"/><path d="M${P(x1,y1)} Q${P(mx,my)} ${P(x2,y2)}" fill="none" stroke="${c}" stroke-width="1.2" stroke-linecap="round"/>`;}
+function knot(a,s){const c=FLINE[O.fline][1];
+  if(a.k==='holder')return `<path d="${rr(a.x-3.2,a.y-s*1.4-1.6,6.4,3.2,1.2)}" fill="${mt()[2]}"/><path d="${rr(a.x-2.6,a.y-s*1.4-1.1,5.2,2.2,.9)}" fill="${mt()[1]}"/>`;
+  if(a.k==='eye')return `<ellipse cx="${a.x}" cy="${a.y}" rx="2.2" ry="1.4" fill="#4d575d"/>`;
+  // A clove hitch: two turns lying side by side.
+  return `<path d="${rr(a.x-3,a.y-2.2,2.6,4.4,1.2)}" fill="${c}" stroke="#000" stroke-opacity=".25" stroke-width=".5"/><path d="${rr(a.x+.4,a.y-2.2,2.6,4.4,1.2)}" fill="${c}" stroke="#000" stroke-opacity=".25" stroke-width=".5"/>`;}
+// Where a line from a fender at x is made fast. Fenders then hang straight
+// below that point; with no stanchion or cleat close by, a holder is used.
+function tieAt(x,s){let a=attach(x,s);if(Math.abs(a.x-x)>16)a={x,y:s*(hb(x)-deckIn(x)-1.2),k:'holder'};return a;}
+function fender(x,s){const c=FENDC[O.fendc][1],t=O.fendt,h=O.fendh;let shape,yy,ties=[];
+  const horiz=t===2||(t!==1&&h===1);
+  if(!horiz){const a=tieAt(x,s);x=a.x;ties=[a];}
+  const e=hb(x);
+  if(t===2){yy=s*(e+2.6);shape=`<path d="${rr(x-11,yy-2.6,22,5.2,1.8)}"/>`;}
+  else if(horiz){yy=s*(e+R);shape=`<path d="${rr(x-14,yy-R,28,2*R,R)}"/>`;}
+  else{yy=s*(e+R);shape=`<circle cx="${x}" cy="${yy}" r="${R}"/>`;}
+  if(horiz)ties=[x-9,x+9].map(ex=>{const a=tieAt(ex,s);return Math.abs(a.x-ex)>6?{x:ex,y:s*(hb(ex)-deckIn(ex)-1.2),k:'holder'}:a;});
+  const fill=(f,extra='')=>shape.replace('/>',` fill="${f}" ${extra}/>`);
+  let g=`<g transform="translate(-4 5)" opacity=".35" filter="url(#b2)">${fill('#04111b')}</g>`+fill(c)+fill('url(#fendG)');
+  if(t===3)g+=fill('none','stroke="#000" stroke-width="1.6" stroke-dasharray="1.2 1.2" opacity=".22"');
+  
+  ties.forEach(a=>{const ex=horiz?a.x:x,ey=horiz?yy-s*(t===2?0:R*.5):yy-s*R*.55;g+=rope(ex,ey,a.x,a.y)+knot(a,s);});
+  return {g,x};}
+function fenders(){const n=FENDN[O.fendn][1],L=FL();if(!n)return '';let g='';
+  FENDS[O.fends][1].forEach(s=>{const used=[];for(let i=0;i<n;i++){const x=n===1?L*.4:L*(.12+.5*i/(n-1));
+    const f=fender(x,s);if(used.some(u=>Math.abs(u-f.x)<14))continue;used.push(f.x);g+=f.g;}});return g;}
+// ---------- Bow ----------
+function roller(L,len=18){const [,a,b]=mt();return `<path d="${rr(L-len,-3.4,len+5,6.8,3)}" fill="${b}"/><path d="${rr(L-len+1,-2.4,len+3,4.8,2.4)}" fill="${a}"/><circle cx="${L+2}" cy="0" r="2.2" fill="${b}"/>`;}
+// A delta anchor seen from above: point forward, two flukes aft, shank in the roller.
+function anchorShape(x){const [,a,b]=mt();return `<g transform="translate(${x} 0)"><path d="M-12 0 H3" stroke="${b}" stroke-width="2.8" stroke-linecap="round"/><path d="M-12 0 H3" stroke="${a}" stroke-width="1.5" stroke-linecap="round"/>`+
+  `<path d="M15 0 Q9 -3 2 -7.5 Q4.5 -3 4 0 Q4.5 3 2 7.5 Q9 3 15 0Z" fill="${a}" stroke="${b}" stroke-width=".8" stroke-linejoin="round"/><path d="M14 0 L4 0" stroke="${b}" stroke-width=".7"/></g>`;}
+function windlass(x){const [,a,b]=mt();return `<circle cx="${x-1}" cy="1.5" r="6" fill="#000" opacity=".2" filter="url(#b2)"/><circle cx="${x}" cy="0" r="5.5" fill="${b}"/><circle cx="${x}" cy="0" r="4.3" fill="${a}"/><circle cx="${x}" cy="0" r="1.6" fill="${b}"/><path d="M${x+5} 0 H${FL()-14}" stroke="#4d575d" stroke-width="2" stroke-dasharray="1.6 .9"/>`;}
+function bowPlatform(len=16,steps=false){const L=FL(),w=10;const d=`M${P(L-16,-w)} L${P(L+len-4,-w*.55)} Q${P(L+len+2,0)} ${P(L+len-4,w*.55)} L${P(L-16,w)}Z`,id=cid('bp');
+  let g=`<path d="${d}" fill="#04111b" opacity=".3" transform="translate(-3 5)" filter="url(#b3)"/><clipPath id="${id}"><path d="${d}"/></clipPath><g clip-path="url(#${id})"><path d="${d}" fill="#c0824b"/>`;
+  for(let y=-w;y<w;y+=2.6)g+=`<path d="M${L-16} ${y.toFixed(1)} H${L+len+4}" stroke="#7a4e2a" stroke-width=".45" opacity=".6"/>`;
+  g+=`<path d="${d}" fill="url(#teakGloss)"/></g>`;
+  g+=steelLine(`M${P(L-12,-w-2)} L${P(L+len-6,-w*.6-1.5)} Q${P(L+len+3,0)} ${P(L+len-6,w*.6+1.5)} L${P(L-12,w+2)}`,1.3);
+  if(steps)g+=`<path d="${rr(L-26,-6,10,12,2)}" fill="${pk(DECKC,'deck')}" stroke="#9aa4aa" stroke-width=".6"/>`;
+  return g;}
+const BOWS=[
+ ['Anker i beslag',()=>roller(FL())+anchorShape(FL()+3),false],
+ ['Anker, spil og kæde',()=>windlass(FL()-34)+roller(FL())+anchorShape(FL()+3),true],
+ ['Lille stævnplatform med anker',()=>bowPlatform(16)+roller(FL()+12,14)+anchorShape(FL()+15),false],
+ ['Stævnplatform med trin og spil',()=>windlass(FL()-34)+bowPlatform(16,true)+roller(FL()+12,14)+anchorShape(FL()+15),true],
+ ['Skjult anker i ankerbrønd',()=>`<path d="${rr(FL()-34,-6,18,12,4)}" fill="none" stroke="#9aa4aa" stroke-width="1"/>`+roller(FL(),10),false],
+ ['Kun beslag, intet anker',()=>roller(FL(),12),false]];
+// ---------- Put it together ----------
+function boat(){return PLAT[O.plat][1]()+LADDER[O.ladder][1]()+hull()+FORE[O.fore][1]()+COCK[O.cock][1]()+helm()+BOWS[O.bow][1]()+cleats()+RAIL[O.rail][1]()+fenders()+SCREEN[O.screen][1]()+ROOF[O.roof][1]();}
+
+// ---------- Targa-style parts ----------
+FORMS.push(['Targa 34',{L:340,B:110,s:.48,pw:1.9,q:.7,tr:.94}]);
+SCREEN.splice(SCREEN.length-1,0,['Targa-rude',()=>screen({ahead:12,back:8,p:2.8,wings:40,t:9})]);
+// A broad arch whose legs sweep aft, with a radar dome on top.
+function targa(canvas){const W=WX(),Y=hb(W-74)-deckIn(W-74)-5,xo=W-62,xi=W-94;
+  const d=`M${P(xo,-Y)} Q${P(W-26,0)} ${P(xo,Y)} L${P(xi,Y-1)} Q${P(W-58,0)} ${P(xi,-Y+1)}Z`;
+  let g=canvas?canvasTop(W-58,W+4,2,10,2):'';
+  g+=roofShape(d,rc(),'roofTop')+`<path d="M${P(xo-2,-Y+3)} Q${P(W-30,0)} ${P(xo-2,Y-3)}" fill="none" stroke="#fff" stroke-width="1.2" opacity=".6"/>`;
+  g+=`<circle cx="${W-60}" cy="2" r="10" fill="#04111b" opacity=".25" filter="url(#b2)" transform="translate(-3 3)"/><circle cx="${W-58}" cy="0" r="9.5" fill="#f3f5f5"/><circle cx="${W-58}" cy="0" r="9.5" fill="url(#fendG)"/>`;
+  g+=`<path d="${rr(W-74,-18,4,36,2)}" fill="#2a2f33"/>`;
+  return g;}
+ROOF.splice(2,0,['Targabøjle med radar',()=>targa(false)],['Targabøjle med kaleche frem',()=>targa(true)]);
+// Cockpit with a C-sofa to port and a walk-through to the platform in the starboard corner.
+COCK.unshift(['Targa: C-sofa og gennemgang',()=>{const w=wv(60),yg=yi(8)-11,dk=pk(DECKC,'deck');
+  return well()+seat(rp([[xa,w*.05],[xa,-w],[xa+76,-w]],10))+tableR(xa+S/2+6,-w+S/2+4,42,26)+wetbar(xa+58,44)+
+   `<path d="${rr(-1,yg-10,13,20,3)}" fill="#04111b" opacity=".18" filter="url(#b2)"/><path d="${rr(0,yg-10,6.5,20,2.5)}" fill="${dk}" stroke="#9aa4aa" stroke-width=".6"/><path d="${rr(6,yg-10,6.5,20,2.5)}" fill="${dk}" stroke="#9aa4aa" stroke-width=".6"/><path d="${rr(6,yg-10,6.5,20,2.5)}" fill="#000" opacity=".06"/>`;}]);
+// Two sunpads split down the middle, with grab rails beside them.
+FORE.unshift(['Delt solseng med håndlister',()=>{const x0=WX()+30,x1=FL()*.8,a=x=>hb(x)-deckIn(x)-7;
+  let g=sunpad(x0,x1,false,true)+`<path d="M${x0} 0 L${x1+8} 0" stroke="#000" stroke-width="1.2" opacity=".14"/>`+round(FL()*.87,6);
+  [-1,1].forEach(s=>g+=steelLine(`M${P(x0+8,s*(a(x0+8)+3))} Q${P((x0+x1)/2,s*(a((x0+x1)/2)+3.5))} ${P(x1-6,s*(a(x1-6)+3))}`,1.3));
+  return g;}]);
+// A coloured stripe along the sheer.
+const STRIPE=[['Ingen',null],['Marineblå','#22385a'],['Grøn','#2f6f5e'],['Grafit','#4b535a'],['Rød','#9b2f2a'],['Dobbelt marineblå','#22385a',true]];
+function stripe(){const s=STRIPE[O.stripe];if(!s[1])return '';const d=inset(0,FL(),()=>.9,10);
+  return s[2]?`<path d="${d}" fill="none" stroke="${s[1]}" stroke-width=".9"/><path d="${inset(0,FL(),()=>2.4,10)}" fill="none" stroke="${s[1]}" stroke-width=".7"/>`:`<path d="${d}" fill="none" stroke="${s[1]}" stroke-width="1.6"/>`;}
+// Cleats: two aft, two up by the bow.
+CLEATN.unshift(['4: agter og i stævnen',L=>[14,L*.89]]);
+// The swim ladder stowed under a hatch: in, out with the lid shut, or out with the lid open.
+LADDER.splice(LADDER.findIndex(l=>l[0]==='Under luge, lukket'),2,
+ ['Under luge, stigen inde',()=>hatchLadder(false)],
+ ['Under luge, stigen ude og lugen lukket',()=>{const x0=-PLEN[O.plat]+3;return ladder({hw:5,n:4,step:5,start:x0+12,teak:true})+hatchLadder(false);}],
+ ['Under luge, stigen ude og lugen åben',()=>hatchLadder(true)]);
+function boat(){return PLAT[O.plat][1]()+LADDER[O.ladder][1]()+hull()+stripe()+FORE[O.fore][1]()+COCK[O.cock][1]()+helm()+BOWS[O.bow][1]()+cleats()+RAIL[O.rail][1]()+fenders()+SCREEN[O.screen][1]()+ROOF[O.roof][1]();}
+// The owner's choice, with indices moved by the new options.
+Object.assign(O,{cock:O.cock+1,fore:O.fore+1,roof:O.roof+2,cleatn:0,ladder:LADDER.findIndex(l=>l[0]==='Under luge, stigen ude og lugen lukket'),stripe:0});
+const TARGA={form:FORMS.length-1,screen:SCREEN.findIndex(s=>s[0]==='Targa-rude'),roof:2,cock:0,fore:0,plat:0,side:1,stripe:1,deck:0,floor:1,cush:1,roofc:0,frame:2,glass:0,bow:0,rail:1,cleatn:0};
+
+// ---------- Platform edge ----------
+// The platform can have a rubber bumper, and the hull sides can run aft along
+// it and slope down at the end.
+const PEDGE=[['Ingen kant',0,0],['Grå gummibumper',1,0],['Sort gummibumper',2,0],['Hvid bumper',3,0],['Skroget langs siderne',0,1],['Skroget langs siderne og bumper agter',1,1]];
+const BUMPC=[null,'#5d656b','#25292c','#eef0ef'];
+function platform(len,kind){if(!len)return '';const [,bump,ext]=PEDGE[O.pedge];const hw=hb(0),ew=6;
+  const w=ext?hw-ew+.5:hw-8,d=rr(-len,-w,len+6,2*w,ext?2:5);
+  let g=`<path d="${rr(-len,-(ext?hw:w),len+6,2*(ext?hw:w),5)}" fill="#04111b" opacity=".3" transform="translate(-3 5)" filter="url(#b3)"/>`;
+  if(kind==='white')g+=moulded(d,pk(DECKC,'deck'),{lift:0});
+  else{const id=cid('pl');g+=`<clipPath id="${id}"><path d="${d}"/></clipPath><g clip-path="url(#${id})"><path d="${d}" fill="#c0824b"/>`;
+    for(let y=-w;y<w;y+=3.2)g+=`<path d="M${-len} ${y.toFixed(1)} H6" stroke="#7a4e2a" stroke-width=".5" opacity=".55"/>`;
+    g+=`<path d="${d}" fill="url(#teakGloss)"/></g>`;
+    if(kind==='hatch')g+=`<path d="${rr(-len+5,-w*.45,len-9,w*.9,2)}" fill="none" stroke="#f4efe6" stroke-width="1.3"/>`;
+    if(kind==='two')g+=[-1,1].map(s=>`<path d="${rr(-len+4,s<0?-w+4:4,len-6,w-8,2)}" fill="none" stroke="#f4efe6" stroke-width="1.3"/>`).join('');}
+  if(ext)[-1,1].forEach(s=>{const y0=s*hw,y1=s*(hw-ew),id=cid('ex');
+    // the hull side carried aft, rounded and shaded where it drops down at the end
+    const e=`M${P(4,y0)} L${P(-len+7,y0)} Q${P(-len,y0)} ${P(-len,(y0+y1)/2)} Q${P(-len,y1)} ${P(-len+6,y1)} L${P(4,y1)}Z`;
+    g+=`<linearGradient id="${id}" x1="1" y1="0" x2="0" y2="0"><stop offset="0" stop-color="#000" stop-opacity="0"/><stop offset=".7" stop-color="#000" stop-opacity=".05"/><stop offset="1" stop-color="#000" stop-opacity=".35"/></linearGradient>`;
+    g+=`<path d="${e}" fill="${pk(DECKC,'deck')}"/><path d="${e}" fill="url(#crown)"/><path d="${e}" fill="url(#${id})"/><path d="M${P(4,y0)} L${P(-len+7,y0)} Q${P(-len,y0)} ${P(-len,(y0+y1)/2)}" fill="none" stroke="${pk(SIDE,'side')}" stroke-width="1.6"/>`;});
+  if(bump){const c=BUMPC[bump],b=ext?`M${P(-len+1,-w)} L${P(-len+1,w)}`:`M${P(4,-w)} L${P(-len+4,-w)} Q${P(-len,-w)} ${P(-len,-w+4)} L${P(-len,w-4)} Q${P(-len,w)} ${P(-len+4,w)} L${P(4,w)}`;
+    g+=`<path d="${b}" fill="none" stroke="#000" stroke-width="3.6" opacity=".25" transform="translate(-1 1.5)" filter="url(#b2)"/><path d="${b}" fill="none" stroke="${c}" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><path d="${b}" fill="none" stroke="#fff" stroke-width=".8" opacity="${bump===3?.9:.3}" transform="translate(.6 -.4)" stroke-linecap="round"/>`;}
+  return g;}
+// The ladder comes out from under the aft edge of a shut lid, and the lid is solid.
+function hatchLadder(open){const x0=-PLEN[O.plat]+3,yc=ladY(),w=7.5,l=16,d=rr(x0,yc-w,l,2*w,2);
+  const lid=(dd)=>{const id=cid('lid');let g=`<clipPath id="${id}"><path d="${dd}"/></clipPath><g clip-path="url(#${id})"><path d="${dd}" fill="#c0824b"/>`;
+    for(let y=yc-w-20;y<yc+w+20;y+=3.2)g+=`<path d="M${x0-40} ${y.toFixed(1)} H${x0+60}" stroke="#7a4e2a" stroke-width=".5" opacity=".55"/>`;return g+`</g>`;};
+  if(!open)return lid(d)+`<path d="${d}" fill="none" stroke="#f4efe6" stroke-width="1.2"/><path d="${rr(x0+l-5,yc-2,3,4,1)}" fill="${mt()[1]}" stroke="${mt()[2]}" stroke-width=".5"/>`;
+  const dir=yc>0?-1:1,ly=yc+dir*2*w;
+  let g=`<path d="${rr(x0,ly-w,l,2*w,2)}" fill="#04111b" opacity=".25" transform="translate(-1.5 2)" filter="url(#b2)"/>`+lid(rr(x0,ly-w,l,2*w,2))+`<path d="${rr(x0+1,ly-w+1,l-2,2*w-2,1.5)}" fill="none" stroke="#7a4e2a" stroke-width=".6"/>`;
+  g+=`<path d="${d}" fill="#2a3237"/><path d="${d}" fill="none" stroke="#000" stroke-width="3" opacity=".35" filter="url(#b2)"/>`;
+  return g+ladder({hw:5,n:4,step:5,start:x0+l-2,teak:true});}
+{const i=LADDER.findIndex(l=>l[0]==='Under luge, stigen ude og lugen lukket');
+ LADDER[i]=[LADDER[i][0],()=>hatchLadder(false)+ladder({hw:5,n:4,step:5,teak:true})];}
+O.pedge=0;
+
+// ---------- Hull carried aft past the transom (as on the owner's photo) ----------
+// The hull sides run aft the full width either side of the platform, their white
+// tops curving down towards the water at the end; the platform is white GRP with
+// teak panels between them.
+const _platform=platform;
+function teakPanel(d){const id=cid('tp');let g=`<clipPath id="${id}"><path d="${d}"/></clipPath><g clip-path="url(#${id})"><path d="${d}" fill="#b9814f"/>`;
+  for(let y=-70;y<70;y+=3)g+=`<path d="M-80 ${y} H20" stroke="#6d4524" stroke-width=".5" opacity=".6"/>`;
+  return g+`<path d="${d}" fill="url(#teakGloss)"/></g><path d="${d}" fill="none" stroke="#000" stroke-width="1.2" opacity=".12"/>`;}
+platform=function(len,kind){const [,bump,ext]=PEDGE[O.pedge];if(!ext||!len)return _platform(len,kind);
+  const hw=hb(0),bw=11,dk=pk(DECKC,'deck'),r=9,x0=-len;
+  const hullD=`M${P(8,-hw)} L${P(x0+r,-hw)} Q${P(x0,-hw)} ${P(x0,-hw+r)} L${P(x0,hw-r)} Q${P(x0,hw)} ${P(x0+r,hw)} L${P(8,hw)}Z`;
+  let g=`<path d="${hullD}" fill="#04111b" opacity=".38" transform="translate(-6 7)" filter="url(#b3)"/><path d="${hullD}" fill="${pk(SIDE,'side')}"/><path d="${hullD}" fill="url(#sideGloss)"/>`;
+  // the platform floor: white moulding between the quarters, with a lip at the aft edge
+  const fl=rr(x0+1.2,-hw+bw-1,len+8,2*(hw-bw+1),3);
+  g+=`<path d="${fl}" fill="${dk}"/><path d="${fl}" fill="url(#crown)"/>`;
+  const yi=hw-bw-3,xa=x0+4.5,xb=-2.5;
+  if(kind==='two')g+=teakPanel(rr(xa,-yi,xb-xa,yi-2,2))+teakPanel(rr(xa,2,xb-xa,yi-2,2));
+  else if(kind==='hatch'||kind==='teak')g+=teakPanel(rr(xa,-yi,xb-xa,2*yi,2))+(kind==='hatch'?`<path d="${rr(xa+3,-yi*.5,xb-xa-6,yi,2)}" fill="none" stroke="#f4efe6" stroke-width="1.2"/>`:'');
+  // the quarters: hull-coloured edge, white top that darkens as it falls away aft
+  [-1,1].forEach(s=>{const id=cid('q'),o=s*(hw-.9),i=s*(hw-bw);
+    const q=`M${P(8,o)} L${P(x0+r,o)} Q${P(x0+1,o)} ${P(x0+1.5,o-s*r*.8)} Q${P(x0+2.5,i)} ${P(x0+r+2,i)} L${P(8,i)}Z`;
+    g+=`<linearGradient id="${id}" x1="1" y1="0" x2="0" y2="0"><stop offset="0" stop-color="#000" stop-opacity="0"/><stop offset=".45" stop-color="#000" stop-opacity=".04"/><stop offset=".85" stop-color="#000" stop-opacity=".22"/><stop offset="1" stop-color="#000" stop-opacity=".34"/></linearGradient>`;
+    g+=`<path d="${q}" fill="#04111b" opacity=".2" transform="translate(-1 ${s*-1.5+1.5})" filter="url(#b2)"/><path d="${q}" fill="${dk}"/><path d="${q}" fill="url(#crown)"/><path d="${q}" fill="url(#${id})"/>`;
+    g+=`<path d="M${P(6,i+s*1.2)} L${P(x0+r+3,i+s*1.2)}" stroke="#fff" stroke-width="1" opacity=".8"/>`;});
+  if(bump){const c=BUMPC[bump],b=`M${P(x0+1.2,-hw+bw)} L${P(x0+1.2,hw-bw)}`;
+    g+=`<path d="${b}" fill="none" stroke="${c}" stroke-width="2.6" stroke-linecap="round"/>`;}
+  return g;};
+PEDGE[4][0]='Skroget med ned langs platformen';PEDGE[5][0]='Skroget med ned og bumper agter';
+// The owner's own arrangement: canvas over the whole cockpit and a steel mast with radar.
+function radarMast(){const W=WX(),x=W-150>20?40:20,[,a,b]=mt(),y=hb(x)-deckIn(x)-6;
+  return steelLine(`M${P(x-6,-y)} Q${P(x+10,0)} ${P(x-6,y)}`,2.2)+steelLine(`M${P(x+2,0)} L${P(x+2,0)}`,1)+
+   `<circle cx="${x+1}" cy="2" r="9" fill="#04111b" opacity=".28" filter="url(#b2)" transform="translate(-3 3)"/><circle cx="${x+3}" cy="0" r="8.5" fill="#f2f3f1"/><circle cx="${x+3}" cy="0" r="8.5" fill="url(#fendG)"/>`;}
+ROOF.push(['Kaleche over hele cockpittet og stålbøjle med radar',()=>canvasTop(6,WX()+4,6,14,4)+radarMast()]);
+O.pedge=4;
+
+// A small door in the starboard side of the transom, out to the platform.
+function transomDoor(){const yd=yi(12)-13,hy=yd+7;
+  // an opening through the transom with a slim door leaf swung into the cockpit
+  return `<path d="${rr(0,yd-7,13,14,1.5)}" fill="${pk(FLOORC,'floor')}"/><path d="${rr(0,yd-7,13,14,1.5)}" fill="#000" opacity=".08"/><path d="M${P(4,hy)} L${P(18,hy)}" stroke="#04111b" stroke-width="2.6" opacity=".2" filter="url(#b2)"/><path d="M${P(4,hy)} L${P(18,hy)}" stroke="${pk(DECKC,'deck')}" stroke-width="2.2" stroke-linecap="round"/><path d="M${P(4,hy)} L${P(18,hy)}" stroke="#8b959b" stroke-width=".5" stroke-linecap="round" opacity=".8"/>`;}
+const _boat=boat;boat=function(){const s=_boat(),i=s.lastIndexOf('<!--roof-->');return PEDGE[O.pedge][2]?s+'':s;};
+
+const C={pedge:L=>[-40,-70,90,140],bow:L=>[L*.72,-50,L*.28+34,100],form:null,plat:L=>[-56,-70,166,140],cock:L=>[-6,-70,200,140],screen:L=>[L*.56-90,-70,140,140],roof:L=>[0,-70,L*.56+30,140],fore:L=>[L*.56-10,-70,L*.44+16,140],
+ cleatt:L=>[L*.63-20,-hb(L*.63)-3,40,32],cleato:L=>[L*.63-20,-hb(L*.63)-3,40,32],metal:null,rail:L=>[L*.4,-72,L*.6+10,144],ladder:L=>[-56,-66,80,132],lside:L=>[-62,-70,130,140],ftie:L=>[L*.12-30,-hb(L*.3)-20,90,60],
+ fendh:L=>[L*.12-40,-hb(L*.3)-20,110,70],fendt:L=>[L*.12-40,-hb(L*.3)-20,110,70]};
+const GROUPS=[
+ ['cleatn','Klamper: antal',CLEATN,'boat'],['cleatpos','Klamper: placering',CLEATPOS,'boat'],['cleatt','Klamper: type',CLEATT,'boat'],['cleato','Klamper: retning',CLEATO,'boat'],
+ ['bow','Stævn og anker',BOWS,'boat'],['metal','Beslag og gelænder: metal',METAL,'sw'],['rail','Gelænder',RAIL,'boat'],['ladder','Badestige',LADDER,'boat'],['lside','Badestige: side',LSIDE,'boat'],
+ ['fendn','Fendere: antal',FENDN,'boat'],['fends','Fendere: side',FENDS,'boat'],['fendh','Fendere: hængemåde',FENDH,'boat'],['fendt','Fendere: type',FENDT,'boat'],['fendc','Fendere: farve',FENDC,'sw'],['ftie','Fendere: bundet',FTIE,'boat'],['fline','Fenderline: farve',FLINE,'sw'],
+ ['form','Form',FORMS,'boat'],['screen','Rude',SCREEN,'boat'],['roof','Tag',ROOF,'boat'],['cock','Cockpit',COCK,'boat'],['fore','Fordæk',FORE,'boat'],['plat','Badeplatform',PLAT,'boat'],['pedge','Badeplatform: kant',PEDGE,'boat'],
+ ['roofc','Tagfarve',ROOFC,'sw'],['canvas','Kaleche og stof',CANVAS,'sw'],['frame','Ruderamme',FRAME,'sw'],['glass','Glas',GLASS,'sw'],
+ ['side','Skrogside',SIDE,'sw'],['stripe','Skrogstribe',STRIPE,'sw'],['deck','Dæk',DECKC,'sw'],['floor','Cockpitgulv',FLOORC,'sw'],['cush','Hynder',CUSHC,'sw'],
+ ['style','Stil',[['Blød, uden streger','#f4f5f5'],['Med fine streger','#8b959b']],'sw']
+];
+
+// The owner's boat in the app's line style: flat fills, a few strong lines for
+// the big shapes. Same geometry as the full drawing.
+const CHOICE="Klamper: antal 1 · Klamper: placering 1 · Klamper: type 1 · Klamper: retning 1 · Stævn og anker 6 · Beslag og gelænder: metal 1 · Gelænder 2 · Badestige 8 · Badestige: side 1 · Fendere: antal 3 · Fendere: side 1 · Fendere: hængemåde 1 · Fendere: type 1 · Fendere: farve 1 · Fendere: bundet 1 · Fenderline: farve 1 · Form 5 · Rude 6 · Tag 11 · Cockpit 7 · Fordæk 6 · Badeplatform 1 · Badeplatform: kant 5 · Tagfarve 2 · Kaleche og stof 3 · Ruderamme 1 · Glas 1 · Skrogside 3 · Skrogstribe 1 · Dæk 1 · Cockpitgulv 2 · Hynder 3 · Stil 2";
+function applyChoice(code){const m={};code.split(' · ').forEach(t=>{const i=t.lastIndexOf(' ');m[t.slice(0,i)]=+t.slice(i+1);});for(const [k,n] of GROUPS)if(m[n])O[k]=m[n]-1;}
+const PAL=[
+ ['Som appen',{bg:'#33495c',hull:'#14202c',deck:'#1b2a38',top:'#22344a',line:'#f2f5f7',soft:'#8ea3b4',teak:'#c79b62',glass:'#0c141c'}],
+ ['Lys',{bg:'#dfe8ee',hull:'#ffffff',deck:'#f3f6f8',top:'#e4eaef',line:'#1c2a36',soft:'#7e909e',teak:'#b07a45',glass:'#2b3b49'}],
+ ['Marine',{bg:'#2a4d66',hull:'#1d3550',deck:'#e9eef2',top:'#c9d2d9',line:'#ffffff',soft:'#9fb3c2',teak:'#c08a52',glass:'#16222d'}],
+ ['Nat',{bg:'#0f171e',hull:'#0f171e',deck:'#0f171e',top:'#0f171e',line:'#7fe0d0',soft:'#3f7f78',teak:'#e0b070',glass:'#0f171e'}]];
+let PI_=0;
+function lineBoat(){const c=PAL[PI_][1],L=FL(),hw=hb(0),len=PLEN[O.plat],x0=-len,r=9,W=WX();
+  const st=(w,col=c.line)=>`fill="none" stroke="${col}" stroke-width="${w}" stroke-linejoin="round" stroke-linecap="round"`;
+  const hullD=hullOutline(),ext=`M${P(8,-hw)} L${P(x0+r,-hw)} Q${P(x0,-hw)} ${P(x0,-hw+r)} L${P(x0,hw-r)} Q${P(x0,hw)} ${P(x0+r,hw)} L${P(8,hw)}Z`;
+  let g='';
+  // outline of hull and the quarters as one shape
+  const one=(()=>{let a=`M${P(x0,-hw+r)} Q${P(x0,-hw)} ${P(x0+r,-hw)}`,b='';const n=90;
+    for(let i=0;i<=n;i++){const x=L*i/n;a+=` L${P(x,-hb(x))}`;b=` L${P(x,hb(x))}`+b;}
+    return a+b+` L${P(x0+r,hw)} Q${P(x0,hw)} ${P(x0,hw-r)}Z`;})();
+  g+=`<path d="${one}" fill="${c.hull}" ${st(2.2).replace('fill="none" ','')}/>`;
+  // deck inside the sheer
+  // platform floor between the quarters, teak panel and the ladder hatch
+  const bw=11;
+  g+=`<path d="${rr(x0+2,-(hw-bw),6-x0-2,2*(hw-bw),2)}" fill="${c.top}"/>`;
+  [-1,1].forEach(s=>g+=`<path d="M${P(6,s*(hw-bw))} L${P(x0+2,s*(hw-bw))}" ${st(1,c.soft)}/>`);
+  const yc=ladY(),hx=x0+3;g+=`<path d="${rr(hx,yc-7.5,16,15,2)}" ${st(1.1,c.soft)}/>`;
+  g+=`<path d="M${P(x0-2.5,yc-5)} L${P(x0-10,yc-5)} M${P(x0-2.5,yc+5)} L${P(x0-10,yc+5)}" ${st(1.3)}/>`+[0,1,2].map(i=>`<path d="M${P(x0-4.5-i*2.6,yc-5)} L${P(x0-4.5-i*2.6,yc+5)}" ${st(1.1)} opacity="${(1-i*.28).toFixed(2)}"/>`).join('');
+  // cockpit edge
+  {const xe=80,y=x=>hb(x)-cIn(x),x1=CK.x0,r=10;let d=`M${P(xe,-y(xe))}`;for(let i=1;i<=20;i++){const x=xe-(xe-x1-r)*i/20;d+=` L${P(x,-y(x))}`;}
+   d+=` Q${P(x1,-y(x1))} ${P(x1,-y(x1)+r)} L${P(x1,y(x1)-r)} Q${P(x1,y(x1))} ${P(x1+r,y(x1+r))}`;for(let i=0;i<=20;i++){const x=x1+r+(xe-x1-r)*i/20;d+=` L${P(x,y(x))}`;}g+=`<path d="${d}" ${st(1,c.soft)}/>`;}
+  // windscreen: one strong curve, like the app's ")"
+  const sp=screenPts({ahead:16,back:12,p:1.8,wings:56});g+=`<path d="${outerLine(sp)}" ${st(2.2)}/>`;
+  // hardtop with its two glass hatches
+  const ht=hardtopPath(40);g+=`<path d="${ht}" fill="${c.top}"/><path d="${ht}" ${st(1.8)}/>`;
+  const m=(40+W)/2-4,hl=(W-40)*.48,yw=Math.min(24,(hb(m)-deckIn(m))*.55);
+  [-1,1].forEach(s=>g+=`<path d="${rr(m-hl/2,s<0?-yw:3,hl,yw-3,6)}" fill="${c.glass}"/><path d="${rr(m-hl/2,s<0?-yw:3,hl,yw-3,6)}" ${st(1.3)}/>`);
+  // foredeck hatches
+  [[L*.72,22],[L*.86,12]].forEach(([x,s])=>g+=`<path d="${rr(x-s/2,-s/2,s,s,3)}" fill="${c.glass}"/><path d="${rr(x-s/2,-s/2,s,s,3)}" ${st(1.3)}/>`);
+  // rail from the windscreen forward
+  g+=`<path d="${railPath(W+4).d}" ${st(.9,c.soft)}/>`;
+  // bow fitting and cleats as short strokes
+  const cleatL=(x,y,a)=>`<g transform="translate(${P(x,y)}) rotate(${(a*180/Math.PI).toFixed(1)})"><path d="M-6 0 Q-6 -1.8 -3.5 -1.8 H3.5 Q6 -1.8 6 0 Q6 1.8 3.5 1.8 H-3.5 Q-6 1.8 -6 0Z" fill="${c.hull}" ${st(1.1).replace('fill="none" ','')}/><path d="M-2 -1.8 V1.8 M2 -1.8 V1.8" ${st(.9)}/></g>`;
+  CLEATN[O.cleatn][1](L).forEach(x=>{if(x<30){[-1,1].forEach(s=>g+=cleatL(x0*.5,s*(hw-bw/2-.5),0));return;}const t=Math.atan2(hb(x+2)-hb(x-2),4);[-1,1].forEach(s=>g+=cleatL(x,s*(hb(x)-deckIn(x)-5.6),s*t));});
+  // fenders: outlined circles on short lines
+  // round fenders seen from above, resting against the hull: aft, amidships, forward
+  [.18,.57,.86].forEach(k=>{const x=L*k,t=Math.atan2(hb(x+2)-hb(x-2),4);[-1,1].forEach(s=>{const rf=8,d=hb(x)+rf+2.5,cx=x-s*Math.sin(t)*0,cy=s*d;
+    g+=`<circle cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" r="${rf}" fill="${c.line}"/><circle cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" r="${rf-2.6}" fill="none" stroke="${c.hull}" stroke-width=".8" opacity=".25"/>`;});});
+  return g;}
+function lineSvg(rot=0,pad=14){const L=FL(),c=PAL[PI_][1];
+  const bb=[-62,-80,L+78,160];const vb=rot?[bb[1],-(bb[0]+bb[2]),bb[3],bb[2]]:bb;
+  return `<svg viewBox="${vb.join(' ')}" role="img" aria-label="Båden i stregstil"><rect x="${vb[0]}" y="${vb[1]}" width="${vb[2]}" height="${vb[3]}" fill="${c.bg}"/><g transform="rotate(${rot?-90:0})">${lineBoat()}</g></svg>`;}
+
+applyChoice(CHOICE);
+function draw(){document.getElementById('big').innerHTML=lineSvg(0);
+  document.getElementById('small').innerHTML=lineSvg(0);document.getElementById('small2').innerHTML=lineSvg(1);
+  document.getElementById('pal').innerHTML=PAL.map((p,i)=>{const k=PI_;PI_=i;const s=lineSvg(0);PI_=k;return `<button class="opt" data-i="${i}" aria-pressed="${i===PI_}">${s}<b>${i+1}. ${p[0]}</b></button>`;}).join('');}
+document.getElementById('pal').addEventListener('click',e=>{const b=e.target.closest('.opt');if(!b)return;PI_=+b.dataset.i;draw();});
+draw();document.getElementById('full').innerHTML=boatSvg();
+document.querySelector('#full svg').style.maxWidth='320px';
+</script></body></html>

@@ -517,6 +517,12 @@ function radarMast(){const W=WX(),x=W-150>20?40:20,[,a,b]=mt(),y=hb(x)-deckIn(x)
 ROOF.push(['Kaleche over hele cockpittet og stålbøjle med radar',()=>canvasTop(6,WX()+4,6,14,4)+radarMast()]);
 O.pedge=4;
 
+// A small door in the starboard side of the transom, out to the platform.
+function transomDoor(){const yd=yi(12)-9,dk=pk(DECKC,'deck');
+  return `<path d="${rr(0,yd-8,12,16,2.5)}" fill="#04111b" opacity=".2" filter="url(#b2)"/><path d="${rr(.5,yd-7.5,11,15,2)}" fill="${dk}"/><path d="${rr(.5,yd-7.5,11,15,2)}" fill="url(#mould)"/><path d="${rr(.5,yd-7.5,11,15,2)}" fill="none" stroke="#8b959b" stroke-width=".8"/><circle cx="9" cy="${yd}" r="1.1" fill="${mt()[2]}"/>`;}
+const _boat=boat;boat=function(){const s=_boat(),i=s.lastIndexOf('<!--roof-->');return PEDGE[O.pedge][2]?s+'':s;};
+COCK.forEach(c=>{const f=c[1];c[1]=()=>f()+(PEDGE[O.pedge][2]?transomDoor():'');});
+
 const C={pedge:L=>[-40,-70,90,140],bow:L=>[L*.72,-50,L*.28+34,100],form:null,plat:L=>[-56,-70,166,140],cock:L=>[-6,-70,200,140],screen:L=>[L*.56-90,-70,140,140],roof:L=>[0,-70,L*.56+30,140],fore:L=>[L*.56-10,-70,L*.44+16,140],
  cleatt:L=>[L*.63-20,-hb(L*.63)-3,40,32],cleato:L=>[L*.63-20,-hb(L*.63)-3,40,32],metal:null,rail:L=>[L*.4,-72,L*.6+10,144],ladder:L=>[-56,-66,80,132],lside:L=>[-62,-70,130,140],ftie:L=>[L*.12-30,-hb(L*.3)-20,90,60],
  fendh:L=>[L*.12-40,-hb(L*.3)-20,110,70],fendt:L=>[L*.12-40,-hb(L*.3)-20,110,70]};

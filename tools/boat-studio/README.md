@@ -19,3 +19,7 @@ rail from the windscreen forward, four classic cleats (two aft, two up by the
 bow), swim ladder stowed under a hatch on the starboard side of the platform,
 folded out with the lid shut, three white cylinder fenders a side hanging
 upright and tied to the rail with white line, fine lines style.
+
+`line-style.html` is the same boat in the app's line style (flat colours, a
+few strong lines), chosen for the drive test scenes, with four colour sets;
+"Som appen" is the one that matches the app.
