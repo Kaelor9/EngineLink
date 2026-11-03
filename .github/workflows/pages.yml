@@ -95,7 +95,10 @@ jobs:
           pathlib.Path("site/release.json").write_text(json.dumps(info,indent=2)+"\n")
           # Cache-bust page assets so browsers never mix old scripts with a new manifest.
           idx=pathlib.Path("site/index.html")
-          idx.write_text(idx.read_text().replace("__VERSION__",version))
+          # Cache the compiled firmware by version, but website assets by commit too:
+          # installer fixes may deploy without an EL_VERSION bump.
+          asset_revision = version + "-" + os.environ["GITHUB_SHA"][:12]
+          idx.write_text(idx.read_text().replace("__VERSION__",asset_revision))
           print("Staged EngineLink",version,"USB",usb.stat().st_size,"update",ota.stat().st_size)
           PY
 
