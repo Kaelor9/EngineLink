@@ -11,7 +11,6 @@
   if (!status || !waiting || !ready || !consent || !selector || !hint) return;
 
   const VERSION_RE = /^\d+\.\d+\.\d+(?:-[a-z0-9.-]+)?$/;
-  const IMAGE_BYTES = 8 * 1024 * 1024;
   const versions = new Map(); // version -> same-origin manifest path
   let latestVersion = '';
   let latestBuild = null;
@@ -61,8 +60,12 @@
     }
     const probe = await fetch(binary.toString(), { method: 'HEAD', cache: 'no-store' });
     if (!probe.ok) throw Error('The firmware image could not be found.');
-    const size = Number(probe.headers.get('content-length') || 0);
-    if (size && size !== IMAGE_BYTES) throw Error('The USB firmware is not a complete 8 MB image.');
+    // Do not compare HEAD Content-Length with the 8 MiB image size.
+    // It describes the *HTTP representation*, which a Pages/CDN proxy may
+    // compress, not necessarily the decoded firmware bytes Web Tools flashes.
+    // The Pages release job already verified each archived USB image is
+    // exactly 8 MiB, with a valid ESP boot header and release SHA-256.
+    // The current image is checked for its full size during compilation.
     return { version: manifest.version, url: url.toString() };
   }
 

@@ -66,7 +66,10 @@ async function runCase({blockedLibrary, missingLatest}) {
       )};
     }
     if (init.method === 'HEAD' && path.endsWith('/firmware.bin')) {
-      return {ok:true,headers:{get:()=>String(8*1024*1024)}};
+      // A compressed CDN response may advertise the transferred byte count,
+      // not the uncompressed 8 MiB firmware size from the GitHub release.
+      return {ok:true,headers:{get:header =>
+        header === 'content-length' ? '1660176' : 'gzip'}};
     }
     throw Error('Unexpected fetch: ' + path);
   };
@@ -111,5 +114,5 @@ async function runCase({blockedLibrary, missingLatest}) {
   await runCase({blockedLibrary:true, missingLatest:false});
   await runCase({blockedLibrary:false, missingLatest:false});
   await runCase({blockedLibrary:true, missingLatest:true});
-  console.log('Firmware selector works without CDN, with USB support and without latest manifest');
+  console.log('Firmware selector handles compressed CDN content length, blocked CDN, normal USB and missing latest manifest');
 })().catch(e => {console.error(e);process.exitCode=1;});
