@@ -46,6 +46,33 @@ The website checks that its manifest and binary exist before it displays the fla
 
 Before bumping the version, write `docs/releases/v<version>.md` with compatible hardware revisions, flashing notes, the change log and any settings/data migration information. The workflow attaches both binaries; `release.json` on Pages carries the update image checksum.
 
+## Install a previous version over USB
+
+The web installer on `/#downloads` has a version selector. It defaults to the
+current compiled site image (`manifest.json` + `firmware.bin`). For a
+previous version, it uses a separate complete ESP32-S3 manifest at
+`versions/vX.Y.Z/manifest.json` pointing to that release's 8 MB merged
+`firmware.bin` **on the same GitHub Pages origin**.
+
+After GitHub Releases are enumerated, `tools/build_installer_archive.py`
+downloads the previous `firmware.bin` assets (up to the most recent 90 older
+releases, within the Pages 1 GB site limit), validates image size, bootloader
+magic and the release asset's SHA-256 digest (when supplied), then publishes
+only successful images in `versions/index.json`. Missing or invalid images
+are never listed. The site continues to offer the latest build if the archive
+index is missing. The board's separate `releases.json` feed and Wi-Fi updater
+continue to list only the latest five releases; this change does not alter
+their behavior.
+
+Selecting a previous version is a **full USB reinstall**, not a safe OTA
+rollback. Every 8 MB image writes at offset 0 and overwrites internal NVS,
+LittleFS, Wi-Fi credentials, calibration and history. The web installer
+requires the same explicit data-loss and hardware-safety acknowledgment for
+all versions. The microSD card is not part of the internal flash image.
+For preservation of internal data, use the documented backup-first USB
+recovery or the app's Wi-Fi update file where compatible. The archive does not
+make an old release hardware-validated or suitable for operation underway.
+
 ## GitHub Pages
 
 Select **Settings → Pages → Build and deployment → Source: GitHub Actions**. The `.github/workflows/pages.yml` action then publishes the `site/` folder to `https://kaelor9.github.io/EngineLink/`.
