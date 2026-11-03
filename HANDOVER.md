@@ -177,6 +177,20 @@ because a report shows a problem, not on a guess.
   look right with reduced motion turned on (show one still scene, nothing
   overlapping).
 
+## USB web installer version archive (2026-11-03)
+
+The website at `site/index.html` / `site/app.js` includes a firmware
+version selector. `tools/build_installer_archive.py` runs during
+`.github/workflows/pages.yml` after GitHub Release publication, downloads
+prior 8 MB `firmware.bin` merged images from the release assets, verifies the
+ESP boot image and release SHA-256, and publishes matching per-version
+manifests and binaries under `site/versions/` (at most 90 older versions).
+The browser still defaults to the newest build; historical choices only
+use same-origin GitHub Pages binaries to avoid CORS trouble. They overwrite
+internal settings and history just like the existing USB installer. This
+does not change the device's separate five-item OTA release feed. See
+`docs/RELEASING.md` and `tools/test_installer_archive.py`.
+
 ## Drive test scenes (in progress, 2026-11-03)
 
 The drive test (app page `dtest`, `dtAnim` and the `scene*` functions in
