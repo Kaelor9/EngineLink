@@ -189,6 +189,14 @@ jobs:
           print("releases.json:", [x["v"] for x in out[:5]])
           PY2
 
+      - name: Prepare older USB firmware for the browser installer
+        # All published versions are 8 MB merged images. Keep them same-origin:
+        # ESP Web Tools cannot rely on CORS from GitHub Release downloads.
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.stage.outputs.version }}
+        run: python3 tools/build_installer_archive.py /tmp/releases.json --current "$VERSION"
+
       - name: Build the app demo
         # site/demo: the phone app against a simulated boat, in the browser.
         run: python3 tools/build_demo.py
