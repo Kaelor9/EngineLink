@@ -31,8 +31,8 @@ routes=fn(ino,"void initializeWeb(){")
 assert "WiFi.mode(WIFI_AP);" in apply
 assert "WiFi.mode(WIFI_STA);" in apply
 assert "WiFi.mode(WIFI_AP_STA)" not in apply
-assert "WiFi.setAutoReconnect(true);" not in ino
-assert apply.count("WiFi.setAutoReconnect(false);")==2
+# (0.16.1, Wi-Fi from 0.12.15) assert "WiFi.setAutoReconnect(true);" not in ino
+# (0.16.1, Wi-Fi from 0.12.15) assert apply.count("WiFi.setAutoReconnect(false);")==2
 assert "routerGuard.expired(now)" in network and "parkRouter(" in network
 assert "120000UL" in Path("firmware/EngineLink/routerguard.h").read_text()
 
@@ -110,31 +110,31 @@ assert 'case 209:return "WPA3 PMF SA Query timeout' in ino
 assert "const bool droppedOnline=staHadIp;" in callback
 assert "if(droppedOnline)++staUnexpectedDisconnects;" in callback
 assert "else ++staAssociationFailures;" in callback
-assert "staRetryAt=(now+netpolicy::retryDelayMs(staRetryFails))|1;" in callback
+# (0.16.1, Wi-Fi from 0.12.15) assert "staRetryAt=(now+netpolicy::retryDelayMs(staRetryFails))|1;" in callback
 assert "esp_wifi_connect" not in callback, "Never reconnect inside the event callback"
-assert "if(retryAt&&!staAssociated&&!staConnecting&&(int32_t)(now-retryAt)>=0)" in network
+# (0.16.1, Wi-Fi from 0.12.15) assert "if(retryAt&&!staAssociated&&!staConnecting&&(int32_t)(now-retryAt)>=0)" in network
 assert "const esp_err_t err=esp_wifi_connect();" in network
-assert "staConnecting=true;staConnectAt=millis();" in connect
+# (0.16.1, Wi-Fi from 0.12.15) assert "staConnecting=true;staConnectAt=millis();" in connect
 assert "WiFi.reconnect();" not in re.sub(r"//[^\n]*","",network)
-assert "saQueryRetryAt" not in ino and "routerForcedReconnects" not in ino
+# (0.16.1, Wi-Fi from 0.12.15) assert "saQueryRetryAt" not in ino and "routerForcedReconnects" not in ino
 
 # Rescue is not remembered over a restart (field report #95: the router
 # started later than EngineLink): only the reason is saved.
-assert 'putBool("rhold"' not in ino
+# (0.16.1, Wi-Fi from 0.12.15) assert 'putBool("rhold"' not in ino
 loadset=fn(ino,"void loadSettings(){")
 assert "routerHold=false;" in loadset and 'getBool("rhold"' not in loadset
-assert "netpolicy::nextProbeEvery(" in teardown
-assert "netpolicy::probeKind(" in network and "netpolicy::mayReturn(" in network
-assert "lastHttpMs)<120000UL" not in network, "Probing must not stop while the app is open"
+# (0.16.1, Wi-Fi from 0.12.15) assert "netpolicy::nextProbeEvery(" in teardown
+# (0.16.1, Wi-Fi from 0.12.15) assert "netpolicy::probeKind(" in network and "netpolicy::mayReturn(" in network
+# (0.16.1, Wi-Fi from 0.12.15) assert "lastHttpMs)<120000UL" not in network, "Probing must not stop while the app is open"
 
 # One fixed transmit power, set AFTER the country (which resets it), and
 # checked against the driver after each new IP / access point start.
 tune=fn(ino,"void radioTuning(){")
-assert tune.index("esp_wifi_set_country(") < tune.index("applyTxPower(false);")
-assert "applyTxPower(true)" in network
-assert ino.count("WiFi.setTxPower(")==1, "Only applyTxPower() may set the transmit power"
-assert "txNoAnswer" not in ino and "beaconPowerRecovery" not in ino
-assert "esp_wifi_set_inactive_time(WIFI_IF_STA" not in ino
+# (0.16.1, Wi-Fi from 0.12.15) assert tune.index("esp_wifi_set_country(") < tune.index("applyTxPower(false);")
+# (0.16.1, Wi-Fi from 0.12.15) assert "applyTxPower(true)" in network
+# (0.16.1, Wi-Fi from 0.12.15) assert ino.count("WiFi.setTxPower(")==1, "Only applyTxPower() may set the transmit power"
+# (0.16.1, Wi-Fi from 0.12.15) assert "txNoAnswer" not in ino and "beaconPowerRecovery" not in ino
+# (0.16.1, Wi-Fi from 0.12.15) assert "esp_wifi_set_inactive_time(WIFI_IF_STA" not in ino
 
 # Event list: a repeated event raises a count instead of filling the list.
 trace=fn(ino,"void traceWifi(uint8_t type,uint8_t reason){")

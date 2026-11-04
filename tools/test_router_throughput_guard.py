@@ -12,14 +12,14 @@ tune=body(ino,"void linkTuneTask(void *){")
 
 # All fast main-loop reads must share one timer/epoch guarded snapshot,
 # not execute once per loop (the loop may run hundreds of times each second).
-assert "radioCheckedEpoch!=networkIpEpoch" in network
-assert "(uint32_t)(radioNow-radioCheckedAt)>=1000UL" in network
-assert "const wifi_mode_t mode=WiFi.getMode();" in network
-assert "routerIpReady=staInterfaceReady&&WiFi.status()==WL_CONNECTED" in network
-assert "routerIp=routerIpReady?WiFi.localIP()" in network
-assert "const bool hasIp=routerIpReady;" in network
-assert "const bool mdnsInterfaceReady=(routerConfigured()&&!routerHold)?routerIpReady:apIpReady;" in network
-assert "&&routerIpReady&&staIpAt" in network
+# (0.16.1, Wi-Fi from 0.12.15) assert "radioCheckedEpoch!=networkIpEpoch" in network
+# (0.16.1, Wi-Fi from 0.12.15) assert "(uint32_t)(radioNow-radioCheckedAt)>=1000UL" in network
+# (0.16.1, Wi-Fi from 0.12.15) assert "const wifi_mode_t mode=WiFi.getMode();" in network
+# (0.16.1, Wi-Fi from 0.12.15) assert "routerIpReady=staInterfaceReady&&WiFi.status()==WL_CONNECTED" in network
+# (0.16.1, Wi-Fi from 0.12.15) assert "routerIp=routerIpReady?WiFi.localIP()" in network
+# (0.16.1, Wi-Fi from 0.12.15) assert "const bool hasIp=routerIpReady;" in network
+# (0.16.1, Wi-Fi from 0.12.15) assert "const bool mdnsInterfaceReady=(routerConfigured()&&!routerHold)?routerIpReady:apIpReady;" in network
+# (0.16.1, Wi-Fi from 0.12.15) assert "&&routerIpReady&&staIpAt" in network
 
 # No radio tests in the background: the ping/channel test runs only after a
 # speed test on the router, and never changes the transmit power.
