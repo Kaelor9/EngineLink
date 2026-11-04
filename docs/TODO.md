@@ -46,6 +46,10 @@ version instead of one update each. Newest at the bottom of each section.
   7. With engines running: switch modes and restart the router; the engine
      report's longest wait (engineWait max) stays under 200 ms.
   8. 24 hours on the router: count of drops and reconnect times in the report.
+  9. With nothing on the USB port: "Test speed" on EngineLink Wi-Fi (0.15.0
+     gave about 300 kB/s at a 95 ms round trip, against 18 ms on the router).
+     Check that the report's "Longest part of the main loop" stays under
+     about 500 ms.
 
 - Run the drive test at the dock (0.14.0) and check that bit 0x100 in 264
   means neutral and 0x20 the compressor.

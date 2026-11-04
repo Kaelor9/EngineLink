@@ -418,6 +418,10 @@ void applyNetwork(){
   // A real mode change may drop old clients, but it must never happen in
   // normal operating loops or between two reconnect attempts.
   web.closeClients();
+  // Tell phones on EngineLink's Wi-Fi that it is going away, so they move to
+  // another known network (the router) at once instead of waiting until
+  // they miss its beacons.
+  if((WiFi.getMode()&WIFI_MODE_AP)&&WiFi.softAPgetStationNum())esp_wifi_deauth_sta(0);
   WiFi.mode(WIFI_OFF);
   // Read by wifiwpa3.cpp when the driver starts again below.
   elAllowSae=routerConfigured()&&!routerHold&&staSecMode==1;
