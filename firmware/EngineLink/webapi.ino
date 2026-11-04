@@ -1011,6 +1011,8 @@ void initializeWeb(){
   web.on("/api/wifi/forget",HTTP_POST,handleWifiForget);
   web.on("/api/diag",HTTP_GET,handleDiag);
   web.on("/api/nmea",HTTP_GET,handleNmea);
+  web.on("/api/nmea/rec",HTTP_POST,handleNmeaRec);
+  web.on("/api/nmea/bus.csv",HTTP_GET,handleNmeaRecDownload);
   web.on("/api/diag/test",HTTP_POST,handleDiagTest);
   web.on("/api/diag/focus",HTTP_POST,handleDiagFocus);
   web.on("/api/kad/discover",HTTP_POST,handleKadDiscover);

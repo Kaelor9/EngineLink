@@ -72,7 +72,7 @@ uint32_t txReapplied=0;   // the driver had another power and it was set again
 volatile bool radioTestWanted=false;  // pings + channel survey (linkTuneTask)
 SpeedLogRec speedLog[SPEED_LOG_N];uint8_t speedLogCount=0;
 
-#define EL_VERSION "0.15.1"
+#define EL_VERSION "0.16.0"
 // Releases list published by the Pages workflow; firmware files come from
 // GitHub Releases of the same repository. Nothing else is downloaded.
 #define EL_RELEASES_URL "https://kaelor9.github.io/EngineLink/releases.json"
@@ -237,6 +237,8 @@ n2k::Nav nav;
 n2k::FastPool navFast;
 n2k::Census navSeen;
 File tripNav;
+File navCap;  // bus recording (/NMEA/BUS.CSV), see nmea2000.ino
+uint32_t navCapUntil=0,navCapFrames=0,navCapBytes=0,navCapStart=0;
 uint32_t tripNavId=0,tripNavFlush=0,navFrames=0,navErrFrames=0;
 const char *const NAV_COLS="lat,lon,sog_kn,cog_deg,heading_deg,stw_kn,depth_m,water_c,rudder_deg,battery_v,wind_kn,wind_deg,tank1_pct,tank2_pct,satellites";
 uint32_t tripSeriesId=0,tripSeriesFlush=0;
