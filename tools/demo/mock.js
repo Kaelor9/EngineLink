@@ -145,7 +145,7 @@ window.fetch=function(url,opt){
   const u=new URL(String(url),'http://enginelink.local'),p=u.pathname,m=(opt&&opt.method)||'GET',b=form(opt&&opt.body);
   if(m==='GET'){
     if(p==='/api/live')return reply(live());
-    if(p==='/api/nmea'){const tt=(Date.now()-t0)/1000;return reply({nav:n2kNow(tt),bus:{state:'running',rxErr:0,missed:0,overrun:0,busErr:0,queued:0,frames:Math.round(42000+tt*96),used:Math.round(30000+tt*61),bad:0,dropped:0},
+    if(p==='/api/nmea'){const tt=(Date.now()-t0)/1000;return reply({nav:n2kNow(tt),rec:{on:false,frames:0,bytes:0,file:false},bus:{state:'running',rxErr:0,missed:0,overrun:0,busErr:0,queued:0,frames:Math.round(42000+tt*96),used:Math.round(30000+tt*61),bad:0,dropped:0},
       seen:[[2,60928,'Address claim',null],[2,129025,'Position',10],[2,129026,'Course and speed over ground',4],[2,129029,'GNSS fix',1],[2,126992,'Time',1],[3,128267,'Depth',2],[3,128259,'Speed through water',2],[3,128275,'Distance log',1],[3,130310,'Temperature',.5],[4,127250,'Heading',10],[4,127245,'Rudder',10],[4,65379,'Raymarine autopilot',1]].map(([src,pgn,name,hz])=>({src,pgn,name,hz,n:Math.round(400+tt*(hz||.1)),ago:0,maker:'Raymarine'}))});}
     if(p==='/api/prefs')return Promise.resolve(new Response(prefs,{headers:{'Content-Type':'application/json'}}));
     if(p==='/api/trips'){const f=cal().f;return reply({trips:trips0.map(r=>Object.assign({},r,{l:r.l.map(x=>+(x*f).toFixed(2))})),port:0});}

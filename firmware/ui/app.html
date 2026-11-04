@@ -1209,6 +1209,10 @@ function n2kView(){const d=S.nmea;let h=backPill();
     <div class="s13 sub" style="margin-top:4px">EngineLink only listens on NMEA 2000. It never sends anything there.</div>
     <div class="grid3" style="gap:8px;margin-top:10px">${[['Messages',NF(b.frames||0,0)],['Understood',NF(b.used||0,0)],['Receive errors',fin(b.rxErr)?NF(b.rxErr,0)+(b.missed?' · '+b.missed+' lost':''):'—']].map(([k,v])=>`<div style="background:var(--track);border-radius:12px;padding:8px 10px"><div class="s12 sub">${k}</div><div style="font-size:16px;font-weight:600">${v}</div></div>`).join('')}</div>
     ${b.state==='off'?'<div class="s13" style="margin-top:10px">Switch it on under Settings › Speed source. Check the cable, termination and power first (docs/STATUS.md).</div>':b.frames===0?'<div class="s13" style="color:var(--orange);margin-top:10px">Switched on, but no messages. Check the drop cable, that the backbone has power (12 V) and a terminator at each end.</div>':''}</div>`;
+  const rc=d.rec||{};
+  h+=`<div class="hd">Record the bus</div><div class="sec">${rc.on?row('n2kRec','0','Recording · '+dur(rc.left||0)+' left',NF(rc.frames||0,0)+' messages · '+NF((rc.bytes||0)/1048576,1)+' MB',rv('Stop')):
+    row('n2kRec','10','Record 10 minutes','Every message from every device, for finding out all the boat sends',rv('Start'))+row('n2kRec','30','Record 30 minutes','Best underway: engines, autopilot, AIS and plotter all running',rv('Start'))}
+    ${rc.file?row('dl','/api/nmea/bus.csv','Download the recording','CSV · '+NF(rc.frames||0,0)+' messages',rv('CSV')):''}</div>`;
   h+=n2kCard(d.nav)||(b.frames?'<div class="card"><div class="s14">Messages arrive, but none of the values EngineLink uses yet (position, speed, depth, heading, temperature, battery, tanks).</div></div>':'');
   const by={};(d.seen||[]).forEach(e=>{(by[e.src]=by[e.src]||{maker:e.maker,list:[]}).list.push(e);});
   const srcs=Object.keys(by);
@@ -2181,6 +2185,7 @@ const A={
   testStop:async()=>{await act('/api/test/stop',{});load('state');},
   busRefresh:()=>load('state'),
   dl:v=>download(v),
+  n2kRec:async v=>{await act('/api/nmea/rec',v==='0'?{on:0}:{on:1,min:v});load('nmea');},
   wifiAdv:()=>{S.wifiAdv=!S.wifiAdv;render(true);},
   ghSave:async()=>{const v=(S.ghTok||'').trim();const r=await cfgSet({ghtoken:v});if(r.ok){S.ghTok='';toast(v?'Token saved':'Token removed');load('diag');}},
   reportEngine:async()=>{await act('/api/report/engine',{});setTimeout(()=>load('state'),3000);},

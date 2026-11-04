@@ -49,7 +49,10 @@ to engines.
 - NMEA 2000 interface: isolation, termination and traffic not validated. Do not
   enable it until verified. 0.16 decodes navigation, depth, log, heading,
   temperatures, battery, rudder, wind and tanks, and lists every device on
-  Diagnostics › GPS · NMEA 2000 › Devices and data. Not yet tested on the boat.
+  Diagnostics › GPS · NMEA 2000 › Devices and data. "Record the bus" saves every raw frame
+  (10/30 min, /NMEA/BUS.CSV) to map everything the boat sends. Owner's boat:
+  SmartPilot X10 and AIS700 on SeaTalkNG; ST60 is SeaTalk1, no converter seen.
+  Not yet tested on the boat.
 - Behaviour after a sudden power cut during SD writes.
 - No battery-backed clock: without phone, router or GPS time, logs use uptime.
 

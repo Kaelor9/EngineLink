@@ -15,15 +15,48 @@ bool startCAN(){
   if(twai_start()!=ESP_OK){twai_driver_uninstall();return false;}
   canReady=true;return true;
 }
-void stopCAN(){if(canReady){twai_stop();twai_driver_uninstall();canReady=false;}}
+// ---- bus recording: every raw frame to /NMEA/BUS.CSV for up to 30 min ----
+// One file, replaced by the next recording. Lines go through a 4 KB buffer so
+// the SD card sees few large writes; size is capped so a card never fills.
+static const char *CAP_FILE="/NMEA/BUS.CSV";
+static const uint32_t CAP_MAX=24UL*1024*1024;
+static char capBuf[4096];static uint16_t capLen=0;static uint32_t capFlushAt=0;
+static void capDrain(){if(capLen&&navCap){navCap.write((const uint8_t*)capBuf,capLen);navCapBytes+=capLen;}capLen=0;}
+void navCapStop(){if(navCap){capDrain();navCap.close();}navCapUntil=0;}
+bool navCapBegin(uint16_t minutes){
+  navCapStop();
+  if(!canReady||!sdReady||!cardInserted()||!ensureDir("/NMEA"))return false;
+  if(SD.exists(CAP_FILE))SD.remove(CAP_FILE);
+  navCap=SD.open(CAP_FILE,FILE_WRITE);if(!navCap)return false;
+  navCap.print("# EngineLink " EL_VERSION " NMEA 2000 bus recording, listen-only. ms since start, source, PGN, priority, destination, length, data bytes (hex)\nms,src,pgn,prio,dst,len,data\n");
+  navCapFrames=0;navCapBytes=0;navCapStart=millis();navCapUntil=navCapStart+(uint32_t)constrain(minutes,1,30)*60000UL;capFlushAt=navCapStart;
+  return true;
+}
+static void capFrame(const twai_message_t &m,uint32_t now){
+  if(capLen>sizeof(capBuf)-64)capDrain();
+  const uint32_t id=m.identifier;const uint8_t pf=(id>>16)&0xFF;
+  int n=snprintf(capBuf+capLen,sizeof(capBuf)-capLen,"%lu,%u,%lu,%u,%d,%u,",(unsigned long)(now-navCapStart),(unsigned)(id&0xFF),(unsigned long)n2k::pgnOf(id),(unsigned)((id>>26)&7),pf<240?(int)((id>>8)&0xFF):255,(unsigned)m.data_length_code);
+  capLen+=n;
+  static const char hx[]="0123456789ABCDEF";
+  for(uint8_t i=0;i<m.data_length_code&&i<8;i++){capBuf[capLen++]=hx[m.data[i]>>4];capBuf[capLen++]=hx[m.data[i]&15];}
+  capBuf[capLen++]='\n';++navCapFrames;
+}
+static void capService(uint32_t now){
+  if(!navCapUntil)return;
+  if((int32_t)(now-navCapUntil)>=0||navCapBytes>CAP_MAX||!cardInserted()||!canReady){navCapStop();return;}
+  if((uint32_t)(now-capFlushAt)>5000){capDrain();navCap.flush();capFlushAt=now;}
+}
+void stopCAN(){navCapStop();if(canReady){twai_stop();twai_driver_uninstall();canReady=false;}}
 void serviceCAN(){
   if(!canReady)return;
   twai_message_t m;
   const uint32_t now=millis();
   // Bounded per loop pass: a busy bus can never hold the loop up.
+  capService(now);
   for(int k=0;k<24;k++){
     if(twai_receive(&m,0)!=ESP_OK)break;
     ++ctr.nmeaFrames;
+    if(navCapUntil&&m.extd)capFrame(m,now);
     if(!m.extd||m.rtr){++navErrFrames;continue;}
     const uint32_t pgn=n2k::pgnOf(m.identifier);const uint8_t src=n2k::srcOf(m.identifier);
     navSeen.note(pgn,src,now);
@@ -97,6 +130,10 @@ void handleNmea(){
   s+=",\"bus\":{\"state\":";jsonString(s,!canReady?"off":!got?"unknown":st.state==TWAI_STATE_RUNNING?"running":st.state==TWAI_STATE_BUS_OFF?"bus off":st.state==TWAI_STATE_RECOVERING?"recovering":"stopped");
   if(got){s+=",\"rxErr\":";s+=st.rx_error_counter;s+=",\"missed\":";s+=st.rx_missed_count;s+=",\"overrun\":";s+=st.rx_overrun_count;s+=",\"busErr\":";s+=st.bus_error_count;s+=",\"queued\":";s+=st.msgs_to_rx;}
   s+=",\"frames\":";s+=ctr.nmeaFrames;s+=",\"used\":";s+=navFrames;s+=",\"bad\":";s+=navErrFrames;s+=",\"dropped\":";s+=navSeen.dropped;s+='}';
+  s+=",\"rec\":{\"on\":";s+=navCapUntil?"true":"false";
+  if(navCapUntil){s+=",\"left\":";s+=(navCapUntil-now)/1000;}
+  s+=",\"frames\":";s+=navCapFrames;s+=",\"bytes\":";s+=navCapBytes;
+  s+=",\"file\":";s+=sdReady&&cardInserted()&&SD.exists(CAP_FILE)?"true":"false";s+='}';
   s+=",\"seen\":[";
   for(uint8_t i=0;i<navSeen.n;i++){const n2k::Seen &e=navSeen.e[i];if(i)s+=',';
     const uint32_t span=e.lastAt-e.firstAt;
@@ -107,4 +144,20 @@ void handleNmea(){
     s+='}';}
   s+="]}";
   sendJSON(200,s);
+}
+void handleNmeaRec(){
+  if(web.arg("on")=="1"){
+    if(!canReady){reply(false,"NMEA 2000 is off. Switch it on first.",409);return;}
+    if(!sdReady||!cardInserted()){reply(false,"No SD card",409);return;}
+    const int mins=web.arg("min").toInt();
+    if(!navCapBegin(mins>0?mins:10)){reply(false,"Could not start the recording",500);return;}
+    reply(true,"Recording every NMEA 2000 message");return;
+  }
+  navCapStop();reply(true,"Recording stopped");
+}
+void handleNmeaRecDownload(){
+  if(navCapUntil){capDrain();navCap.flush();}
+  if(!sdReady||!SD.exists(CAP_FILE)){web.send(404,"text/plain","No bus recording on this SD card");return;}
+  File f=SD.open(CAP_FILE,FILE_READ);if(!f){web.send(500,"text/plain","Cannot open the recording");return;}
+  streamFileOut(f,"bus recording","EngineLink-nmea2000-bus.csv");f.close();
 }
