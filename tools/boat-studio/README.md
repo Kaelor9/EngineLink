@@ -23,3 +23,17 @@ upright and tied to the rail with white line, fine lines style.
 `line-style.html` is the same boat in the app's line style (flat colours, a
 few strong lines), chosen for the drive test scenes, with four colour sets;
 "Som appen" is the one that matches the app.
+
+## Drive-test scene prototype (work in progress)
+
+`drive-test-scenes.html` preserves the owner's exported interactive **Køretestens scener**
+preview (three scene groups, six selectable examples per group). Open this file
+locally in a browser to review, compare, and revise the **existing** illustrations,
+mooring lines, fenders, water effects, and animations. The export-only outer HTML
+wrapper was removed; the inner interactive design code was kept unchanged.
+
+**Not an approved final design and not embedded in firmware.** The owner is
+not satisfied with the current options and wants to improve this exact preview,
+not start over. Keep the earlier approved boat shape in `studio.html`/
+`line-style.html` as the reference when revising the scenes. Do not replace
+`firmware/ui/app.html` or publish firmware until the owner chooses the final look.
