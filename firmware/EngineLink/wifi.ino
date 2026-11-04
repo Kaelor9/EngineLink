@@ -12,7 +12,7 @@ void traceWifi(uint8_t type,uint8_t reason){
       return;
     }
   }
-  routerTrace[traceHead]={now,now,1,type,reason};
+  routerTrace[traceHead]={now,now,1,type,reason};++traceTotal;
   traceHead=(traceHead+1)%ROUTER_TRACE_CAP;
   if(traceSize<ROUTER_TRACE_CAP)++traceSize;
   portEXIT_CRITICAL(&traceMux);
@@ -128,7 +128,12 @@ void startAP(){
   WiFi.softAPConfig(IPAddress(192,168,4,1),IPAddress(192,168,4,1),IPAddress(255,255,255,0));
   apChannelNow=(cfg.apChannel>=1&&cfg.apChannel<=11)?cfg.apChannel:6;
   apStarted=WiFi.softAP(cfg.apName.c_str(),cfg.apPassword.c_str(),apChannelNow,false,6);
+  // Many ESP32-S3 boards: the network is visible but phones cannot join at
+  // full power (supply dips, antenna). Phones are close on a boat; 8.5 dBm
+  // is the usual fix in ESP32 projects.
+  WiFi.setTxPower(WIFI_POWER_8_5dBm);
   apStartedChannel=apChannelNow;
+  wifiLog(String("Own Wi-Fi ")+(apStarted?"on":"FAILED to start")+": "+cfg.apName+", channel "+apChannelNow);
   Serial.printf("EngineLink Wi-Fi %s: %s, channel %u, %s\n",apStarted?"on":"FAILED",cfg.apName.c_str(),(unsigned)apChannelNow,WiFi.softAPIP().toString().c_str());
 }
 void connectRouter(){
@@ -215,6 +220,7 @@ void serviceNetwork(){
   // Router not reached in 2 minutes: own Wi-Fi, and try again later.
   if(routerConfigured()&&!routerHold&&!online&&staDownSince&&(uint32_t)(now-staDownSince)>=120000UL){
     Serial.println("Router not reached in 2 minutes: EngineLink Wi-Fi on");
+    wifiLog("Router not reached in 2 minutes: own Wi-Fi on");
     routerHold=true;routerHoldSince=now;routerRetryAt=now+600000UL;applyNetwork();return;
   }
   if(routerHold&&routerConfigured()&&(int32_t)(now-routerRetryAt)>=0){
