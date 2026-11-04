@@ -51,6 +51,7 @@ const char* traceText(uint8_t t){
     case 6:return "Rescue AP fallback";
     case 7:return "Phone joined EngineLink Wi-Fi";
     case 8:return "Phone left EngineLink Wi-Fi";
+    case 9:return "Phone received an IP from EngineLink DHCP";
     default:return "Network event";
   }
 }
@@ -115,6 +116,7 @@ void onWiFi(WiFiEvent_t e,WiFiEventInfo_t info){
   switch(e){
     case ARDUINO_EVENT_WIFI_AP_START:apStarted=true;apLastEvent=1;apLastEventMs=now;++apStarts;++networkIpEpoch;networkIpEventAt=now;mdnsRefreshPending=true;mdnsNetworkChangedAt=now;break;
     case ARDUINO_EVENT_WIFI_AP_STACONNECTED:++apJoins;traceWifi(7);break;
+    case ARDUINO_EVENT_WIFI_AP_STAIPASSIGNED:++apDhcpLeases;traceWifi(9);break;
     case ARDUINO_EVENT_WIFI_AP_STADISCONNECTED:++apLeaves;apReason=info.wifi_ap_stadisconnected.reason;traceWifi(8,apReason);break;
     case ARDUINO_EVENT_WIFI_AP_STOP:apLastEvent=2;apLastEventMs=now;break;
     case ARDUINO_EVENT_WIFI_STA_CONNECTED:staAssociated=true;traceWifi(2);break;
@@ -132,10 +134,10 @@ void startAP(){
   WiFi.softAPConfig(IPAddress(192,168,4,1),IPAddress(192,168,4,1),IPAddress(255,255,255,0));
   apChannelNow=(cfg.apChannel>=1&&cfg.apChannel<=11)?cfg.apChannel:6;
   apStarted=WiFi.softAP(cfg.apName.c_str(),cfg.apPassword.c_str(),apChannelNow,false,6);
-  // Many ESP32-S3 boards: the network is visible but phones cannot join at
-  // full power (supply dips, antenna). Phones are close on a boat; 8.5 dBm
-  // is the usual fix in ESP32 projects.
-  WiFi.setTxPower(WIFI_POWER_8_5dBm);
+  // Use the tested project-wide fixed TX level. 0.16.3 forced 8.5 dBm
+  // in AP mode despite TX_LEVEL_FIXED=4 (19.5 dBm); the report then
+  // claimed high power while the actual driver used 8.5 dBm.
+  if(apStarted)applyTxPower(false);
   WiFi.setSleep(false);
   apStartedChannel=apChannelNow;
   wifiLog(String("Own Wi-Fi ")+(apStarted?"on":"FAILED to start")+": "+cfg.apName+", channel "+apChannelNow);
@@ -240,6 +242,8 @@ void serviceNetwork(){
   // The web server must listen on the Wi-Fi that is up now: (re)bind it
   // shortly after the own Wi-Fi started or the router gave an IP.
   if(networkIpEpoch!=httpBoundEpoch&&!scanBusy&&(uint32_t)(now-networkIpEventAt)>=600UL){
+    // AP driver setup may reset TX power after softAP(); verify at ready epoch.
+    if(WiFi.getMode()&WIFI_MODE_AP)applyTxPower(true);
     web.rebindNetwork();httpBoundEpoch=networkIpEpoch;httpBoundAt=now;
     Serial.printf("HTTP/80 listening on %s\n",online?WiFi.localIP().toString().c_str():WiFi.softAPIP().toString().c_str());
     wifiLog("Web server listening");

@@ -38,7 +38,7 @@ String makeNetworkHealthJson(){
   s+=",\"loopParts\":[";for(uint8_t i=0;i<LOOP_PARTS;i++){if(i)s+=',';s+=loopPartMaxMs[i];}s+=']';
   s+=",\"engineMaxWaitMs\":";s+=engineMaxWaitMs;
   s+=",\"apStations\":";s+=(unsigned)WiFi.softAPgetStationNum();
-  s+=",\"apJoins\":";s+=(unsigned long)apJoins;s+=",\"apLeaves\":";s+=(unsigned long)apLeaves;
+  s+=",\"apJoins\":";s+=(unsigned long)apJoins;s+=",\"apLeaves\":";s+=(unsigned long)apLeaves;s+=",\"apDhcpLeases\":";s+=(unsigned long)apDhcpLeases;
   s+=",\"apLeaveReason\":";s+=(unsigned)apReason;s+=",\"apRestarts\":";s+=apRestarts;
   s+=",\"speedTxBytes\":";s+=(unsigned long)speedTxLastBytes;
   s+=",\"speedTxMs\":";s+=(unsigned long)speedTxLastMs;
@@ -51,7 +51,7 @@ String makeNetworkHealthJson(){
   s+=",\"httpSelfFails\":";s+=httpSelfFails;s+=",\"httpHeals\":";s+=httpHeals;s+=",\"httpSelfRestarts\":";s+=httpSelfRestarts;
   s+=",\"httpBoundEpoch\":";s+=httpBoundEpoch;
   s+=",\"networkEpoch\":";s+=(unsigned long)networkIpEpoch;
-  s+=",\"httpRequests\":";s+=web.served;
+  s+=",\"httpRequests\":";s+=web.served;s+=",\"httpAccepts\":";s+=web.accepted;s+=",\"httpExternalAccepts\":";s+=web.externalAccepted;s+=",\"httpParseFailures\":";s+=web.parseFailures;
   s+=",\"routerAttempts\":";s+=routerAttempts;
   s+=",\"routerFallbacks\":";s+=routerFallbacks;
   s+=",\"routerAutoReturns\":";s+=routerAutoReturns;s+=",\"routerNextTryS\":";
@@ -110,7 +110,7 @@ String buildNetworkReport(){
   {int8_t q=0;if(esp_wifi_get_max_tx_power(&q)==ESP_OK){s+=" · driver reports ";s+=q/4.0f;s+=" dBm";}}
   s+=" · set again after the driver changed it: ";s+=txReapplied;s+=" time(s)\n";
   {wifi_ps_type_t ps=WIFI_PS_NONE;esp_wifi_get_ps(&ps);
-   s+="Power save: ";s+=ps==WIFI_PS_NONE?"off":ps==WIFI_PS_MIN_MODEM?"ON (minimum modem sleep)":"ON (maximum modem sleep)";s+="\n";}
+   s+="Power save: ";s+=(WiFi.getMode()&WIFI_MODE_STA)?(ps==WIFI_PS_NONE?"off":ps==WIFI_PS_MIN_MODEM?"ON (minimum modem sleep)":"ON (maximum modem sleep)"):"not applicable (access point mode)";s+="\n";}
   if(WiFi.getMode()&WIFI_MODE_STA){
     wifi_phy_mode_t pm;
     if(esp_wifi_sta_get_negotiated_phymode(&pm)==ESP_OK){s+="Negotiated Wi-Fi standard: ";s+=pm==WIFI_PHY_MODE_11B?"802.11b (slow)":pm==WIFI_PHY_MODE_11G?"802.11g":pm==WIFI_PHY_MODE_HT20?"802.11n 20 MHz":pm==WIFI_PHY_MODE_HT40?"802.11n 40 MHz":pm==WIFI_PHY_MODE_HE20?"802.11ax":"other";s+="\n";}
@@ -193,7 +193,7 @@ String buildNetworkReport(){
   }
   s+="ENGINELINK WI-FI (ACCESS POINT, THIS START)\n";
   s+="Phones connected now: ";s+=(unsigned)WiFi.softAPgetStationNum();
-  s+=" · joined ";s+=(unsigned long)apJoins;s+=" · left ";s+=(unsigned long)apLeaves;
+  s+=" · joined ";s+=(unsigned long)apJoins;s+=" · DHCP leases assigned ";s+=(unsigned long)apDhcpLeases;s+=" · left ";s+=(unsigned long)apLeaves;
   if(apLeaves){s+=" (last code ";s+=(unsigned)apReason;s+=")";}
   s+=" · started ";s+=(unsigned long)apStarts;s+=" · restarted by the watchdog ";s+=apRestarts;
   s+=" · channel ";s+=(unsigned)apChannelNow;s+="\n\n";
@@ -215,6 +215,7 @@ String buildNetworkReport(){
   s+="HTTP rebinds: ";s+=web.listenerRebinds;s+="\n";
   s+="Web server self-check misses: ";s+=httpSelfFails;s+=" · restarted web server: ";s+=httpHeals;s+=" · board restarts for it: ";s+=httpSelfRestarts;s+="\n";
   s+="HTTP requests: ";s+=web.served;s+="\n";
+  s+="Port 80 TCP connections accepted: ";s+=web.accepted;s+=" · non-loopback: ";s+=web.externalAccepted;s+=" · HTTP parse failures: ";s+=web.parseFailures;s+="\n";
   s+="Last 32 KiB server write: ";s+=speedTxLastBytes;s+=" bytes in ";s+=speedTxLastMs;s+=" ms (";
   s+=speedTxLastWrites;s+=" write calls)\n";
   s+="TCP send window: 5744 bytes by default, raised to 17 KB for page/file requests and 23 KB for the speed test (";s+=elBoostedSockets;s+=" connections raised, ";s+=elBoostMisses;s+=" not found)\n";

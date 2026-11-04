@@ -72,6 +72,22 @@ version instead of one update each. Newest at the bottom of each section.
 
 ## To check on the boat
 
+- **Standalone Wi-Fi 0.16.5 — verify on the EngineLink PCB before calling this fixed.**
+  Evidence from the 0.16.4 USB report at 50 s: one phone joined at +23 s,
+  left at +40 s with reason 8 (station left), zero port-80 HTTP requests;
+  AP mode on channel 6, no watchdog restart. The driver actually reported
+  8.5 dBm despite the firmware claiming its fixed 19.5 dBm setting.
+  0.16.5 removes that AP-only override and records AP DHCP leases, port-80
+  TCP accepts and HTTP parse failures separately. With iPhone joined to
+  `EngineLink`, turn off mobile data for the controlled test and open
+  `http://192.168.4.1/api/health` directly in Safari, then the app at
+  `http://192.168.4.1/`. Repeat once at normal distance and send the new
+  USB Wi-Fi report *before and after*. If it still fails, use the three
+  counters to locate whether failure is association/DHCP, TCP, or HTTP.
+  Do not attribute reason 8 to a radio fault without further evidence.
+
+## Previous boat checks
+
 - **Wi-Fi 0.15.0 test plan** (send a Wi-Fi report after each step; the report
   now has reconnect attempts, rescue looks, real transmit power and the
   longest loop parts):
