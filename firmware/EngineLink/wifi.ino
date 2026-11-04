@@ -49,6 +49,8 @@ const char* traceText(uint8_t t){
     case 4:return "Disconnected";
     case 5:return "Lost router IP";
     case 6:return "Rescue AP fallback";
+    case 7:return "Phone joined EngineLink Wi-Fi";
+    case 8:return "Phone left EngineLink Wi-Fi";
     default:return "Network event";
   }
 }
@@ -112,6 +114,8 @@ void onWiFi(WiFiEvent_t e,WiFiEventInfo_t info){
   const uint32_t now=millis();
   switch(e){
     case ARDUINO_EVENT_WIFI_AP_START:apStarted=true;apLastEvent=1;apLastEventMs=now;++apStarts;++networkIpEpoch;networkIpEventAt=now;mdnsRefreshPending=true;mdnsNetworkChangedAt=now;break;
+    case ARDUINO_EVENT_WIFI_AP_STACONNECTED:++apJoins;traceWifi(7);break;
+    case ARDUINO_EVENT_WIFI_AP_STADISCONNECTED:++apLeaves;apReason=info.wifi_ap_stadisconnected.reason;traceWifi(8,apReason);break;
     case ARDUINO_EVENT_WIFI_AP_STOP:apLastEvent=2;apLastEventMs=now;break;
     case ARDUINO_EVENT_WIFI_STA_CONNECTED:staAssociated=true;traceWifi(2);break;
     case ARDUINO_EVENT_WIFI_STA_GOT_IP:staHadIp=true;staIpAt=now?now:1;staDownSince=0;++networkIpEpoch;networkIpEventAt=now;mdnsRefreshPending=true;mdnsNetworkChangedAt=now;traceWifi(3);break;
@@ -132,6 +136,7 @@ void startAP(){
   // full power (supply dips, antenna). Phones are close on a boat; 8.5 dBm
   // is the usual fix in ESP32 projects.
   WiFi.setTxPower(WIFI_POWER_8_5dBm);
+  WiFi.setSleep(false);
   apStartedChannel=apChannelNow;
   wifiLog(String("Own Wi-Fi ")+(apStarted?"on":"FAILED to start")+": "+cfg.apName+", channel "+apChannelNow);
   Serial.printf("EngineLink Wi-Fi %s: %s, channel %u, %s\n",apStarted?"on":"FAILED",cfg.apName.c_str(),(unsigned)apChannelNow,WiFi.softAPIP().toString().c_str());
@@ -232,6 +237,13 @@ void serviceNetwork(){
   if(ntpNotification){ntpNotification=false;if(allowTime("ntp")&&validWall()){hasTime=true;timeSource="ntp";backfillTripTime();}}
   serviceWifiScan();
   if(mdnsRefreshPending&&!scanBusy&&(uint32_t)(now-mdnsNetworkChangedAt)>=2000UL)startNameService();
+  // The web server must listen on the Wi-Fi that is up now: (re)bind it
+  // shortly after the own Wi-Fi started or the router gave an IP.
+  if(networkIpEpoch!=httpBoundEpoch&&!scanBusy&&(uint32_t)(now-networkIpEventAt)>=600UL){
+    web.rebindNetwork();httpBoundEpoch=networkIpEpoch;httpBoundAt=now;
+    Serial.printf("HTTP/80 listening on %s\n",online?WiFi.localIP().toString().c_str():WiFi.softAPIP().toString().c_str());
+    wifiLog("Web server listening");
+  }
   if(httpHealPending){httpHealPending=false;++httpHeals;web.rebindNetwork();}
   // Device report to GitHub (only with a token and the router up).
   if(!reportedThisBoot&&cfg.ghToken.length()&&online&&staIpAt&&(uint32_t)(now-staIpAt)>=120000UL){
