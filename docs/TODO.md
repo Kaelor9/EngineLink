@@ -27,16 +27,25 @@ version instead of one update each. Newest at the bottom of each section.
   warm-up, lookout and lever scenes keep their old look for now. Check on an
   iPhone after the release.
 
-- **Drive test steps as text — in source, awaiting the next release.** Each step
-  shows a PORT LEVER and a STARBOARD LEVER card with the position in words
-  (NEUTRAL / FORWARD / REVERSE, idle or rpm) and marks the lever to move.
-  Safety:
-  - a red warning when an engine is over 1,000 rpm at the dock, or when the
-    other engine is above idle in a one-engine step;
-  - Start works only when both engines are under 800 rpm.
+- **Drive test flow, owner's choice — in source, awaiting the next release.**
+  Chosen on `tools/boat-studio/drive-test-flow.html` (2026-11-04):
+  `Ingen i vandet 1 · Stop 14 · Tomgang 5 · Udkig 1 · Bekræft 8 · Start 1 ·
+  Trinbillede 18 · Omdrejningstællere 1/1 · Opbygning 2 · Farve 1 · Nedtælling 8 ·
+  Fremskridt 7 · Værdier 8 · Stopknap 6 · Vagter 1-10,12 · Advarsel 1 ·
+  Start-skærm 1 · Resultat 1 · Tekst 1`.
+  - Pictures come from the page via `node tools/boat-studio/export_flow.js`.
+  - Safety cards are swiped away (with a "Done, next" button too). The checks
+    are remembered for 15 minutes.
+  - Each step shows a big instruction and the Volvo Penta twin-lever picture
+    (front and side), gear and rpm per engine, a bar with seconds, and Pause
+    and Stop at the top.
+  - Guards: over 1,000 rpm at the dock; the other engine above idle; Start
+    only at idle; a guard stops the step; boat moving over 2 kn at the dock
+    (needs GPS on NMEA 2000); lost connection; engine data missing 3 s; a
+    "Put both levers in NEUTRAL" screen when stopped; a lookout reminder
+    every 30 s at sea.
 
-  The elaborate options page for the rest of the drive test
-  (`tools/boat-studio/drive-test-flow.html`) is kept but not used, to save work.
+  Check on the board and an iPhone after the release.
 
 ## Firmware
 
