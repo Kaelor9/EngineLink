@@ -1,15 +1,16 @@
-<!doctype html><html lang="da"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<!doctype html><html lang="da"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Køretestens scener</title>
+<meta name="claude:viewport-fit-sides" content="cover">
 <style>
 :root{--bg:#f3f1ec;--card:#fff;--ink:#1c2328;--mute:#66707a;--line:#e1ddd4;--acc:#1f4f73;--accbg:#e6eef5}
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#12171b;--card:#1b2227;--ink:#e8ecef;--mute:#98a2ab;--line:#2b343b;--acc:#8cc0e6;--accbg:#1d3242}}
 :root[data-theme="dark"]{--bg:#12171b;--card:#1b2227;--ink:#e8ecef;--mute:#98a2ab;--line:#2b343b;--acc:#8cc0e6;--accbg:#1d3242}
 *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif;padding-bottom:76px}
-.wrap{max-width:1000px;margin:0 auto;padding:16px}h1{font-size:22px;margin:6px 0 2px}p.lead{color:var(--mute);margin:0 0 14px}
+.wrap{max-width:1000px;margin:0 auto;padding-block:16px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}h1{font-size:22px;margin:6px 0 2px}p.lead{color:var(--mute);margin:0 0 14px}
 section{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px;margin:0 0 16px}
 section h2{font-size:17px;margin:2px 2px 10px}
 .big svg{display:block;width:100%;height:auto;border-radius:10px}.big b{display:block;margin:8px 2px 12px;font-size:14px}
-.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:10px}
 .opt{all:unset;cursor:pointer;border:2px solid transparent;border-radius:12px;overflow:hidden;background:var(--bg);display:flex;flex-direction:column}
 .opt svg{display:block;width:100%;height:auto}.opt b{font-size:13px;padding:7px 9px 9px}
 .opt[aria-pressed="true"]{border-color:var(--acc);background:var(--accbg)}.opt:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
@@ -22,12 +23,68 @@ section h2{font-size:17px;margin:2px 2px 10px}
 @keyframes draw{to{stroke-dashoffset:0}}@keyframes fade{to{opacity:1}}
 @keyframes pulse{0%,100%{opacity:.35;transform:scale(.95)}50%{opacity:1;transform:scale(1.03)}}
 @keyframes wk{to{stroke-dashoffset:-36}}@keyframes bob{from{transform:scale(.85)}to{transform:scale(1.1)}}
-@media (prefers-reduced-motion:reduce){.sway,.rip,.pulse,.wk,.bob{animation:none}.rp{animation:none;stroke-dashoffset:0}.ey{animation:none;opacity:1}}
-.bar{position:fixed;left:0;right:0;bottom:0;background:var(--card);border-top:1px solid var(--line);padding:10px 16px;display:flex;gap:10px;align-items:center;justify-content:center}
+.layout{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);gap:16px;align-items:start;margin-bottom:18px}
+@media (max-width:820px){.layout{grid-template-columns:minmax(0,1fr)}}
+.pvcol{position:sticky;top:env(safe-area-inset-top,0px);z-index:2}
+.pv{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:10px}
+.pv svg{display:block;width:100%;height:auto;max-height:46vh;border-radius:10px}
+@media (max-width:820px){.pv svg{max-height:32vh}.pvcol{margin:0 -4px}}
+.tabs{display:flex;gap:6px;flex-wrap:wrap;margin:0 0 8px}
+.tabs button{font:inherit;font-size:13px;font-weight:600;border:1px solid var(--line);background:var(--bg);color:var(--ink);border-radius:999px;padding:5px 11px;cursor:pointer}
+.tabs button[aria-pressed="true"]{background:var(--acc);border-color:var(--acc);color:var(--card)}
+.ctlcol{display:flex;flex-direction:column;gap:12px;min-width:0}
+.cg{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px}
+.cg h3{font-size:15px;margin:0 0 4px}.spd{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:0 0 10px}.spd span{font-size:12px;font-weight:600;color:var(--mute);margin-right:2px}.spd button{font:inherit;font-size:12px;font-weight:600;border:1px solid var(--line);background:var(--bg);color:var(--ink);border-radius:999px;padding:4px 9px;cursor:pointer}.spd button[aria-pressed="true"]{background:var(--acc);border-color:var(--acc);color:var(--card)}.spd button:focus-visible{outline:2px solid var(--acc);outline-offset:2px}.cg p{margin:0 0 10px;color:var(--mute);font-size:13px}
+.hh{font-size:19px;margin:22px 2px 2px}
+.list{display:flex;flex-direction:column;gap:6px}
+.list button{all:unset;cursor:pointer;display:flex;gap:10px;align-items:center;border:2px solid var(--line);background:var(--bg);border-radius:10px;padding:8px 10px;font-size:14px}
+.list button[aria-pressed="true"]{border-color:var(--acc);background:var(--accbg)}
+.list button:focus-visible,.tabs button:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+.list .n{min-width:22px;font-variant-numeric:tabular-nums;color:var(--mute);font-weight:600}
+.cols{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:6px}
+.wvs{transform-box:view-box}
+.wv-slide{animation:wsl calc(14s / var(--k,1)) linear infinite}.wv-slow{animation:wsl calc(30s / var(--k,1)) linear infinite}.wv-fast{animation:wsl calc(6s / var(--k,1)) linear infinite}
+.wv-diag{animation:wdg calc(18s / var(--k,1)) linear infinite}.wv-bob{animation:wbob calc(3.2s / var(--k,1)) ease-in-out infinite alternate}
+.wv-fade .wm{animation:wfd calc(4.5s / var(--k,1)) ease-in-out infinite;animation-delay:var(--d)}
+.wv-tw .wm{animation:wtw calc(2.6s / var(--k,1)) ease-in-out infinite;animation-delay:var(--d)}
+.wv-rise .wm{animation:wrs calc(5s / var(--k,1)) ease-in-out infinite;animation-delay:var(--d)}
+@keyframes wsl{from{transform:translateX(0px)}to{transform:translateX(-120px)}}
+@keyframes wdg{from{transform:translate(0px,0px)}to{transform:translate(-120px,-68px)}}
+@keyframes wbob{from{transform:translateY(-2px)}to{transform:translateY(3px)}}
+@keyframes wfd{0%{opacity:0;transform:translateX(8px)}45%{opacity:1}100%{opacity:0;transform:translateX(-12px)}}
+@keyframes wtw{0%,100%{opacity:.15}50%{opacity:1}}
+@keyframes wrs{0%{opacity:0;transform:scale(.6,.6)}40%{opacity:1;transform:scale(1,1)}100%{opacity:0;transform:scale(1.15,1.15)}}
+.wm{transform-box:fill-box;transform-origin:center}
+.st *{animation:none!important}
+.ctl{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px}
+.ctl h3{font-size:14px;margin:0 2px 8px;color:var(--mute);font-weight:600}
+.seg{display:flex;flex-wrap:wrap;gap:8px}
+.seg button{font:inherit;font-size:14px;border:2px solid var(--line);background:var(--bg);color:var(--ink);border-radius:10px;padding:8px 12px;cursor:pointer;display:flex;gap:8px;align-items:center}
+.seg button[aria-pressed="true"]{border-color:var(--acc);background:var(--accbg)}
+.seg i{width:16px;height:16px;border-radius:50%;display:inline-block;border:1px solid var(--line)}
+.new{display:inline-block;font-size:11px;font-weight:700;letter-spacing:.04em;color:var(--acc);background:var(--accbg);border-radius:6px;padding:1px 6px;margin-right:6px;vertical-align:1px}
+.bigbar{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:8px 2px 12px}.bigbar b{margin:0!important}
+.replay{font:inherit;font-size:13px;font-weight:600;border:1px solid var(--line);background:var(--bg);color:var(--ink);border-radius:8px;padding:6px 10px;cursor:pointer}
+.arrx{animation:arrx 3.4s cubic-bezier(.25,.7,.3,1) both}.arry{animation:arry 3.4s cubic-bezier(.25,.7,.3,1) both}
+.mv{animation:mv 40s linear infinite}
+@keyframes arrx{from{transform:translateX(150px)}to{transform:translateX(0px)}}
+@keyframes arry{from{transform:translateY(60px)}to{transform:translateY(0px)}}
+@keyframes mv{from{transform:translateX(0px)}to{transform:translateX(-120px)}}
+@keyframes rock{0%{transform:translate(0px,0px) rotate(0deg)}50%{transform:translate(1.6px,1.2px) rotate(.55deg)}100%{transform:translate(-1px,.4px) rotate(-.35deg)}}
+@keyframes rock2{0%{transform:translate(0px,0px)}50%{transform:translate(.8px,.6px)}100%{transform:translate(-.5px,.2px)}}
+.m2 .sway{animation:rock 4.8s ease-in-out infinite alternate;transform-box:fill-box;transform-origin:center}
+.m2 .rpg{animation:rock2 4.8s ease-in-out infinite alternate}
+.m2 .rip{animation-duration:9s}
+.m0 .sway,.m0 .rip,.m0 .pulse,.m0 .wk,.m0 .bob,.m0 .arrx,.m0 .arry,.m0 .mv,.m0 .rpg{animation:none}.m0 .rp{animation:none;stroke-dashoffset:0}.m0 .ey{animation:none;opacity:1}
+@media (prefers-reduced-motion:reduce){.wv-slide,.wv-slow,.wv-fast,.wv-diag,.wv-bob,.wm,.sway,.rip,.pulse,.wk,.bob,.arrx,.arry,.mv,.rpg{animation:none!important}.rp{animation:none!important;stroke-dashoffset:0}.ey{animation:none!important;opacity:1}}
+.bar{position:fixed;left:0;right:0;bottom:0;background:var(--card);border-top:1px solid var(--line);padding:10px max(16px,env(safe-area-inset-right,0px)) calc(10px + env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px));display:flex;gap:10px;align-items:center;justify-content:center}
 .bar span{color:var(--mute);font-size:13px;max-width:70vw;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.bar button{font:inherit;font-weight:600;border:0;border-radius:9px;padding:9px 14px;background:var(--acc);color:var(--card);cursor:pointer}
 </style></head><body><div class="wrap">
 <h1>Køretestens scener</h1>
-<p class="lead">Din båd i stregstilen, seks forslag til hver af de tre scener. Tovene bliver lagt ud ét ad gangen, vandet glider forbi, og badestigen er oppe. Vælg ét i hver.</p>
+<p class="lead">Din båd fra oven i appens stil. Vælg til højre, så spiller forhåndsvisningen forfra. Tovene sidder fast på klamperne og strammes og slækkes, når båden bevæger sig. Forslag mærket <span class="new">NY</span> er nye; resten er fra filerne.</p>
+<div class="layout"><div class="pvcol"><div class="pv"><div class="tabs" id="tabs"></div><div id="pvsvg"></div><div class="bigbar"><b id="pvname"></b><button class="replay" id="replay">Spil igen</button></div></div></div>
+<div class="ctlcol" id="ctl"></div></div>
+<h2 class="hh">Scenernes udseende</h2><p class="lead">Kajen, pælene og omgivelserne for hver af de tre scener. Tryk på et billede for at se det i forhåndsvisningen.</p>
 <div id="groups"></div></div>
 <div class="bar"><span id="code"></span><button id="copy">Kopiér valget</button></div>
 <script>
@@ -582,7 +639,12 @@ applyChoice(CHOICE);
 
 // Drive test scenes in the line style with the owner's boat (bow to the right,
 // transom at x = 0, port at -y). Three kinds, several looks each.
-const K={bg:'#33495c',quay:'#4a6074',quay2:'#56697b',line:'#f2f5f7',soft:'#8ea3b4',rope:'#ece3cc',ropeD:'#0e1820',pile:'#6d5d4c',water:'#a9bfce',teal:'#5fd0c0',red:'#e0645a',green:'#4fbf7a'};
+const KS=[
+ {bg:'#33495c',quay:'#4a6074',quay2:'#56697b',line:'#f2f5f7',soft:'#8ea3b4',rope:'#ece3cc',ropeD:'#0e1820',pile:'#6d5d4c',water:'#a9bfce',teal:'#5fd0c0',red:'#e0645a',green:'#4fbf7a',skin:'#e7c29c'},
+ {bg:'#dfe8ee',quay:'#c9d3da',quay2:'#bcc8d0',line:'#1c2a36',soft:'#7e909e',rope:'#f7f1e2',ropeD:'#6b5a3c',pile:'#9a7d5e',water:'#6f8ea3',teal:'#1f8f80',red:'#d0463c',green:'#2f9a5c',skin:'#d9a77a'},
+ {bg:'#2a4d66',quay:'#47657c',quay2:'#526f85',line:'#ffffff',soft:'#9fb3c2',rope:'#ece3cc',ropeD:'#0e1820',pile:'#7a6650',water:'#b5cad8',teal:'#6fe0d0',red:'#ef6a5e',green:'#5fd08a',skin:'#e7c29c'}];
+const PALS=[['Som appen (mørkeblå)',0],['Lys',1],['Marine',2]];
+let palSel=0,motSel=1;let K=KS[0];
 const plen=()=>PLEN[O.plat];
 function bp(){const L=FL(),hw=hb(0),x0=-plen(),xb=L*.89,yb=hb(xb)-deckIn(xb)-5.6;
   return {L,hw,x0,aft:s=>[x0*.5,s*(hw-11/2-.5)],bow:s=>[xb,s*yb]};}
@@ -634,38 +696,301 @@ function sea({kind}){const p=bp(),cx=p.L/2-14;let q='',top='',ov='';
   if(kind==='rings')ov=[.45,.7,.95].map((k,i)=>`<circle cx="${cx}" cy="0" r="${p.L*k}" fill="none" stroke="${K.teal}" stroke-width="1.4" opacity="${.7-i*.2}"/>`).join('');
   if(kind==='bow')q=`<path class="wk" d="M${p.L-4} -6 Q${p.L*.8} -${p.hw+6} ${p.L*.55} -${p.hw+22} M${p.L-4} 6 Q${p.L*.8} ${p.hw+6} ${p.L*.55} ${p.hw+22}" stroke="${K.water}" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-dasharray="8 7" opacity=".55"/>`;
   return {vb:[cx-250,-118,500,236],q,f:[],top:top+ov,lines:[],fast:kind==='bow'||kind==='wake',waves:kind==='waves'};}
+// ---- new: figure-of-eight turns on the boat's cleat, hints, swimmer, far boats ----
+function fig8([x,y],delay){return `<g class="ey" style="animation-delay:${delay}s" transform="translate(${P(x,y)})"><path d="M-6 -2.6 C-2 -6 2 6 6 2.6 M-6 2.6 C-2 6 2 -6 6 -2.6" fill="none" stroke="${K.rope}" stroke-width="1.5" stroke-linecap="round"/></g>`;}
+function fenderHints(s){const L=FL();return [.18,.57,.86].map((k,i)=>{const x=L*k,y=s*(hb(x)+10.5);
+  return `<g class="ey" style="animation-delay:${(.3+i*.45).toFixed(2)}s"><circle class="pulse" cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="12.5" fill="none" stroke="${K.teal}" stroke-width="1.6" style="animation-delay:${(-i).toFixed(0)}s"/></g>`;}).join('');}
+function swimmer(){const x=-PLEN[O.plat]-22,y=ladY();
+  return `<g><circle class="pulse" cx="${x}" cy="${y}" r="13" fill="none" stroke="${K.water}" stroke-width="1.3"/><circle cx="${x}" cy="${y}" r="20" fill="none" stroke="${K.water}" stroke-width="1" opacity=".5"/>
+  <path d="M${x-9} ${y-6} Q${x-4} ${y-1} ${x} ${y} Q${x+4} ${y+1} ${x+9} ${y+6}" fill="none" stroke="${K.skin}" stroke-width="2.6" stroke-linecap="round"/><circle cx="${x}" cy="${y}" r="5" fill="${K.skin}" stroke="${K.ropeD}" stroke-width=".8"/></g>`;}
+function farBoat(x,y,s=.5,dir=1){return `<g transform="translate(${x} ${y}) scale(${s*dir} ${s})"><path d="M-30 -9 L18 -9 Q34 -8 40 0 Q34 8 18 9 L-30 9 Z" fill="${K.quay}" stroke="${K.line}" stroke-width="2"/><path d="M-6 -5 L10 -5 Q14 0 10 5 L-6 5 Z" fill="none" stroke="${K.line}" stroke-width="1.6"/></g>`;}
+function newSternArrive(){const s=sternTo({});s.arrive='x';return s;}
+function newSternFingerNeigh(){return sternTo({finger:true,neigh:true});}
+function newSternConcreteCross(){return sternTo({quayKind:'concrete',rings:true,cross:true});}
+function newAlongArrive(){const s=alongside({});s.arrive='y';return s;}
+function newAlongStone(){return alongside({quayKind:'stone'});}
+function newAlongFloatArrive(){const s=alongside({cleats:true});s.arrive='y';return s;}
+function newSeaBow(){return sea({kind:'bow'});}
+function newSeaSwimmer(){const s=sea({kind:'calm'});s.ladder=true;s.under=swimmer();return s;}
+function newSeaTraffic(){const s=sea({kind:'calm'}),p=bp(),cx=p.L/2-14;s.top+=`<g class="mv">${farBoat(cx+210,-92,.45,-1)}${farBoat(cx+330,84,.38,-1)}</g>`;return s;}
 const GROUPS3=[
- ['Mellem pæle, agten mod kajen',[
+ ['Mellem pæle',[
    ['Træbro, lige agtertove',()=>sternTo({})],
    ['Træbro, krydsede agtertove',()=>sternTo({cross:true})],
    ['Betonkaj med ringe',()=>sternTo({quayKind:'concrete',rings:true})],
    ['Stenkaj, pæle lidt længere ude',()=>sternTo({quayKind:'stone',pileX:1.08})],
    ['Bås med naboer',()=>sternTo({neigh:true})],
-   ['Bro med fingerbro i bagbord',()=>sternTo({finger:true})]]],
- ['Langs kajen, fendere på kajsiden',[
+   ['Bro med fingerbro i bagbord',()=>sternTo({finger:true})],
+   ['NY|Bakker ind mellem pælene',newSternArrive],
+   ['NY|Fingerbro og naboer i båsene',newSternFingerNeigh],
+   ['NY|Betonkaj, krydsede agtertove',newSternConcreteCross]]],
+ ['Langs kajen',[
    ['Træbro, fire tove',()=>alongside({})],
    ['Betonkaj, for- og agtertov',()=>alongside({quayKind:'concrete',springs:false})],
    ['Flydebro med klamper',()=>alongside({cleats:true})],
    ['Stenkaj med ringe',()=>alongside({quayKind:'stone',rings:true,springs:false})],
    ['Kaj med gummiliste',()=>alongside({quayKind:'concrete',rub:true})],
-   ['Gammel kaj med pæle foran',()=>alongside({pilesFront:true,springs:false})]]],
+   ['Gammel kaj med pæle foran',()=>alongside({pilesFront:true,springs:false})],
+   ['NY|Lægger sig ind til kajen',newAlongArrive],
+   ['NY|Stenkaj, fire tove',newAlongStone],
+   ['NY|Flydebro, lægger sig ind',newAlongFloatArrive]]],
  ['Åbent vand',[
    ['Stille vand',()=>sea({kind:'calm'})],
    ['Frit rum rundt om båden',()=>sea({kind:'circle'})],
    ['Afstandsringe',()=>sea({kind:'rings'})],
    ['Kølvand bag båden',()=>sea({kind:'wake'})],
    ['Lidt bølger',()=>sea({kind:'waves'})],
-   ['Bøjer langt væk',()=>sea({kind:'buoys'})]]]];
-function scene(g,i){const s=GROUPS3[g][1][i][1]();LB.f=s.f;LB.ladder=false;const PI0=PI_;PI_=0;const boatG=lineBoat();PI_=PI0;const vb=s.vb;
-  const rp=s.lines.map((l,k)=>rope(l[0],l[1],{delay:.4+k*.7,eye:l[2]})).join('');
-  return `<svg viewBox="${vb.map(v=>v.toFixed(1)).join(' ')}" role="img" aria-label="${GROUPS3[g][1][i][0]}"><rect x="${vb[0]}" y="${vb[1]}" width="${vb[2]}" height="${vb[3]}" fill="${K.bg}"/>${ripples(s.fast?2.4:1,s.waves?26:12,s.waves?.34:.22)}${s.q}<g class="sway">${boatG}</g>${rp}${s.top}</svg>`;}
+   ['Bøjer langt væk',()=>sea({kind:'buoys'})],
+   ['NY|Sejler: bovbølge',newSeaBow],
+   ['NY|Person i vandet, stigen ude',newSeaSwimmer],
+   ['NY|Andre både passerer langt ude',newSeaTraffic]]]];
+const nm=t=>t.startsWith('NY|')?`<span class="new">NY</span>${t.slice(3)}`:t;const plain=t=>t.replace('NY|','');
 
-const sel=[0,0,0];
-function draw(g){const el=document.getElementById('g'+g);el.querySelector('.big').innerHTML=scene(g,sel[g])+`<b>${sel[g]+1}. ${GROUPS3[g][1][sel[g]][0]}</b>`;
-  el.querySelectorAll('.opt').forEach((b,i)=>b.setAttribute('aria-pressed',i===sel[g]));
-  document.getElementById('code').textContent=GROUPS3.map((G,k)=>`${G[0]}: ${sel[k]+1}`).join(' · ');}
-document.getElementById('groups').innerHTML=GROUPS3.map((G,g)=>`<section id="g${g}"><h2>${G[0]}</h2><div class="big"></div><div class="grid">${G[1].map((s,i)=>`<button class="opt" data-g="${g}" data-i="${i}">${scene(g,i)}<b>${i+1}. ${s[0]}</b></button>`).join('')}</div></section>`).join('');
-document.getElementById('groups').addEventListener('click',e=>{const b=e.target.closest('.opt');if(!b)return;sel[+b.dataset.g]=+b.dataset.i;draw(+b.dataset.g);});
-document.getElementById('copy').onclick=async()=>{const t=document.getElementById('code').textContent;try{await navigator.clipboard.writeText(t);}catch(_){prompt('Kopiér:',t);}};
-[0,1,2].forEach(draw);
-</script></body></html>
+// ===================== choices =====================
+const BOATM=[['Ligger stille'],['Rolig, næsten stille'],['Levende: vugger let'],['Svajer frem og tilbage mod tovene'],['Dønning: løftes og sænkes'],['Vugger kraftigere (blæsende)']];
+const ROPES=[
+ ['Tegnes fra klampen ud til kajen',{m:'draw',dur:1.1,gap:.8}],
+ ['Tegnes fra kajen ind til båden',{m:'rev',dur:1.1,gap:.8}],
+ ['Kastes i en bue og strammes',{m:'throw',dur:1.7,gap:1}],
+ ['Lægges slapt ud og strammes',{m:'slack',dur:1.9,gap:.9}],
+ ['Fader ind ét ad gangen',{m:'fade',dur:.9,gap:.7}],
+ ['Klampen blinker, så tegnes tovet',{m:'draw',dur:1.1,gap:1.9,pre:.9,blink:true}],
+ ['Stiplet hjælpelinje først, så tovet',{m:'draw',dur:1.1,gap:2,pre:1,guide:true}],
+ ['Tegnes, øjet lægges om pullerten',{m:'draw',dur:1.1,gap:1.4,eye:true}],
+ ['Tegnes med en lille pause mellem hvert tov',{m:'draw',dur:1.1,gap:1.6}],
+ ['Kastes, og øjet lægges om pullerten',{m:'throw',dur:1.7,gap:1.9,eye:true}],
+ ['Slanger sig ud',{m:'snake',dur:1.5,gap:1}],
+ ['Alle tove på én gang',{m:'draw',dur:1.4,gap:0}],
+ ['Hurtigt efter hinanden',{m:'draw',dur:.6,gap:.35}],
+ ['Langsomt, ét ad gangen med pause',{m:'draw',dur:2,gap:2.8}],
+ ['Lægges slapt, og øjet lægges om pullerten',{m:'slack',dur:1.9,gap:2,eye:true}],
+ ['Ingen animation: tovene ligger der',{m:'none'}]];
+const FENDX=[
+ ['Sat ud fra start',{ap:'none',ring:'none'}],
+ ['Fader ind én efter én',{ap:'fade',ring:'none'}],
+ ['Fader ind én efter én, fast ring',{ap:'fade',ring:'static'}],
+ ['Fader ind, ringen blinker',{ap:'fade',ring:'blink'}],
+ ['Fader ind, ringen fader ind og ud',{ap:'fade',ring:'pulse'}],
+ ['Fader ind og blinker én gang',{ap:'fade',ring:'once'}],
+ ['Fader ind og blinker tre gange',{ap:'fade',ring:'thrice'}],
+ ['Ringen viser pladsen først, så fenderen',{ap:'fade',ring:'first'}],
+ ['Fader ind, ringen forsvinder bagefter',{ap:'fade',ring:'fadeout'}],
+ ['Glider ud fra rælingen',{ap:'slide',ring:'none'}],
+ ['Glider ud, fast ring',{ap:'slide',ring:'static'}],
+ ['Glider ud og blinker én gang',{ap:'slide',ring:'once'}],
+ ['Popper op én efter én',{ap:'pop',ring:'none'}],
+ ['Popper op, ringen pulserer',{ap:'pop',ring:'pulse'}],
+ ['Ring der kører rundt',{ap:'fade',ring:'spin'}],
+ ['Rød ring bliver grøn, når fenderen er ude',{ap:'fade',ring:'redgreen'}],
+ ['Nummereret 1, 2, 3 med ring',{ap:'fade',ring:'num'}],
+ ['Pil peger på pladsen, så fenderen',{ap:'fade',ring:'arrow'}],
+ ['Alle på én gang, ringene blinker tre gange',{ap:'all',ring:'thrice'}],
+ ['Alle på én gang, fast ring',{ap:'all',ring:'static'}],
+ ['Ingen fendere',{ap:'hide',ring:'none'}]];
+const WAVES=[
+ ['Korte streger (som nu)',{mark:(x,y)=>`<path d="M${x} ${y} q6 -2.2 12 0" fill="none" stroke="${K.water}" stroke-width="1" stroke-linecap="round" opacity=".24"/>`}],
+ ['Blankt vand',{mark:()=>''}],
+ ['Lange dønninger',{mark:(x,y,r,s)=>s%2?'':`<path d="M${x-10} ${y} q17 -3 34 0" fill="none" stroke="${K.water}" stroke-width="1.1" stroke-linecap="round" opacity=".2"/>`}],
+ ['Små krusninger',{mark:(x,y)=>`<path d="M${x} ${y} q2.5 -1.4 5 0 M${x+9} ${y+7} q2.5 -1.4 5 0 M${x+18} ${y+2} q2.5 -1.4 5 0" fill="none" stroke="${K.water}" stroke-width=".9" stroke-linecap="round" opacity=".26"/>`}],
+ ['Skumtoppe',{mark:(x,y)=>`<path d="M${x} ${y} q6 -3.2 12 0" fill="none" stroke="${K.water}" stroke-width="1.1" stroke-linecap="round" opacity=".3"/><circle cx="${x+6}" cy="${y-1.8}" r="1.2" fill="${K.line}" opacity=".55"/>`}],
+ ['Bølgebånd hele vejen',{band:'sine'}],
+ ['Lysglimt',{mark:(x,y,r)=>`<path d="M${x} ${y-2.6} L${x+.8} ${y} L${x} ${y+2.6} L${x-.8} ${y}Z M${x-2.6} ${y} L${x} ${y+.8} L${x+2.6} ${y} L${x} ${y-.8}Z" fill="${K.line}" opacity="${(.25+r*.45).toFixed(2)}"/>`}],
+ ['Prikker',{mark:(x,y)=>`<circle cx="${x}" cy="${y}" r="1.2" fill="${K.water}" opacity=".35"/>`}],
+ ['Krap sø (små toppe)',{mark:(x,y)=>`<path d="M${x} ${y} l4 -3 l4 3 M${x+12} ${y+9} l4 -3 l4 3" fill="none" stroke="${K.water}" stroke-width="1" stroke-linejoin="round" stroke-linecap="round" opacity=".3"/>`}],
+ ['V-bølger',{mark:(x,y)=>`<path d="M${x} ${y} l5 3.5 l5 -3.5" fill="none" stroke="${K.water}" stroke-width="1" stroke-linejoin="round" stroke-linecap="round" opacity=".28"/>`}],
+ ['Dobbeltstreger',{mark:(x,y)=>`<path d="M${x} ${y} q6 -2.2 12 0 M${x+3} ${y+3.6} q5 -1.8 10 0" fill="none" stroke="${K.water}" stroke-width=".9" stroke-linecap="round" opacity=".24"/>`}],
+ ['Strømlinjer',{mark:(x,y)=>`<path d="M${x-6} ${y} H${x+22}" stroke="${K.water}" stroke-width=".8" stroke-linecap="round" opacity=".22"/>`}],
+ ['Lyse pletter (blødt)',{mark:(x,y,r)=>`<ellipse cx="${x+6}" cy="${y}" rx="${(12+r*8).toFixed(1)}" ry="4.5" fill="${K.water}" opacity=".08"/>`}],
+ ['Små ringe på vandet',{mark:(x,y)=>`<circle cx="${x+5}" cy="${y}" r="2.8" fill="none" stroke="${K.water}" stroke-width=".9" opacity=".3"/>`}],
+ ['Store bølger',{mark:(x,y)=>`<path d="M${x-6} ${y} q12 -5.5 24 0" fill="none" stroke="${K.water}" stroke-width="1.6" stroke-linecap="round" opacity=".32"/>`}],
+ ['Tegnede bølgetoppe',{mark:(x,y)=>`<path d="M${x} ${y} q3 -4 6 0 q3 -4 6 0 q3 -4 6 0" fill="none" stroke="${K.water}" stroke-width="1" stroke-linecap="round" opacity=".28"/>`}],
+ ['Streger og glimt',{mark:(x,y,r,s)=>s%3?`<path d="M${x} ${y} q6 -2.2 12 0" fill="none" stroke="${K.water}" stroke-width="1" stroke-linecap="round" opacity=".24"/>`:`<path d="M${x} ${y-2.6} L${x+.8} ${y} L${x} ${y+2.6} L${x-.8} ${y}Z M${x-2.6} ${y} L${x} ${y+.8} L${x+2.6} ${y} L${x} ${y-.8}Z" fill="${K.line}" opacity=".5"/>`}],
+ ['Lyse og mørke striber',{band:'stripes'}],
+ ['Bølgebånd og skumtoppe',{band:'sine',mark:(x,y,r,s)=>s%2?'':`<circle cx="${x+6}" cy="${y-1.8}" r="1.2" fill="${K.line}" opacity=".5"/>`}],
+ ['Diagonale streger (vind)',{mark:(x,y)=>`<path d="M${x} ${y+3} l10 -6" stroke="${K.water}" stroke-width="1" stroke-linecap="round" opacity=".26"/>`}]];
+const WMODES=[['Glider forbi','wv-slide'],['Fader ind og glider ud','wv-fade'],['Fader ind og ud, mens de glider','wv-slide wv-fade'],['Står stille',''],['Vugger op og ned','wv-bob'],['Glider på skrå','wv-diag'],['Glimter','wv-tw'],['Dukker op og breder sig','wv-rise'],['Glider langsomt','wv-slow'],['Glider hurtigt','wv-fast'],['Glider forbi og glimter','wv-slide wv-tw']];
+const K8='M0 3.6 C-3 3.6 -8.4 3.4 -8.4 0 C-8.4 -2.9 -5.2 -2.9 -3.4 -1.9 L3.4 1.9 C5.2 2.9 8.4 2.9 8.4 0 C8.4 -3.4 3 -3.6 0 -3.6 C-3 -3.6 -5 -2.4 -3.4 1.9 M-3.4 -1.9 L-1.2 -0.7';
+const K8N='M0 3.6 C-3 3.6 -8.4 3.4 -8.4 0 C-8.4 -2.9 -5.2 -2.9 -3.4 -1.9 L3.4 1.9 C5.2 2.9 8.4 2.9 8.4 0 C8.4 -2.9 5.2 -2.9 3.4 -1.9 L-3.4 1.9';
+const K8X='M-7 -2.4 L7 2.4 M-7 2.4 L7 -2.4 M-7 -2.4 Q-9.6 0 -7 2.4 M7 -2.4 Q9.6 0 7 2.4';
+const K8R='M0 3.6 C-4 3.6 -9 3.2 -9 0 C-9 -3.2 -4 -3.6 0 -3.6 C4 -3.6 9 -3.2 9 0 C9 3.2 4 3.6 0 3.6 M-6 -2 L6 2';
+// look: path, rope width, scale, colour, a light cleat underneath, a second layer
+const KLOOK=[['Klassisk ottetal med låsetørn',{d:K8}],['Ottetal uden låsetørn',{d:K8N}],['Dobbelt: to lag ottetal',{d:K8N,dbl:true}],
+ ['Tykt tov',{d:K8,w:2.3}],['Tyndt tov',{d:K8,w:1}],['Tydelig klampe under stikket',{d:K8,cleat:true}],['Kontrastfarve, så det ses',{d:K8,col:'teal'}],
+ ['Forenklet: kryds med sløjfer',{d:K8X}],['Rundtørn om klampen og et kryds',{d:K8R}],['Stort og tydeligt',{d:K8,sc:1.45,cleat:true}],['Intet ottetalsstik',{none:true}]];
+const KSHOW=[['Fader ind, når tovet er lagt',{m:'fade'}],['Tegnes rundt om klampen',{m:'draw',d:.9}],['Tegnes langsomt rundt',{m:'draw',d:2.2}],['Tegnes i to omgange',{m:'two'}],
+ ['Popper op',{m:'pop'}],['Blinker, når det kommer',{m:'blink'}],['Ring om klampen først, så stikket',{m:'ring'}],['Tegnes, og en grøn ring bekræfter',{m:'confirm'}],
+ ['Fader ind og pulserer svagt',{m:'pulse'}],['Ligger der med det samme sammen med tovet',{m:'with'}]];
+const ORDER=[['Fendere først, så fortøjninger'],['Fortøjninger først, så fendere'],['Fendere og fortøjninger samtidig'],['Skiftevis: en fender, et tov'],['Fendere, og tovene begynder halvvejs']];
+const SPEEDS=[['Meget langsom',.4],['Langsom',.65],['Normal',1],['Hurtig',1.5],['Meget hurtig',2.2]];
+const SEL={pal:0,boat:2,rope:0,fend:3,wave:0,wmode:1,tab:0,spBoat:2,spRope:2,spFend:2,spWave:2,klook:0,kshow:1,spKnot:2,order:0};const sel=[0,0,0];
+
+// ===================== drawing helpers =====================
+const NS='http://www.w3.org/2000/svg';
+const rnd=s=>{const v=Math.sin(s*12.9898+78.233)*43758.5453;return v-Math.floor(v);};
+const clamp=(v,a=0,b=1)=>Math.max(a,Math.min(b,v));
+const ease=q=>q<.5?2*q*q:1-Math.pow(-2*q+2,2)/2;
+const outC=q=>1-Math.pow(1-q,3);
+let EXPORT=false;
+function waves(type,vb,cls,k=1){if(EXPORT)return '<!--W-->';const W=WAVES[type][1],x0=vb[0]-260,x1=vb[0]+vb[2]+260,y0=vb[1]-90,y1=vb[1]+vb[3]+90;let g='';
+  if(W.band==='sine'){for(let y=Math.floor(y0/34)*34;y<y1;y+=34){let d=`M${Math.floor(x0/60)*60} ${y}`;for(let x=Math.floor(x0/60)*60;x<x1;x+=60)d+=' q15 -2.4 30 0 q15 2.4 30 0';g+=`<path d="${d}" fill="none" stroke="${K.water}" stroke-width="1" opacity=".2"/>`;}}
+  if(W.band==='stripes'){for(let y=Math.floor(y0/68)*68;y<y1;y+=68)g+=`<rect x="${x0}" y="${y}" width="${x1-x0}" height="34" fill="${K.water}" opacity=".06"/>`;}
+  if(W.mark)for(let y=Math.floor(y0/34)*34;y<y1;y+=34){const row=Math.round(y/34),rm=((row%2)+2)%2;
+    for(let x=Math.floor(x0/40)*40;x<x1;x+=40){const col=Math.round(x/40),cm=((col%3)+3)%3,seed=cm*7+rm*3+1,r=rnd(seed),m=W.mark(+(x+rm*20+r*6).toFixed(1),+(y+r*4).toFixed(1),r,seed);
+      if(m)g+=`<g class="wm" style="--d:${(-rnd(col*31+row*17)*5).toFixed(2)}s">${m}</g>`;}}
+  return `<g class="wvs ${cls}" style="--k:${k}">${g}</g>`;}
+const ropeD=d=>`<path d="${d}" fill="none" stroke="${K.ropeD}" stroke-width="3.4" stroke-linecap="round" opacity=".55"/>`;
+// Figure-of-eight on a horn cleat, in the cleat's own frame (horns at x = -6 and 6):
+// the line comes in at the middle, goes round one horn, crosses over the
+// middle, round the other horn, crosses back, and ends in a locking turn.
+const knotD='M0 3.6 C-3 3.6 -8.4 3.4 -8.4 0 C-8.4 -2.9 -5.2 -2.9 -3.4 -1.9 L3.4 1.9 C5.2 2.9 8.4 2.9 8.4 0 C8.4 -3.4 3 -3.6 0 -3.6 C-3 -3.6 -5 -2.4 -3.4 1.9 M-3.4 -1.9 L-1.2 -0.7';
+// fender positions in boat coordinates: aft, amidships, forward; quay side first
+function fenderSpots(f){const L=FL(),out=[];f.forEach(s=>[.18,.57,.86].forEach(k=>{const x=L*k;out.push({x,y:s*(hb(x)+10.5),s,rail:s*(hb(x)-1.5)});}));return out;}
+
+// The knot group in the cleat's frame: optional light cleat, the line (dark edge
+// under a light line, normalised to length 100 so it can be drawn on), a second
+// layer, and a ring for the reveal effects.
+function knotG(){const L=KLOOK[SEL.klook][1];if(L.none)return '<g data-knot></g>';const w=L.w||1.5,c=L.col==='teal'?K.teal:K.rope,sc=L.sc||1;
+  const one=(tr='')=>`<g${tr}><path data-kd pathLength="100" d="${L.d}" fill="none" stroke="${K.ropeD}" stroke-width="${(w+1.3).toFixed(1)}" stroke-linecap="round" stroke-linejoin="round" opacity=".6"/><path data-kd pathLength="100" d="${L.d}" fill="none" stroke="${c}" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round"/></g>`;
+  return `<g data-knot opacity="0"><circle data-kring r="${(11*sc).toFixed(1)}" fill="none" stroke="${K.teal}" stroke-width="1.6" opacity="0"/><g data-kbody transform="scale(${sc})">${L.cleat?`<path d="M-6 0 Q-6 -1.8 -3.5 -1.8 H3.5 Q6 -1.8 6 0 Q6 1.8 3.5 1.8 H-3.5 Q-6 1.8 -6 0Z" fill="${K.line}" opacity=".85"/>`:''}${one()}${L.dbl?one(' transform="scale(1.22 1.3)"'):''}</g></g>`;}
+// ===================== one scene, as live SVG elements =====================
+function build(g,i,{live,boatM,rope,fend,wave,wmode}){const kK=SPEEDS[SEL.spKnot][1],kB=SPEEDS[SEL.spBoat][1],kR=SPEEDS[SEL.spRope][1],kF=SPEEDS[SEL.spFend][1],kW=SPEEDS[SEL.spWave][1];K=KS[PALS[SEL.pal][1]];const s=GROUPS3[g][1][i][1]();
+  LB.f=[];LB.ladder=!!s.ladder;const PI0=PI_;PI_=PALS[SEL.pal][1];const boatG=lineBoat();PI_=PI0;const vb=s.vb,cx=FL()/2-14;
+  const R0=ROPES[rope][1],R={...R0,dur:(R0.dur||1)/kR,gap:(R0.gap||0)/kR,pre:(R0.pre||0)/kR},F=FENDX[fend][1],spots=F.ap==='hide'?[]:fenderSpots(s.f);
+  // fenders and their rings live inside the boat group, so they move with it
+  let fg='';spots.forEach((p,k)=>{fg+=`<g data-f="${k}"><circle data-ring cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="13" fill="none" stroke="${K.teal}" stroke-width="1.8" opacity="0"/>`+
+    `<g data-body><path d="M${p.x.toFixed(1)} ${p.rail.toFixed(1)} L${p.x.toFixed(1)} ${(p.y-p.s*8).toFixed(1)}" stroke="${K.line}" stroke-width="1" opacity=".8"/><circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="8" fill="${K.line}"/><circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="5.4" fill="none" stroke="${K.bg}" stroke-width=".8" opacity=".3"/></g>`+
+    `<text data-num x="${p.x.toFixed(1)}" y="${(p.y+p.s*22+3).toFixed(1)}" text-anchor="middle" font-size="10" font-weight="700" fill="${K.line}" opacity="0">${k%3+1}</text>`+
+    `<path data-arrow d="M${p.x} ${(p.y+p.s*40).toFixed(1)} L${p.x} ${(p.y+p.s*18).toFixed(1)} M${p.x-4} ${(p.y+p.s*23).toFixed(1)} L${p.x} ${(p.y+p.s*18).toFixed(1)} L${p.x+4} ${(p.y+p.s*23).toFixed(1)}" fill="none" stroke="${K.teal}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" opacity="0"/></g>`;});
+  let rg='';s.lines.forEach((l,k)=>{rg+=`<g data-r="${k}"><path data-guide fill="none" stroke="${K.teal}" stroke-width="1.2" stroke-dasharray="4 5" opacity="0"/><path data-under fill="none" stroke="${K.ropeD}" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round" opacity=".55"/><path data-over fill="none" stroke="${K.rope}" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/>`+
+    `<circle data-eye cx="${l[1][0]}" cy="${l[1][1]}" r="${l[2]||0}" fill="none" stroke="${K.rope}" stroke-width="1.7" opacity="0"/><circle data-blink r="6.5" fill="none" stroke="${K.teal}" stroke-width="1.8" opacity="0"/>${knotG()}</g>`;});
+  const svg=`<svg viewBox="${vb.map(v=>v.toFixed(1)).join(' ')}" role="img" aria-label="${plain(GROUPS3[g][1][i][0])}" class="${live?'':'st'}"><rect x="${vb[0]}" y="${vb[1]}" width="${vb[2]}" height="${vb[3]}" fill="${K.bg}"/>${waves(wave,vb,live?WMODES[wmode][1]:'',kW)}${s.q}${s.under||''}<g data-boat>${boatG}${fg}</g><g data-ropes>${rg}</g>${s.top}</svg>`;
+  // timeline: fenders first, then the arrival (if any), then the ropes
+  const fgap=(F.ap==='all'?0:.75)/kF,firstLead=(F.ring==='first'||F.ring==='arrow'?.8:0)/kF;
+  const fOn=spots.length&&F.ap!=='none',rOn=s.lines.length&&R.m!=='none';
+  const fRel=spots.map((_,k)=>firstLead+k*fgap),fBlock=fOn?Math.max(...fRel)+(.9+(F.ring==='thrice'?1.6:0))/kF:0;
+  const pre=R.pre||0,rRel=s.lines.map((_,k)=>pre+k*R.gap),rBlock=rOn?Math.max(...rRel)+R.dur+(R.eye?.5/kR:0)+1.2/kK:0;
+  const arrDur=3.6/kB,arrive=s.arrive?arrDur:0;let fS=.4,arrStart=0,rS=0,fT,rT;
+  switch(SEL.order){
+    case 0:arrStart=fS+fBlock;rS=arrStart+arrive+.5;break;
+    case 1:arrStart=0;rS=arrive+.5;fS=rS+rBlock+.3;break;
+    case 2:arrStart=0;fS=rS=arrive+.4;break;
+    case 4:arrStart=fS+fBlock*.5;rS=arrStart+arrive+.3;break;
+    case 3:arrStart=0;fS=rS=arrive+.4;break;}
+  if(SEL.order===3){const step=Math.max(.9/kF,R.dur+.3/kR);fT=spots.map((_,k)=>fS+firstLead+k*2*step);rT=s.lines.map((_,k)=>rS+pre+(k*2+1)*step);}
+  else{fT=fRel.map(r=>fS+r);rT=rRel.map(r=>rS+r);}
+  if(!fOn)fT=fT.map(()=>-99);if(R.m==='none')rT=rT.map(()=>-99);
+  const rest=s.lines.map(l=>Math.hypot(l[0][0]-l[1][0],l[0][1]-l[1][1])*1.03);
+  const cleatAng=s.lines.map(([[x,y]])=>x<30?0:Math.sign(y)*Math.atan2(hb(x+2)-hb(x-2),4)*180/Math.PI);
+  return {svg,s,cx,spots,F,R,fT,arrStart,arrDur,rT,rest,cleatAng,boatM,kB,kR,kF,kK,KS:KSHOW[SEL.kshow][1],lines:s.lines};}
+
+function attachLive(o,el){o.el=el;o.boat=el.querySelector('[data-boat]');o.fe=[...el.querySelectorAll('[data-f]')];o.re=[...el.querySelectorAll('[data-r]')];o.t0=performance.now();return o;}
+function motion(m,t){const S=Math.sin;switch(m){case 0:return [0,0,0];case 1:return [.7*S(t*.8),.5*S(t*.6+1),.1*S(t*.5)];case 2:return [1.6*S(t*.55),1.4*S(t*.8+1),.55*S(t*.9)];
+  case 3:return [5*S(t*.4),.8*S(t*.5),.2*S(t*.4+1)];case 4:return [.8*S(t*.4),3*S(t*.6),.4*S(t*.6+.6)];case 5:return [3*S(t*.7),2.6*S(t*1.05+1),1.2*S(t*1.2)];}}
+function quadAt(A,C,B,u){const a=(1-u)*(1-u),b=2*(1-u)*u,c=u*u;return [a*A[0]+b*C[0]+c*B[0],a*A[1]+b*C[1]+c*B[1]];}
+function partial(A,C,B,p){const P1=[A[0]+(C[0]-A[0])*p,A[1]+(C[1]-A[1])*p],Q1=[C[0]+(B[0]-C[0])*p,C[1]+(B[1]-C[1])*p],P2=[P1[0]+(Q1[0]-P1[0])*p,P1[1]+(Q1[1]-P1[1])*p];
+  return `M${A[0].toFixed(1)} ${A[1].toFixed(1)} Q${P1[0].toFixed(1)} ${P1[1].toFixed(1)} ${P2[0].toFixed(1)} ${P2[1].toFixed(1)}`;}
+function update(o,t){const [mx,my,rot]=motion(o.boatM,t*o.kB);let dx=mx,dy=my;
+  if(o.s.arrive){const e=outC(clamp((t-o.arrStart)/o.arrDur));if(o.s.arrive==='x')dx+=150*(1-e);else dy+=60*(1-e);}
+  o.boat.setAttribute('transform',`translate(${dx.toFixed(2)} ${dy.toFixed(2)}) rotate(${rot.toFixed(3)} ${o.cx.toFixed(1)} 0)`);
+  const ra=rot*Math.PI/180,co=Math.cos(ra),si=Math.sin(ra),tf=([x,y])=>{const X=x-o.cx;return [o.cx+X*co-y*si+dx,X*si+y*co+dy];};
+  // ---- fenders ----
+  const F=o.F;o.fe.forEach((el,k)=>{const t0=o.fT[k],q=clamp((t-t0)*o.kF/.6),body=el.querySelector('[data-body]'),ring=el.querySelector('[data-ring]'),num=el.querySelector('[data-num]'),arr=el.querySelector('[data-arrow]'),p=o.spots[k];
+    let op=1,tr='';
+    if(F.ap==='fade'||F.ap==='all')op=q;
+    if(F.ap==='slide'){op=clamp(q*1.6);tr=`translate(0 ${(-p.s*14*(1-outC(q))).toFixed(2)})`;}
+    if(F.ap==='pop'){const z=q<.7?outC(q/.7)*1.15:1.15-.15*((q-.7)/.3);op=q>0?1:0;tr=`translate(${p.x} ${p.y}) scale(${z.toFixed(3)}) translate(${-p.x} ${-p.y})`;}
+    body.setAttribute('opacity',op.toFixed(2));body.setAttribute('transform',tr);
+    let ro=0,rc=K.teal,dash='';const since=(t-t0)*o.kF;
+    switch(F.ring){case 'static':case 'num':ro=clamp(since/.4);break;
+      case 'blink':ro=since>0?(Math.floor(since/.5)%2?.15:1):0;break;
+      case 'pulse':ro=since>0?.2+.8*(.5+.5*Math.sin(since*3.2)):0;break;
+      case 'once':ro=since>0&&since<.9?Math.sin(since/.9*Math.PI):0;break;
+      case 'thrice':ro=since>0&&since<2.4?(Math.floor(since/.4)%2?0:1):0;break;
+      case 'first':ro=clamp((since+.8)/.4);break;
+      case 'fadeout':ro=since<0?0:since<.4?since/.4:clamp(1-(since-1.4)/1.2);break;
+      case 'spin':ro=clamp(since/.4);dash='5 5';break;
+      case 'redgreen':ro=1;rc=since>.6?K.green:K.red;break;
+      case 'arrow':ro=0;break;}
+    ring.setAttribute('opacity',ro.toFixed(2));ring.setAttribute('stroke',rc);
+    if(dash){ring.setAttribute('stroke-dasharray',dash);ring.setAttribute('stroke-dashoffset',(-t*12*o.kF).toFixed(1));}
+    num.setAttribute('opacity',F.ring==='num'?clamp(since/.4).toFixed(2):'0');
+    arr.setAttribute('opacity',F.ring==='arrow'?(since<-.8?0:since<0?clamp((since+.8)/.3):clamp(1-since/.6)).toFixed(2):'0');});
+  // ---- ropes: the boat end is the cleat, moved with the boat every frame ----
+  const R=o.R;o.re.forEach((el,k)=>{const l=o.lines[k],A=tf(l[0]),B=l[1],dX=B[0]-A[0],dY=B[1]-A[1],d=Math.hypot(dX,dY)||1;
+    let n=[-dY/d,dX/d];if(n[1]<0)n=[-n[0],-n[1]];
+    const slack=Math.max(0,o.rest[k]-d),baseSag=Math.min(d*.3,Math.sqrt(slack*d)*.5);
+    const ts=o.rT[k],q=R.m==='none'?1:clamp((t-ts)/R.dur);let extra=0,pd=1,op=1,snake=0,from=A,to=B;
+    switch(R.m){case 'none':break;case 'draw':pd=ease(q);break;case 'rev':pd=ease(q);from=B;to=A;break;
+      case 'throw':pd=clamp(q*1.7);extra=d*.32*(1-ease(q));break;case 'slack':op=clamp((t-ts)/.3);extra=d*.24*(1-ease(q));break;
+      case 'fade':op=q;break;case 'snake':pd=ease(q);snake=(1-q)*4.5;break;}
+    if(t<ts){pd=0;op=0;}
+    const sag=baseSag+extra,C=[(A[0]+B[0])/2+n[0]*sag,(A[1]+B[1])/2+n[1]*sag];
+    let dd='';if(pd>0){if(snake>0){const N=30;let s2='';for(let j=0;j<=N;j++){const u=pd*j/N,pt=quadAt(from,C,to,u),w=Math.sin(u*26)*snake;s2+=(j?' L':'M')+(pt[0]+n[0]*w).toFixed(1)+' '+(pt[1]+n[1]*w).toFixed(1);}dd=s2;}else dd=partial(from,C,to,pd);}
+    const under=el.querySelector('[data-under]'),over=el.querySelector('[data-over]');under.setAttribute('d',dd);over.setAttribute('d',dd);under.setAttribute('opacity',(.55*op).toFixed(2));over.setAttribute('opacity',op.toFixed(2));
+    const done=R.m==='none'?99:(t-(ts+R.dur))*o.kR;
+    const eye=el.querySelector('[data-eye]');const er=+eye.getAttribute('r');
+    if(er){if(R.eye){const e=clamp(done/.5);eye.setAttribute('opacity',e>0?'1':'0');eye.setAttribute('transform',`translate(${B[0]} ${B[1]}) scale(${outC(e).toFixed(3)}) translate(${-B[0]} ${-B[1]})`);}
+      else eye.setAttribute('opacity',done>=0?'1':'0');}
+    const kn=el.querySelector('[data-knot]');kn.setAttribute('transform',`translate(${A[0].toFixed(1)} ${A[1].toFixed(1)}) rotate(${(rot+o.cleatAng[k]).toFixed(2)})`);
+    if(kn.firstElementChild){const M=o.KS.m,kt=R.m==='none'?99:M==='with'?(t-ts)*o.kK:((t-(ts+R.dur))-(R.eye?.5/o.kR:0))*o.kK;
+      let op=0,draw=1,sc=1,ring=0,rc=K.teal;
+      switch(M){case 'fade':op=clamp(kt/.5);break;case 'with':op=kt>=0?1:0;break;
+        case 'draw':op=kt>0?1:0;draw=clamp(kt/o.KS.d);break;
+        case 'two':op=kt>0?1:0;draw=kt<.6?.5*kt/.6:kt<1?.5:.5+.5*clamp((kt-1)/.6);break;
+        case 'pop':op=kt>0?1:0;sc=kt<.35?outC(kt/.35)*1.3:kt<.6?1.3-.3*((kt-.35)/.25):1;break;
+        case 'blink':op=kt<0?0:kt<.9?(Math.floor(kt/.15)%2?.25:1):1;break;
+        case 'ring':ring=kt>0&&kt<1?(Math.floor(kt/.25)%2?.3:1):0;op=clamp((kt-.9)/.4);break;
+        case 'confirm':op=kt>0?1:0;draw=clamp(kt/.9);ring=kt>.9&&kt<2?Math.sin((kt-.9)/1.1*Math.PI):0;rc=K.green;break;
+        case 'pulse':op=kt<0?0:Math.min(clamp(kt/.5),.7+.3*Math.sin(kt*3.2));break;}
+      kn.setAttribute('opacity',op.toFixed(2));
+      kn.querySelectorAll('[data-kd]').forEach(pth=>{pth.setAttribute('stroke-dasharray','100 100');pth.setAttribute('stroke-dashoffset',(100*(1-draw)).toFixed(1));});
+      const kb=kn.querySelector('[data-kbody]'),base=KLOOK[SEL.klook][1].sc||1;kb.setAttribute('transform',`scale(${(base*sc).toFixed(3)})`);
+      const kr=kn.querySelector('[data-kring]');kr.setAttribute('opacity',ring.toFixed(2));kr.setAttribute('stroke',rc);
+      if(M==='ring'&&kt>0&&kt<1)kn.setAttribute('opacity','1');}
+    const bl=el.querySelector('[data-blink]');bl.setAttribute('cx',A[0].toFixed(1));bl.setAttribute('cy',A[1].toFixed(1));
+    bl.setAttribute('opacity',R.blink&&t>ts-R.pre&&t<ts?(Math.floor((t-ts+R.pre)*o.kR/.3)%2?'.2':'1'):'0');
+    const gd=el.querySelector('[data-guide]');if(R.guide){gd.setAttribute('d',`M${A[0].toFixed(1)} ${A[1].toFixed(1)} L${B[0]} ${B[1]}`);gd.setAttribute('opacity',(t<ts-R.pre?0:t<ts?clamp((t-ts+R.pre)*o.kR/.4):clamp(1-(t-ts)*o.kR/.8)).toFixed(2));}});}
+
+// ===================== page =====================
+const reduced=matchMedia('(prefers-reduced-motion: reduce)');
+let live=null;
+function opts(liveMode){return {live:liveMode,boatM:liveMode?SEL.boat:0,rope:liveMode?SEL.rope:ROPES.length-1,fend:liveMode?SEL.fend:0,wave:SEL.wave,wmode:SEL.wmode};}
+function preview(){const g=SEL.tab,i=sel[g],o=build(g,i,opts(!reduced.matches));const box=document.getElementById('pvsvg');box.innerHTML=o.svg;live=attachLive(o,box.firstElementChild);
+  if(reduced.matches){update(live,999);live=null;}
+  document.getElementById('pvname').innerHTML=`${GROUPS3[g][0]} ${i+1}. ${nm(GROUPS3[g][1][i][0])}`;
+  document.getElementById('tabs').innerHTML=GROUPS3.map((G,k)=>`<button data-tab="${k}" aria-pressed="${k===g}">${G[0]}</button>`).join('');code();}
+function frame(now){if(live&&live.el.isConnected)update(live,(now-live.t0)/1000);requestAnimationFrame(frame);}
+function thumbs(){document.getElementById('groups').innerHTML=GROUPS3.map((G,g)=>`<section id="g${g}"><h2>${G[0]}</h2><div class="grid">${G[1].map((s,i)=>`<button class="opt" data-g="${g}" data-i="${i}" aria-pressed="${i===sel[g]}"><span data-th></span><b>${i+1}. ${nm(s[0])}</b></button>`).join('')}</div></section>`).join('');
+  document.querySelectorAll('.opt').forEach(b=>{const o=build(+b.dataset.g,+b.dataset.i,opts(false));const h=b.querySelector('[data-th]');h.innerHTML=o.svg;update(attachLive(o,h.firstElementChild),999);});}
+const CG=[['pal','Farver','Din båd og omgivelserne.',PALS.map(p=>p[0])],
+ ['boat','Båden','Hvordan båden bevæger sig i vandet. Tovene følger klamperne. Hastigheden gælder også, når båden lægger til.',BOATM.map(x=>x[0]),'spBoat'],
+ ['rope','Fortøjninger','Hvordan tovene bliver lagt ud.',ROPES.map(x=>x[0]),'spRope'],
+ ['fend','Fendere','Hvordan fenderne kommer ud, og hvordan brugeren bliver gjort opmærksom på dem.',FENDX.map(x=>x[0]),'spFend'],
+ ['order','Rækkefølge','Hvad der kommer først, når båden ligger til.',ORDER.map(x=>x[0])],
+ ['klook','Ottetalsstik: udseende','Stikket på bådens klampe, hvor tovet er gjort fast.',KLOOK.map(x=>x[0])],
+ ['kshow','Ottetalsstik: sådan vises det','Hvordan stikket kommer frem, når tovet er lagt.',KSHOW.map(x=>x[0]),'spKnot'],
+ ['wave','Bølger','Mønstret på vandet.',WAVES.map(x=>x[0])],
+ ['wmode','Bølgernes bevægelse','Hvordan bølgerne vises og bevæger sig.',WMODES.map(x=>x[0]),'spWave']];
+function controls(){document.getElementById('ctl').innerHTML=CG.map(([k,h,p,list,sp])=>`<div class="cg"><h3>${h}</h3><p>${p}</p>${sp?`<div class="spd"><span>Hastighed</span>${SPEEDS.map((x,i)=>`<button data-k="${sp}" data-v="${i}" aria-pressed="${SEL[sp]===i}">${x[0]}</button>`).join('')}</div>`:''}<div class="list${list.length>8?' cols':''}">${list.map((t,i)=>`<button data-k="${k}" data-v="${i}" aria-pressed="${SEL[k]===i}"><span class="n">${i+1}</span><span>${t}</span></button>`).join('')}</div></div>`).join('');}
+function code(){const v=k=>SEL[k]+1;document.getElementById('code').textContent=`Farver ${v('pal')} · Båden ${v('boat')} (fart ${v('spBoat')}) · Fortøjninger ${v('rope')} (fart ${v('spRope')}) · Fendere ${v('fend')} (fart ${v('spFend')}) · Rækkefølge ${v('order')} · Ottetalsstik ${v('klook')}, vises ${v('kshow')} (fart ${v('spKnot')}) · Bølger ${v('wave')} · Bølgernes bevægelse ${v('wmode')} (fart ${v('spWave')}) · `+GROUPS3.map((G,k)=>`${G[0]} ${sel[k]+1}`).join(' · ');}
+document.addEventListener('click',e=>{const c=e.target.closest('[data-k]'),t=e.target.closest('[data-tab]'),o=e.target.closest('.opt');
+  if(c){SEL[c.dataset.k]=+c.dataset.v;controls();if(c.dataset.k==='pal'||c.dataset.k==='wave')thumbs();preview();}
+  else if(t){SEL.tab=+t.dataset.tab;preview();}
+  else if(o){const g=+o.dataset.g;sel[g]=+o.dataset.i;SEL.tab=g;document.querySelectorAll(`.opt[data-g="${g}"]`).forEach(b=>b.setAttribute('aria-pressed',b===o));preview();}
+  else if(e.target.id==='replay')preview();});
+document.getElementById('copy').onclick=async()=>{const el=document.getElementById('code'),t=el.textContent,b=document.getElementById('copy');
+  try{await navigator.clipboard.writeText(t);b.textContent='Kopieret';}catch(_){const r=document.createRange();r.selectNodeContents(el);const s=getSelection();s.removeAllRanges();s.addRange(r);b.textContent='Markeret: kopiér selv';}
+  setTimeout(()=>b.textContent='Kopiér valget',2500);};
+reduced.addEventListener?.('change',preview);
+// For the app: the chosen scenes as markup (waves left out) plus the numbers
+// the app's own small animation needs. Used by tools/boat-studio/export_scenes.js.
+function exportApp(choice){Object.assign(SEL,choice.sel);const r1=v=>Math.round(v*10)/10,out={};EXPORT=true;
+  for(const [key,g,i] of choice.scenes){sel[g]=i;const o=build(g,i,opts(true));
+    LB.f=[];LB.ladder=false;const P0=PI_;PI_=PALS[SEL.pal][1];const boatG=lineBoat();PI_=P0;out.boat=boatG;
+    out[key]={vb:o.s.vb.map(r1),svg:o.svg.replace(/ role="img" aria-label="[^"]*" class=""/,'').split(boatG).join('<!--B-->'),cx:r1(o.cx),
+      spots:o.spots.map(p=>[r1(p.x),r1(p.y),p.s]),lines:o.lines.map(l=>[l[0].map(r1),l[1].map(r1),l[2]||0]),rest:o.rest.map(r1),ang:o.cleatAng.map(v=>Math.round(v*100)/100),
+      fT:o.fT.map(v=>Math.round(v*1000)/1000),rT:o.rT.map(v=>Math.round(v*1000)/1000),rDur:Math.round(o.R.dur*1000)/1000};}
+  EXPORT=false;return out;}
+controls();thumbs();preview();requestAnimationFrame(frame);
+</script>
+</body></html>

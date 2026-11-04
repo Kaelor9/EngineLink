@@ -17,9 +17,18 @@ assert "render(" not in sampling, "Do not replace the scene during recording"
 assert "d.busy=true;d.left=st.s;render(true);" in record
 assert "render(true);$('#main').scrollTop=0;" in record
 
-# With reduced motion, only the first mooring setup remains visible.
+# With reduced motion: one still picture of the first mooring, no switch to
+# the second, the ripples stand still.
 assert "prefers-reduced-motion:reduce" in app
-assert ".anim .mo-alongside{display:none!important}" in app
-assert 'class="mo-alongside"' in app
+assert "const still=matchMedia('(prefers-reduced-motion: reduce)').matches;" in app
+assert "if(!still&&host.dataset.dtscene==='moor'&&t>o.end)" in app
+assert "dtFrame(o,still?99:t,still);" in app
+assert "@media (prefers-reduced-motion:reduce){.dtw{animation:none" in app
+
+# The owner's chosen scenes (2026-11-04) come from the boat studio page, and
+# the lines are recomputed every frame from the boat's moved cleat.
+assert "const DTS=/*DTS*/{" in app and '"boat":' in app and '"moorA":' in app and '"moorB":' in app and '"sea":' in app
+frame = app.split("function dtFrame(o,t,still){", 1)[1].split("\n}", 1)[0]
+assert "A=tf(l[0])" in frame, "The boat end of each line follows the cleat"
 
 print("Drive test animation continuity source contracts OK")
