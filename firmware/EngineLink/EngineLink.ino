@@ -72,7 +72,7 @@ uint32_t txReapplied=0;   // the driver had another power and it was set again
 volatile bool radioTestWanted=false;  // pings + channel survey (linkTuneTask)
 SpeedLogRec speedLog[SPEED_LOG_N];uint8_t speedLogCount=0;
 
-#define EL_VERSION "0.16.4"
+#define EL_VERSION "0.16.5"
 // Releases list published by the Pages workflow; firmware files come from
 // GitHub Releases of the same repository. Nothing else is downloaded.
 #define EL_RELEASES_URL "https://kaelor9.github.io/EngineLink/releases.json"
@@ -201,7 +201,7 @@ uint32_t sdRows=0,sdErrors=0;
 bool apStarted=false;
 bool testFileAvailable=false,spiStarted=false,cardWasInserted=false;
 uint32_t lastCardCheck=0,cardChangeAt=0;
-volatile uint32_t apJoins=0,apLeaves=0,apStarts=0,apStops=0,staDisconnects=0;
+volatile uint32_t apJoins=0,apLeaves=0,apDhcpLeases=0,apStarts=0,apStops=0,staDisconnects=0;
 volatile uint8_t apReason=0;
 float sogKnots=NAN;
 uint64_t sogAt=0;
