@@ -12,6 +12,9 @@ version instead of one update each. Newest at the bottom of each section.
   iPhone and dock safety-step behavior once a new release is installed.
 - **Drive test scenes, new look.** The owner has chosen the boat and its
   look: see `tools/boat-studio/`. `line-style.html` is the one to use in the
+  `tools/boat-studio/drive-test-scenes.html` is the owner's exported, interactive
+  scene preview (three groups of six choices); it is a **draft to refine**, not
+  an approved design. Future visual iterations must start from this preview.
   scenes (`lineSvg()`, colour set "Som appen", bow to the right); `studio.html`
   is the full drawing with the same shape (keep the shape exactly). Fenders:
   three a side (aft, amidships, forward), round, a little off the hull. Swim
