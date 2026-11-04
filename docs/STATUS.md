@@ -47,7 +47,9 @@ to engines.
 - Fault codes: no read command found among the PC tool's commands; "Discover more values" now covers 256–447.
 - Fuel factor confirmed tank to tank.
 - NMEA 2000 interface: isolation, termination and traffic not validated. Do not
-  enable it until verified.
+  enable it until verified. 0.16 decodes navigation, depth, log, heading,
+  temperatures, battery, rudder, wind and tanks, and lists every device on
+  Diagnostics › GPS · NMEA 2000 › Devices and data. Not yet tested on the boat.
 - Behaviour after a sudden power cut during SD writes.
 - No battery-backed clock: without phone, router or GPS time, logs use uptime.
 

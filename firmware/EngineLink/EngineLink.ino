@@ -53,6 +53,7 @@
 #include "shiftrules.h"
 #include "otaheader.h"
 #include "routerguard.h"
+#include "nmea2k.h"
 #include "netpolicy.h"
 #include "miniz.h"   // the deflate compressor in the chip's ROM
 #include "wifiwpa3.h"
@@ -230,6 +231,14 @@ uint32_t nextEventId=1;
 Sample *ring=nullptr;
 uint16_t ringHead=0,ringCount=0;
 File tripSeries;
+// NMEA 2000 (nmea2000.ino): live navigation values, fast packets, the bus census
+// and the per-trip navigation log.
+n2k::Nav nav;
+n2k::FastPool navFast;
+n2k::Census navSeen;
+File tripNav;
+uint32_t tripNavId=0,tripNavFlush=0,navFrames=0,navErrFrames=0;
+const char *const NAV_COLS="lat,lon,sog_kn,cog_deg,heading_deg,stw_kn,depth_m,water_c,rudder_deg,battery_v,wind_kn,wind_deg,tank1_pct,tank2_pct,satellites";
 uint32_t tripSeriesId=0,tripSeriesFlush=0;
 uint32_t markLedUntil=0;
 uint32_t pendingBox[8];

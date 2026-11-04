@@ -430,6 +430,7 @@ async function load(what){
     if(what==='life')S.life=await get('/api/life',5000);
     if(what==='shifts'){S.shiftsAt=Date.now();S.shifts=await get('/api/shifts?n=120',5000);}
     if(what==='led')S.led=await get('/api/led',4000);
+    if(what==='nmea')S.nmea=await get('/api/nmea',4000);
     if(what==='recent'){S.recentAt=Date.now();S.recent=await get('/api/series/recent?secs=600',8000);}
   }catch(e){}
   render();
@@ -480,6 +481,7 @@ function onLive(){
   if(S.tab==='engines'&&!S.page&&(!S.recentAt||Date.now()-S.recentAt>10000))load('recent');
   if(S.tab==='engines'&&!S.page&&Date.now()-S.shiftsAt>8000)load('shifts');
   if(S.page==='led'&&(!S.ledAt||Date.now()-S.ledAt>1000)){S.ledAt=Date.now();load('led');}
+  if(S.page==='n2k'&&(!S.nmeaAt||Date.now()-S.nmeaAt>2000)){S.nmeaAt=Date.now();load('nmea');}
   if(S.page==='dtest')dtPaint();
   if(!S.page&&(S.tab==='trip'||S.tab==='engines'||S.tab==='tank'))render();
 }
@@ -530,7 +532,7 @@ function warmBox(){
 
 // ---------- Header, nav ----------
 const TITLES={trip:'Trip',economy:'Economy',tank:'Tank',history:'History',engines:'Engines',more:'Settings'};
-const PAGES={dest:'Saved places',vals:'Engine values',ap:'EngineLink Wi-Fi',router:'Boat router',fw:'Firmware',diag:'Diagnostics',events:'Events',trip:'Trip timeline',led:'Status light',dtest:'Drive test',boat:'My boat'};
+const PAGES={dest:'Saved places',vals:'Engine values',ap:'EngineLink Wi-Fi',router:'Boat router',fw:'Firmware',diag:'Diagnostics',events:'Events',trip:'Trip timeline',led:'Status light',dtest:'Drive test',n2k:'NMEA 2000',boat:'My boat'};
 function header(){
   const title=S.page?PAGES[S.page]:TITLES[S.tab];
   return `<div class="top"><h1>${title}</h1>${S.tab!=='more'&&!S.page?`<button class="gear" data-a="tab" data-v="more" aria-label="Settings">${svg(IC.gear,20,'var(--sub)',1.8)}</button>`:''}</div>`;
@@ -592,6 +594,7 @@ function vTrip(){
     if(es.some(e=>fin(e.rpm)))h+=burnCard(null);
   }
   h+=rangeCard();
+  h+=n2kCard(lv.n2k,'Navigation');
   if(es.some(e=>e.run))h+=`<button class="btn" style="width:100%" data-a="mark">${svg(IC.flag,15)}Mark this moment</button><div class="s12 sub" style="text-align:center;padding:0 20px">Felt or heard something odd? Tap it while it happens: the engine data around it is kept.</div>`;
   return h+'</div>';
 }
@@ -1180,6 +1183,38 @@ function dtRecentSafe(place){let r=S.dtSafeAt;if(!r)try{r=JSON.parse(localStorag
   const age=r&&r.place===place?Date.now()-r.t:Infinity;return age<900000?age:0;}
 const dtIdle=es=>es.every(e=>!fin(e.rpm)||e.rpm<800);
 function dtState(){return S.dt||(S.dt={phase:'intro',place:null,safe:0,step:0,rec:[],busy:false,left:0,res:null});}
+// ---------- NMEA 2000 ----------
+// What the boat's instruments send (listen only), in plain words, and every
+// device and message seen on the bus, so a bus test shows what works.
+function n2kRows(n){if(!n)return [];const deg=v=>NF(v,0)+'°',r=[];
+  const ll=(v,p,m)=>{const a=Math.abs(v),d=Math.floor(a);return d+'° '+NF((a-d)*60,3)+'′ '+(v<0?m:p);};
+  if(fin(n.lat)&&fin(n.lon))r.push(['Position',ll(n.lat,'N','S')+'  '+ll(n.lon,'E','W')]);
+  if(fin(n.sog))r.push(['Speed over ground',NF(n.sog,1)+' kn']);if(fin(n.cog))r.push(['Course over ground',deg(n.cog)]);
+  if(fin(n.hdg))r.push(['Heading',deg(n.hdg)+(n.hdgMag===false?' true':' magnetic')]);if(fin(n.stw))r.push(['Speed through water',NF(n.stw,1)+' kn']);
+  if(fin(n.depth))r.push(['Depth',NF(n.depth,1)+' m']);if(fin(n.water))r.push(['Sea temperature',TT(n.water)]);if(fin(n.air))r.push(['Air temperature',TT(n.air)]);
+  if(fin(n.log))r.push(['Log',NF(n.log,1)+' nm'+(fin(n.trip)?' · trip '+NF(n.trip,1)+' nm':'')]);
+  if(fin(n.rudder))r.push(['Rudder',NF(Math.abs(n.rudder),1)+'° '+(n.rudder>=0?'starboard':'port')]);
+  if(fin(n.batt))r.push(['Battery',NF(n.batt,2)+' V'+(fin(n.amps)?' · '+NF(n.amps,1)+' A':'')]);if(fin(n.batt2))r.push(['Battery 2',NF(n.batt2,2)+' V']);
+  if(fin(n.wind))r.push(['Wind',NF(n.wind,1)+' kn'+(fin(n.windDeg)?' from '+deg(n.windDeg):'')]);
+  if(fin(n.tank0))r.push(['Tank 1',NF(n.tank0,0)+' %']);if(fin(n.tank1))r.push(['Tank 2',NF(n.tank1,0)+' %']);
+  if(fin(n.sats))r.push(['GPS satellites',NF(n.sats,0)+(fin(n.hdop)?' · HDOP '+NF(n.hdop,1):'')]);
+  if(fin(n.rpm0)||fin(n.rpm1))r.push(['Engine rpm on other gauges',[n.rpm0,n.rpm1].map(v=>fin(v)?NF(v,0):'—').join(' / ')]);
+  return r;}
+function n2kCard(n,title='From the boat\'s instruments'){const r=n2kRows(n);if(!r.length)return '';
+  return `<div class="card"><div class="ct">${title}</div><div style="display:grid;grid-template-columns:auto 1fr;gap:6px 12px;margin-top:10px;font-size:14px">${r.map(([k,v])=>`<span class="sub">${k}</span><span style="font-weight:600">${v}</span>`).join('')}</div></div>`;}
+function n2kView(){const d=S.nmea;let h=backPill();
+  if(!d)return h+waiting('Reading NMEA 2000…');
+  const b=d.bus||{};
+  h+=`<div class="card"><div class="cth"><span class="ct">NMEA 2000 bus</span><span class="rv" style="color:${b.state==='running'?'var(--green)':'var(--orange)'}">${b.state==='running'?'Running':b.state==='off'?'Off':esc(b.state||'—')}</span></div>
+    <div class="s13 sub" style="margin-top:4px">EngineLink only listens on NMEA 2000. It never sends anything there.</div>
+    <div class="grid3" style="gap:8px;margin-top:10px">${[['Messages',NF(b.frames||0,0)],['Understood',NF(b.used||0,0)],['Receive errors',fin(b.rxErr)?NF(b.rxErr,0)+(b.missed?' · '+b.missed+' lost':''):'—']].map(([k,v])=>`<div style="background:var(--track);border-radius:12px;padding:8px 10px"><div class="s12 sub">${k}</div><div style="font-size:16px;font-weight:600">${v}</div></div>`).join('')}</div>
+    ${b.state==='off'?'<div class="s13" style="margin-top:10px">Switch it on under Settings › Speed source. Check the cable, termination and power first (docs/STATUS.md).</div>':b.frames===0?'<div class="s13" style="color:var(--orange);margin-top:10px">Switched on, but no messages. Check the drop cable, that the backbone has power (12 V) and a terminator at each end.</div>':''}</div>`;
+  h+=n2kCard(d.nav)||(b.frames?'<div class="card"><div class="s14">Messages arrive, but none of the values EngineLink uses yet (position, speed, depth, heading, temperature, battery, tanks).</div></div>':'');
+  const by={};(d.seen||[]).forEach(e=>{(by[e.src]=by[e.src]||{maker:e.maker,list:[]}).list.push(e);});
+  const srcs=Object.keys(by);
+  if(srcs.length){h+=`<div class="hd">Devices on the bus</div>`+srcs.map(sr=>{const g=by[sr];return `<div class="card"><div class="cth"><span class="ct">${g.maker?esc(g.maker):'Device'} <span class="sub" style="font-weight:400">· address ${sr}</span></span></div>
+    ${g.list.sort((a,x)=>a.pgn-x.pgn).map(e=>`<div class="cth s13" style="margin-top:6px"><span>${e.name?esc(e.name):'PGN '+e.pgn}<span class="sub"> · ${e.pgn}</span></span><span class="sub">${fin(e.hz)?NF(e.hz,1)+'/s':NF(e.n,0)+'×'}${e.ago>10?' · '+dur(e.ago)+' ago':''}</span></div>`).join('')}</div>`;}).join('');}
+  return h;}
 function dtView(){
   const d=dtState(),es=engines(),lv=S.live;
   let h=backPill();
@@ -1618,6 +1653,7 @@ const CALST={1:['var(--green)','Used for calibration'],2:['var(--orange)','Looks
 const PAGE_VIEWS={
   events:()=>eventsView(),
   dtest:()=>dtView(),
+  n2k:()=>n2kView(),
   boat:()=>boatView(),
   trip:()=>tripTimelineView(),
   led:()=>ledView(),
@@ -1713,7 +1749,7 @@ const PAGE_VIEWS={
         ${run?`<div class="bar" style="height:6px;margin-top:12px"><i style="width:${t.prog}%;background:var(--teal)"></i></div>`:''}
         <div class="grid3" style="gap:8px;margin-top:10px">${[['Answered',t.utc?Math.round(t.rep/Math.max(1,t.req)*100)+' %':'—'],['Checksum errors',t.utc?t.err:'—'],['Reply time',t.utc&&t.ms?t.ms+' ms':'—']].map(([k,v])=>`<div style="background:var(--track);border-radius:12px;padding:8px 10px"><div class="s12 sub">${k}</div><div style="font-size:16px;font-weight:600">${v}</div></div>`).join('')}</div>
         <div class="s12 sub" style="margin-top:8px">${run?'Testing… '+Math.round(t.prog*0.3)+' of 30 seconds':t.utc?'Last tested '+new Date(t.utc*1000).toLocaleString(LOC):'Not tested yet. Start the engine (or switch on the ignition) and press Test.'}</div></div>`;}).join('')}
-      <div class="rowx"><div class="cth"><span class="rt">GPS · NMEA 2000</span><span class="rv">${d.can?(fin(d.sog)?NF(d.sog,1)+' kn':d.nmea+' messages'):'Off'}</span></div><div class="s12 sub" style="margin-top:4px">${d.can?(d.nmea?'Receiving the NMEA 2000 network.':'Switched on, but no messages yet. Check the NMEA 2000 cable.'):'Optional. Switch on under Settings › Speed source for knots and miles.'}</div></div>
+      <div class="rowx"><button class="btn sm" style="float:right" data-a="page" data-v="n2k" data-b="more">Devices and data</button><div class="cth"><span class="rt">GPS · NMEA 2000</span><span class="rv">${d.can?(fin(d.sog)?NF(d.sog,1)+' kn':d.nmea+' messages'):'Off'}</span></div><div class="s12 sub" style="margin-top:4px">${d.can?(d.nmea?'Receiving the NMEA 2000 network.':'Switched on, but no messages yet. Check the NMEA 2000 cable.'):'Optional. Switch on under Settings › Speed source for knots and miles.'}</div></div>
       <div class="rowx s12 sub">A test asks the engine for its values for 30 seconds. Only read requests are sent, never commands.</div></div>`;
     // Wi-Fi
 

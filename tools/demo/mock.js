@@ -31,6 +31,8 @@ const trips0=[
   {id:3,g:0,s:1793199842,e:1793200237,run:396,l:[0.23,0.25],max:1121,p:0,sea:0,w:0,x:0,n:'',b:1},
   {id:2,g:0,s:1793198415,e:1793199429,run:1003,l:[6.81,6.65],max:3104,p:1,sea:1,w:1,x:0,n:'',b:1},
   {id:1,g:0,s:1793196901,e:1793197943,run:1042,l:[0.67,0.77],max:794,p:0,sea:0,w:0,x:0,n:'',b:1}];
+// NMEA 2000 from the boat's Raymarine instruments (SeaTalk1 via a SeaTalkNG converter), for the demo.
+function n2kNow(t){return {on:true,frames:Math.round(42000+t*96),lat:55.6761+t*0.00009,lon:12.5683+t*0.00012,sog:+(21.4+Math.sin(t/30)*.4).toFixed(1),cog:52,hdg:49,hdgMag:true,stw:+(20.8+Math.sin(t/30)*.4).toFixed(1),depth:+(14.2+Math.sin(t/17)*1.5).toFixed(1),water:14.6,rudder:+(Math.sin(t/9)*2).toFixed(1),log:4321.7+t/170,trip:12.4+t/170,sats:11,hdop:0.9};}
 function live(){
   const c=cal(),t=(Date.now()-t0)/1000,f=c.f;
   const e=(ch)=>{const rpm=2850+ch*30+Math.round(Math.sin(t/3+ch)*6),raw=(41.2-ch*0.6+Math.sin(t/4)*0.4);
@@ -42,7 +44,8 @@ function live(){
   return {v:'__VERSION__',up:Math.round(1800+t),utc:now(),ts:'ntp',proto:'kad',port:0,e:[e(0),e(1)],
     led:ledNow(),ev:evSummary(),
     trip:{act:true,start:now()-1500-Math.round(t),run:1500+Math.round(t),l:[+(tripRaw/2*f*1.01).toFixed(2),+(tripRaw/2*f*0.99).toFixed(2)],max:2912},
-    tank:{cap:575,aboard:+(575-since).toFixed(1),pm:+pm.toFixed(1),reserve:10},price:20.03,sog:null,
+    tank:{cap:575,aboard:+(575-since).toFixed(1),pm:+pm.toFixed(1),reserve:10},price:20.03,sog:+(21.4+Math.sin(t/30)*.4).toFixed(1),
+    n2k:n2kNow(t),
     net:{ap:'EngineLink',host:'enginelink',cl:1,ch:1,rt:true,sta:true,ssid:'Boat router',rssi:-42,ip:'192.168.1.20',conflict:false},
     sd:{ok:true,log:true},test:false,rb:false,fw:0};
 }
@@ -142,6 +145,8 @@ window.fetch=function(url,opt){
   const u=new URL(String(url),'http://enginelink.local'),p=u.pathname,m=(opt&&opt.method)||'GET',b=form(opt&&opt.body);
   if(m==='GET'){
     if(p==='/api/live')return reply(live());
+    if(p==='/api/nmea'){const tt=(Date.now()-t0)/1000;return reply({nav:n2kNow(tt),bus:{state:'running',rxErr:0,missed:0,overrun:0,busErr:0,queued:0,frames:Math.round(42000+tt*96),used:Math.round(30000+tt*61),bad:0,dropped:0},
+      seen:[[2,60928,'Address claim',null],[2,129025,'Position',10],[2,129026,'Course and speed over ground',4],[2,129029,'GNSS fix',1],[2,126992,'Time',1],[3,128267,'Depth',2],[3,128259,'Speed through water',2],[3,128275,'Distance log',1],[3,130310,'Temperature',.5],[4,127250,'Heading',10],[4,127245,'Rudder',10],[4,65379,'Raymarine autopilot',1]].map(([src,pgn,name,hz])=>({src,pgn,name,hz,n:Math.round(400+tt*(hz||.1)),ago:0,maker:'Raymarine'}))});}
     if(p==='/api/prefs')return Promise.resolve(new Response(prefs,{headers:{'Content-Type':'application/json'}}));
     if(p==='/api/trips'){const f=cal().f;return reply({trips:trips0.map(r=>Object.assign({},r,{l:r.l.map(x=>+(x*f).toFixed(2))})),port:0});}
     if(p==='/api/fuel')return reply(fuelList());
