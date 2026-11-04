@@ -317,6 +317,7 @@ volatile uint32_t staLastDropAt=0;
 volatile bool staAssociated=false;
 uint32_t staDownSince=0,routerLastRecoveryAttempt=0;
 // Used by the 0.12.15 Wi-Fi code restored in 0.16.1 (wifi.ino).
+constexpr uint32_t ROUTER_LAST_RESORT_RETRY_MS=30000UL;
 uint32_t routerForcedReconnects=0,saQueryFastRetries=0,txAutoSteps=0;
 volatile uint32_t saQueryRetryAt=0;
 volatile uint16_t txNoAnswer=0;
