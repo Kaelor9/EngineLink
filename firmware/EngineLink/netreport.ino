@@ -51,7 +51,7 @@ String makeNetworkHealthJson(){
   s+=",\"httpSelfFails\":";s+=httpSelfFails;s+=",\"httpHeals\":";s+=httpHeals;s+=",\"httpSelfRestarts\":";s+=httpSelfRestarts;
   s+=",\"httpBoundEpoch\":";s+=httpBoundEpoch;
   s+=",\"networkEpoch\":";s+=(unsigned long)networkIpEpoch;
-  s+=",\"httpRequests\":";s+=web.served;s+=",\"httpAccepts\":";s+=web.accepted;s+=",\"httpParseFailures\":";s+=web.parseFailures;
+  s+=",\"httpRequests\":";s+=web.served;s+=",\"httpAccepts\":";s+=web.accepted;s+=",\"httpExternalAccepts\":";s+=web.externalAccepted;s+=",\"httpParseFailures\":";s+=web.parseFailures;
   s+=",\"routerAttempts\":";s+=routerAttempts;
   s+=",\"routerFallbacks\":";s+=routerFallbacks;
   s+=",\"routerAutoReturns\":";s+=routerAutoReturns;s+=",\"routerNextTryS\":";
@@ -215,7 +215,7 @@ String buildNetworkReport(){
   s+="HTTP rebinds: ";s+=web.listenerRebinds;s+="\n";
   s+="Web server self-check misses: ";s+=httpSelfFails;s+=" · restarted web server: ";s+=httpHeals;s+=" · board restarts for it: ";s+=httpSelfRestarts;s+="\n";
   s+="HTTP requests: ";s+=web.served;s+="\n";
-  s+="Port 80 TCP connections accepted: ";s+=web.accepted;s+=" · HTTP parse failures: ";s+=web.parseFailures;s+="\n";
+  s+="Port 80 TCP connections accepted: ";s+=web.accepted;s+=" · non-loopback: ";s+=web.externalAccepted;s+=" · HTTP parse failures: ";s+=web.parseFailures;s+="\n";
   s+="Last 32 KiB server write: ";s+=speedTxLastBytes;s+=" bytes in ";s+=speedTxLastMs;s+=" ms (";
   s+=speedTxLastWrites;s+=" write calls)\n";
   s+="TCP send window: 5744 bytes by default, raised to 17 KB for page/file requests and 23 KB for the speed test (";s+=elBoostedSockets;s+=" connections raised, ";s+=elBoostMisses;s+=" not found)\n";
