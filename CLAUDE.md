@@ -35,6 +35,15 @@
 - Reserve the most expensive model for cases where it is demonstrably useful, not as a default. Don't spend more tokens orchestrating than the task would take to solve.
 - **Model names, availability, and selection vary by environment.** These are routing preferences, not a promise that `CLAUDE.md` can switch the active model. Use only actually available controls and report limitations honestly.
 
+### Session context and handoff — protect Pro/Max usage
+
+- Keep a session focused on one coherent task. Don't repeatedly reread the whole repo or paste giant logs, diff outputs or generated files into chat; use bounded searches and summaries.
+- For a long, ongoing task, **suggest** `/compact` when context becomes bloated; after a finished task, **suggest** `/clear` before an unrelated task. These commands are owner actions, not automatic steps in a coding task.
+- Before suggesting a fresh session, make sure important observations, accepted decisions, remaining blockers and next steps are preserved in the appropriate repo docs **during an authorized change**. Include commit/PR references and exact pass/fail test evidence. Never pretend that chat context or auto memory substitutes for committed source or documentation.
+- If the owner only requests analysis, do **not** edit project files merely to create a handoff; instead give a short, self-contained summary the owner can reuse.
+- In a new session, verify branch and current changes and read `HANDOVER.md` once. Do not reconstruct old conversations when current source, TODO and reports already answer the question.
+- Respond briefly by default: concise Danish, the result first, no long explanations or lists unless requested. State only real unresolved risks.
+
 ## 4. Repository exploration and Graphify
 
 - **Never automatically rebuild the entire knowledge graph at session start.** For simple or narrowly scoped tasks, use direct source search; a graph is useful mainly for questions spanning many modules.
