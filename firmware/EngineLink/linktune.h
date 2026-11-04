@@ -1,4 +1,4 @@
-// Automatic transmit power and link measurements (linktune.cpp).
+// Transmit power steps and the radio test (linktune.cpp).
 #pragma once
 #include <Arduino.h>
 #include <WiFi.h>
@@ -25,6 +25,6 @@ extern volatile uint32_t linkScanAt, linkScanDurationMs;
 extern volatile uint16_t linkScanFailures;
 extern volatile uint8_t linkChannelCounts[14], linkChannelStrong[14];
 
-// Tests every step against the router; returns the step to use and leaves the
-// radio on it. Blocks for about half a minute: call it from a task.
-uint8_t runLinkTune(uint8_t current);
+// Pings and channel survey at the current power (`level`, for the report).
+// Changes nothing on the radio. Blocks for about 15 s: call it from a task.
+void runRadioTest(uint8_t level);

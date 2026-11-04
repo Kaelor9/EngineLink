@@ -106,7 +106,7 @@ void handleState(){
   s+=",\"protocol\":";s+=cfg.protocol==PROTO_KAD?"\"kad\"":"\"j1587\"";
   s+=",\"kadBigEndian\":";s+=cfg.kadBigEndian?"true":"false";
   s+=",\"kadFuelDiv\":";s+=cfg.kadFuelDiv;
-  s+=",\"kadVolt\":";s+=cfg.kadVolt;s+=",\"txLevel\":";s+=txLevel;s+=",\"txAutoSteps\":";s+=txAutoSteps;
+  s+=",\"kadVolt\":";s+=cfg.kadVolt;s+=",\"txLevel\":";s+=txLevel;
   s+=",\"fuelCorr\":[";s+=String(cfg.fuelCorr[0],4);s+=',';s+=String(cfg.fuelCorr[1],4);s+=']';
   s+=",\"apName\":";jsonString(s,cfg.apName);
   s+=",\"host\":";jsonString(s,cfg.hostName);
@@ -814,15 +814,18 @@ void handleWifiConnect(){
   const String pass=web.arg("pass");
   if(pass.length()>63){reply(false,"Password too long",400);return;}
   // The user explicitly requested another router attempt; release rescue
-  // mode, including the persistent latch, without modifying AP credentials.
+  // mode without modifying AP credentials.
   if(scanBusy){reply(false,"Wait for the network scan to finish",409);return;}
   routerHold=false;routerGuard.reset();
   routerAttempts=0;
+  routerReturnFailed=false;routerProbeEvery=netpolicy::PROBE_EVERY_MS;
   cfg.router=true;cfg.ssid=ssid;cfg.wifiPassword=pass;cfg.completed=true;
   saveSettings();
-  // WPA2 unless the scan shows a WPA3-only router.
-  {uint8_t want=0;for(uint8_t k=0;k<scanEntriesCount;k++)if(scanEntries[k].ssid==ssid){want=scanEntries[k].auth==WIFI_AUTH_WPA3_PSK?1:0;break;}
-   if(want!=staSecMode){staSecMode=want;saveSecMode();}}
+  // WPA2 unless the scan shows a WPA3-only router. Its channel (from the
+  // scan, if listed) is where a rescue looks for it first.
+  {uint8_t want=0,ch=0;for(uint8_t k=0;k<scanEntriesCount;k++)if(scanEntries[k].ssid==ssid){want=scanEntries[k].auth==WIFI_AUTH_WPA3_PSK?1:0;ch=scanEntries[k].channel;break;}
+   if(want!=staSecMode){staSecMode=want;saveSecMode();}
+   if(ch!=routerKnownChannel){routerKnownChannel=0;Preferences rp;if(rp.begin("enginelink",false)){rp.remove("rch");rp.end();}saveKnownChannel(ch);}}
   // The displayed scan is only for choosing the SSID. Never lock to its
   // cached BSSID/channel: it can change before the connection begins.
   staBssidKnown=false;
@@ -973,6 +976,8 @@ void initializeWeb(){
       x.at=millis();x.level=web.hasArg("l")?(uint8_t)web.arg("l").toInt():txLevel;
       x.kbs10=(uint16_t)constrain(web.arg("kbs").toFloat()*10.0f,0.0f,65000.0f);
       x.rttMs=(uint16_t)constrain(web.arg("rtt").toInt(),0,65000);
+      // On the router: also measure pings and the channel for the report.
+      if(routerConfigured()&&!routerHold&&(!linkTuneAt||(uint32_t)(millis()-linkTuneAt)>=300000UL))radioTestWanted=true;
     }
     reply(true,"ok");
   });

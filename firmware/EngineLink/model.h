@@ -451,9 +451,10 @@ struct Coverage {
 constexpr uint8_t KAD_N=sizeof(KAD_PARAMS)/sizeof(KAD_PARAMS[0]);
 struct DiagRun { bool on=false; uint32_t startMs=0; uint32_t req0=0,rep0=0,inv0=0; uint64_t ms0=0; uint32_t cnt0=0; } diagRun[2];
 // Bounded uptime-based router event log (kept during rescue).
-struct RouterTrace {uint32_t ms;uint8_t type,reason;};
+// One Wi-Fi event; the same event again in a row only raises count/lastMs,
+// so a long retry series cannot push the first cause out of the list.
+struct RouterTrace {uint32_t ms,lastMs;uint16_t count;uint8_t type,reason;};
 constexpr uint8_t ROUTER_TRACE_CAP=64;
-constexpr uint32_t ROUTER_LAST_RESORT_RETRY_MS=30000UL;
 // Discovery is a short-lived, explicit commissioning operation. Normal
 // operation remains either AP-only (standalone) or STA-only (router).
 // A channel-by-channel asynchronous scan returns to the AP channel between

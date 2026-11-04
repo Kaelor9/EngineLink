@@ -31,8 +31,8 @@ routes=fn(ino,"void initializeWeb(){")
 assert "WiFi.mode(WIFI_AP);" in apply
 assert "WiFi.mode(WIFI_STA);" in apply
 assert "WiFi.mode(WIFI_AP_STA)" not in apply
-assert "WiFi.setAutoReconnect(true);" in apply
-assert "WiFi.setAutoReconnect(false);" in apply
+assert "WiFi.setAutoReconnect(true);" not in ino
+assert apply.count("WiFi.setAutoReconnect(false);")==2
 assert "routerGuard.expired(now)" in network and "parkRouter(" in network
 assert "120000UL" in Path("firmware/EngineLink/routerguard.h").read_text()
 
@@ -103,19 +103,42 @@ assert "sample[1460]" in speed
 assert "Content-Length: %u" in speed and "size_t total=32768" in speed
 assert "if((++blocks&3)==0)vTaskDelay(1);" in speed
 
-# WPA3 PMF code 209 is NOT included in Arduino-ESP32 3.3.x native
-# reconnectable-reason list. Schedule a one-shot, non-disruptive retry in the
-# main loop instead of waiting for the 30-second emergency fallback.
+# Every reconnect (all reasons, including WPA3 PMF code 209 that the Arduino
+# core skips) is planned by the DISCONNECTED event with the back-off from
+# netpolicy.h and made in the loop, only while no attempt is running.
 assert 'case 209:return "WPA3 PMF SA Query timeout' in ino
-assert "staLastReason==WIFI_REASON_SA_QUERY_TIMEOUT && droppedOnline" in callback
-assert "saQueryRetryAt=millis()+2000UL" in callback
 assert "const bool droppedOnline=staHadIp;" in callback
 assert "if(droppedOnline)++staUnexpectedDisconnects;" in callback
 assert "else ++staAssociationFailures;" in callback
-assert "const uint32_t saRetry=saQueryRetryAt;" in network
-assert "if(saRetry && !staAssociated && (int32_t)(now-saRetry)>=0)" in network
-assert "saQueryRetryAt=0;" in network and "esp_wifi_connect();" in network
+assert "staRetryAt=(now+netpolicy::retryDelayMs(staRetryFails))|1;" in callback
+assert "esp_wifi_connect" not in callback, "Never reconnect inside the event callback"
+assert "if(retryAt&&!staAssociated&&!staConnecting&&(int32_t)(now-retryAt)>=0)" in network
+assert "const esp_err_t err=esp_wifi_connect();" in network
+assert "staConnecting=true;staConnectAt=millis();" in connect
 assert "WiFi.reconnect();" not in re.sub(r"//[^\n]*","",network)
+assert "saQueryRetryAt" not in ino and "routerForcedReconnects" not in ino
+
+# Rescue is not remembered over a restart (field report #95: the router
+# started later than EngineLink): only the reason is saved.
+assert 'putBool("rhold"' not in ino
+loadset=fn(ino,"void loadSettings(){")
+assert "routerHold=false;" in loadset and 'getBool("rhold"' not in loadset
+assert "netpolicy::nextProbeEvery(" in teardown
+assert "netpolicy::probeKind(" in network and "netpolicy::mayReturn(" in network
+assert "lastHttpMs)<120000UL" not in network, "Probing must not stop while the app is open"
+
+# One fixed transmit power, set AFTER the country (which resets it), and
+# checked against the driver after each new IP / access point start.
+tune=fn(ino,"void radioTuning(){")
+assert tune.index("esp_wifi_set_country(") < tune.index("applyTxPower(false);")
+assert "applyTxPower(true)" in network
+assert ino.count("WiFi.setTxPower(")==1, "Only applyTxPower() may set the transmit power"
+assert "txNoAnswer" not in ino and "beaconPowerRecovery" not in ino
+assert "esp_wifi_set_inactive_time(WIFI_IF_STA" not in ino
+
+# Event list: a repeated event raises a count instead of filling the list.
+trace=fn(ino,"void traceWifi(uint8_t type,uint8_t reason){")
+assert "if(last.type==type&&last.reason==reason)" in trace and "++last.count" in trace
 assert 'Last 32 KiB server write:' in health
 assert "speedTxMs" in ino
 assert 'speedTxLastMs=millis()-begun;' in speed

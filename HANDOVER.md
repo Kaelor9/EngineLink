@@ -54,19 +54,20 @@ program, so they share the globals in `EngineLink.ino`.
 | `diagnosis.ino` | Sample ring, rules, events and black boxes, engine life story, series downloads |
 | `gearbox.ino` | Gear and clutch: four readings a second (ring, trip and event files), shift timing per engine, compressor, warm-up and charging, `/api/shifts` and `/api/fast` |
 | `storage.ino` | SD card, LittleFS, NVS settings and totals, restart log, raw logging |
-| `wifi.ino` | Own access point or router, fallback and return, scans, mDNS |
+| `wifi.ino` | Own access point or router, reconnect, rescue and return, scans, mDNS |
 | `webserver.h` | The port 80 web server (connection pool) |
 | `webapi.ino` | JSON helpers, the app's API handlers and the route table |
-| `netreport.ino` | Network report, ports 81 and 82, web server self-check, transmit power task |
+| `netreport.ino` | Network report, ports 81 and 82, web server self-check, radio test task |
 | `downloads.ino`, `sdexport.ino` | Streaming (compressed) downloads, CSV exports, SD clean-up, backup |
 | `updates.ino` | Firmware updates from GitHub or a file, with rollback; sends the GitHub reports |
 | `enginereport.ino` | Engine report after each trip: how well both engines were read, plus the diagnostics JSON |
 | `led.ino`, `nmea2000.ino`, `enginetest.ino` | Status LED, NMEA 2000 listener, engine test capture |
 | `wifiwpa3.cpp/.h` | Wraps `esp_wifi_init` to switch WPA3-SAE off unless the router needs it |
-| `linktune.cpp/.h` | Automatic transmit power, link measurements, channel scan |
+| `linktune.cpp/.h` | Transmit power steps; radio test (pings, channel survey) after a speed test |
+| `netpolicy.h` | Router reconnect back-off and rescue probe/return rules (host-tested) |
 | `netboost.cpp/.h` | Raises the TCP send window per connection |
 | `crashinfo.cpp/.h` | The last crash from the core dump, for the report |
-| `fuelcal.h`, `diagrules.h`, `shiftrules.h`, `ledpatterns.h`, `routerguard.h`, `otaheader.h` | Logic without Arduino, tested on a PC in CI |
+| `fuelcal.h`, `diagrules.h`, `shiftrules.h`, `ledpatterns.h`, `routerguard.h`, `netpolicy.h`, `otaheader.h` | Logic without Arduino, tested on a PC in CI |
 
 Elsewhere:
 
@@ -136,11 +137,26 @@ stored life story counts only the first 22 event types (`LIFE_EV_N`); newer
 types are counted in `ShiftLife`.
 
 **Wi-Fi.** Two exclusive modes. Standalone: access point only, `EngineLink` at
-192.168.4.1. Router: station only, reachable at the router's address. If the
-router connection is lost, the access point returns after 120 s (300 s while a
-login is still in progress) and EngineLink looks for the router again, at
-growing intervals, and goes back by itself. WPA2 is used unless the router is
-WPA3-only. Transmit power is chosen by `linktune.cpp`. The network report
+192.168.4.1. Router: station only, reachable at the router's address. The
+rules (0.15.0, `netpolicy.h`):
+- **Reconnect:** EngineLink's own, with Arduino's auto-reconnect off. One
+  `esp_wifi_connect()` after each DISCONNECTED event, with a pause of 1, 2, 4,
+  8, then 15 s, and never while an attempt runs. All Wi-Fi calls are made
+  in `serviceNetwork()`, never in the event callback.
+- **Rescue:** after 120 s without a router IP (300 s while a login is still
+  answered), the access point returns. Rescue is not saved: every start in
+  router mode tries the router first. In rescue EngineLink looks for the
+  router every minute (its last channel, NVS `rch`; all channels every fifth
+  time). It goes back when the router is there and the app has been unused
+  for 60 s, or after 10 min unless the last return failed. Failed returns
+  space the looks out to 15 min.
+- **Security and power:** WPA2 is used unless the router is WPA3-only. The
+  transmit power is fixed at 19.5 dBm, set after the country (setting the
+  country resets it) and checked after every new IP.
+- **Radio test:** pings and the channel survey run only after a speed test on
+  the router.
+
+The network report
 (`/api/network-report`, also on port 81 at `/report`) holds everything needed
 to diagnose a connection; with a GitHub token saved, the board files it as an
 issue by itself after problems. After each trip it also files an engine report
@@ -152,6 +168,31 @@ Lessons from the router work (late 2026): the prebuilt libraries' 4-packet TCP
 send window capped downloads through a router; the remaining slowness was a
 crowded 2.4 GHz channel on the router (channel 1), fixed by moving the router to
 channel 11. A-MPDU on/off and power save made no measurable difference.
+EngineLink must not require such router changes: as a station it follows the
+router's channel, so a busy channel lowers speed but must not break the link.
+
+Wi-Fi review (2026-11-04, before 0.15.0), from reports #95, #126, #130 and the
+engine reports #104/#107:
+- The automatic transmit power (0.12.2–0.14.1) never took effect at start.
+  The driver reported 20 dBm while 11 or 15 dBm was "chosen", because
+  `esp_wifi_set_country()` ran after `setTxPower()`. Its ping test never
+  completed in the field, since the app polls every second. The theory that
+  a lower power helped was therefore never tested.
+- The Arduino core (3.3.12, `STA.cpp`) retries with `disconnect()` +
+  `connect()` at once on every failure. Each try is logged as code 201 plus
+  code 36 in the same millisecond, every 1.57 s. That filled the 64-entry
+  event list and hid the first cause of the outage in #126.
+- #95: after power-on the router was not found for 120 s; Connect at 311 s
+  worked in 1 s. The remembered rescue latch would have kept later starts on
+  the access point.
+- #126: the router (−39 dBm) was not found on any channel for about 50 s,
+  probably while it restarted its radio (automatic channel). EngineLink got
+  back by itself.
+- The main loop holds `engineMx`. Its longest passes were 3.3–9.1 s, and the
+  engine task waited up to 4.25 s (#104/#107). The cause was not measured,
+  so 0.15.0 logs the longest time per loop part in the report.
+- The loopback web self-check counted as app use, so a phone joined to the
+  access point held back the return from rescue.
 
 ## Field data
 

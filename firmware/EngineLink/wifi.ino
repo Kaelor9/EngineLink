@@ -4,7 +4,15 @@
 void traceWifi(uint8_t type,uint8_t reason){
   const uint32_t now=millis();
   portENTER_CRITICAL(&traceMux);
-  routerTrace[traceHead]={now,type,reason};
+  if(traceSize){
+    RouterTrace &last=routerTrace[(traceHead+ROUTER_TRACE_CAP-1)%ROUTER_TRACE_CAP];
+    if(last.type==type&&last.reason==reason){
+      last.lastMs=now;if(last.count<65535)++last.count;
+      portEXIT_CRITICAL(&traceMux);
+      return;
+    }
+  }
+  routerTrace[traceHead]={now,now,1,type,reason};
   traceHead=(traceHead+1)%ROUTER_TRACE_CAP;
   if(traceSize<ROUTER_TRACE_CAP)++traceSize;
   portEXIT_CRITICAL(&traceMux);
@@ -21,7 +29,7 @@ const char* reasonText(uint8_t r){
     case 0:return "No reason reported";
     case 8:return "Station deliberately left";
     case 15:return "WPA handshake timeout";
-    case 36:return "Station left during mode change";
+    case 36:return "Station left (mode change or a new attempt)";
     case 200:return "Router beacons lost";
     case 201:return "Router not found";
     case 202:return "Authentication failed (does not prove a wrong password)";
@@ -75,12 +83,25 @@ bool allowTime(const String &source){
   return cfg.timePreference==source;
 }
 void ntpCallback(struct timeval *tv){(void)tv;ntpNotification=true;}
-// One-shot power recovery after losing AP beacons. Never touch radio settings
-// inside the Wi-Fi event callback; service it from the main loop instead.
-static volatile bool beaconPowerRecoveryPending=false;
-static uint32_t beaconPowerRecoveryLastAt=0;
-static uint32_t beaconPowerRecoveryCount=0;
-uint32_t beaconPowerRecoveryAttempts(){return beaconPowerRecoveryCount;}
+// Router channel for the rescue look (one channel instead of all); kept in
+// NVS, written only when the router really moved.
+void saveKnownChannel(uint8_t ch){
+  if(ch<1||ch>13||ch==routerKnownChannel)return;
+  routerKnownChannel=ch;
+  Preferences p;if(p.begin("enginelink",false)){p.putUChar("rch",ch);p.end();}
+}
+// The fixed transmit power (txLevel). Setting the country resets the power
+// to 20 dBm, so this runs after it; with `check` it only sets the power when
+// the driver reports another one (counted for the report).
+void applyTxPower(bool check){
+  if(check){
+    int8_t q=0;
+    if(esp_wifi_get_max_tx_power(&q)!=ESP_OK)return;   // Wi-Fi not running
+    if(abs((int)q-(int)elTxPower[txLevel])<=2)return;   // the driver rounds to its steps
+    ++txReapplied;
+  }
+  WiFi.setTxPower(elTxPower[txLevel]);
+}
 void onWiFi(WiFiEvent_t e,WiFiEventInfo_t info){
   if(e==ARDUINO_EVENT_WIFI_AP_START){
     const uint32_t now=millis();
@@ -94,7 +115,7 @@ void onWiFi(WiFiEvent_t e,WiFiEventInfo_t info){
   if(e==ARDUINO_EVENT_WIFI_STA_CONNECTED){
     const uint32_t now=millis();
     staAssociated=true;staAssociatedAt=now;++staAssociatedEvents;
-    saQueryRetryAt=0; // A native reconnect may already have succeeded.
+    staConnecting=false;staRetryAt=0;
     staNegotiatedAuth=(uint8_t)info.wifi_sta_connected.authmode;
     traceWifi(2);
     const uint32_t from=staLastDropAt && staLastDropAt>staBeginAt?
@@ -102,12 +123,24 @@ void onWiFi(WiFiEvent_t e,WiFiEventInfo_t info){
     if(from)staJoinMs=now-from;
   }
   if(e==ARDUINO_EVENT_WIFI_STA_DISCONNECTED){
+    const uint32_t now=millis();
     const bool droppedOnline=staHadIp;
     staHadIp=false;
     staAssociated=false;
+    staConnecting=false;
     ++staDisconnects;
     staLastReason=info.wifi_sta_disconnected.reason;
-    staLastDropAt=millis();
+    staLastDropAt=now;
+    // The Arduino core retries by itself once per start, after the first
+    // failure (disconnect + connect; the disconnect reports code 36 at once,
+    // field reports #95/#126). Leave that one attempt alone and keep its 36
+    // out of the event list. Every other retry is EngineLink's (below).
+    static bool arduinoRetried=false,arduinoLeave=false;
+    if(arduinoLeave&&staLastReason==36){arduinoLeave=false;staConnecting=true;staConnectAt=now;return;}
+    arduinoLeave=false;
+    if(!arduinoRetried&&staLastReason!=WIFI_REASON_ASSOC_LEAVE){
+      arduinoRetried=true;arduinoLeave=true;staConnecting=true;staConnectAt=now;
+    }
     traceWifi(4,staLastReason);
     // Count a lost live connection only after a DHCP IP was obtained.
     // Failures BEFORE first association are connection attempts, not drops.
@@ -117,15 +150,16 @@ void onWiFi(WiFiEvent_t e,WiFiEventInfo_t info){
       staLastUnexpectedReason=staLastReason;
       if(droppedOnline)++staUnexpectedDisconnects;
       else ++staAssociationFailures;
-      // The Arduino 3.3.12 auto-reconnect list excludes reason 209.
-      // Schedule an early one-shot attempt without resetting WPA/PMF state.
-      if(staLastReason==WIFI_REASON_SA_QUERY_TIMEOUT && droppedOnline)
-        saQueryRetryAt=millis()+2000UL;
-      if(staLastReason==200 && droppedOnline) beaconPowerRecoveryPending=true;
-      if(staLastReason==2||staLastReason==15){if(txNoAnswer<65535)++txNoAnswer;}
       // The router offers no WPA2 (WPA3-only): start the driver with WPA3.
       if((staLastReason==210||staLastReason==211)&&staSecMode==0){staSecSwitchTo=1;staSecSwitchPending=true;}
-
+      // Next attempt after a pause that grows with each failure in a row
+      // (1, 2, 4, 8, then 15 s; netpolicy.h), for every reason including
+      // 209. serviceNetwork() makes it, never this callback.
+      if(!staConnecting){
+        if(droppedOnline)staRetryFails=0;
+        staRetryAt=(now+netpolicy::retryDelayMs(staRetryFails))|1;
+        if(staRetryFails<65535)++staRetryFails;
+      }
     }
   }
   if(e==ARDUINO_EVENT_WIFI_STA_LOST_IP){
@@ -136,10 +170,9 @@ void onWiFi(WiFiEvent_t e,WiFiEventInfo_t info){
     routerIntentionalShutdown=false;
     ++staConnects;staConnectedAt=now;staIpAt=now;++staIpEvents;
     staHadIp=true;
-    saQueryRetryAt=0;
+    staRetryAt=0;staRetryFails=0;staConnecting=false;
     routerGotIpThisSession=true;
     esp_wifi_set_ps(WIFI_PS_NONE); // modem sleep adds up to a beacon (~100 ms) to every reply
-    txNoAnswer=0;
     traceWifi(3);
     if(staAssociatedAt)staDhcpMs=now-staAssociatedAt;
     mdnsNetworkChangedAt=now;mdnsRefreshPending=true;
@@ -195,14 +228,6 @@ bool routerConfigured(){return cfg.router&&cfg.ssid.length();}
 void radioTuning(){
   WiFi.setSleep(false);
   esp_wifi_set_ps(WIFI_PS_NONE);
-  // Full power reaches furthest, but its current peaks can upset the radio on
-  // a board with a weak supply or a chip antenna; a lower setting can then
-  // hold the connection better (Diagnostics → Wi-Fi → Transmit power).
-  if(txLevel>4)txLevel=3;
-  WiFi.setTxPower(elTxPower[txLevel]);
-  // Ride out a few seconds of not hearing the router (default 6 s) instead of
-  // dropping and logging in again on a weak or busy link.
-  esp_wifi_set_inactive_time(WIFI_IF_STA,20);
   // Setting the country again on a running network makes it start over and
   // drops every phone, so it is only set when it is not already right.
   wifi_country_t cur={};
@@ -210,6 +235,11 @@ void radioTuning(){
     wifi_country_t cc={{'E','U',' '},1,13,20,WIFI_COUNTRY_POLICY_MANUAL};
     esp_wifi_set_country(&cc);
   }
+  // After the country: setting it puts the power back to 20 dBm. The
+  // driver's 6 s default for a silent router is kept, so a router that went
+  // away is noticed (and looked for again) quickly.
+  if(txLevel>4)txLevel=TX_LEVEL_FIXED;
+  applyTxPower(false);
 }
 void startAP(){
   // Reapplying softAP configuration can interrupt associated phones. Do not
@@ -229,8 +259,8 @@ void startAP(){
   }
 }
 void connectRouter(){
-  // The standard ESP32 station path: configure the credentials once and let
-  // Arduino's built-in reconnect handle router dropouts.
+  // Configure the credentials once and start one attempt; later attempts
+  // come from the back-off in serviceNetwork() (netpolicy.h).
   staBssidKnown=false;
   staBeginAt=millis();
   traceWifi(1);
@@ -263,6 +293,8 @@ void connectRouter(){
       err=esp_wifi_connect();
       if(err!=ESP_OK)staSecurityConfigError=err;
     }
+    staRetryAt=0;staRetryFails=0;
+    staConnecting=true;staConnectAt=millis();
     if(err!=ESP_OK){
       // Safe fallback to Arduino's known-good default path; never strand the
       // user in STA without a live connection attempt.
@@ -309,8 +341,10 @@ void startNameService(){
   Serial.println("mDNS setup failed; will retry without restarting Wi-Fi");
 }
 // Fail open to the device's own Wi-Fi if the boat router cannot be reached.
-// Store the hold in NVS, not in LittleFS or the user's router credentials;
-// subsequent reboots immediately start in AP-only until Connect is selected.
+// Rescue lasts until the router is seen again (serviceNetwork) or the board
+// restarts; only the reason is kept in NVS for the report. On a boat the
+// router often starts slower than EngineLink (field report #95), so a
+// remembered rescue would keep a later start away from a working router.
 void parkRouter(const char *why){
   if(routerHold)return;
   // Filed once the router is back (no internet in standalone).
@@ -331,18 +365,20 @@ void parkRouter(const char *why){
   // A fallback says nothing about security: the router may simply have been
   // off or restarting. WPA3 is chosen only on clear evidence (WPA3-only in the
   // scan, or codes 210/211); a router that needs WPA2 is never pushed to WPA3.
-  if(routerAutoReturning){routerAutoReturning=false;routerProbeEvery=min<uint32_t>(routerProbeEvery*2,7200000UL);}
+  // A return that did not get in makes the next looks rarer (up to 15 min).
+  routerReturnFailed=routerAutoReturning;
+  routerAutoReturning=false;
+  routerProbeEvery=netpolicy::nextProbeEvery(routerProbeEvery,routerReturnFailed);
   routerProbeAt=millis()+routerProbeEvery;
   Preferences p;
   if(p.begin("enginelink",false)){
-    p.putBool("rhold",true);
     p.putUChar("rrsn",routerFailureReason);
     p.putUChar("rstage",routerFailurePhase);
     p.putULong("rduration",routerFailureAfterMs);
     p.end();
   }
   routerGuard.reset();
-  saQueryRetryAt=0;
+  staRetryAt=0;staConnecting=false;
   staHadIp=false;
   staDownSince=0; // Do not count rescue time as router downtime.
   staBssidKnown=false;
@@ -390,11 +426,14 @@ void applyNetwork(){
   apStarted=false;
   staAssociated=false;
   staHadIp=false;
-  saQueryRetryAt=0;
+  staRetryAt=0;staRetryFails=0;staConnecting=false;
   ntpStarted=false;
   if(withRouter){
     WiFi.mode(WIFI_STA);         // never broadcast EngineLink in router mode
-    WiFi.setAutoReconnect(true);
+    // Arduino's auto-reconnect retries at once, every 1.6 s, for as long as
+    // the router is away (#95/#126) and skips code 209; EngineLink's own
+    // back-off (netpolicy.h) replaces it.
+    WiFi.setAutoReconnect(false);
     radioTuning();
     // Stock fast scan and strongest-AP selection; never pin to a possibly
     // stale BSSID or channel.
@@ -406,9 +445,8 @@ void applyNetwork(){
     routerGotIpThisSession=false;
     staSecSwitchPending=false;
     staDownSince=millis()?millis():1;
-    routerLastRecoveryAttempt=millis();
     routerAttempts=0;
-    routerForcedReconnects=0;
+    staRetries=0;
     staFails=0;
     connectRouter();            // only one begin() per selected network
   }else{
@@ -554,6 +592,9 @@ void serviceNetwork(){
   static IPAddress routerIp;
   const uint32_t radioNow=millis();
   if(!radioCheckedAt||(uint32_t)(radioNow-radioCheckedAt)>=1000UL||radioCheckedEpoch!=networkIpEpoch){
+    // After a new router IP or access point start: is the fixed transmit
+    // power really in use (#95/#125/#130 showed 20 dBm instead)?
+    if(radioCheckedEpoch!=networkIpEpoch&&!pendingNetwork)applyTxPower(true);
     radioCheckedAt=radioNow?radioNow:1;
     radioCheckedEpoch=networkIpEpoch;
     const wifi_mode_t mode=WiFi.getMode();
@@ -581,75 +622,60 @@ void serviceNetwork(){
       startAP();
     }
   }
-  // Beacon loss can be caused by interference or a marginal downlink.
-  // A previously selected low transmit level may also hurt the uplink.
-  // Try 15 dBm only after the station reconnects, with a 5-minute cooldown;
-  // normal idle link tuning can subsequently choose a different level.
-  if(beaconPowerRecoveryPending&&routerConfigured()&&!routerHold&&!pendingNetwork&&routerIpReady){
-    beaconPowerRecoveryPending=false;
-    if(txLevel<3&&(!beaconPowerRecoveryLastAt||(uint32_t)(millis()-beaconPowerRecoveryLastAt)>=300000UL)){
-      if(WiFi.setTxPower(elTxPower[3])){
-        txLevel=3;
-        beaconPowerRecoveryLastAt=millis()?millis():1;
-        ++beaconPowerRecoveryCount;
-        Serial.println("Beacon-loss recovery: testing 15 dBm TX power after reconnect");
-      }
-    }
-  }
-  if(txNoAnswer>=12&&routerConfigured()&&!routerHold&&!pendingNetwork){
-    txNoAnswer=0;
-    if(txLevel>0){
-      --txLevel;++txAutoSteps;
-      {Preferences tp;if(tp.begin("enginelink",false)){tp.putUChar("txal",txLevel);tp.end();}}
-      WiFi.setTxPower(elTxPower[txLevel]);
-      Serial.printf("Router does not answer: transmit power lowered to %s\n",elTxName[txLevel]);
-    }
-  }
   if(staSecSwitchPending&&routerConfigured()&&!routerHold&&!pendingNetwork){
     staSecSwitchPending=false;
     if(staSecMode!=staSecSwitchTo){
-      staSecMode=staSecSwitchTo;++staSecSwitches;saveSecMode();saQueryRetryAt=0;
+      staSecMode=staSecSwitchTo;++staSecSwitches;saveSecMode();staRetryAt=0;
       Serial.printf("Router security switched to %s\n",staSecMode?"WPA3 allowed":"WPA2");
       // The driver must start again for the change: a normal network re-apply.
       networkSwitchAt=millis();pendingNetwork=true;
     }
   }
-  // Standalone after a router fallback: listen for the saved router now and
-  // then, with EngineLink's own Wi-Fi kept on, and go back to router mode
-  // when it is there. Not while someone is using the app on EngineLink's own
-  // Wi-Fi (a request in the last 2 minutes), so nobody is cut off mid-use.
+  // Rescue: look for the saved router every minute with EngineLink's own
+  // Wi-Fi kept on (netpolicy.h): a short look on its last channel, all
+  // channels every fifth time. Back to the router when it is there and the
+  // app is not in use on EngineLink's Wi-Fi (or after 10 minutes, unless the
+  // last return did not get in). Asynchronous: the loop keeps serving.
   if(routerProbing){
     const int16_t r=WiFi.scanComplete();
     if(r>=0||r==WIFI_SCAN_FAILED||(uint32_t)(millis()-routerProbeStarted)>10000){
-      bool seen=false;
-      for(int16_t i=0;i<r;i++)if(WiFi.SSID(i)==cfg.ssid){seen=true;break;}
+      bool seen=false;uint8_t seenCh=0;
+      for(int16_t i=0;i<r;i++)if(WiFi.SSID(i)==cfg.ssid){seen=true;seenCh=(uint8_t)WiFi.channel(i);break;}
       WiFi.scanDelete();
       routerProbing=false;
-      if(!seen&&!routerProbeHadSta)WiFi.mode(WIFI_AP);
+      bool back=false;
       if(seen&&routerHold){
+        ++routerProbeSeen;
+        saveKnownChannel(seenCh);
+        const uint32_t idle=WiFi.softAPgetStationNum()?(uint32_t)(millis()-lastHttpMs):UINT32_MAX;
+        back=netpolicy::mayReturn(idle,(uint32_t)(millis()-routerHoldSince),routerReturnFailed);
+      }
+      if(!back&&!routerProbeHadSta)WiFi.mode(WIFI_AP);
+      if(back){
         Serial.println("Saved router is back: returning to router mode");
         routerHold=false;routerGuard.reset();routerAttempts=0;
         routerAutoReturning=true;++routerAutoReturns;
-        {Preferences pr;if(pr.begin("enginelink",false)){pr.putBool("rhold",false);pr.end();}}
         networkSwitchAt=millis();
         pendingNetwork=true;
       }
     }
   }else if(routerHold&&routerConfigured()&&!pendingNetwork&&!scanBusy&&!otaActive
-     &&(int32_t)(millis()-routerProbeAt)>=0
-     &&!(WiFi.softAPgetStationNum()>0&&(uint32_t)(millis()-lastHttpMs)<120000UL
-         &&(!routerHoldSince||(uint32_t)(millis()-routerHoldSince)<1800000UL))){
+     &&(int32_t)(millis()-routerProbeAt)>=0){
     routerProbeAt=millis()+routerProbeEvery;
-    routerProbeHadSta=(WiFi.getMode()&WIFI_MODE_STA)!=0;
-    if(!routerProbeHadSta)WiFi.mode(WIFI_AP_STA);
-    // Asynchronous: the loop keeps serving while the radio listens.
-    if(WiFi.scanNetworks(true,true,false,300,0,cfg.ssid.c_str())!=WIFI_SCAN_FAILED){routerProbing=true;routerProbeStarted=millis();}
-    else if(!routerProbeHadSta)WiFi.mode(WIFI_AP);
+    ++routerProbeCount;
+    const bool inUse=WiFi.softAPgetStationNum()>0&&(uint32_t)(millis()-lastHttpMs)<netpolicy::RETURN_IDLE_MS;
+    const netpolicy::Probe kind=netpolicy::probeKind(routerProbeCount,routerKnownChannel,inUse);
+    if(kind!=netpolicy::PROBE_SKIP){
+      routerProbeHadSta=(WiFi.getMode()&WIFI_MODE_STA)!=0;
+      if(!routerProbeHadSta)WiFi.mode(WIFI_AP_STA);
+      const uint8_t ch=kind==netpolicy::PROBE_CHANNEL?routerKnownChannel:0;
+      if(WiFi.scanNetworks(true,true,false,120,ch,cfg.ssid.c_str())!=WIFI_SCAN_FAILED){routerProbing=true;routerProbeStarted=millis();}
+      else if(!routerProbeHadSta)WiFi.mode(WIFI_AP);
+    }
   }
-  // The driver, not EngineLink, reconnects to the selected router. This
-  // avoids resetting in-flight WPA handshakes and DHCP exchanges.
-  // EngineLink only guards against indefinite invisibility, and supplies a
-  // very infrequent last-resort reconnect if the STA becomes stuck idle.
+  // Router mode. EngineLink makes each new attempt itself, only after the
+  // driver reported the last one over (DISCONNECTED), so a running login or
+  // DHCP exchange is never cut off. After 120 s without an IP: rescue.
   if(routerConfigured()&&!routerHold){
     const uint32_t now=millis();
     const bool hasIp=routerIpReady;
@@ -663,37 +689,15 @@ void serviceNetwork(){
        lastRouterChannel=WiFi.channel();
        if(staDownSince)Serial.printf("Router ready: %s RSSI=%d dBm\n",
         lastRouterIp.c_str(),lastRouterRssi);
-       if(lastRouterChannel){staChannel=(uint8_t)lastRouterChannel;apChannelNow=(uint8_t)lastRouterChannel;}
+       if(lastRouterChannel){staChannel=(uint8_t)lastRouterChannel;apChannelNow=(uint8_t)lastRouterChannel;saveKnownChannel((uint8_t)lastRouterChannel);}
     }
     if(hasIp){
       routerGuard.reset();
       routerLastSuccessMs=now;
       staDownSince=0;
-      if(routerAutoReturning){routerAutoReturning=false;routerProbeEvery=600000UL;}
+      if(routerAutoReturning){routerAutoReturning=false;routerReturnFailed=false;routerProbeEvery=netpolicy::PROBE_EVERY_MS;}
     }else{
-      // A PMF SA Query timeout can leave Arduino's station idle because its
-      // native reconnect list omits error 209. Run one retry ~2 s later,
-      // OUTSIDE the event callback, without disconnecting a live WPA3 link.
-      const uint32_t saRetry=saQueryRetryAt;
-      if(saRetry && !staAssociated && (int32_t)(now-saRetry)>=0){
-        saQueryRetryAt=0;
-        const esp_err_t saErr=esp_wifi_connect();
-        if(saErr==ESP_OK){
-          ++saQueryFastRetries;
-          ++routerAttempts;
-          routerLastRecoveryAttempt=now;
-        }else if(saErr!=ESP_ERR_WIFI_STATE){
-          ++staFails;
-        }
-        Serial.printf("WPA3 SA Query recovery: %s\n",esp_err_to_name(saErr));
-      }
-      if(!staDownSince){
-        staDownSince=now?now:1;
-        // A link that was up for hours gets a fresh grace window. Do not
-        // issue a forced reconnect immediately after the driver's first
-        // DISCONNECTED event; native auto-reconnect gets the first 30s.
-        routerLastRecoveryAttempt=now;
-      }
+      if(!staDownSince)staDownSince=now?now:1;
       if(!routerGuard.disconnectedSince)routerGuard.attempt(now);
       // A router that answers but is slow to let EngineLink in (logins timing
       // out, codes 2/4/15/202/204) can need about two minutes and many tries:
@@ -706,23 +710,27 @@ void serviceNetwork(){
         parkRouter(slowLogin?"router did not let EngineLink in within 5 minutes":"no router DHCP address after 120 seconds");
         return;
       }
-      // The native auto-reconnect normally handles all recoverable failures.
-      // If the radio has remained genuinely unassociated for 30 seconds,
-      // nudge it once with reconnect() (never another WiFi.begin()).
-      // Only nudge a truly silent driver. Never compete with native retries.
-      if(!staAssociated &&
-         (!staLastDropAt||(uint32_t)(now-staLastDropAt)>=ROUTER_LAST_RESORT_RETRY_MS) &&
-         (uint32_t)(now-routerLastRecoveryAttempt)>=ROUTER_LAST_RESORT_RETRY_MS){
-        routerLastRecoveryAttempt=now;
-        // esp_wifi_connect() does NOT forcibly disconnect an ongoing WPA
-        // handshake. WiFi.reconnect() does, and used to restart attempts at
-        // 30-second intervals even when the router was still negotiating.
+      // The next attempt, planned by the DISCONNECTED event (netpolicy.h).
+      const uint32_t retryAt=staRetryAt;
+      if(retryAt&&!staAssociated&&!staConnecting&&(int32_t)(now-retryAt)>=0){
+        staRetryAt=0;
         const esp_err_t err=esp_wifi_connect();
-        if(err==ESP_OK){++routerForcedReconnects;++routerAttempts;}
-        else if(err!=ESP_ERR_WIFI_STATE){++staFails;}
-        Serial.printf("Router retry nudge: %s (associated=%u, reason=%u)\n",
-          esp_err_to_name(err),(unsigned)staAssociated,(unsigned)staLastReason);
+        if(err==ESP_OK||err==ESP_ERR_WIFI_STATE){  // STATE: an attempt already runs
+          staConnecting=true;staConnectAt=now;
+          if(err==ESP_OK){++staRetries;++routerAttempts;}
+        }else{
+          ++staFails;staRetryAt=(now+netpolicy::RETRY_MAX_MS)|1;
+        }
+        Serial.printf("Router attempt %u: %s (last reason %u)\n",(unsigned)staRetryFails,
+          esp_err_to_name(err),(unsigned)staLastReason);
       }
+      // An attempt the driver never answered, or nothing planned at all
+      // (should not happen): plan the next one so the station is never idle.
+      if(staConnecting&&!staAssociated&&(uint32_t)(now-staConnectAt)>=netpolicy::ATTEMPT_TIMEOUT_MS){
+        staConnecting=false;staRetryAt=now|1;
+      }
+      if(!staRetryAt&&!staConnecting&&!staAssociated)
+        staRetryAt=(now+netpolicy::retryDelayMs(staRetryFails))|1;
     }
   }
   if(routerConfigured()&&routerIpReady&&!ntpStarted&&cfg.ntpOn&&allowTime("ntp")){

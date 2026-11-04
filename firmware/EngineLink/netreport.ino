@@ -31,14 +31,22 @@ String makeNetworkHealthJson(){
   s+=",\"unexpectedReason\":";s+=(unsigned)staLastUnexpectedReason;
   s+=",\"unexpectedDrops\":";s+=(unsigned long)staUnexpectedDisconnects;
   s+=",\"associationFailures\":";s+=(unsigned long)staAssociationFailures;
-  s+=",\"saQueryFastRetries\":";s+=saQueryFastRetries;
+  s+=",\"retryFails\":";s+=(unsigned)staRetryFails;
+  s+=",\"routerProbes\":";s+=routerProbeCount;s+=",\"routerProbeSeen\":";s+=routerProbeSeen;
+  s+=",\"knownChannel\":";s+=(unsigned)routerKnownChannel;
+  s+=",\"txReapplied\":";s+=txReapplied;
+  s+=",\"loopParts\":[";for(uint8_t i=0;i<LOOP_PARTS;i++){if(i)s+=',';s+=loopPartMaxMs[i];}s+=']';
+  s+=",\"engineMaxWaitMs\":";s+=engineMaxWaitMs;
+  s+=",\"apStations\":";s+=(unsigned)WiFi.softAPgetStationNum();
+  s+=",\"apJoins\":";s+=(unsigned long)apJoins;s+=",\"apLeaves\":";s+=(unsigned long)apLeaves;
+  s+=",\"apLeaveReason\":";s+=(unsigned)apReason;s+=",\"apRestarts\":";s+=apRestarts;
   s+=",\"speedTxBytes\":";s+=(unsigned long)speedTxLastBytes;
   s+=",\"speedTxMs\":";s+=(unsigned long)speedTxLastMs;
   s+=",\"speedTxWrites\":";s+=(unsigned long)speedTxLastWrites;
   s+=",\"failedReason\":";s+=(unsigned)routerFailureReason;
   s+=",\"failedPhase\":";s+=(unsigned)routerFailurePhase;
   s+=",\"failedAfterMs\":";s+=(unsigned long)routerFailureAfterMs;
-  s+=",\"driverNudges\":";s+=routerForcedReconnects;
+  s+=",\"driverNudges\":";s+=staRetries;
   s+=",\"httpRebinds\":";s+=web.listenerRebinds;
   s+=",\"httpSelfFails\":";s+=httpSelfFails;s+=",\"httpHeals\":";s+=httpHeals;s+=",\"httpSelfRestarts\":";s+=httpSelfRestarts;
   s+=",\"httpBoundEpoch\":";s+=httpBoundEpoch;
@@ -66,6 +74,8 @@ String makeNetworkHealthJson(){
     s+="{\"uptimeMs\":";s+=trace[i].ms;
     s+=",\"event\":";jsonString(s,traceText(trace[i].type));
     s+=",\"reason\":";s+=(unsigned)trace[i].reason;
+    s+=",\"count\":";s+=(unsigned)trace[i].count;
+    s+=",\"lastUptimeMs\":";s+=trace[i].lastMs;
     s+='}';
   }
   s+="]}";
@@ -96,22 +106,21 @@ String buildNetworkReport(){
   s+="Security mode: ";s+=staSecMode?"WPA3 allowed (router needs WPA3)":"WPA2, like most IoT devices (works on WPA2 and WPA2/WPA3 routers)";s+="\n";
   s+="WPA3 switch in firmware: ";s+=elSaeControlActive()?"active":"NOT active (built without -Wl,--wrap=esp_wifi_init)";s+="\n";
   s+="Security switches: ";s+=staSecSwitches;s+="\n";
-  s+="Transmit power: ";s+=elTxName[txLevel<5?txLevel:3];s+=" (chosen by EngineLink)";
+  s+="Transmit power: ";s+=elTxName[txLevel<5?txLevel:TX_LEVEL_FIXED];s+=" (fixed)";
   {int8_t q=0;if(esp_wifi_get_max_tx_power(&q)==ESP_OK){s+=" · driver reports ";s+=q/4.0f;s+=" dBm";}}
-  s+=" · lowered automatically ";s+=txAutoSteps;s+=" time(s) this start\n";
+  s+=" · set again after the driver changed it: ";s+=txReapplied;s+=" time(s)\n";
   {wifi_ps_type_t ps=WIFI_PS_NONE;esp_wifi_get_ps(&ps);
    s+="Power save: ";s+=ps==WIFI_PS_NONE?"off":ps==WIFI_PS_MIN_MODEM?"ON (minimum modem sleep)":"ON (maximum modem sleep)";s+="\n";}
   if(WiFi.getMode()&WIFI_MODE_STA){
     wifi_phy_mode_t pm;
     if(esp_wifi_sta_get_negotiated_phymode(&pm)==ESP_OK){s+="Negotiated Wi-Fi standard: ";s+=pm==WIFI_PHY_MODE_11B?"802.11b (slow)":pm==WIFI_PHY_MODE_11G?"802.11g":pm==WIFI_PHY_MODE_HT20?"802.11n 20 MHz":pm==WIFI_PHY_MODE_HT40?"802.11n 40 MHz":pm==WIFI_PHY_MODE_HE20?"802.11ax":"other";s+="\n";}
   }
-  s+="Transmit power test (ping to the router, 20 x 1400 bytes, min/avg/max): ";
+  s+="Radio test (after a speed test on the router; ping to the router, 20 x 1400 bytes, min/avg/max): ";
   if(linkTuneRunning)s+="running";
-  else if(!linkTuneCount)s+="not run yet";
+  else if(!linkTuneCount)s+="not run yet (tap \"Test speed\" on the router)";
   else{
     static const char *nm[5]={"8.5","11","13","15","19.5"};
     for(uint8_t i=0;i<linkTuneCount;i++){const LinkTuneStep &x=linkTuneSteps[i];s+="\n  ";s+=nm[x.level];s+=" dBm: ";s+=x.p.got;s+="/";s+=x.p.sent;s+=" back, ";s+=x.p.minMs;s+="/";s+=x.p.avgMs;s+="/";s+=x.p.maxMs;s+=" ms";}
-    if(linkTuneChosen<5){s+="\n  best by ping: ";s+=nm[linkTuneChosen];s+=" dBm";}
     s+=" (";s+=(millis()-linkTuneAt)/1000UL;s+=" s ago)";
   }
   s+="\n";
@@ -123,11 +132,10 @@ String buildNetworkReport(){
   s+="Successful Wi-Fi associations: ";s+=(unsigned long)staAssociatedEvents;s+="\n";
   s+="Successful router IP assignments: ";s+=(unsigned long)staIpEvents;s+="\n";
   s+="Router IP losses: ";s+=(unsigned long)staIpLostEvents;s+="\n";
-  s+="Beacon-loss TX recovery attempts: ";s+=(unsigned long)beaconPowerRecoveryAttempts();s+=" (temporary 15 dBm after reconnect, 5-minute cooldown)\n";
   s+="Wi-Fi disconnect events: ";s+=(unsigned long)staDisconnects;s+="\n";
   s+="Dropped active router connections: ";s+=(unsigned long)staUnexpectedDisconnects;s+="\n";
   s+="Pre-connection failures: ";s+=(unsigned long)staAssociationFailures;s+="\n";
-  s+="SA Query fast recovery attempts: ";s+=saQueryFastRetries;s+="\n";
+  s+="Reconnect attempts by EngineLink: ";s+=staRetries;s+=" (pause 1, 2, 4, 8, then 15 s) · failed in a row now: ";s+=(unsigned)staRetryFails;s+="\n";
   s+="App-initiated router attempts: ";s+=routerAttempts;s+="\n";
   s+="Router recovery fallbacks: ";s+=routerFallbacks;s+="\n";
   s+="Last association time: ";s+=staJoinMs;s+=" ms\n";
@@ -138,6 +146,10 @@ String buildNetworkReport(){
   s+="Last saved failure: ";s+=(unsigned)routerFailureReason;s+=" - ";s+=reasonText(routerFailureReason);s+="\n";
   s+="Failure stage at timeout: ";s+=routerFailurePhase==2?"Associated but without IP":routerFailurePhase==1?"Not associated":"Not recorded";s+="\n";
   s+="Time before rescue: ";s+=routerFailureAfterMs;s+=" ms\n";
+  s+="Rescue looks for the router: ";s+=routerProbeCount;s+=" · router seen: ";s+=routerProbeSeen;
+  s+=" · automatic returns: ";s+=routerAutoReturns;s+=" · last known router channel: ";s+=(unsigned)routerKnownChannel;
+  if(routerHold&&routerConfigured()){s+=" · next look in ";s+=(long)((int32_t)(routerProbeAt-millis())/1000);s+=" s";}
+  s+="\n";
   s+="Note: final failure stage does not erase any earlier successful IP events.\n";
   s+="Error 202 means authentication failure; it does not prove the password is wrong.\n\n";
   s+="DOWNLOAD TESTS FROM THE PHONE (newest last)\n";
@@ -179,10 +191,20 @@ String buildNetworkReport(){
     }
     s+="\n";
   }
+  s+="ENGINELINK WI-FI (ACCESS POINT, THIS START)\n";
+  s+="Phones connected now: ";s+=(unsigned)WiFi.softAPgetStationNum();
+  s+=" · joined ";s+=(unsigned long)apJoins;s+=" · left ";s+=(unsigned long)apLeaves;
+  if(apLeaves){s+=" (last code ";s+=(unsigned)apReason;s+=")";}
+  s+=" · started ";s+=(unsigned long)apStarts;s+=" · restarted by the watchdog ";s+=apRestarts;
+  s+=" · channel ";s+=(unsigned)apChannelNow;s+="\n\n";
   s+="SYSTEM\n";
   s+="Chip: ";s+=ESP.getChipModel();s+=" rev ";s+=ESP.getChipRevision();s+=" · ";s+=ESP.getCpuFreqMHz();s+=" MHz · Arduino core ";s+=ESP_ARDUINO_VERSION_MAJOR;s+=".";s+=ESP_ARDUINO_VERSION_MINOR;s+=".";s+=ESP_ARDUINO_VERSION_PATCH;s+=" · IDF ";s+=esp_get_idf_version();s+="\n";
   s+="Memory: free ";s+=ESP.getFreeHeap()/1024;s+=" KB, lowest ";s+=ESP.getMinFreeHeap()/1024;s+=" KB, largest block ";s+=ESP.getMaxAllocHeap()/1024;s+=" KB · PSRAM free ";s+=ESP.getFreePsram()/1024;s+=" KB\n";
-  s+="Main loop: longest pass ";s+=loopMaxMs;s+=" ms · engine reading in own task: ";s+=engineTaskOn?"yes":"no";s+="\n";
+  s+="Main loop: longest pass ";s+=loopMaxMs;s+=" ms · engine reading in own task: ";s+=engineTaskOn?"yes":"no";
+  s+=" · engine task longest wait ";s+=engineMaxWaitMs;s+=" ms\n";
+  {static const char *part[LOOP_PARTS]={"web","sd","diag","raw cleanup","history","network","led","serial","other"};
+   s+="Longest part of the main loop (ms):";
+   for(uint8_t i=0;i<LOOP_PARTS;i++){s+=i?", ":" ";s+=part[i];s+=' ';s+=loopPartMaxMs[i];}s+="\n";}
   s+="Reset reason: ";s+=(int)esp_reset_reason();s+=" (1 power on, 3 software/update, 4 crash, 5/6/7 watchdog, 9 brownout, 11 reset over USB)\n";
   s+="Recent restarts (newest first): ";
   {bool any=false;for(uint8_t i=0;i<RESTART_LOG_N;i++){const RestartRec &x=restartLog[i];if(!x.ver[0])continue;if(any)s+=" | ";any=true;s+="reason ";s+=x.reason;s+=" after ";s+=x.upBefore;s+=" s on ";s+=x.ver;}if(!any)s+="none recorded";}
@@ -203,6 +225,7 @@ String buildNetworkReport(){
   for(uint8_t i=0;i<n;i++){
     s+="  +";s+=trace[i].ms/1000UL;s+="s  ";s+=traceText(trace[i].type);
     if(trace[i].reason){s+="  code ";s+=(unsigned)trace[i].reason;s+=" (";s+=reasonText(trace[i].reason);s+=")";}
+    if(trace[i].count>1){s+="  x";s+=(unsigned)trace[i].count;s+=" until +";s+=trace[i].lastMs/1000UL;s+="s";}
     s+="\n";
   }
   s+="\nMACHINE-READABLE JSON (copy/send the entire report)\n";
@@ -275,7 +298,7 @@ void liveHttpTask(void *){
     refreshWorkerListener(liveServer,boundEpoch);
     NetworkClient c=liveServer.accept();
     if(!c){vTaskDelay(pdMS_TO_TICKS(10));continue;}
-    lastHttpMs=millis();  // live API calls keep radio calibration idle
+    lastHttpMs=millis();  // live API calls: the app is in use
     c.setNoDelay(true);
     c.setTimeout(250);
     const String request=c.readStringUntil('\n');
@@ -315,8 +338,6 @@ void liveHttpTask(void *){
 // failing two minutes after that: save the totals and restart. Skipped while
 // a handler is legitimately busy (a download, a report). This catches a web
 // server that accepts connections but never answers, whatever the cause.
-// Tunes the transmit power once per start, 60 s after the router link is up,
-// and when asked from the app. Never during a download or an update.
 static void appendPingJson(String &s,const char *k,uint8_t sent,uint8_t got,uint16_t mn,uint16_t av,uint16_t mx){
   s+=",\"";s+=k;s+="\":{\"sent\":";s+=sent;s+=",\"got\":";s+=got;s+=",\"min\":";s+=mn;s+=",\"avg\":";s+=av;s+=",\"max\":";s+=mx;s+='}';
 }
@@ -341,34 +362,20 @@ void appendLinkJson(String &s){
   s+="]}";
   s+='}';
   s+=",\"txLevel\":";s+=txLevel;
-  s+=",\"beaconPowerRecoveryCount\":";s+=(unsigned long)beaconPowerRecoveryAttempts();
   s+=",\"phoneTests\":[";
   for(uint8_t i=0;i<speedLogCount;i++){const SpeedLogRec &x=speedLog[i];if(i)s+=',';s+="{\"agoS\":";s+=(unsigned long)((millis()-x.at)/1000UL);s+=",\"level\":";s+=x.level;s+=",\"kbs\":";s+=x.kbs10/10.0f;s+=",\"rttMs\":";s+=x.rttMs;s+='}';}
   s+=']';
 }
-// Transmit power, fully automatic: a ping test 60 s after joining the router
-// and again every 30 minutes while nobody is downloading, keeping the
-// strength the router answers best. Nothing to set or press.
+// Radio test on request: a speed test on the router (/api/speedlog) asks for
+// it, at most every 5 minutes; it waits for a long request or an update to end.
 void linkTuneTask(void *){
-  uint32_t lastRun=0,lastIp=0;
   for(;;){
-    vTaskDelay(pdMS_TO_TICKS(2000));
-    const bool online=routerConfigured()&&!routerHold&&WiFi.status()==WL_CONNECTED&&staIpAt&&(uint32_t)(millis()-staIpAt)>=60000UL;
-    if(!online||otaActive||httpBusySince)continue;
-    const bool fresh=staIpAt!=lastIp;                       // a new connection
-    const bool due=lastRun&&(uint32_t)(millis()-lastRun)>=1800000UL;
-    if(!fresh&&!due)continue;
-    // Defer ALL active radio testing while the phone app is in use, even
-    // the first test after joining. The test changes TX power five times,
-    // runs dozens of pings and scans every 2.4 GHz channel; doing that under
-    // live HTTP traffic can stall the very link being measured.
-    if(lastHttpMs&&(uint32_t)(millis()-lastHttpMs)<20000UL)continue;
-    lastIp=staIpAt;lastRun=millis()?millis():1;
-    const uint8_t best=runLinkTune(txLevel);
-    if(best!=txLevel){
-      txLevel=best;
-      Preferences tp;if(tp.begin("enginelink",false)){tp.putUChar("txal",best);tp.end();}
-    }
+    vTaskDelay(pdMS_TO_TICKS(1000));
+    if(!radioTestWanted)continue;
+    if(!(routerConfigured()&&!routerHold&&WiFi.status()==WL_CONNECTED)){radioTestWanted=false;continue;}
+    if(otaActive||httpBusySince)continue;
+    radioTestWanted=false;
+    runRadioTest(txLevel);
   }
 }
 void httpSelfCheckTask(void *){

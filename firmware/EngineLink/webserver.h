@@ -63,7 +63,6 @@ private:
   bool wrote=false,keepAlive=false,rewriteHeader=false;
   void serve(Slot &s){
     const uint32_t t0=millis();
-    lastHttpMs=t0;
     _currentClient=s.c;
     _currentClient.setTimeout(HTTP_IO_TIMEOUT_MS);
     _currentStatus=HC_WAIT_READ;_statusChange=t0;
@@ -72,6 +71,9 @@ private:
     netWaitBegin();const bool parsed=_parseRequest(_currentClient);netWaitEnd();
     const uint32_t parsedAt=millis();
     if(parsedAt-t0>worstParseMs)worstParseMs=parsedAt-t0;
+    // App traffic (for the rescue return rule), not the board's own
+    // loopback self-check of /api/health every 20 s.
+    if(!parsed||uri()!="/api/health")lastHttpMs=t0;
     if(parsed){
       _contentLength=CONTENT_LENGTH_NOT_SET;_responseCode=0;_clearResponseHeaders();
       // Only HTTP/1.1 frames every response (length or chunks) for reuse.

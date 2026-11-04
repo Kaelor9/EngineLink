@@ -308,7 +308,6 @@ void saveSettings(){
   pref.begin("enginelink",false);
   pref.putBool("done",cfg.completed);
   pref.putBool("router",cfg.router);
-  pref.putBool("rhold",routerHold);
   pref.putBool("can",cfg.canListen);
   pref.putUChar("port",cfg.portChannel);
   pref.putUChar("apch",cfg.apChannel);
@@ -355,19 +354,20 @@ void loadSettings(){
   pref.begin("enginelink",true);
   cfg.completed=pref.getBool("done",false);
   cfg.router=pref.getBool("router",false);
-  routerHold=pref.getBool("rhold",false);
+  // Rescue is not remembered: a start in router mode always tries the router.
+  routerHold=false;
   {Preferences sp;if(sp.begin("enginelink",true)){staSecMode=sp.getUChar("smode",0)?1:0;sp.end();}}
-  if(routerHold)routerHoldSince=1;
-  routerProbeAt=120000UL;  // after a start in standalone, first look after 2 minutes
+  routerKnownChannel=pref.getUChar("rch",0);
   routerFailureReason=pref.getUChar("rrsn",0);
   routerFailurePhase=pref.getUChar("rstage",0);
   routerFailureAfterMs=pref.getULong("rduration",0);
   cfg.canListen=pref.getBool("can",false);
   cfg.portChannel=pref.getUChar("port",1);
   cfg.apChannel=pref.getUChar("apch",6);
-  txLevel=pref.getUChar("txal",3);
-  // Settings from earlier Wi-Fi experiments that no longer exist.
-  {Preferences old;if(old.begin("enginelink",false)){for(const char *k:{"txp","txp2","txp3","aggr","aggr2","agrx","agrxt"})if(old.isKey(k))old.remove(k);old.end();}}
+  txLevel=TX_LEVEL_FIXED;
+  // Settings from earlier Wi-Fi experiments that no longer exist (txal: the
+  // automatic transmit power, rhold: the remembered rescue, until 0.14.1).
+  {Preferences old;if(old.begin("enginelink",false)){for(const char *k:{"txp","txp2","txp3","aggr","aggr2","agrx","agrxt","txal","rhold"})if(old.isKey(k))old.remove(k);old.end();}}
   cfg.apPassword=pref.getString("appass","12345678");
   cfg.ssid=pref.getString("ssid","");
   cfg.wifiPassword=pref.getString("wpass","");
@@ -415,5 +415,4 @@ void loadSettings(){
   if(cfg.apPassword.length()<8)cfg.apPassword="12345678";
   if(cfg.portChannel>2)cfg.portChannel=0;
   if(cfg.apChannel<1||cfg.apChannel>13)cfg.apChannel=6;
-  if(txLevel>4)txLevel=3;
 }

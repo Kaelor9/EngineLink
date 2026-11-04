@@ -441,7 +441,7 @@ String makeDiagJson(){
   s+=",\"staConnects\":";s+=staConnects;
   s+=",\"routerAttempts\":";s+=routerAttempts;
   s+=",\"routerNativeAutoReconnect\":";s+=(WiFi.getAutoReconnect()?"true":"false");
-  s+=",\"routerDriverNudges\":";s+=routerForcedReconnects;
+  s+=",\"routerDriverNudges\":";s+=staRetries;
   s+=",\"routerAssociated\":";s+=staAssociated?"true":"false";
   s+=",\"staAssocEvents\":";s+=(unsigned long)staAssociatedEvents;
   s+=",\"routerAuthMode\":";jsonString(s,stationSecurityName(staNegotiatedAuth));
@@ -456,7 +456,6 @@ String makeDiagJson(){
   s+=",\"routerUnexpectedReason\":";s+=(unsigned)staLastUnexpectedReason;
   s+=",\"routerUnexpectedDrops\":";s+=(unsigned long)staUnexpectedDisconnects;
   s+=",\"routerAssociationFailures\":";s+=(unsigned long)staAssociationFailures;
-  s+=",\"routerSaFastRetries\":";s+=saQueryFastRetries;
   s+=",\"speedTxBytes\":";s+=(unsigned long)speedTxLastBytes;
   s+=",\"speedTxMs\":";s+=(unsigned long)speedTxLastMs;
   s+=",\"speedTxWrites\":";s+=(unsigned long)speedTxLastWrites;
