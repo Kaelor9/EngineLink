@@ -207,6 +207,9 @@ inline const char *pgnName(uint32_t p) {
   case 127258: return "Magnetic variation"; case 129283: return "Cross track error"; case 129284: return "Navigation data"; case 129285: return "Route";
   case 129539: return "GNSS DOPs"; case 129540: return "Satellites in view"; case 127237: return "Heading/track control (autopilot)";
   case 65359: case 65360: case 65379: return "Raymarine autopilot"; case 126208: return "Command/request"; case 59904: return "Request";
+  case 129038: return "AIS Class A position"; case 129039: return "AIS Class B position"; case 129040: return "AIS Class B extended";
+  case 129041: return "AIS aids to navigation"; case 129794: return "AIS Class A static"; case 129809: return "AIS Class B name"; case 129810: return "AIS Class B static";
+  case 127252: return "Heave"; case 65288: return "Raymarine alarm"; case 126720: return "Raymarine proprietary";
   case 130577: return "Direction data"; case 128000: return "Leeway"; case 127251: return "Rate of turn"; case 127257: return "Attitude";
   default: return nullptr; }
 }
