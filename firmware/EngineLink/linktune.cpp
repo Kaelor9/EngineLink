@@ -1,25 +1,14 @@
-// Transmit power test and link measurements for the network report.
-//
-// After joining the router (and every 30 minutes while idle) the board pings
-// its router with large packets at each transmit power step and keeps the
-// step with the fewest losses and the shortest round trip, unless the current
-// step is within 20 %. It also measures small pings, pings to the internet
-// (a slow router CPU versus a slow radio link) and scans which networks share
-// the router's channel. Runs in its own task. In its own file: the ping API
-// uses C callbacks.
+// Radio test for the network report, on request (after a speed test on the
+// router): large and small pings to the router, pings to the internet (a slow
+// router CPU versus a slow radio link) and which networks share the router's
+// channel. It changes nothing on the radio: the transmit power is fixed
+// (until 0.14.1 it tried every power step; that test never completed in the
+// field because the app is always polling). Runs in its own task. In its own
+// file: the ping API uses C callbacks.
 #include <Arduino.h>
 #include <WiFi.h>
 #include "ping/ping_sock.h"
 #include "linktune.h"
-
-// The live API is served by a different task from the main web server.
-// Avoid changing TX power or scanning across Wi-Fi channels while any app
-// connection is actively requesting data.
-extern volatile uint32_t lastHttpMs;
-static bool webBusyNow(){
-  const uint32_t at=lastHttpMs;
-  return at&&(uint32_t)(millis()-at)<3000UL;
-}
 
 // Transmit power steps, lowest to highest (index = level).
 const wifi_power_t elTxPower[5] = {WIFI_POWER_8_5dBm, WIFI_POWER_11dBm, WIFI_POWER_13dBm, WIFI_POWER_15dBm, WIFI_POWER_19_5dBm};
@@ -122,42 +111,18 @@ static void surveyChannel() {
   WiFi.scanDelete();
 }
 
-// Called from a task. `current` is the step in use; returns the step to use
-// (`current` if the test could not run) and leaves the radio on it.
-uint8_t runLinkTune(uint8_t current) {
+// Called from a task; blocks for about 15 s. `level` is the transmit power
+// step in use, recorded with the large pings.
+void runRadioTest(uint8_t level) {
   linkTuneRunning = true; linkTuneCount = 0;
-  uint8_t best = current; int32_t bestScore = INT32_MAX, curScore = INT32_MAX;
-  bool interrupted=false;
-  for (int8_t lv = 4; lv >= 0; lv--) {
-    if (WiFi.status() != WL_CONNECTED || webBusyNow()) { interrupted=true; break; }
-    WiFi.setTxPower(elTxPower[lv]);
-    vTaskDelay(pdMS_TO_TICKS(1500));       // let rate control settle
-    PingStat p;
-    if (!pingHost(WiFi.gatewayIP(), 20, 1400, 60, p)) break;
-    if (webBusyNow()) { interrupted=true; break; }
-    linkTuneSteps[linkTuneCount++] = {(uint8_t)lv, p};
-    // Every lost packet costs as much as 100 ms of extra round trip.
-    const int32_t score = (int32_t)(20 - p.got) * 100 + p.avgMs;
-    if (p.got >= 10 && score < bestScore) { bestScore = score; best = lv; }
-    if (lv == current) curScore = p.got >= 10 ? score : INT32_MAX;
-  }
-  if(interrupted){
-    // Do not persist a choice from a partial test under app traffic.
-    WiFi.setTxPower(elTxPower[current]);
-    linkTuneCount=0;linkTuneChosen=255;linkTuneRunning=false;
-    return current;
-  }
-  // Stay on the current step unless another one is clearly (20 %) better:
-  // a busy channel makes single measurements jump around.
-  if (curScore != INT32_MAX && (int64_t)curScore * 100 <= (int64_t)bestScore * 120) best = current;
-  WiFi.setTxPower(elTxPower[best]);
+  PingStat p;
+  if (WiFi.status() == WL_CONNECTED && pingHost(WiFi.gatewayIP(), 20, 1400, 60, p))
+    linkTuneSteps[linkTuneCount++] = {level, p};
   if (WiFi.status() == WL_CONNECTED) {
-    vTaskDelay(pdMS_TO_TICKS(1000));
-    if(!webBusyNow())pingHost(WiFi.gatewayIP(), 20, 64, 100, linkSmall);
-    if(!webBusyNow())pingHost(IPAddress(1, 1, 1, 1), 10, 64, 200, linkNet);
-    if(!webBusyNow())surveyChannel();
+    pingHost(WiFi.gatewayIP(), 20, 64, 100, linkSmall);
+    pingHost(IPAddress(1, 1, 1, 1), 10, 64, 200, linkNet);
+    surveyChannel();
   }
-  linkTuneChosen = best; linkTuneAt = millis() ? millis() : 1;
+  linkTuneChosen = level; linkTuneAt = millis() ? millis() : 1;
   linkTuneRunning = false;
-  return best;
 }

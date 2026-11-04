@@ -41,13 +41,13 @@ assert "esp_wifi_disconnect()" not in forget
 assert "WiFi.disconnect(" not in forget
 assert "pendingNetwork=true" in forget
 
-# Use the ESP32 driver's native auto reconnect, matching the working
-# Marine RGB controller's Wi-Fi strategy. No custom WPA retry/disconnect loop.
+# Router reconnects: EngineLink's own back-off (netpolicy.h) instead of the
+# Arduino core's immediate retry loop; never a disconnect/begin in the loop.
 assert "!pendingNetwork&&(!routerConfigured()||routerHold)" in network, (
     "AP watchdog must not interrupt HTTP mode-switch acknowledgement"
 )
-assert "WiFi.setAutoReconnect(true);" in apply_network
-assert "WiFi.setAutoReconnect(false);" in apply_network
+assert "WiFi.setAutoReconnect(true);" not in ino
+assert apply_network.count("WiFi.setAutoReconnect(false);") == 2
 assert "WiFi.mode(WIFI_OFF);" in apply_network, (
     "Hostname and interface must be configured while Wi-Fi is stopped"
 )
@@ -56,8 +56,8 @@ assert apply_network.index("WiFi.setHostname(") < apply_network.index("WiFi.mode
 assert not re.search(r"(?m)^\s*(?:WiFi\.begin|WiFi\.disconnect|esp_wifi_disconnect)\(", network), (
     "The service loop must never restart or disconnect a live STA association"
 )
-assert "WiFi.reconnect()" in network
-assert "ROUTER_LAST_RESORT_RETRY_MS=30000UL" in ino
+assert "WiFi.reconnect()" not in re.sub(r"//[^\n]*", "", network)
+assert "netpolicy::ATTEMPT_TIMEOUT_MS" in network
 assert "routerGuard.expired(" in network and "parkRouter(" in network
 assert "staAssociated" in network, "Last-resort retry must not interrupt an associated STA"
 assert "ARDUINO_EVENT_WIFI_STA_CONNECTED" in ino

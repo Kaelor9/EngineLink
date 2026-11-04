@@ -21,16 +21,18 @@ assert "const bool hasIp=routerIpReady;" in network
 assert "const bool mdnsInterfaceReady=(routerConfigured()&&!routerHold)?routerIpReady:apIpReady;" in network
 assert "&&routerIpReady&&staIpAt" in network
 
-# The initial calibration is just as disruptive as repeat calibration.
-# It must not start during active app traffic.
-assert "if(lastHttpMs&&(uint32_t)(millis()-lastHttpMs)<20000UL)continue;" in tune
-assert "if(!fresh&&(uint32_t)(millis()-lastHttpMs)<20000UL)continue;" not in tune
+# No radio tests in the background: the ping/channel test runs only after a
+# speed test on the router, and never changes the transmit power.
+assert "if(!radioTestWanted)continue;" in tune
+assert "if(otaActive||httpBusySince)continue;" in tune
+radio=body(ino,"void runRadioTest(uint8_t level) {")
+assert "setTxPower" not in radio
+assert "radioTestWanted=true" in body(ino,"void initializeWeb(){")
 # All HTTP listeners, including the live API on port 81 and speed test on
-# port 82, must mark actual app traffic so auto-calibration stays out of the way.
+# port 82, mark actual app traffic (used by the rescue return rule).
 assert "lastHttpMs=millis();  // live API calls" in ino
+assert "if(!parsed||uri()!=\"/api/health\")lastHttpMs=t0;" in ino, "The loopback self-check is not app traffic"
 assert "lastHttpMs=millis();  // speed downloads" in ino
-assert "if (webBusyNow()) { interrupted=true; break; }" in ino
-assert "WiFi.setTxPower(elTxPower[current]);" in ino
 
 # The 0.13.2 crash backtrace repeatedly reached ChunkOut::flush via
 # handleExportRaw's compressed transfer on a slow link. Keep this particular

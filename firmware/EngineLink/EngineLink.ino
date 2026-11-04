@@ -53,18 +53,25 @@
 #include "shiftrules.h"
 #include "otaheader.h"
 #include "routerguard.h"
+#include "netpolicy.h"
 #include "miniz.h"   // the deflate compressor in the chip's ROM
 #include "wifiwpa3.h"
 #include "netboost.h"
 #include "crashinfo.h"
 #include "linktune.h"
 #include "model.h"
-// Transmit power step in use (0 = 8.5 dBm .. 4 = 19.5 dBm), chosen by
-// linkTuneTask and kept in NVS ("txal").
-uint8_t txLevel=3;
+// Transmit power step (0 = 8.5 dBm .. 4 = 19.5 dBm). Fixed: the automatic
+// choice (0.12.2-0.14.1) never took effect at start (the country setting
+// reset the power to 20 dBm, field reports #95/#125/#130) and its test never
+// completed in the field. The board has run well at 20 dBm. wifi.ino sets it
+// after the country and checks that the driver really uses it.
+constexpr uint8_t TX_LEVEL_FIXED=4;
+uint8_t txLevel=TX_LEVEL_FIXED;
+uint32_t txReapplied=0;   // the driver had another power and it was set again
+volatile bool radioTestWanted=false;  // pings + channel survey (linkTuneTask)
 SpeedLogRec speedLog[SPEED_LOG_N];uint8_t speedLogCount=0;
 
-#define EL_VERSION "0.14.1"
+#define EL_VERSION "0.15.0"
 // Releases list published by the Pages workflow; firmware files come from
 // GitHub Releases of the same repository. Nothing else is downloaded.
 #define EL_RELEASES_URL "https://kaelor9.github.io/EngineLink/releases.json"
@@ -79,7 +86,7 @@ SpeedLogRec speedLog[SPEED_LOG_N];uint8_t speedLogCount=0;
 // used to stop.
 SemaphoreHandle_t engineMx=nullptr;
 bool engineTaskOn=false;
-volatile uint32_t lastHttpMs=0;   // last served request (any client)
+volatile uint32_t lastHttpMs=0;   // last app request (not the loopback self-check)
 volatile uint32_t httpBusySince=0; // a handler is running since (0 = idle)
 volatile bool httpHealPending=false;
 uint32_t httpSelfFails=0,httpHeals=0,httpSelfRestarts=0;
@@ -199,6 +206,10 @@ float sogKnots=NAN;
 uint64_t sogAt=0;
 volatile bool ntpNotification=false;
 uint32_t loopMaxMs=0;
+// Longest time of each part of loop() (the loop holds the engine lock, so
+// this is also how long engine reading can wait). Names in netreport.ino.
+constexpr uint8_t LOOP_PARTS=9;
+uint32_t loopPartMaxMs[LOOP_PARTS]={};
 // Wi-Fi firmware update
 bool otaActive=false,otaResumeLogging=false,otaChecked=false;
 String otaError="";
@@ -260,27 +271,40 @@ uint8_t apChannelNow=6;          // channel the AP actually uses
 uint8_t staChannel=0;            // router channel found by the last scan
 uint8_t staBssid[6]={};
 bool staBssidKnown=false;
-// A failed AP+STA attempt must NEVER permanently remove the rescue SoftAP.
-// Once a router is parked, only choosing Connect in the app resumes it.
+// Rescue: the router could not be reached, EngineLink's own Wi-Fi is on
+// until the router is back. Not kept over a restart (each start in router
+// mode tries the router first); only the reason is saved for the report.
 bool routerHold=false;
 uint32_t routerFallbacks=0;
-// Going back to the router by itself after a fallback to standalone: every
-// 10 minutes at first, doubling after each failed return (up to 2 hours).
-uint32_t routerProbeAt=0,routerProbeEvery=600000UL,routerAutoReturns=0;
+// Going back to the router by itself from rescue: a look every minute,
+// doubling after each failed return (up to 15 minutes), see netpolicy.h.
+uint32_t routerProbeAt=0,routerProbeEvery=netpolicy::PROBE_EVERY_MS,routerAutoReturns=0;
 bool routerAutoReturning=false,routerProbing=false,routerProbeHadSta=false;
 uint32_t routerProbeStarted=0;
 RouterGuard routerGuard;
+// Router reconnects are EngineLink's own (Arduino's auto-reconnect is off):
+// after every failed or lost connection one esp_wifi_connect() after a
+// growing pause (netpolicy.h). Written by the Wi-Fi event callback, acted on
+// in serviceNetwork().
+volatile uint32_t staRetryAt=0;      // next connect attempt (0 = none planned)
+volatile uint16_t staRetryFails=0;   // failed attempts in a row
+volatile bool staConnecting=false;   // an attempt is running (no answer yet)
+volatile uint32_t staConnectAt=0;
+uint32_t staRetries=0;               // attempts made by the back-off
+// Rescue: looks for the router (count) and whether the last return failed.
+uint32_t routerProbeCount=0,routerProbeSeen=0;
+bool routerReturnFailed=false;
+uint8_t routerKnownChannel=0;        // last channel the router was on (NVS "rch")
 // AP and STA are mutually exclusive; 192.168.4.x is a valid router subnet.
 bool staConflict=false;
-// The driver owns association and automatic re-association. The application
-// must not repeatedly call begin()/disconnect() while authentication runs.
+// The application never calls begin()/disconnect() while authentication runs;
+// it only starts a new attempt after the driver reported the last one over.
 uint32_t staFails=0,staConnects=0,apRestarts=0,lastApCheck=0;
 uint32_t routerAttempts=0,routerLastSuccessMs=0,staConnectedAt=0;
 volatile uint8_t staLastReason=0;
 volatile uint32_t staLastDropAt=0;
 volatile bool staAssociated=false;
-uint32_t staDownSince=0,routerLastRecoveryAttempt=0;
-uint32_t routerForcedReconnects=0;
+uint32_t staDownSince=0;
 // Only the driver event callback writes these measurements. The main loop
 // reads snapshots and performs network operations outside the callback.
 volatile uint32_t staBeginAt=0,staAssociatedAt=0,staIpAt=0,staIpLostAt=0;
@@ -291,17 +315,6 @@ volatile uint32_t staUnexpectedDisconnects=0;
 // Count failed association attempts separately from dropped live connections.
 volatile uint32_t staAssociationFailures=0;
 volatile bool staHadIp=false;
-// Arduino-ESP32 3.3.12 does not auto-retry WIFI_REASON_SA_QUERY_TIMEOUT.
-// Queue ONE non-disruptive retry for the normal loop; never reconnect in callbacks.
-volatile uint32_t saQueryRetryAt=0;
-// Transmit power that the router can hear. Field reports (WPA2 on a Zyxel):
-// EngineLink hears the router strongly (-45 dBm) while the router does not
-// answer EngineLink's login frames (codes 2/15, about once a second), DHCP
-// takes 29 s and links drop: frames from EngineLink are lost. Full transmit
-// power can distort on some ESP32-S3 boards or pull the supply down. After 12
-// unanswered logins in a row EngineLink lowers its power one step (15 -> 11
-// -> 8.5 dBm) and keeps the level that works.
-volatile uint16_t txNoAnswer=0;uint32_t txAutoSteps=0;
 // Router security, like most ESP32 products: 0 = WPA2 (the driver starts
 // without WPA3, see wifiwpa3.cpp), which works on WPA2 and WPA2/WPA3 mixed
 // routers; 1 = WPA3 allowed, only for a router that needs it (WPA3-only).
@@ -313,7 +326,6 @@ bool routerGotIpThisSession=false;
 uint32_t routerHoldSince=0,staSecSwitches=0;
 // A macro: Arduino puts its prototypes before the first function.
 #define saveSecMode() do{Preferences sp_;if(sp_.begin("enginelink",false)){sp_.putUChar("smode",staSecMode);sp_.end();}}while(0)
-uint32_t saQueryFastRetries=0;
 // The browser's 32-KiB speed measurement includes HTTP setup. Track the
 // worker's own TCP write duration separately to locate actual bottlenecks.
 volatile uint32_t speedTxLastMs=0,speedTxLastBytes=0,speedTxLastWrites=0,speedTxLastAt=0;
@@ -530,18 +542,31 @@ void loop(){
     int handled=0;
     while(framesQueue&&handled<32&&xQueueReceive(framesQueue,&f,0)==pdTRUE){processFrame(f);handled++;}
   }
+  // Each part's longest time goes to the network report (loopPartMaxMs).
+  uint32_t partAt=millis();
+  auto part=[&partAt](uint8_t i){const uint32_t t=millis(),d=t-partAt;if(d>loopPartMaxMs[i])loopPartMaxMs[i]=d;partAt=t;};
   serviceCAN();
+  part(8);
   web.handleClient();
+  part(0);
   serviceSD();
+  part(1);
   if(!engineTaskOn){serviceKad();serviceAutoPoll();}
   serviceDiag();
   if(!engineTaskOn){serviceFast();serviceEngines();}
+  part(2);
   serviceRawCleanup();
+  part(3);
   serviceHistory();
+  part(4);
   serviceNetwork();
+  part(5);
   updateLED();
+  part(6);
   serialStatus();
+  part(7);
   restartLogDate();
+  part(8);
   // Watchdog for the engine task: stuck for 10 s without waiting for the lock
   // means something inside it hangs. Without it nothing is read, so start over
   // (totals are saved first; automatic reading starts again by itself).

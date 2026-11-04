@@ -5,7 +5,7 @@ version instead of one update each. Newest at the bottom of each section.
 
 ## App
 
-- **Drive test, animation continuity — fixed in source, awaiting next firmware release.**
+- **Drive test, animation continuity — released in 0.15.0.**
   [PR #131](https://github.com/Kaelor9/EngineLink/pull/131) keeps the scene mounted
   while 1 Hz `/api/fast` samples arrive, updates numbers in place, and hides
   the second mooring scene under reduced motion. Confirm smooth playback on
@@ -27,6 +27,25 @@ version instead of one update each. Newest at the bottom of each section.
 ## Firmware
 
 ## To check on the boat
+
+- **Wi-Fi 0.15.0 test plan** (send a Wi-Fi report after each step; the report
+  now has reconnect attempts, rescue looks, real transmit power and the
+  longest loop parts):
+  1. 10 starts with the router already on: router IP in under 5 s (median).
+  2. Router and EngineLink switched on together (boat power), 5 times: ends on
+     the router without touching anything.
+  3. Router restarted while in use: no rescue for outages under 2 minutes;
+     back within about 15 s of the router.
+  4. Router off for 5 minutes: EngineLink Wi-Fi after 2 minutes; with the app
+     closed it is back on the router within about a minute of the router.
+  5. Standalone for 2 hours with an iPhone and an Android phone (mobile data
+     on): no stalls over 2 s; check that Android keeps using EngineLink Wi-Fi
+     without internet.
+  6. "Test speed" 5 times in each mode: router at least 400 kB/s, standalone
+     at least 500 kB/s.
+  7. With engines running: switch modes and restart the router; the engine
+     report's longest wait (engineWait max) stays under 200 ms.
+  8. 24 hours on the router: count of drops and reconnect times in the report.
 
 - Run the drive test at the dock (0.14.0) and check that bit 0x100 in 264
   means neutral and 0x20 the compressor.
