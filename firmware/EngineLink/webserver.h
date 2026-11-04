@@ -7,6 +7,7 @@ class EngineLinkWebServer : public WebServer {
 public:
   explicit EngineLinkWebServer(int port):WebServer(port){}
   uint32_t served=0,reused=0,evicted=0,slowestMs=0;
+  uint32_t accepted=0,parseFailures=0; // TCP reached port 80 vs valid HTTP parsed
   uint32_t slowestInteractiveMs=0,slowestTransferMs=0;
   uint32_t worstParseMs=0,worstHandlerMs=0;
   String slowPath="";
@@ -37,6 +38,7 @@ public:
     for(;;){
       NetworkClient c=_server.accept();
       if(!c)break;
+      ++accepted;
       c.setNoDelay(true);
       elBoostSocket(c.fd(),11488);   // 8 packets in flight instead of 4
       int slot=-1,oldest=0;
@@ -73,6 +75,7 @@ private:
     if(parsedAt-t0>worstParseMs)worstParseMs=parsedAt-t0;
     // App traffic (for the rescue return rule), not the board's own
     // loopback self-check of /api/health every 20 s.
+    if(!parsed)++parseFailures;
     if(!parsed||uri()!="/api/health")lastHttpMs=t0;
     if(parsed){
       _contentLength=CONTENT_LENGTH_NOT_SET;_responseCode=0;_clearResponseHeaders();
