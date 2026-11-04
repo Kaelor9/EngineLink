@@ -60,23 +60,39 @@ void handleSdWipe(){
   reply(true,String("SD card wiped: ")+n+" files deleted");
 }
 // Deletes raw logs older than the chosen number of days (needs the clock).
+// Once a day: delete raw logs older than cfg.rawKeepDays. In small steps
+// (a few directory entries, or one file, per loop pass): done in one go it
+// held the main loop, the web server and engine reading for 7.4 s (#141).
 void serviceRawCleanup(){
+  static File root;
+  static String doomed[16];
+  static uint8_t n=0,removed=0;
+  static time_t limit=0;
+  static bool scanning=false,removing=false;
+  if(scanning||removing){
+    if(!sdReady||calActive||otaActive){if(root)root.close();scanning=removing=false;n=removed=0;return;}
+    if(removing){
+      if(removed<n){SD.remove(doomed[removed]);doomed[removed++]="";return;}
+      removing=false;n=removed=0;return;
+    }
+    for(uint8_t k=0;k<4;k++){
+      File f=root.openNextFile();
+      if(!f||n>=16){if(f)f.close();root.close();scanning=false;removing=n>0;removed=0;return;}
+      String name=f.name();if(name.startsWith("/"))name=name.substring(1);
+      const time_t w=f.getLastWrite();
+      if(!f.isDirectory()&&isRawName(name)&&w>1700000000&&w<limit&&("/"+name)!=sessionName&&("/"+name)!=calName)doomed[n++]="/"+name;
+      f.close();
+    }
+    return;
+  }
   if(!cfg.rawKeepDays||!sdReady||!validWall()||calActive||otaActive)return;
   if(lastRawCleanup&&(uint32_t)(millis()-lastRawCleanup)<86400000UL)return;
   if(!lastRawCleanup&&millis()<120000)return;
   lastRawCleanup=millis();
-  const time_t limit=time(nullptr)-(time_t)cfg.rawKeepDays*86400;
-  File root=SD.open("/");
+  limit=time(nullptr)-(time_t)cfg.rawKeepDays*86400;
+  root=SD.open("/");
   if(!root)return;
-  String doomed[16];uint8_t n=0;
-  for(File f=root.openNextFile();f&&n<16;f=root.openNextFile()){
-    String name=f.name();if(name.startsWith("/"))name=name.substring(1);
-    const time_t w=f.getLastWrite();
-    if(!f.isDirectory()&&isRawName(name)&&w>1700000000&&w<limit&&("/"+name)!=sessionName&&("/"+name)!=calName)doomed[n++]="/"+name;
-    f.close();
-  }
-  root.close();
-  for(uint8_t i=0;i<n;i++)SD.remove(doomed[i]);
+  n=removed=0;scanning=true;
 }
 void handleExportTrips(){
   uint32_t ids[MAX_TRIPS];uint8_t n;

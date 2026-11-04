@@ -71,7 +71,7 @@ uint32_t txReapplied=0;   // the driver had another power and it was set again
 volatile bool radioTestWanted=false;  // pings + channel survey (linkTuneTask)
 SpeedLogRec speedLog[SPEED_LOG_N];uint8_t speedLogCount=0;
 
-#define EL_VERSION "0.15.0"
+#define EL_VERSION "0.15.1"
 // Releases list published by the Pages workflow; firmware files come from
 // GitHub Releases of the same repository. Nothing else is downloaded.
 #define EL_RELEASES_URL "https://kaelor9.github.io/EngineLink/releases.json"
@@ -440,6 +440,11 @@ void setup(){
   pinMode(LED_PIN,OUTPUT);digitalWrite(LED_PIN,LOW);
   led.begin();led.setBrightness(ledBrightness);led.clear();led.show();
   Serial.begin(115200);
+  // USB serial must never hold the board up. With a computer attached that
+  // does not read the port, each print waited up to 2 s (20 x 100 ms in the
+  // Arduino core's HWCDC.cpp): the main loop, web server and engine reading
+  // stood still for up to 9.4 s (#141). Without a reader output is dropped.
+  Serial.setTxTimeoutMs(0);
   delay(120); // launch Wi-Fi promptly; USB serial can attach later
   Serial.println("\nEngineLink " EL_VERSION " - engine monitoring, listen-only at boot unless automatic reading is on");
   {

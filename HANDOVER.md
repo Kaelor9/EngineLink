@@ -194,6 +194,21 @@ engine reports #104/#107:
 - The loopback web self-check counted as app use, so a phone joined to the
   access point held back the return from rescue.
 
+First 0.15.0 reports (#141–#143, 2026-11-04, board started over USB):
+- Router join took 1.4 s and DHCP 1.1 s; pings to the router were 1–3 ms
+  with 0 % loss; no disconnects. Router speed tests reached 490–600 kB/s at
+  an 18 ms round trip.
+- The main loop stood still for up to 9.4 s (engine wait 9.4 s). Per part:
+  - serial 2.2 s: the Arduino core's HWCDC waits up to 20 × 100 ms per write
+    when a USB host is attached but not reading. Fixed with
+    `Serial.setTxTimeoutMs(0)`.
+  - network 6 s: three prints in a mode switch, the same cause.
+  - raw cleanup 7.4 s: a one-pass SD directory scan, now incremental.
+- Standalone speed tests on the phone came in at 265–346 kB/s with a 91–99 ms
+  round trip, against 18 ms on the router with the same phone. Not explained
+  yet; possibly the phone's power save on a network without internet. Measure
+  again without USB attached before changing anything.
+
 ## Field data
 
 The board files its reports as GitHub issues in this repository: "Engine report:
