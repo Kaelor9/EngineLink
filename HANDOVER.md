@@ -54,7 +54,8 @@ program, so they share the globals in `EngineLink.ino`.
 | `diagnosis.ino` | Sample ring, rules, events and black boxes, engine life story, series downloads |
 | `gearbox.ino` | Gear and clutch: four readings a second (ring, trip and event files), shift timing per engine, compressor, warm-up and charging, `/api/shifts` and `/api/fast` |
 | `storage.ino` | SD card, LittleFS, NVS settings and totals, restart log, raw logging |
-| `wifi.ino` | Own access point or router, reconnect, rescue and return, scans, mDNS |
+| `wifi.ino` | Own access point or router (simple since 0.16.2, kept under 300 lines by `tools/test_wifi_simple.py`), fallback, scans, mDNS |
+| `serialcmd.ino` | USB serial commands and the Wi-Fi log/reports on the SD card (0.16.3) |
 | `webserver.h` | The port 80 web server (connection pool) |
 | `webapi.ino` | JSON helpers, the app's API handlers and the route table |
 | `netreport.ino` | Network report, ports 81 and 82, web server self-check, radio test task |
@@ -209,6 +210,34 @@ First 0.15.0 reports (#141–#143, 2026-11-04, board started over USB):
   round trip, against 18 ms on the router with the same phone. Not explained
   yet; possibly the phone's power save on a network without internet. Measure
   again without USB attached before changing anything.
+
+Wi-Fi 0.16.0–0.16.5 (2026-11-04, standalone on the boat with an iPhone):
+- 0.16.0 (0.15 Wi-Fi): the phone saw `EngineLink` but could not join with
+  `12345678`, then the network disappeared. 0.16.1 put back the 0.12.15 Wi-Fi
+  code; it also failed.
+- Owner's decision: Wi-Fi code must stay dead simple, like ordinary ESP32
+  projects, never back to ~1000 lines. Don't touch the app UI for Wi-Fi work.
+  0.16.2 rewrote `wifi.ino`: one mode at a time (AP or router), AP
+  192.168.4.1 channel 6, max 6 phones, router fallback to AP after 120 s
+  without IP, router retried every 10 min while no phone is joined. The old
+  contract tests (network architecture, router reliability, scan contract)
+  were replaced by `tools/test_wifi_simple.py`.
+- 0.16.3 USB log: AP up and "Phones connected now: 1" but "HTTP requests: 0".
+  Root cause: 0.16.2 dropped `web.rebindNetwork()` after the AP came up, so
+  port 80 never listened on 192.168.4.1. 0.16.4 restored the rebind (serial
+  prints `HTTP/80 listening on 192.168.4.1`).
+- 0.16.4 USB report: phone joined at +23 s, left at +40 s (reason 8), still 0
+  HTTP requests; the driver reported 8.5 dBm. 0.16.5 removed the AP-only
+  8.5 dBm override and counts DHCP leases, port-80 accepts and HTTP parse
+  failures separately. Not yet verified on the board (see TODO).
+- Reset reason 11 in web-installer logs is the console's USB reset, not a crash.
+
+USB serial commands (0.16.3, 115200 baud, web installer "Logs & console" or any
+serial monitor): `wifi` (full Wi-Fi report), `wifi log` / `read wifi log`
+(`/WIFI.LOG`), `wifi reports` / `read wifi report from sd` (`/WIFIREP.TXT`),
+`wifi save`, `status`, `help`. The SD log gets one line per Wi-Fi event; a full
+report is appended 2 min after boot and every 30 min. Both files are capped at
+256 KB and rotate to `.OLD`, so they survive reflashing.
 
 ## Field data
 
