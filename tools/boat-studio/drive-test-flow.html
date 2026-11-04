@@ -372,9 +372,9 @@ function keysScene(v){const a=kf('0%,20%{transform:rotate(0deg)}35%,85%{transfor
 
 // ===================== NEW: twin Volvo Penta levers =====================
 // Lever angle per step (side view: forward = towards the bow = right).
-const LANG={N:[0,0],F:[24,0],R:[-24,0],F2:[42,42],V:[30,0]};
-const LTXT={N:['NEUTRAL','NEUTRAL'],F:['FORWARD','NEUTRAL'],R:['REVERSE','NEUTRAL'],F2:['FORWARD','FORWARD'],V:['NEUTRAL + throttle','NEUTRAL']};
-const LRPM={N:[600,600],F:[620,600],R:[620,600],F2:[1500,1500],V:[1500,600]};
+const LANG={N:[0,0],F:[24,0],R:[-24,0],F1:[34,34],F2:[42,42],F3:[50,50],V:[30,0]};
+const LTXT={N:['NEUTRAL','NEUTRAL'],F:['FORWARD','NEUTRAL'],R:['REVERSE','NEUTRAL'],F1:['FORWARD','FORWARD'],F2:['FORWARD','FORWARD'],F3:['FORWARD','FORWARD'],V:['NEUTRAL + throttle','NEUTRAL']};
+const LRPM={N:[600,600],F:[620,600],R:[620,600],F1:[1000,1000],F2:[1500,1500],F3:[2000,2000],V:[1500,600]};
 // side view of one binnacle with two levers; port lever drawn nearer (front)
 function binSide(cx,cy,angs,{active=[1,0],chromeStyle=0,anim=true,scale=1,ghost=false,zones=false,letters=false,frameOk=false,dark=false}={}){
   const st=(i)=>{const k=kf(`0%,15%{transform:rotate(0deg)}40%,85%{transform:rotate(${angs[i]}deg)}100%{transform:rotate(0deg)}`,6);return {css:k.css,st:k.st};};
@@ -425,17 +425,18 @@ function tachOne(cx,cy,r,rpm,col,name){const a=(-225+rpm/5000*270)*Math.PI/180,s
   return {g:g+label(cx,cy+r+12,name,col,10),css:nk.css};}
 function tachPair(cx,cy,r,rpms){const a=tachOne(cx-r-10,cy,r,rpms[0],PORT,'Port'),b=tachOne(cx+r+10,cy,r,rpms[1],STB,'Starboard');return {g:a.g+b.g,css:a.css+b.css};}
 const LEVERS2=['Volvo-håndtag fra siden, det aktive i teal','Volvo-håndtag fra siden, det andet næsten usynligt','Forfra som på billedet, pile FWD og REV','Forfra og lille sidebillede','Ovenfra: to knopper i skinner med F – N – R','Fra siden med farvezoner R | N | F bag håndtaget','Fra siden: start- og slutstilling med pil','Fra siden med skilt: "PORT: FORWARD"','Fra siden og to omdrejningstællere','Forfra og to omdrejningstællere','Ovenfra med rpm under hver knop','Fra siden: store bogstaver R, N, F','Fra siden: grøn ramme, når stillingen er rigtig','Fra siden og din båd med pil','Stregtegning: hvide streger, mørk baggrund','Forfra med N, F eller R under hver knop','Forfra, ingen pile, kun det aktive håndtag lyser','Ovenfra og forfra side om side'];
-function leverScene2(v,s){const an=LANG[s],act=s==='F2'?[1,1]:[1,0],rp=LRPM[s],tx=LTXT[s],title=s==='F2'?'Both levers: FORWARD, 1,500 rpm':s==='V'?'Port lever: warm-up, 1,500 rpm in neutral':'Port lever: '+tx[0]+(s==='N'?'':', idle');
+function leverScene2(v,s,side){const both=s==='F1'||s==='F2'||s==='F3'||side==='b';side=both?'b':side||'p';const a0=LANG[s][0],an=both?[a0,a0]:side==='s'?[0,a0]:LANG[s],act=side==='b'?[1,1]:side==='s'?[0,1]:[1,0],rp=side==='s'?[LRPM[s][1],LRPM[s][0]]:LRPM[s],tx=LTXT[s],who=side==='s'?'Starboard':'Port';
+  const rpmT={F1:'1,000',F2:'1,500',F3:'2,000'}[s],title=both?(rpmT?`Both levers: FORWARD, ${rpmT} rpm`:`Both levers: ${tx[0]}, idle`):s==='V'?`${who} lever: warm-up, 1,500 rpm in neutral`:s==='N'?'Both levers: NEUTRAL':`${who} lever: ${tx[0]}, idle`;
   const P=(g,css)=>withCss(css,picto(g));
   switch(v){
   case 0:{const b=binSide(160,124,an,{active:act});return P(b.g+label(160,15,title,K.line,12),b.css);}
   case 1:{const b=binSide(160,124,an,{active:[1,s==='F2'?1:0]});return P(b.g.replace(/opacity="0.38"/g,'opacity=".1"')+label(160,15,title,K.line,12),b.css);}
   case 2:{const b=binFront(160,128,an,{active:act});return P(b.g,b.css);}
-  case 3:{const b=binFront(120,128,an,{active:act,arrows:false}),c=binSide(262,126,an,{active:act,scale:.55});return P(b.g+c.g+label(262,30,'From the side',K.soft,9),b.css+c.css);}
+  case 3:{const b=binFront(120,132,an,{active:act,arrows:false,labels:false}),c=binSide(262,130,an,{active:act,scale:.55});return P(b.g+c.g+label(60,44,'PORT',PORT,11)+label(178,44,'STBD',STB,11)+label(262,52,'From the side',K.soft,9)+label(160,16,title,K.line,12),b.css+c.css);}
   case 4:{const b=binTop(160,80,an,{active:act});return P(b.g,b.css);}
   case 5:{const b=binSide(160,124,an,{active:act,zones:true});return P(b.g+label(160,15,title,K.line,12),b.css);}
   case 6:{const b=binSide(160,128,an,{active:act,ghost:true});return P(b.g,b.css);}
-  case 7:{const b=binSide(110,128,an,{active:act});return P(b.g+`<rect x="196" y="56" width="112" height="56" rx="10" fill="${K.dark}" stroke="${K.teal}" stroke-width="2"/>${label(252,80,'PORT',PORT,13)}${label(252,100,tx[0].split(' ')[0],K.teal,14)}`,b.css);}
+  case 7:{const b=binSide(110,128,an,{active:act});return P(b.g+`<rect x="196" y="56" width="112" height="56" rx="10" fill="${K.dark}" stroke="${K.teal}" stroke-width="2"/>${label(252,80,who.toUpperCase(),side==='s'?STB:PORT,13)}${label(252,100,tx[0].split(' ')[0],K.teal,14)}`,b.css);}
   case 8:{const b=binSide(80,130,an,{active:act,scale:.9}),t=tachPair(232,80,36,rp);return P(b.g+t.g,b.css+t.css);}
   case 9:{const b=binFront(98,132,an,{active:act,arrows:false,labels:false}),t=tachPair(240,80,32,rp);return P(b.g+t.g,b.css+t.css);}
   case 10:{const b=binTop(160,72,an,{active:act,rpm:rp});return P(b.g,b.css);}
@@ -650,6 +651,21 @@ document.addEventListener('click',e=>{const c=e.target.closest('[data-k]'),t=e.t
 document.getElementById('copy').onclick=async()=>{const el=document.getElementById('code'),t=el.textContent,b=document.getElementById('copy');
   try{await navigator.clipboard.writeText(t);b.textContent='Kopieret';}catch(_){const r=document.createRange();r.selectNodeContents(el);const s=getSelection();s.removeAllRanges();s.addRange(r);b.textContent='Markeret: kopiér selv';}
   setTimeout(()=>b.textContent='Kopiér valget',2500);};
+// For the app: the owner's chosen pictures as markup, classes prefixed dtf-,
+// the boat left out (the app has it). Used by tools/boat-studio/export_flow.js.
+const DTF_CLS=['pulse','blink','spin','sweep360','sweep','grow2','grow','rock','fadein','arm1','arm2','kick1','kick2','cl1','cl2','pblade'];
+function exportFlow(){
+  const fix=h=>{h=h.replace(/class="([^"]*)"/g,(m,c)=>'class="'+c.split(' ').map(x=>DTF_CLS.includes(x)?'dtf-'+x:x).join(' ')+'"');
+    h=h.replace(/\.(arm1|arm2|kick1|kick2|cl1|cl2|pblade|grow2)\{animation:(arm|kick|clb|pbl|grow2)\b/g,'.dtf-$1{animation:dtf-$2').replace(/@keyframes (arm|kick|clb|pbl|grow2)\b/g,'@keyframes dtf-$1');
+    return h.split(BOATL).join('<!--BL-->').split(BOAT).join('<!--B-->');};
+  // shared classes (page CSS), prefixed
+  const css=[...document.querySelectorAll('style')].map(x=>x.textContent).join('\n').split('\n').filter(l=>/^\.(rock|pulse|blink|spin|sweep|sweep360|grow|fadein)\{/.test(l)).join('').replace(/\.(rock|pulse|blink|spin|sweep360|sweep|grow|fadein)\{animation:(\w+)/g,'.dtf-$1{animation:dtf-$2').replace(/@keyframes (\w+)/g,'@keyframes dtf-$1');
+  Object.assign(SW2,{story:0,sym:0,place:0,show:0,drive:1,ladder:3,shorts:3});
+  // The owner chose "Nobody in the water" option 1 (from above); the boat with the ladder down goes along.
+  const out={css,boatL:BOATL,swim:fix(swimScene(0)),stop:fix(keysScene(1)),warm:fix(warmScene(4)),look:fix(lookScene(0)),lever:{}};
+  for(const st of ['N','F','R','V'])for(const side of ['p','s'])out.lever[st+'_'+side]=fix(leverScene2(3,st,side));
+  for(const st of ['F','F1','F2','F3'])out.lever[st+'_b']=fix(leverScene2(3,st,'b'));
+  return out;}
 controls();screen();
 </script>
 </body></html>
