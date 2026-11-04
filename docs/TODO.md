@@ -27,6 +27,17 @@ version instead of one update each. Newest at the bottom of each section.
   warm-up, lookout and lever scenes keep their old look for now. Check on an
   iPhone after the release.
 
+- **Drive test steps as text — in source, awaiting the next release.** Each step
+  shows a PORT LEVER and a STARBOARD LEVER card with the position in words
+  (NEUTRAL / FORWARD / REVERSE, idle or rpm) and marks the lever to move.
+  Safety:
+  - a red warning when an engine is over 1,000 rpm at the dock, or when the
+    other engine is above idle in a one-engine step;
+  - Start works only when both engines are under 800 rpm.
+
+  The elaborate options page for the rest of the drive test
+  (`tools/boat-studio/drive-test-flow.html`) is kept but not used, to save work.
+
 ## Firmware
 
 ## To check on the boat

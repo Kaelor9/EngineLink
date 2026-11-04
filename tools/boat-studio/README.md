@@ -75,3 +75,15 @@ side · evenly spread · line colour 6 (red) · braided · quay point 7 (cleat o
 a plate) · pile 6 (with shadow) · quay 2 (wooden jetty). He still finds it too
 minimal; the next step offered is a slanted (three-quarter) perspective, real
 daylight colours and small movements (boat rocking, lines tightening).
+
+## Drive test flow options (2026-11-04, not chosen)
+
+`drive-test-flow.html` is the options page for the rest of the drive test:
+- the safety screens, including a side view with a swimmer, twin Volvo Penta
+  levers and two ignition keys;
+- the step screen, countdown, stop button and warnings;
+- the safety guards, with priority;
+- the result screen.
+
+Open it in a browser. The owner chose not to take it further for now, to save
+work. The app gets a simple text guide instead. Kept for later.

@@ -1210,21 +1210,6 @@ function sceneLook(){
   const css='@keyframes loC{0%,100%{transform:rotate(-22deg)}50%{transform:rotate(22deg)}}';
   return sceneWrap('look',body,css);
 }
-// The control lever from the side: N up, forward ahead, reverse back.
-function sceneLever(kind){
-  const ang={N:0,F:24,R:-24,F1:34,F2:44,F3:54,V:44}[kind];
-  const label=kind==='V'?'Neutral, with throttle':kind==='N'?'Neutral':kind==='R'?'Reverse, idle':kind==='F'?'Forward, idle':'Forward, more rpm';
-  const col=kind==='R'?SC.fender:kind==='N'?'var(--sub)':SC.line;
-  const body=`<rect width="320" height="180" fill="var(--track)"/>
-    <path d="M96 140 Q160 92 224 140" fill="none" stroke="var(--line)" stroke-width="10" stroke-linecap="round"/>
-    <text x="84" y="160" font-size="11" fill="var(--sub)">R</text><text x="156" y="88" font-size="11" fill="var(--sub)">N</text><text x="228" y="160" font-size="11" fill="var(--sub)">F</text>
-    <rect x="124" y="134" width="72" height="22" rx="8" fill="${SC.hull}" stroke="${SC.edge}" stroke-width="1.6"/>
-    <g style="transform-origin:160px 144px;animation:lv${kind} 6s ease-in-out infinite"><rect x="155" y="66" width="10" height="80" rx="5" fill="${SC.edge}"/><rect x="138" y="54" width="44" height="20" rx="10" fill="${col}"/></g>
-    <text x="16" y="26" font-size="13" font-weight="600" fill="${SC.edge}">${label}</text>
-    ${kind==='V'?`<circle cx="262" cy="70" r="28" fill="${SC.hull}" stroke="${SC.edge}" stroke-width="2"/><g style="transform-origin:262px 70px;animation:lvNd 6s ease-in-out infinite"><path d="M262 70 L262 48" stroke="${SC.fender}" stroke-width="3" stroke-linecap="round"/></g>`:''}`;
-  const css=`@keyframes lv${kind}{0%,15%{transform:rotate(0)}45%,85%{transform:rotate(${ang}deg)}100%{transform:rotate(0)}}@keyframes lvNd{0%,20%{transform:rotate(-70deg)}55%{transform:rotate(40deg)}85%,100%{transform:rotate(-70deg)}}`;
-  return sceneWrap('lev',body,css);
-}
 function dtAnim(kind){
   if(kind==='lines')return sceneMoor();
   if(kind==='space')return sceneSea();
@@ -1232,8 +1217,27 @@ function dtAnim(kind){
   if(kind==='stop')return sceneStop();
   if(kind==='warm')return sceneWarm();
   if(kind==='look')return sceneLook();
-  return sceneLever(kind);
+  return '';
 }
+// Lever card: where each lever must be in this step, in words. The lever that
+// moves in this step is marked. No pictures: nothing to misread.
+const DT_POS={N:['NEUTRAL','idle'],F:['FORWARD','idle'],R:['REVERSE','idle'],F1:['FORWARD','about 1,000 rpm'],F2:['FORWARD','about 1,500 rpm'],F3:['FORWARD','about 2,000 rpm'],V:['NEUTRAL','short rev to about 1,500 rpm']};
+function dtLevers(st,prev,es){
+  const pos=(s,e)=>!s?'N':(s.ch==null||s.ch===e.ch)?s.lever:'N';
+  return `<div class="grid2" style="gap:10px">${es.map(e=>{const k=pos(st,e),[w,r]=DT_POS[k]||DT_POS.N,moves=k!==pos(prev,e);
+    const c=k==='R'?'var(--orange)':k==='N'||k==='V'?'var(--text)':'var(--teal)';
+    return `<div style="border-radius:14px;padding:12px;background:var(--track);border:2px solid ${moves?c:'transparent'}">
+      <div class="s13" style="color:${e.color};font-weight:650">${e.name.toUpperCase()} LEVER</div>
+      <div style="font-size:22px;font-weight:800;margin-top:4px;color:${c}">${w}</div><div class="s13 sub">${r}</div>
+      <div class="s12" style="margin-top:6px;font-weight:650;color:${moves?c:'var(--sub)'}">${moves?'Move this lever':'Leave as it is'}</div></div>`;}).join('')}</div>`;}
+// Safety at the dock: warn as soon as an engine is above idle where it should not be.
+function dtGuard(st,es,place){
+  if(!st)return '';const hi=es.filter(e=>fin(e.rpm)&&e.rpm>1000),other=st.ch!=null?es.filter(e=>e.ch!==st.ch&&fin(e.rpm)&&e.rpm>800):[];
+  let m='';
+  if(place==='dock'&&hi.length)m=`${hi.map(e=>e.name).join(' and ')} over 1,000 rpm at the dock. Back to idle and neutral now.`;
+  else if(other.length)m=`${other.map(e=>e.name).join(' and ')} is above idle. Only the ${es.find(e=>e.ch===st.ch).name.toLowerCase()} lever moves in this step.`;
+  return m?`<div class="card" style="border:2px solid var(--red);margin-bottom:12px"><div style="font-weight:750;color:var(--red)">${m}</div></div>`:'';}
+const dtIdle=es=>es.every(e=>!fin(e.rpm)||e.rpm<800);
 function dtState(){return S.dt||(S.dt={phase:'intro',place:null,safe:0,step:0,rec:[],busy:false,left:0,res:null});}
 function dtView(){
   const d=dtState(),es=engines(),lv=S.live;
@@ -1264,12 +1268,12 @@ function dtView(){
     const st=d.steps[d.step],e=st.ch!=null?es.find(x=>x.ch===st.ch):null;
     h+=`<div class="cth" style="padding:0 6px 8px"><span class="s13 sub">Step ${d.step+1} of ${d.steps.length}</span><button class="s13" style="color:var(--red)" data-a="dtStop">Stop the test</button></div>
       <div class="bar" style="height:6px;margin-bottom:14px"><i style="width:${d.step/d.steps.length*100}%;background:var(--teal)"></i></div>
-      <div class="card">${dtAnim(st.lever)}<div style="font-size:24px;font-weight:700;margin-top:12px;color:${e?e.color:'var(--text)'}">${esc(st.t)}</div><div class="s14" style="margin-top:4px">${esc(st.d)}</div>
+      <div data-dt-warn></div><div class="card">${dtLevers(st,d.steps[d.step-1],es)}<div style="font-size:24px;font-weight:700;margin-top:12px;color:${e?e.color:'var(--text)'}">${esc(st.t)}</div><div class="s14" style="margin-top:4px">${esc(st.d)}</div>
       <div class="grid2" style="gap:10px;margin-top:14px">${es.map(x=>`<div style="background:var(--track);border-radius:12px;padding:8px 10px"><div class="s12" style="color:${x.color}">${x.name}</div><div data-dt-engine="${x.ch}" style="font-weight:600">${fin(x.rpm)?NF(x.rpm,0)+' rpm':'—'} · ${fin(x.lph)?L(x.lph,1)+' '+U.ru():'—'}</div></div>`).join('')}</div>
       ${d.busy?(()=>{const el=st.s-d.left,now=el>=2;return `<div class="bar" style="height:8px;margin-top:14px"><i data-dt-progress style="width:${(1-d.left/st.s)*100}%;background:var(--teal);transition:width .9s linear"></i></div>
         <div data-dt-now style="font-size:19px;font-weight:650;margin-top:10px;color:${now?'var(--teal)':'var(--sub)'}">${now?esc(st.now):'Get ready…'}</div><div data-dt-left class="s13 sub" style="margin-top:2px">Recording, ${Math.ceil(d.left)} s left.</div>`;})():''}
-      <div class="grid2" style="gap:10px;margin-top:14px">${st.opt?`<button class="btn" data-a="dtSkip" ${d.busy?'disabled':''}>Skip</button>`:'<span></span>'}<button class="btn pri" data-a="dtRec" ${d.busy?'disabled':''}>${d.busy?'Recording…':'Start'}</button></div>
-      ${d.busy?'':'<div class="s12 sub" style="margin-top:8px">Press Start first. After two seconds the app says when to move the lever.</div>'}</div>`;
+      <div class="grid2" style="gap:10px;margin-top:14px">${st.opt?`<button class="btn" data-a="dtSkip" ${d.busy?'disabled':''}>Skip</button>`:'<span></span>'}<button class="btn pri" data-a="dtRec" ${d.busy||!dtIdle(es)?'disabled':''}>${d.busy?'Recording…':'Start'}</button></div>
+      ${d.busy?'':dtIdle(es)?'<div class="s12 sub" style="margin-top:8px">Press Start first. After two seconds the app says when to move the lever.</div>':'<div class="s12" style="margin-top:8px;color:var(--orange)">Both engines back to idle (under 800 rpm) to start this step.</div>'}</div>`;
     return h;
   }
   // Results
@@ -1296,7 +1300,8 @@ function dtPaint(){
   if(S.page!=='dtest')return;
   const d=S.dt;
   if(!d||d.phase!=='run')return;
-  const m=$('#main');
+  const m=$('#main'),w=m.querySelector('[data-dt-warn]');
+  if(w)w.innerHTML=dtGuard(d.steps&&d.steps[d.step],engines(),d.place);
   for(const e of engines()){
     const node=m.querySelector('[data-dt-engine="'+e.ch+'"]');
     if(node)node.textContent=(fin(e.rpm)?NF(e.rpm,0)+' rpm':'—')+' · '+(fin(e.lph)?L(e.lph,1)+' '+U.ru():'—');
