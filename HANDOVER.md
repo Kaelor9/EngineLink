@@ -76,6 +76,7 @@ Elsewhere:
 | `tools/test_*` | Host tests and source checks, run in CI (`tools/fwsource.py` reads the firmware for the source checks) |
 | `tools/build_demo.py`, `tools/demo/` | Browser demo (app + simulated boat) for GitHub Pages |
 | `docs/` | Protocol notes, hardware, status, release process |
+| `.claude/skills/`, `.claude/references/` | Agent Skills for Claude Code (third-party, MIT). When and how they are used is in `CLAUDE.md` |
 
 ## Build and release
 
