@@ -61,7 +61,8 @@ program, so they share the globals in `EngineLink.ino`.
 | `downloads.ino`, `sdexport.ino` | Streaming (compressed) downloads, CSV exports, SD clean-up, backup |
 | `updates.ino` | Firmware updates from GitHub or a file, with rollback; sends the GitHub reports |
 | `enginereport.ino` | Engine report after each trip: how well both engines were read, plus the diagnostics JSON |
-| `led.ino`, `nmea2000.ino`, `enginetest.ino` | Status LED, NMEA 2000 listener, engine test capture |
+| `led.ino`, `nmea2000.ino`, `enginetest.ino` | Status LED, NMEA 2000 listener (navigation, bus census, per-trip `.NAV` log, `/api/nmea`), engine test capture |
+| `nmea2k.h` | NMEA 2000 decoding, fast packets and census, host-tested (`tools/test_nmea2k.cpp`) |
 | `wifiwpa3.cpp/.h` | Wraps `esp_wifi_init` to switch WPA3-SAE off unless the router needs it |
 | `linktune.cpp/.h` | Transmit power steps; radio test (pings, channel survey) after a speed test |
 | `netpolicy.h` | Router reconnect back-off and rescue probe/return rules (host-tested) |

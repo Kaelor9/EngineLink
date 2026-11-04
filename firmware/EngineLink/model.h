@@ -277,6 +277,12 @@ constexpr uint8_t MAX_EVENTS=100;
 // Header of a trip log or black box file: Sample records follow.
 struct SeriesHead { uint32_t magic; uint32_t id,boot,startUp; int64_t startUtc; int8_t port; uint8_t pad[3]; };
 constexpr uint32_t SERIES_MAGIC=0x31535245; // "ERS1"
+// One second of NMEA 2000 navigation data during a trip (/TRIPS/Tnnnnnn.NAV,
+// after a 4-byte NAV_MAGIC). Not-available values: INT32_MIN, 0xFFFF,
+// INT16_MIN, 0xFFFFFFFF, 0xFF. Scales: lat/lon 1e-7 deg, speeds and angles
+// x100 (wind angle x10), depth cm, water/rudder x100, battery V x100, tank % x2.
+constexpr uint32_t NAV_MAGIC=0x3156414E;  // "NAV1"
+struct NavRec{uint32_t up;int32_t lat,lon;uint16_t sog,cog,hdg,stw;uint32_t depth;int16_t water,rudder;uint16_t batt,wind,windAng;uint8_t tank[2],sats,flags;};
 struct Segment {
   uint32_t boot=0;
   uint64_t startMs=0,endMs=0;

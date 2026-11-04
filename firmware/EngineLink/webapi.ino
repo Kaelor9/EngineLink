@@ -487,6 +487,7 @@ String makeLiveJson(){
   s+=",\"reserve\":";s+=cfg.reserve;
   s+="},\"price\":";jnum(s,latestPrice(),2);
   s+=",\"sog\":";if(sogFresh())jnum(s,sogKnots,1);else s+="null";
+  if(canReady){s+=",\"n2k\":";navJson(s);}
   s+=",\"net\":{\"ap\":";jsonString(s,cfg.apName);
   s+=",\"host\":";jsonString(s,cfg.hostName);
   s+=",\"cl\":";s+=WiFi.softAPgetStationNum();
@@ -1009,6 +1010,7 @@ void initializeWeb(){
   web.on("/api/wifi/connect",HTTP_POST,handleWifiConnect);
   web.on("/api/wifi/forget",HTTP_POST,handleWifiForget);
   web.on("/api/diag",HTTP_GET,handleDiag);
+  web.on("/api/nmea",HTTP_GET,handleNmea);
   web.on("/api/diag/test",HTTP_POST,handleDiagTest);
   web.on("/api/diag/focus",HTTP_POST,handleDiagFocus);
   web.on("/api/kad/discover",HTTP_POST,handleKadDiscover);

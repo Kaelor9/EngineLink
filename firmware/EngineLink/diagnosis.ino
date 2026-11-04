@@ -86,6 +86,8 @@ void tripSeriesReopen(){
 }
 void tripSeriesClose(bool keep){
   tripFastClose(keep);
+  tripNavClose();
+  if(!keep&&tripSeriesId&&sdReady&&cardInserted()){char nn[32];snprintf(nn,sizeof(nn),"/TRIPS/T%06lu.NAV",(unsigned long)tripSeriesId);SD.remove(nn);}
   if(!tripSeries)return;
   tripSeries.close();
   if(keep&&sdReady&&cardInserted()){
@@ -163,6 +165,7 @@ void serviceDiagnosis(){
   updateLife(in,s.up);
   if(totals.tripActive&&tripSeries){
     tripSeries.write((const uint8_t*)&s,sizeof(s));
+    tripNavWrite(s.up);
     if((uint32_t)(millis()-tripSeriesFlush)>10000){tripSeries.flush();tripSeriesFlush=millis();}
   }
   serviceBlackBoxes(s.up);
@@ -304,6 +307,7 @@ void handleExportSeries(){
   String s="trip_id,time_utc,seconds";
   const char *cols[]={"rpm","requested_rpm","fuel_lph","coolant_c","charge_air_c","boost_kpa","battery_v"};
   for(const char *side:{A,B})for(const char *c:cols){s+=',';s+=side;s+='_';s+=c;}
+  s+=',';s+=NAV_COLS;
   s+="\n";out.add(s);s="";
   for(uint8_t j=0;j<n;j++){
     char name[32];snprintf(name,sizeof(name),"/TRIPS/T%06lu.BIN",(unsigned long)ids[j]);
@@ -311,6 +315,12 @@ void handleExportSeries(){
     if(!f)continue;
     SeriesHead h;
     if(f.read((uint8_t*)&h,sizeof(h))!=sizeof(h)||h.magic!=SERIES_MAGIC){f.close();continue;}
+    // NMEA 2000 navigation of the same trip, matched by uptime (may be absent).
+    char nn[32];snprintf(nn,sizeof(nn),"/TRIPS/T%06lu.NAV",(unsigned long)ids[j]);
+    if(tripNav&&tripNavId==ids[j])tripNav.flush();
+    File nf=SD.open(nn,FILE_READ);uint32_t mg=0;
+    if(nf&&(nf.read((uint8_t*)&mg,sizeof(mg))!=sizeof(mg)||mg!=NAV_MAGIC)){nf.close();}
+    NavRec nr;bool nrOk=nf&&nf.read((uint8_t*)&nr,sizeof(nr))==sizeof(nr);
     Sample x;
     while(f.read((uint8_t*)&x,sizeof(x))==sizeof(x)){
       const long sec=(long)x.up-(long)h.startUp;
@@ -321,10 +331,12 @@ void handleExportSeries(){
         auto put=[&](int16_t v,float k,int d){s+=',';if(v!=NA16)s+=String((float)v/k,d);};
         put(x.rpm[c],1,0);put(x.req[c],1,0);put(x.lph10[c],10,1);put(x.cool10[c],10,1);put(x.air10[c],10,1);put(x.boost10[c],10,1);put(x.volt100[c],100,2);
       }
+      while(nrOk&&nr.up<x.up)nrOk=nf.read((uint8_t*)&nr,sizeof(nr))==sizeof(nr);
+      navCsv(s,nrOk&&nr.up==x.up?&nr:nullptr);
       s+="\n";
       if(s.length()>3000){out.add(s);s="";}
     }
-    f.close();
+    f.close();if(nf)nf.close();
   }
   out.add(s);
   endDownload(out);

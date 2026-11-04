@@ -49,6 +49,27 @@ version instead of one update each. Newest at the bottom of each section.
 
 ## Firmware
 
+- **NMEA 2000, listen only — in source, awaiting the next release.**
+  - EngineLink now decodes:
+    - position, course and speed over ground, GNSS fix, satellites and HDOP;
+    - heading, speed through water, depth, distance log;
+    - sea and air temperature, rudder, battery, wind, tank levels;
+    - other instruments' engine rpm and the time.
+  - Logged:
+    - every second of a trip to `/TRIPS/Tnnnnnn.NAV`, beside the engine log
+      so old trips keep their format;
+    - added as columns to the second-by-second export.
+  - In the app: a "Navigation" card on the Trip screen, and Settings ›
+    Diagnostics › GPS · NMEA 2000 › "Devices and data". That page lists every
+    device (maker from its address claim) and every message with its rate,
+    plus bus errors.
+  - The boat's survey lists Raymarine SeaTalk1 instruments (ST60 Tridata,
+    ST6001 autopilot, a Raymarine plotter, Raymarine VHF with DSC). They reach
+    NMEA 2000 only through a SeaTalk1-to-SeaTalkNG converter.
+  - To check on the boat: the bus page shows the Raymarine devices; depth,
+    log and heading match the ST60; the trip export has the navigation
+    columns.
+
 ## To check on the boat
 
 - **Wi-Fi 0.15.0 test plan** (send a Wi-Fi report after each step; the report
