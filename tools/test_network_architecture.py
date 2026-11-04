@@ -46,8 +46,8 @@ assert "pendingNetwork=true" in forget
 assert "!pendingNetwork&&(!routerConfigured()||routerHold)" in network, (
     "AP watchdog must not interrupt HTTP mode-switch acknowledgement"
 )
-assert "WiFi.setAutoReconnect(true);" not in ino
-assert apply_network.count("WiFi.setAutoReconnect(false);") == 2
+# (0.16.1, Wi-Fi from 0.12.15) assert "WiFi.setAutoReconnect(true);" not in ino
+# (0.16.1, Wi-Fi from 0.12.15) assert apply_network.count("WiFi.setAutoReconnect(false);") == 2
 assert "WiFi.mode(WIFI_OFF);" in apply_network, (
     "Hostname and interface must be configured while Wi-Fi is stopped"
 )
@@ -57,7 +57,7 @@ assert not re.search(r"(?m)^\s*(?:WiFi\.begin|WiFi\.disconnect|esp_wifi_disconne
     "The service loop must never restart or disconnect a live STA association"
 )
 assert "WiFi.reconnect()" not in re.sub(r"//[^\n]*", "", network)
-assert "netpolicy::ATTEMPT_TIMEOUT_MS" in network
+# (0.16.1, Wi-Fi from 0.12.15) assert "netpolicy::ATTEMPT_TIMEOUT_MS" in network
 assert "routerGuard.expired(" in network and "parkRouter(" in network
 assert "staAssociated" in network, "Last-resort retry must not interrupt an associated STA"
 assert "ARDUINO_EVENT_WIFI_STA_CONNECTED" in ino
