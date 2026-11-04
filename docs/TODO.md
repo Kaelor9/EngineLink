@@ -10,19 +10,22 @@ version instead of one update each. Newest at the bottom of each section.
   while 1 Hz `/api/fast` samples arrive, updates numbers in place, and hides
   the second mooring scene under reduced motion. Confirm smooth playback on
   iPhone and dock safety-step behavior once a new release is installed.
-- **Drive test scenes, new look.** The owner has chosen the boat and its
-  look: see `tools/boat-studio/`. `line-style.html` is the one to use in the
-  `tools/boat-studio/drive-test-scenes.html` is the owner's exported, interactive
-  scene preview (three groups of six choices); it is a **draft to refine**, not
-  an approved design. Future visual iterations must start from this preview.
-  scenes (`lineSvg()`, colour set "Som appen", bow to the right); `studio.html`
-  is the full drawing with the same shape (keep the shape exactly). Fenders:
-  three a side (aft, amidships, forward), round, a little off the hull. Swim
-  ladder: stowed under the hatch on the starboard side of the platform (up)
-  in every scene, except the one where the boat is seen from the side in the
-  water with a person swimming: there it is folded out, down into the water,
-  with the lid shut. Water, quay, piles and lines still to be chosen in the
-  same style.
+- **Drive test scenes, new look — built into the app, awaiting the next
+  firmware release.** The owner chose on 2026-11-04 on the options page
+  `tools/boat-studio/drive-test-scenes.html`:
+  `Farver 1 · Båden 3 (fart 3) · Fortøjninger 1 (fart 4) · Fendere 13 (fart 5) ·
+  Rækkefølge 2 · Ottetalsstik 2, vises 1 (fart 3) · Bølger 4 ·
+  Bølgernes bevægelse 2 (fart 3) · Mellem pæle 1 · Langs kajen 1 · Åbent vand 1`.
+  That is:
+  - his boat in the app's dark blue, rocking gently;
+  - lines drawn from the cleats to the quay, fast, and fixed to the cleats;
+  - a figure-of-eight without locking turn fading in on each cleat;
+  - then the fenders popping out one by one, very fast;
+  - small ripples fading in and gliding out.
+
+  Only the "Moored properly" and "Open water" scenes use it; the swim, stop,
+  warm-up, lookout and lever scenes keep their old look for now. Check on an
+  iPhone after the release.
 
 ## Firmware
 

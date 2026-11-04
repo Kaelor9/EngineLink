@@ -274,43 +274,36 @@ checks the latest merged image's size. Browser tests exercise a misleading
 compressed HEAD size. No new firmware version is needed; browser USB flashing
 still requires physical verification.
 
-## Drive test scenes (in progress, 2026-11-03)
+## Drive test scenes (2026-11-04)
 
-The drive test (app page `dtest`, `dtAnim` and the `scene*` functions in
-`firmware/ui/app.html`) was released in 0.14.0/0.14.1 with simple top-down
-scenes. The owner is choosing a new look on an options page (artifact
-"Køretest-scener"; its source is not in the repository). What he has asked
-for so far:
+The owner chose the look of the dock and open-water scenes on the options
+page `tools/boat-studio/drive-test-scenes.html` (open it locally). The page has
+choices for:
+- colours and the boat's motion;
+- how the lines, fenders and the figure-of-eight on each cleat appear, and in
+  which order;
+- waves and how they move;
+- the quay layout;
+- a speed for each animated part.
 
-- A boat with swim platform and cleats (also one on the bow); lines tied to
-  those cleats. Choices for hull shape, colour, foredeck, cockpit, lounge,
-  platform and the cleats (count, placement, direction, look).
-- Open water without the dashed circle and the wake triangle; waves that fade
-  in and glide out, never popping up.
-- At the dock: two ways of mooring in turn, stern-to between piles (piles just
-  outside the boat's beam, more empty berths with piles beside it) and
-  alongside with bow line, stern line and two springs. Fenders out first, with
-  a hint where they belong (where the hull is widest, towards the quay or the
-  neighbours), then the lines one by one.
-- Lines that end properly: figure-of-eight on cleats, a bowline (pælestik)
-  around piles, an eye over a bollard.
-- Fenders: his are standard ones (dark blue body, black tapered ends, an eye
-  at each end) hanging vertically from one end. Choice of count per side and
-  placement, always kept where the hull is near full beam.
-- Choice of quay (concrete, wooden jetty, stone, rubber strip, steel sheet
-  piling) and of line colour and type.
-- Safety steps one at a time with "Done, next" (already in 0.14.1), dock order:
-  nobody in the water, moored with fenders out, how to stop, engines at idle.
+His choice is recorded in `docs/TODO.md` and in `tools/boat-studio/export_scenes.js`.
 
-His latest choice on the page: Form 5 (wide) · Colour 1 (white) · Foredeck 6
-(sunpad and rail) · Cockpit 2 (windscreen and helm bench) · Lounge 1 (empty) ·
-Platform 5 (teak with ladder) · 4 cleats · at the rail · along the boat ·
-cleat look 4 (polished steel) · Water A (drifting swells) · Fender 19 (navy
-ball, but his real ones are the standard type, hanging from one end) · 3 per
-side · evenly spread · line colour 6 (red) · braided · quay point 7 (cleat on
-a plate) · pile 6 (with shadow) · quay 2 (wooden jetty). He still finds it too
-minimal; the next step offered is a slanted (three-quarter) perspective, real
-daylight colours and small movements (boat rocking, lines tightening).
+How it reaches the app:
+- `node tools/boat-studio/export_scenes.js` (Playwright) runs the page's
+  `exportApp()` with that choice. It writes the scene markup and timings into
+  `firmware/ui/app.html` between `/*DTS*/` and `/*/DTS*/`, with the boat once
+  and the waves left out. Then run `python3 tools/build_ui.py`.
+- In the app, `dtFrame()` moves the boat and recomputes every line from the
+  moved cleat in each frame. The lines therefore stay on the cleats and tighten
+  or slacken with the boat. Then the knot fades in and the fenders pop.
+- The dock scene alternates stern-to and alongside.
+- With reduced motion it shows one still picture of the first scene.
+- To change the look, change the page or the choice and export again. Never
+  edit the generated data by hand.
+
+The swim, stop, warm-up, lookout and lever scenes still have the older simple
+style; the boat studio's notes on the owner's wishes (fenders, knots, ladder,
+quays) are in `tools/boat-studio/README.md`.
 
 ## Drive test animation fix — 2026-11-03
 
