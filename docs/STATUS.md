@@ -30,12 +30,12 @@ to engines.
 | Fuel figures | First fill-ups within about ±8 % before calibration |
 | microSD, status LED | Bench tested |
 | Own Wi-Fi (standalone) | Phones connect at 192.168.4.1; about 650 kB/s |
-| Router mode | Zyxel EX3600 (WPA2/WPA3 mixed): previously 500–630 kB/s on free channel. Field report [#126](https://github.com/Kaelor9/EngineLink/issues/126), v0.13.4: 12 test average 584.6 kB/s (457.8–665.3), round trip 18–20 ms. Still 95 Wi-Fi disconnect events / 48 pre-connection failures and about 50 seconds reconnecting, so long-term stability is NOT verified. 0.15.0 replaces reconnect, rescue and transmit power handling: not yet tested on the board. |
+| Router mode | Zyxel EX3600 (WPA2/WPA3 mixed): previously 500–630 kB/s on free channel. Field report [#126](https://github.com/Kaelor9/EngineLink/issues/126), v0.13.4: 12 test average 584.6 kB/s (457.8–665.3), round trip 18–20 ms. Still 95 Wi-Fi disconnect events / 48 pre-connection failures and about 50 seconds reconnecting, so long-term stability is NOT verified. 0.16.2 replaced the Wi-Fi with a simple version: router mode not yet tested on the board. |
 | Firmware updates | Over Wi-Fi from GitHub and from a file, with rollback |
 
 ## Not yet checked
 
-- 0.15.0 Wi-Fi on the board. The test plan is in [TODO.md](TODO.md) under "To check on the boat": start with router and EngineLink powered on together, router off/on, router channel change, standalone with phones, 24 h router run, engine reading during Wi-Fi changes.
+- Standalone Wi-Fi 0.16.5 (simple Wi-Fi since 0.16.2): 0.16.0–0.16.4 failed on the boat (phone could not join, or joined but got no web page). Test steps in [TODO.md](TODO.md) under "To check on the boat". Router mode with the simple Wi-Fi is also untested.
 - Long-term router stability across automatic router channel changes; #126 shows recovery after an outage but not why it occurred.
 - Whether the small Trip summary CSV fix in PR #123 resolves Chrome/iPhone download failures.
 - Whether retained crash history reflects any new crashes during extended v0.13.4 operation.

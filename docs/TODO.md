@@ -49,7 +49,11 @@ version instead of one update each. Newest at the bottom of each section.
 
 ## Firmware
 
-- **NMEA 2000, listen only — in source, awaiting the next release.**
+- **NMEA 2000, listen only — released in 0.16.0, not yet tested on the boat.**
+  - "Record the bus" (0.16.0) saves every raw frame for 10 or 30 min to
+    `/NMEA/BUS.CSV` (download `/api/nmea/bus.csv`) to map everything the boat
+    sends. Next step after a recording: analyse it, then decide on AIS
+    target decoding (owner's AIS700 and SmartPilot X10 are on SeaTalkNG).
   - EngineLink now decodes:
     - position, course and speed over ground, GNSS fix, satellites and HDOP;
     - heading, speed through water, depth, distance log;
@@ -81,7 +85,9 @@ version instead of one update each. Newest at the bottom of each section.
   TCP accepts and HTTP parse failures separately. With iPhone joined to
   `EngineLink`, turn off mobile data for the controlled test and open
   `http://192.168.4.1/api/health` directly in Safari, then the app at
-  `http://192.168.4.1/`. Repeat once at normal distance and send the new
+  `http://192.168.4.1/`. In the USB console check for
+  `HTTP/80 listening on 192.168.4.1`, and type `wifi` / `wifi log` to get the
+  report. Repeat once at normal distance and send the new
   USB Wi-Fi report *before and after*. If it still fails, use the three
   counters to locate whether failure is association/DHCP, TCP, or HTTP.
   Do not attribute reason 8 to a radio fault without further evidence.
