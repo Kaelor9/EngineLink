@@ -231,6 +231,14 @@ Wi-Fi 0.16.0–0.16.5 (2026-11-04, standalone on the boat with an iPhone):
   8.5 dBm override and counts DHCP leases, port-80 accepts and HTTP parse
   failures separately. Not yet verified on the board (see TODO).
 - Reset reason 11 in web-installer logs is the console's USB reset, not a crash.
+- 0.16.5 USB report: phone joined, DHCP lease, 6 HTTP requests, 19.5 dBm, so
+  standalone reaches the web server again. Main loop stalled up to 10 s in
+  the web part (unexplained).
+- Next: **Wi-Fi 2.0**, a clean rewrite with four states (standalone, router
+  test, router, router lost), `enginelink.local`, no retry settings. The plan,
+  rules, what to remove/keep and the required tests are in
+  [docs/TODO.md](docs/TODO.md) under "Wi-Fi 2.0". Follow it rather than the
+  0.15 rules above, which describe the old design.
 
 USB serial commands (0.16.3, 115200 baud, web installer "Logs & console" or any
 serial monitor): `wifi` (full Wi-Fi report), `wifi log` / `read wifi log`

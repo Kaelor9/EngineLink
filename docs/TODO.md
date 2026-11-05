@@ -74,23 +74,82 @@ version instead of one update each. Newest at the bottom of each section.
     log and heading match the ST60; the trip export has the navigation
     columns.
 
+## Wi-Fi 2.0 (plan, agreed with the owner 2026-11-04 — not built yet)
+
+A clean rewrite of the Wi-Fi part, built in one release after a short router
+test on 0.16.5. Not written from zero: the lessons below become tests.
+
+**Why:** the Wi-Fi logic in `wifi.ino` is only ~100 lines; the clutter is the
+0.12–0.15 leftovers around it (`netpolicy.h`, `linktune.cpp`, channel survey,
+and a 409-line `netreport.ino` full of fields that are always 0). Rewriting
+blindly in 0.16.2 lost the web-server rebind and the TX power, which cost
+0.16.3 and 0.16.4 on the boat.
+
+**Four states, never two networks** (except the 15 s router test):
+1. *Standalone*: own Wi-Fi `EngineLink` / `12345678`, 192.168.4.1, fixed
+   channel 6. Must stay the simplest, most robust part: it is the fallback.
+   Time from the phone; files in and out as today; no NTP, GitHub update or
+   reports. With a router saved, it listens briefly (~0.1 s, the router's
+   remembered channel) for the router about every minute, forever.
+2. *Router test* (setup only): the owner picks a network from the scan
+   (bars, −dBm, open/locked, security) and types the code. The own Wi-Fi
+   stays on while EngineLink tries the router for ~15 s, then shows
+   "Wrong code" or "OK, address …"; only then the own Wi-Fi goes off. The
+   single radio moves the own Wi-Fi to the router's channel during the test,
+   so the phone may drop for seconds: the app waits and the result is kept
+   until it is back.
+3. *Router*: station only, Arduino's own reconnect, fast and stable.
+4. *Router lost*: keep retrying for 2 min, then standalone (state 1).
+
+**Rules:**
+- Start with a router saved: try the router for up to 3 min (router and
+  EngineLink usually get boat power together), else standalone.
+- Back to the router: automatically when no phone is on the own Wi-Fi; if
+  one is, the app asks "Router is back, switch now?".
+- No settings for retry minutes or number of tries (replaces the owner's
+  first idea of "every 10 min, 3 times": that could lock him out for 30 min).
+- `enginelink.local` everywhere, so one iPhone home-screen app works in both
+  modes (the PWA is bound to the address it was saved from).
+- Power off/on 3 times within 10 s: start in standalone whatever is saved.
+- WPA2 unless the scan shows the router is WPA3-only (decided at connect, no
+  stored security mode or switch counter). Keep `wifiwpa3.cpp`: 0.11.x WPA3
+  logins failed repeatedly on the Zyxel mixed router, WPA2 since 0.12.0 works.
+- Channel: follow the router as a station, never ask for router changes;
+  own Wi-Fi fixed on 6; remember the router's channel for the quick look.
+- Upgrade keeps the saved router, code and all data.
+
+**Remove:** `netpolicy.h`, `linktune.cpp` (radio test, channel survey),
+quiet-channel hints, channel and security counters, the always-0 report
+fields; move clock/NTP, mDNS and GitHub reports out of `wifi.ino`. Report
+becomes short and readable.
+**Keep:** `wifiwpa3.cpp`, `netboost.cpp` (TCP send window, gave the measured
+router speed), the USB serial commands and SD Wi-Fi log.
+
+**Tests (lessons that must not get lost):** web server listens on the network
+that is up now (0.16.3); TX power set after the country and checked
+(0.16.4); power save off; USB printing never blocks (`setTxTimeoutMs(0)`,
+0.15 stalls); Wi-Fi calls only from the main loop, never from the event
+callback; `wifi.ino` stays under ~300 lines.
+
+**Open:**
+- Owner's OK needed: the router test and the "Router is back" prompt need
+  small app changes, and he earlier said not to touch the app for Wi-Fi work.
+- 10 s main-loop stall in the web part (0.16.5 report): find the cause.
+- Only if EngineLink is ever sold: unique SSID (`EngineLink-XXXX`) and code
+  per board on a label with a Wi-Fi QR code; a shared default password is
+  not allowed for new radio products in the EU since 2025-08-01 (RED / EN 18031).
+
+**Boat test after the release:** standalone; pick router; wrong code; router
+off and on; boot with router; power off/on 3 times; speed in both modes.
+
 ## To check on the boat
 
-- **Standalone Wi-Fi 0.16.5 — verify on the EngineLink PCB before calling this fixed.**
-  Evidence from the 0.16.4 USB report at 50 s: one phone joined at +23 s,
-  left at +40 s with reason 8 (station left), zero port-80 HTTP requests;
-  AP mode on channel 6, no watchdog restart. The driver actually reported
-  8.5 dBm despite the firmware claiming its fixed 19.5 dBm setting.
-  0.16.5 removes that AP-only override and records AP DHCP leases, port-80
-  TCP accepts and HTTP parse failures separately. With iPhone joined to
-  `EngineLink`, turn off mobile data for the controlled test and open
-  `http://192.168.4.1/api/health` directly in Safari, then the app at
-  `http://192.168.4.1/`. In the USB console check for
-  `HTTP/80 listening on 192.168.4.1`, and type `wifi` / `wifi log` to get the
-  report. Repeat once at normal distance and send the new
-  USB Wi-Fi report *before and after*. If it still fails, use the three
-  counters to locate whether failure is association/DHCP, TCP, or HTTP.
-  Do not attribute reason 8 to a radio fault without further evidence.
+- **Router mode on 0.16.5 (before Wi-Fi 2.0, ~15 min):** set up the router,
+  check it joins, "Test speed", restart the router once; send the USB
+  `wifi` report. Gives a baseline for the rewrite.
+- **Standalone 0.16.5:** the first USB report shows join, DHCP and HTTP
+  working (see STATUS). Still to confirm: the app is usable without USB over
+  a longer session, and no multi-second stalls.
 
 ## Previous boat checks
 

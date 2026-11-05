@@ -29,13 +29,13 @@ to engines.
 | Both KAD300 engines | Read on the boat: rpm, fuel rate, temperatures, boost, battery voltage, gear learned |
 | Fuel figures | First fill-ups within about ±8 % before calibration |
 | microSD, status LED | Bench tested |
-| Own Wi-Fi (standalone) | Phones connect at 192.168.4.1; about 650 kB/s |
+| Own Wi-Fi (standalone) | Phones connect at 192.168.4.1; about 650 kB/s (0.15 and earlier). 0.16.5 USB report (2026-11-04, board on USB): phone joined at +14 s, got a DHCP lease, 10 port-80 TCP connections from the phone, 6 HTTP requests, 0 parse failures, driver at 19.5 dBm. Open: the main loop stood still for up to 10 s in the web part (cause unknown); whether the app was fully usable was not reported. |
 | Router mode | Zyxel EX3600 (WPA2/WPA3 mixed): previously 500–630 kB/s on free channel. Field report [#126](https://github.com/Kaelor9/EngineLink/issues/126), v0.13.4: 12 test average 584.6 kB/s (457.8–665.3), round trip 18–20 ms. Still 95 Wi-Fi disconnect events / 48 pre-connection failures and about 50 seconds reconnecting, so long-term stability is NOT verified. 0.16.2 replaced the Wi-Fi with a simple version: router mode not yet tested on the board. |
 | Firmware updates | Over Wi-Fi from GitHub and from a file, with rollback |
 
 ## Not yet checked
 
-- Standalone Wi-Fi 0.16.5 (simple Wi-Fi since 0.16.2): 0.16.0–0.16.4 failed on the boat (phone could not join, or joined but got no web page). Test steps in [TODO.md](TODO.md) under "To check on the boat". Router mode with the simple Wi-Fi is also untested.
+- Standalone Wi-Fi 0.16.5 over a longer session without USB, and the 10 s web stall seen in its first report. 0.16.0–0.16.4 failed on the boat (phone could not join, or joined but got no web page). Router mode with the simple Wi-Fi (since 0.16.2) is untested. A new Wi-Fi architecture is planned: see "Wi-Fi 2.0" in [TODO.md](TODO.md).
 - Long-term router stability across automatic router channel changes; #126 shows recovery after an outage but not why it occurred.
 - Whether the small Trip summary CSV fix in PR #123 resolves Chrome/iPhone download failures.
 - Whether retained crash history reflects any new crashes during extended v0.13.4 operation.
