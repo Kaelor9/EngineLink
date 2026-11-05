@@ -7,7 +7,10 @@ tested on hardware is in [docs/STATUS.md](docs/STATUS.md).
 
 **Talk to the owner in Danish**, briefly and concretely. The app itself is in
 English. The owner has asked for pull requests to be merged without asking once
-CI is green.
+CI is green — except changes that touch networking: those are merged and
+released only after the owner has run the bench and boat protocol in
+[docs/WIFI_REWRITE_PLAN.md](docs/WIFI_REWRITE_PLAN.md) section 9.9 (owner's
+rule of 2026-11-05).
 
 Never ask for, repeat or store secrets (GitHub tokens, passwords) in chats,
 code or reports. The owner's GitHub token for reports lives only on the board.
@@ -238,13 +241,24 @@ Wi-Fi 0.16.0–0.16.5 (2026-11-04, standalone on the boat with an iPhone):
   test, router, router lost), `enginelink.local`, no retry settings. The plan,
   rules, what to remove/keep and the required tests are in
   [docs/TODO.md](docs/TODO.md) under "Wi-Fi 2.0". Follow it rather than the
-  0.15 rules above, which describe the old design. The implementation plan
-  with the code audit, state machine, stages and tests is
-  [docs/WIFI_REWRITE_PLAN.md](docs/WIFI_REWRITE_PLAN.md) (2026-11-05, nothing
-  built yet). Two findings from that audit worth knowing now: the 10 s web
-  stall is the Arduino core's `NetworkClient::write()` retry loop (10 × 1 s
-  `select` when the phone stops acknowledging), and the TX power check
-  accepts the driver's unset default (20 dBm) as 19.5 dBm.
+  0.15 rules above, which describe the old design. **The one authoritative
+  implementation plan is [docs/WIFI_REWRITE_PLAN.md](docs/WIFI_REWRITE_PLAN.md)**
+  (third revision 2026-11-05, nothing built yet). Its architecture decision:
+  stay on the Arduino ESP32 core 3.3.12 (ESP-IDF 5.5.5) and use the official
+  components directly — `esp_http_server` replaces the hand-written web
+  server, connection pool, the port 81/82 listeners and the self-check;
+  `esp_wifi`/`WiFi` with a small host-tested product state machine
+  (`wifistate.h`) replaces the ad-hoc timers; FreeRTOS queue for driver
+  events. Two fenced exceptions remain until a possible later move to
+  ESP-IDF-with-Arduino-as-component: `netboost.cpp` (compile-time 5744-byte
+  TCP window in the prebuilt core) and `wifiwpa3.cpp`. Findings worth
+  knowing now: the 5–10 s web stall is the core's `NetworkClient::write()`
+  retry loop (10 × 1 s `select` when the phone stops acknowledging); the TX
+  power check accepts the driver's unset 20 dBm as 19.5 dBm; 0.16.2 dropped
+  the AP's 20 MHz bandwidth, country and inactive-time settings; and the
+  2026-11-05 boat test shows the own Wi-Fi's downlink to the phone failing
+  with the cause still open (plan section 13, root-cause gate before any
+  rewrite stage).
 
 USB serial commands (0.16.3, 115200 baud, web installer "Logs & console" or any
 serial monitor): `wifi` (full Wi-Fi report), `wifi log` / `read wifi log`

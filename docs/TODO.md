@@ -78,9 +78,15 @@ version instead of one update each. Newest at the bottom of each section.
 
 A clean rewrite of the Wi-Fi part, built in one release after a short router
 test on 0.16.5. Not written from zero: the lessons below become tests.
-The step-by-step implementation plan (audit of the 0.16.5 code, state
-machine, stages, tests, boat protocol) is
-[docs/WIFI_REWRITE_PLAN.md](WIFI_REWRITE_PLAN.md) (2026-11-05, plan only).
+**The one authoritative implementation plan is
+[docs/WIFI_REWRITE_PLAN.md](WIFI_REWRITE_PLAN.md)** (third revision
+2026-11-05, plan only). Where this section and the plan differ, the plan
+wins: it turns the wishes below into requirements D1–D22 and chooses the
+technical realisation (Arduino core 3.3.12 + official ESP-IDF components:
+`esp_http_server` for the web server, `esp_wifi`/`WiFi` with a small
+host-tested state machine, FreeRTOS queue for events; owner's component
+policy D23; hardware validation before merge D24; pinned toolchain D25).
+Open approvals for the owner: P8–P11 in the plan's section 11.
 
 **Why:** the Wi-Fi logic in `wifi.ino` is only ~100 lines; the clutter is the
 0.12–0.15 leftovers around it (`netpolicy.h`, `linktune.cpp`, channel survey,
@@ -155,7 +161,7 @@ off and on; boot with router; power off/on 3 times; speed in both modes.
   The 5 Nov boat test of 0.16.5 showed the phone joining and getting DHCP
   but EngineLink's frames not reaching the phone (0 TCP connections, code 2
   ×8–10 then 209, DHCP asked twice, 60–72 kB/s). Follow
-  `docs/WIFI_REWRITE_PLAN.md` section 10.6 in order:
+  `docs/WIFI_REWRITE_PLAN.md` section 13.6 in order:
   0. On the boat, 0.16.5: "Scan for networks" → note the boat router's
      channel and dBm (read only); `/api/diag` → `wifi.bw`, `wifi.ch`.
   1. At home, USB from a charger, 0.16.5, iPhone + PC, 15 min.
@@ -164,8 +170,9 @@ off and on; boot with router; power off/on 3 times; speed in both modes.
      router on, then 5 min with the router powered off (no settings change).
   4. Oscilloscope on 3V3 and the 5 V node: USB only, 12 V only, 12 V
      connected while on USB (a power-on reset happened then on 5 Nov).
-  Send the `wifi` report after each step. The decision table in 10.6 says
-  what each outcome means.
+  Send the `wifi` report after each step. The decision table in 13.6 says
+  what each outcome means. Step 2 uses 0.13.4 as a comparison point only; it
+  is not a stable reference (its router mode had 95 disconnects in #126).
 - **Hardware documentation needed for the power tests:** LDO and buck part
   numbers, how USB 5 V and the buck output are combined, decoupling at the
   module (`docs/HARDWARE.md` has none of it).

@@ -77,6 +77,7 @@
 - Favor explicit bounds, timeouts, resource limits, defensive parsing, and recoverable errors on an embedded device. Avoid blocking Wi-Fi/web loops or creating unbounded allocations, retries, logs, or queues.
 - Preserve FreeRTOS core/task assumptions, cross-core mutex discipline (`engineMx`), and shared-state safety. Understand effects on heap/PSRAM, watchdogs, flash wear, SD writes, and OTA rollback before changing those paths.
 - Protect existing working features. Test edge cases: missing/stale engine readings, either engine stopping, Wi-Fi reconnects, no internet, small/large exports, SD absent/full, sudden restart, and iPhone safe areas when relevant.
+- **Component policy (owner, 2026-11-05).** Build on Espressif's official, documented components and the Arduino ESP32 core's thin wrappers of them (`esp_wifi`, `esp_event`, `esp_netif`, `esp_http_server`, `mdns`, `nvs`, FreeRTOS primitives; `WiFi`, `Preferences`, `ESPmDNS`, `Update`, `HTTPClient`). EngineLink code is for product logic only. Anything that pokes a component's internals or intercepts its initialisation is an exception that needs its own file, a contract test and a removal plan; the list of allowed exceptions is in `docs/WIFI_REWRITE_PLAN.md` section 4. Treat the owner's wishes as functional requirements, not implementation instructions; if a wish needs disproportionate special code, say so and propose the conventional solution.
 
 ## 6. Non-negotiable EngineLink constraints
 
@@ -93,7 +94,8 @@
 
 - Inspect branch, working tree, and open PR context before modifying anything. Never overwrite unrelated work; don't force-push, reset, or delete user work to make a task look clean.
 - **Small ideas/bugs:** record them in `docs/TODO.md` when the owner is collecting requests. Do not create a new firmware release for every suggestion.
-- **Explicit implementation request:** make the code change, test it, and prepare/submit a focused PR when repository access permits. Follow the existing project's merge-after-green-CI preference; do not misrepresent pending checks as passing.
+- **Explicit implementation request:** make the code change, test it, and prepare/submit a focused PR when repository access permits. Follow the existing project's merge-after-green-CI preference; do not misrepresent pending checks as passing. **Exception (owner, 2026-11-05): a change that touches networking (Wi-Fi, HTTP server, mDNS, OTA transport) is merged and released only after the owner reports the bench and boat protocol in `docs/WIFI_REWRITE_PLAN.md` section 9.9 as passed.**
+- **Wi-Fi 2.0** is built only according to `docs/WIFI_REWRITE_PLAN.md` (one authoritative plan, stage by stage, Stage 0 root-cause gate first). Do not start a competing plan or skip a stage; record deviations in that document.
 - **Explicit release/update request:** follow `docs/RELEASING.md`, update version/release notes/status as required, verify CI and artifacts, then merge/publish according to the documented workflow. Do not bump firmware for a website-only/doc-only fix unless required.
 - Keep `HANDOVER.md`, `docs/STATUS.md`, `docs/TODO.md`, and release documentation accurate *when affected*, not through wholesale rewrites. Make commitments only when an actual change has been made.
 - Do not change hardware design, ECU behavior, production credentials, destructive flashing/erasure behavior, or external service settings without explicit authorization.
