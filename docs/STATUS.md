@@ -19,7 +19,11 @@ to engines.
   endpoint.
 - Do not poll while a Volvo diagnostic tool (VODIA) is connected.
 - Change the factory Wi-Fi password `12345678` in Settings. Anyone with the
-  Wi-Fi password can change settings; there is no separate admin login.
+  Wi-Fi password (or on the boat router's network) can change settings; there
+  is no separate admin login. Today every response also carries
+  `Access-Control-Allow-Origin: *`, so a web page open in your browser could
+  read EngineLink data or send it commands; Wi-Fi 2.0 closes that (plan
+  section 6.9) without adding a login.
 
 ## Checked on the board
 

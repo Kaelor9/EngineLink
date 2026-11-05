@@ -1,6 +1,6 @@
 # Wi-Fi 2.0: the implementation plan
 
-Status: **plan, nothing built yet** (revised 2026-11-05, third revision). This
+Status: **plan, nothing built yet** (revised 2026-11-05, fourth revision: quality pass). This
 is the single authoritative plan. It replaces its earlier revisions (same
 file, git history) and must be followed stage by stage without guessing at
 architecture decisions. Where it keeps analysis and decision history, that is
@@ -145,10 +145,72 @@ Option C is rejected: a whole-firmware rewrite with no requirement behind it;
 | Time | `configTime` (IDF `esp_sntp`), phone, GPS | same | official wrapper |
 | OTA | `Update` + `HTTPClient` + `NetworkClientSecure` | same; upload body read with `httpd_req_recv` | official wrapper |
 | Watchdog, core dump, restart log | `esp_task_wdt` on the loop, core dump to flash (prebuilt config), `crashinfo.cpp` | same | official |
-| Larger TCP send window per connection | `netboost.cpp` pokes `tcp_pcb->snd_buf` under `LOCK_TCPIP_CORE()` | **exception** (A only; a `CONFIG_LWIP_TCP_SND_BUF_DEFAULT` line under B) | fenced: own file, kill switch `EL_NETBOOST`, contract test, measured 7× on the router (#116 → #126), approval P8 |
-| WPA2 on WPA2/WPA3 routers, WPA3 only when required | `wifiwpa3.cpp` + `-Wl,--wrap=esp_wifi_init` clears `CONFIG_FEATURE_WPA3_SAE_BIT` in `wifi_init_config_t.feature_caps` (a documented field) | **exception** (A only; under B it is three lines before the application's own `esp_wifi_init()`) | fenced: own file, CI objdump check, D10 |
+| Larger TCP send window per connection | `netboost.cpp` pokes `tcp_pcb->snd_buf` under `LOCK_TCPIP_CORE()` | **exception** (A only; a `CONFIG_LWIP_TCP_SND_BUF_DEFAULT` line under B) | fenced, justified in 4.1; `EL_NETBOOST` switch; approval P8 |
+| WPA2 on WPA2/WPA3 routers, WPA3 only when required | `wifiwpa3.cpp` + `-Wl,--wrap=esp_wifi_init` clears `CONFIG_FEATURE_WPA3_SAE_BIT` in `wifi_init_config_t.feature_caps` (a documented field) | **exception** (A only; under B it is three lines before the application's own `esp_wifi_init()`) | fenced, justified in 4.1; CI objdump check; D10 |
 | Radio test, channel survey, pings, back-off tables, router guard | `linktune.cpp/.h`, `netpolicy.h`, `routerguard.h` | **removed** (D13) | — |
 | Diagnostics: report, SD log, serial commands | `netreport.ino`, `serialcmd.ino` | kept, slimmed to fields that exist; per-station RSSI/PHY from `esp_wifi_ap_get_sta_list()` added | product |
+
+### 4.1 The two exceptions: why, alternatives, isolation, removal
+
+Verified against the sources in the header table.
+
+**`netboost.cpp` — a larger TCP send window per connection.**
+
+- *Why it exists:* lwIP's per-connection send buffer is the compile-time
+  `TCP_SND_BUF = CONFIG_LWIP_TCP_SND_BUF_DEFAULT` (`lwipopts.h:627`); the
+  prebuilt Arduino core sets **5744 bytes** (lib-builder `defconfig.common`).
+  Throughput over a path with round-trip *t* is bounded by window / *t*:
+  5744 B / 70 ms ≈ 80 kB/s, which is what the router measured before the
+  boost (#116: 83 kB/s average) and 7× less than after it (#126: 585 kB/s).
+  On the own Wi-Fi the round trip is short, so the window hardly matters
+  there.
+- *Supported alternatives checked:* `setsockopt(SO_SNDBUF)` — not available:
+  IDF's `lwipopts.h` enables `LWIP_SO_RCVBUF` only, there is no
+  `LWIP_SO_SNDBUF` (and lwIP's `SO_SNDBUF` is read-only even where it exists);
+  `esp_http_server` has no buffer-size option; window scaling does not change
+  the send buffer; the only supported knobs are `sdkconfig`
+  (`CONFIG_LWIP_TCP_SND_BUF_DEFAULT`, needs option B) or rebuilding the core
+  with the Arduino Static Library Builder (official but a second toolchain
+  and a self-hosted core package — rejected as heavier than B).
+- *Decision:* keep, as the only code in the firmware that touches a private
+  structure (`lwip/priv/tcp_priv.h`, `tcp_active_pcbs`, under
+  `LOCK_TCPIP_CORE()`; a struct change breaks the build, not the device).
+- *Isolation and test:* compile flag `EL_NETBOOST` (default 1) around the
+  call in the HTTP open hook; `elBoostedSockets`/`elBoostMisses` in the
+  report; T8 measures "Test speed" on the router with and without it, and
+  the plan records both numbers; `tools/test_wifi_contract.py` asserts that
+  `lwip/priv` is included from `netboost.cpp` only.
+- *Removal:* option B (one `sdkconfig` line), or the owner accepting the
+  no-boost router throughput measured in T8.
+
+**`wifiwpa3.cpp` — WPA2 on WPA2/WPA3 routers, WPA3 only when required.**
+
+- *Why it exists:* the Zyxel EX3600 in WPA2/WPA3 mixed mode failed the WPA3
+  login repeatedly (0.11.x, reports #53 and HANDOVER); WPA2 since 0.12.0
+  works. The driver chooses WPA3 whenever the AP offers it and the driver
+  was initialised with the SAE capability.
+- *Supported alternatives checked:* `wifi_sta_config_t.threshold.authmode`
+  is a *minimum*, not a maximum; there is no runtime API to disable SAE for
+  a connection; the capability comes from `wifi_init_config_t.feature_caps`,
+  which `WIFI_INIT_CONFIG_DEFAULT()` fills from the **compile-time macro**
+  `WIFI_FEATURE_CAPS` (`esp_wifi.h:325-358`, no runtime variable); the
+  Arduino core builds that config inside `WiFiGenericClass`
+  (`WiFiGeneric.cpp:272-289`) with no hook; `CONFIG_ESP_WIFI_ENABLE_WPA3_SAE`
+  is `sdkconfig` (option B) and would remove WPA3 for all routers (D10 wants
+  it for WPA3-only ones).
+- *Decision:* keep. It changes one documented public field
+  (`feature_caps`, `CONFIG_FEATURE_WPA3_SAE_BIT`) and touches no private
+  data; the intercept is the GNU ld `--wrap` the build already uses.
+- *Isolation and test:* own file; CI's objdump check proves the wrap is
+  linked; the report prints "WPA3 switch in firmware: active/NOT active" and
+  the negotiated security of the live link (runtime evidence); building
+  without `-Wl,--wrap=esp_wifi_init` disables it cleanly (driver default,
+  `elSaeControlActive()` false).
+- *Removal:* option B (three lines before the application's own
+  `esp_wifi_init()`), or dropping WPA2 forcing if the router's WPA3 is
+  shown to work in a later test.
+
+No third exception is allowed (rule in section 10).
 
 ---
 
@@ -169,7 +231,7 @@ Line numbers refer to commit `9485843`.
 | F9 | A wrong router password is saved before it is tried and locks the owner out for 2–3 min per boot. | `webapi.ino:812-837` | Stage 5 (router test; save on success). |
 | F10 | `handleCfg()` restarts mDNS inside the request; handlers rely on a 1.2 s delay before radio changes. | `webapi.ino:727` | kept as the rule "reply first, act from the loop" (6.3). |
 | F11 | `elAllowSae` takes effect only through `esp_wifi_init()`, i.e. after `WIFI_OFF`. | `WiFiGeneric.cpp:319-334` | 6.2 `radioApply()`: only when the flag must change. |
-| F12 | Rollback confirmation needs `apStarted` or a router IP (`EngineLink.ino:601`). | | kept; contract test. |
+| F12 | Rollback confirmation needs only `apStarted` or a router IP (`EngineLink.ino:601`). | | superseded by the boot self-test, 6.10 (see F23). |
 | F13 | Scans move the radio off channel 6; a one-channel look is ~0.15 s. | | Stage 5 rules (ported from `netpolicy.h` tests). |
 | F14 | Lowest free heap 55–78 KB; an idle STA costs RAM. | #126, #146, 5 Nov | criterion in section 7. |
 | F15 | iPhone leaves the own Wi-Fi by itself (reason 8). | 0.16.4, 5 Nov | measured in 9.9; D22. |
@@ -179,6 +241,8 @@ Line numbers refer to commit `9485843`.
 | F19 | 0.16.2 dropped `esp_wifi_set_bandwidth(AP, HT20)`, the explicit country and `esp_wifi_set_inactive_time(AP, 600)` that every working version had. | `d82911b:wifi.ino:225-262,452-470` | Stage 1a `apRadioSetup()`. |
 | F20 | The report lacks per-station RSSI/PHY and the AP's real bandwidth/channel/PMF. | | Stage 1d. |
 | F21 | A power-on reset occurred when the boat 12 V was connected while the board ran on USB (hardware, to be confirmed). | 5 Nov 10:48 UTC report | Stage 0 step 4. |
+| F22 | No access control and `Access-Control-Allow-Origin: *` on every response: a web page in the owner's browser, or a DNS-rebinding page, can read EngineLink data and POST to `/api/factory-reset`, `/api/update`, `/api/wifi/*`. | `webapi.ino:1053`, `netreport.ino:261,271,329` | 6.9, Stage 2 (P12). |
+| F23 | A new firmware confirms itself after 60 s whenever the radio is up, without proving the web server works; the loopback self-check task compensated with a heal/restart machine. | `EngineLink.ino:601`, `netreport.ino:382-409` | 6.10, Stage 2 (P11). |
 
 ---
 
@@ -189,9 +253,10 @@ Line numbers refer to commit `9485843`.
 | File | Purpose | Size target |
 |---|---|---|
 | `wifistate.h` (**new**, no Arduino includes) | the product state machine: states, timers, inputs, actions; host-tested by `tools/test_wifistate.cpp` | ≤ 220 lines |
+| `httputil.h` (**new**, no Arduino includes) | URL decoding and the own-origin/host allow-list (6.9); host-tested by `tools/test_httputil.cpp` | ≤ 80 lines |
 | `wifi.ino` (**rewritten**) | `onWiFi()` → queue + trace; `radioApply()` (the only place that calls `WiFi.mode/softAP/begin/disconnect`); `apRadioSetup()`; scan and look; `serviceNetwork()` feeds `wifistate` and performs its actions; TX power | ≤ 300 lines (D14) |
-| `httpd.ino` (**new**) | `esp_http_server` start/stop, the `Web` adapter class (6.6), the async transfer worker, static page with ETag/gzip, CORS, URL decoding | ≤ 300 lines |
-| `netsvc.ino` (**new**) | clock helpers and NTP, mDNS (`startNameService`, `validHostName`), GitHub device-report scheduling, reason/trace texts — moved verbatim from `wifi.ino`/`serviceNetwork()` | ~120 lines |
+| `httpd.ino` (**new**) | `esp_http_server` start, the `Web` adapter (6.6, ≤ 200 lines of logic), the async transfer worker, static page with ETag/gzip, the security checks of 6.9 | ≤ 300 lines |
+| `netsvc.ino` (**new**) | clock helpers and NTP, mDNS (`startNameService`, `validHostName`), GitHub device-report scheduling, reason/trace texts — moved verbatim from `wifi.ino`/`serviceNetwork()` — and the boot self-test `serviceSelfTest()` (6.10) | ~150 lines |
 | `netreport.ino` (**slimmed**) | report text + JSON with the fields of 6.8 only | ≤ 220 lines |
 | `txpower.h` (**new**, tiny) | `elTxPower[5]`, `elTxName[5]` (from `linktune.cpp`) | 12 lines |
 | `netboost.cpp/.h` (**kept, fenced**) | unchanged; `#if EL_NETBOOST` kill switch (default on); called from the adapter's open hook | exception |
@@ -218,7 +283,7 @@ ROUTER_LOST     STA only, no IP. Core reconnect keeps trying. After
 | State | `WiFi.getMode()` | AP | STA |
 |---|---|---|---|
 | STANDALONE | `WIFI_AP_STA` | up, `apChannelNow` | started, idle; used only for scans/looks |
-| ROUTER_TEST | `WIFI_AP_STA` | up (the driver moves it to the router's channel when the STA associates: *"the channel of the external AP … has higher priority over the ESP AP channel"*, `wifi.rst` §station/AP coexistence) | `begin()`, auto-reconnect **off** |
+| ROUTER_TEST | `WIFI_AP_STA` | up (the driver moves it to the router's channel when the STA associates: *"the channel of the external AP … has higher priority over the ESP AP channel"*, `wifi.rst` §station/AP coexistence; it announces the move to joined phones with a Channel Switch Announcement, `wifi_ap_config_t.csa_count`, default 3 beacons) | `begin()`, auto-reconnect **off** |
 | ROUTER_JOIN / ROUTER / ROUTER_LOST | `WIFI_STA` | off | `begin()`, auto-reconnect **on** |
 
 `constexpr bool STANDALONE_APSTA = true;` in `wifi.ino` reverts D19 to
@@ -288,8 +353,8 @@ Constants (`constexpr`, no settings — D7):
 | `TEST_MS` | 20 000 | router test budget (P5) |
 | `LOOK_MS` | 60 000 | look for the router from Standalone |
 | `LOOK_AFTER_FAIL_MS` | 300 000, then 900 000 | after a failed return; reset to `LOOK_MS` after a success or a new `/api/wifi/connect` |
-| `LOOK_FULL_EVERY` | 5 | every fifth look scans all channels when a channel is known; always full when unknown and no phone joined |
-| `LOOK_DWELL_MS` | 120 | active dwell per channel |
+| `LOOK_FULL_EVERY` | 5 | **no phone joined:** every fifth look scans all channels (the router may have moved), always all channels when none is known. **A phone joined:** only the known channel (~0.15 s off channel 6), never a full scan; no look at all when no channel is known |
+| `LOOK_DWELL_MS` | 120 | active dwell per channel (the driver's own default, `wifi.rst` s2.1) |
 | `RAPID_BOOT_WINDOW_MS`, `RAPID_BOOT_COUNT` | 10 000, 3 | D9 |
 | `BIND_DELAY_MS` | 600 | mDNS re-announce after an IP epoch change |
 
@@ -358,7 +423,7 @@ later `applyTxPower(true)` and `startNameService()`; `EV_AP_STOP` sets
 into an `EV_CMD_*` when due (reply first, act later; F10). A state change
 writes one line to `/WIFI.LOG` and to `Serial`, never a password.
 
-Result texts (3.8 of the previous revision, unchanged): 201 → "Router not
+Result texts: 201 → "Router not
 found (off, out of range, or 5 GHz only)"; 15/202/204 → "Wrong code or the
 router refused the login (code n)"; 203/205 → "Router refused the connection
 (code n)"; 210/211 after the WPA3 retry → "Router security not supported
@@ -383,7 +448,7 @@ crash loop also lands in Standalone (safe side).
 |---|---|---|
 | `routerConfigured()` | led, updates, webapi, serialcmd, netreport | `cfg.router && cfg.ssid.length()` |
 | `bool routerHold` | webapi, netreport, serialcmd, diagnosis | kept equal to `state==STANDALONE && routerConfigured()` by `serviceNetwork()` ("a router is saved but the own Wi-Fi is on") |
-| `bool apStarted` | `EngineLink.ino:601` rollback, serialcmd, netreport | true on `EV_AP_START`, false on `EV_AP_STOP` or `RADIO_STA` |
+| `bool apStarted` | the boot self-test (6.10), serialcmd, netreport | true on `EV_AP_START`, false on `EV_AP_STOP` or `RADIO_STA` |
 | `volatile uint32_t networkIpEpoch, networkIpEventAt` | netreport, diagnosis | kept (mDNS/TX re-check timing; no listener rebind any more) |
 | `uint8_t apChannelNow`, `routerKnownChannel` + NVS `rch` | webapi, serialcmd, storage | unchanged |
 | `pendingNetwork`, `networkSwitchAt` | webapi handlers | the "reply first" mechanism (6.3) |
@@ -397,71 +462,85 @@ crash loop also lands in Standalone (safe side).
 
 ### 6.6 HTTP server design (`httpd.ino`)
 
-`esp_http_server`, one instance:
+`esp_http_server` (IDF 5.5) in its own task; the adapter only maps the
+handlers' existing calls onto the server's API and must stay under 200 lines
+of logic. Anything the server already does (sessions, keep-alive, timeouts,
+purge, chunking, wildcard routes, query parsing) is used, not re-done.
 
 ```
-httpd_config_t c = HTTPD_DEFAULT_CONFIG();   // IDF 5.5 defaults: prio idle+5, stack 4096, 7 sockets, 8 handlers, 5 s recv/send wait
-c.server_port = 80; c.core_id = 1; c.task_priority = tskIDLE_PRIORITY + 5;
-c.stack_size = 8192;             // handlers build JSON Strings
-c.max_uri_handlers = 96;         // 83 routes today
-c.max_open_sockets = 8;          // + 3 internal = 11 of CONFIG_LWIP_MAX_SOCKETS=16; leaves mDNS, SNTP, HTTPClient, loopback
-c.lru_purge_enable = true;       // a phone that walked away does not hold a slot
-c.recv_wait_timeout = 5; c.send_wait_timeout = 5;   // a dead phone costs the server task ≤ 5 s, the loop nothing
+httpd_config_t c = HTTPD_DEFAULT_CONFIG();   // IDF 5.5 defaults verified in esp_http_server.h:53-79
+c.server_port = 80; c.core_id = 1;           // the loop also runs on core 1; Wi-Fi/lwIP stay on core 0
+c.task_priority = tskIDLE_PRIORITY + 5;      // above the loop (1)
+c.stack_size = 8192;                         // same as the Arduino loop task that ran these handlers until now
+c.max_uri_handlers = 96;                     // 83 routes today (default 8)
+c.max_open_sockets = 7;                      // default; + 3 internal = 10 of CONFIG_LWIP_MAX_SOCKETS=16,
+                                             // leaving 6 for mDNS, SNTP, HTTPClient/TLS and the boot self-test
+c.lru_purge_enable = true;                   // Safari keeps up to 6 idle connections per host
+c.recv_wait_timeout = 5; c.send_wait_timeout = 5;
+c.keep_alive_enable = true; c.keep_alive_idle = 5; c.keep_alive_interval = 5; c.keep_alive_count = 3;
+                                             // TCP keepalive: a phone that vanished frees its socket in ~20 s
 c.uri_match_fn = httpd_uri_match_wildcard;
-c.open_fn = elHttpdOpen;         // netboost on the new socket (exception, 4) + TCP_NODELAY
+c.open_fn = elHttpdOpen;                     // TCP_NODELAY; netboost under #if EL_NETBOOST (4.1)
 ```
 
-The `Web` adapter (≤ 250 lines) keeps the handler API so `webapi.ino` stays
-readable: `on(path, method, fn)`, `arg(name)`, `hasArg(name)`, `header(name)`,
-`uri()`, `send(code, type, body)`, `send_P(code, type, PGM, len)`,
-`sendHeader(name, value)`, `sendContent(ptr, len)` (chunked), `client()`
-replaced by `clientIsOnAp()`. Implementation: a thread-local
-`httpd_req_t *cur`; query from `httpd_req_get_url_query_str()` +
-`httpd_query_key_value()`; POST bodies ≤ 2 KB read with `httpd_req_recv()`
-and parsed the same way (the app sends `application/x-www-form-urlencoded`,
-`URLSearchParams`), with a 20-line URL decoder (`+`, `%xx`); headers via
-`httpd_req_get_hdr_value_str()`; `Access-Control-Allow-Origin: *` on every
-response (today's `enableCORS(true)`); the app page `/` with
-`Content-Encoding: gzip`, `ETag`, 304 on `If-None-Match` as today
-(`webapi.ino:922-928`).
+The server is started once in `initializeWeb()` and never stopped;
+`httpdSuspend()` (6.2) only closes sessions with `httpd_sess_trigger_close()`.
 
-Locking: every handler runs in the server task. The adapter takes `engineMx`
-with a 2 s timeout before calling the handler (503 "EngineLink is busy" on
-timeout) and **gives it back around every `httpd_resp_send*` call**, so a slow
-phone never holds the engine task (today's `netWaitBegin/End`, now in one
-place). The main loop keeps holding the lock while it works and releasing it
-in `delay(1)` as today; the server task has the higher priority and gets it
-at the next release.
+**Adapter (`class Web`)** — the handlers keep calling `web.arg()`,
+`web.hasArg()`, `web.header()`, `web.uri()`, `web.send()`, `web.send_P()`,
+`web.sendHeader()`, `web.sendContent()`, `web.clientIsOnAp()`. Each maps to
+one server call: `httpd_req_get_url_query_str` + `httpd_query_key_value`,
+`httpd_req_get_hdr_value_str`, `httpd_resp_set_status/type/hdr`,
+`httpd_resp_send`, `httpd_resp_send_chunk`. POST bodies
+(`application/x-www-form-urlencoded`, `URLSearchParams` in the app) are
+read with `httpd_req_recv()` into a 2 KB buffer (413 above it) and parsed with
+the same `httpd_query_key_value()`; the only EngineLink code is a URL decoder
+(`+`, `%xx`) and the origin/host allow-list of 6.9, both in a pure header
+`httputil.h` with host tests. The current request is a static pointer valid
+only during the handler (single server task); it is never stored.
 
-Long transfers — `/api/speedtest`, `/api/rtt`, `/api/export/*.csv`,
+**Locking.** The adapter takes `engineMx` (timeout 2 s → 503 "EngineLink is
+busy") before calling a handler and releases it around every
+`httpd_resp_send*` call, so a slow phone never holds the engine task. The
+request body is read *before* the lock is taken. The loop keeps holding the
+lock while it works and releasing it in `delay(1)`; the server task has the
+higher priority and gets it at the next release. No task ever waits for the
+server task while holding the lock, so there is no cycle: loop → (lock) →
+engine task; server → (lock, bounded) → nothing.
+
+**Long transfers** (`/api/speedtest`, `/api/rtt`, `/api/export/*.csv`,
 `/api/log`, `/api/segments.csv`, `/api/backup`, `/api/nmea/bus.csv`,
 `/api/trip/series`, `/api/event/series`, `/api/series/recent`,
-`/api/export/fast.csv` — use the documented async pattern
-(`httpd_req_async_handler_begin()` → one "xfer" task, 8 KB stack, core 1,
-priority idle+4, queue depth 1 → `httpd_req_async_handler_complete()`); a
-second transfer while one runs gets 503 "Another download is running". This
-keeps today's property that a download cannot starve `/api/live`, with the
-official mechanism instead of two raw-socket listeners. The `ChunkOut`
-deflate buffer stays single-instance (the queue depth guarantees it).
+`/api/export/fast.csv`) use the documented async pattern
+(`examples/async_requests`): the handler calls
+`httpd_req_async_handler_begin()` and hands the copy to one "xfer" task
+(8 KB stack, core 1, priority idle+4, queue depth 1; a second transfer gets
+503 "Another download is running"). The worker takes `engineMx` only while it
+reads a chunk of data and releases it before `httpd_resp_send_chunk()`. The
+worker calls `httpd_req_async_handler_complete()` on **every** exit path (done,
+send error, session closed by `httpdSuspend()`); the header warns that
+otherwise the server stops accepting connections. `ChunkOut` (static 8 KB
+deflate buffer) stays single-instance; the queue depth guarantees it.
 
-Uploads (`/api/update`): the app sends the file as the raw request body
-(`application/octet-stream`; `esp_http_server` has no multipart parser) and
-the handler reads it with `httpd_req_recv()` in 2 KB blocks into `Update`,
-checking the image header as today (`handleUpdateUpload`).
+**Uploads** (`/api/update`): the app sends the file as the raw body
+(`application/octet-stream`, `esp_http_server` has no multipart parser);
+the handler takes `Content-Length` (reject < 100 kB or > 3.2 MB, as the
+GitHub path does), `Update.begin(len)`, reads 2 KB blocks with
+`httpd_req_recv()` without holding `engineMx`, checks the image header as
+today, and `Update.end()`; a truncated upload now fails by length instead of
+flashing a short image.
 
-Ports 81 and 82 are gone: `/api/live` and `/report` are ordinary port-80
-routes; the speed test is an async transfer on port 80. The app's two
-`url.port='81'`/`'82'` lines (`app.html:325, 2198`) are removed (its port-80
-fallback already exists for live data).
+**Limits:** URI ≤ 512 B and headers ≤ 1024 B (server config), bodies ≤ 2 KB
+except uploads, query values validated per handler as today, one async
+transfer at a time, 7 client sockets.
 
-The loopback self-check task and `web.rebindNetwork()` are gone: the server
-task is independent of the loop, binds all interfaces, and its own timeouts
-and LRU purge replace the heal/restart logic. The loop watchdog
-(`esp_task_wdt`, 60 s) stays on the loop; the server task is not subscribed
-(IDF default).
+**Memory:** +8 KB server stack +8 KB xfer stack; −8 KB live task, −4 KB speed
+task, −4 KB self-check task, −4 KB link-tune task, −`HTTP_POOL` clients. The
+report prints the server and xfer tasks' stack high-water marks
+(`uxTaskGetStackHighWaterMark`).
 
-Memory: +8 KB server stack +8 KB xfer stack; −8 KB live task, −4 KB speed
-task, −4 KB self-check, −4 KB link-tune, −`HTTP_POOL` clients. Net ≈ −4 KB.
+Ports 81 and 82 are gone; the app's `url.port='81'`/`'82'` lines
+(`app.html:325, 2198`) are removed (P9).
 
 ### 6.7 API contract (routes unchanged; fields and two transports change)
 
@@ -522,6 +601,99 @@ app reads (`routerFailureReason, routerUnexpectedReason, staReason,
 staIpEvents, routerUnexpectedDrops, routerNextTryS, routerAuthMode, bw, ch`)
 and drops the rest.
 
+### 6.9 Security model (local, offline-first, one owner)
+
+Threats that apply: a device on the boat router's LAN, and a web page open in
+the owner's browser while that browser can reach EngineLink (cross-site
+requests, DNS rebinding). Threats that do not apply: the internet (EngineLink
+is never port-forwarded; it only makes outbound TLS calls to GitHub).
+
+What 0.16.5 does: no authentication; `Access-Control-Allow-Origin: *` on
+every response; 40 state-changing POST routes incl. `/api/factory-reset`,
+`/api/update`, `/api/wifi/*`; OTA from GitHub over TLS with the built-in CA
+bundle and a URL pinned to this repository's releases; the Arduino `Update`
+library checks the image magic and IDF verifies the whole image (checksum
+and appended SHA-256) in `esp_ota_set_boot_partition()`
+(`esp_ota_ops.c:623`, called from `Update.end()`); rollback if the new image
+does not confirm itself. Passwords and the GitHub token are stored in NVS
+(plain; flash encryption is not available in the prebuilt core), never
+returned by any API or report, and the router name is hidden in GitHub
+reports.
+
+The model for Wi-Fi 2.0 — the simplest one routers and other LAN devices use;
+no login, no users (owner's requirement):
+
+1. **Same-origin only, by allow-list.** The adapter answers with
+   `Access-Control-Allow-Origin: <origin>` only when the request's `Origin`
+   host is one of EngineLink's own addresses (`192.168.4.1`,
+   `<hostName>.local`, `enginelink.local`, the current router IP); otherwise
+   no CORS header, so a foreign page cannot read responses. The app still
+   works when it hops between those origins (`findHost()`, `preferIp()`).
+2. **State changes need a custom header.** Every POST must carry
+   `X-EngineLink: 1`; without it the adapter answers 403 before any handler
+   runs. Browsers never add a custom header to a cross-site request without
+   a CORS preflight, and the preflight fails for foreign origins (1), so
+   cross-site POSTs are blocked. The adapter answers `OPTIONS` for allowed
+   origins with `Access-Control-Allow-Headers: X-EngineLink, Content-Type`.
+   App change: one header in `post()` and in `uploadFw()`.
+3. **Host header check.** Requests whose `Host` is not one of the addresses
+   in (1) get 421; this defeats DNS rebinding (a foreign name resolving to
+   EngineLink's address would otherwise look same-origin to the browser).
+4. **Resource limits** as in 6.6 (bodies, URI, headers, sockets, one
+   transfer, upload size, 5 s socket timeouts, TCP keepalive).
+5. **Firmware images:** TLS + CA bundle + repository-pinned URL (as today),
+   IDF's image verification at `set_boot_partition` (as today, now documented
+   as the integrity check), `Content-Length` enforced on uploads (6.6), and
+   after `Update.end()` the new partition's `esp_app_desc_t`
+   (`esp_ota_get_partition_description()`) must have the same `project_name`
+   as the running image (`esp_app_get_description()`), which rejects a
+   foreign ESP32 application. **Signed images need secure boot / signed-app
+   support in the bootloader — not available in the prebuilt core (option B,
+   and a key-management decision).**
+6. **What stays open, by design:** any device that is on the boat router's
+   LAN (knows the router password) can use the app, change settings and
+   update the firmware, exactly like the owner's phone. Traffic is plain
+   HTTP on the LAN. The own Wi-Fi's factory password `12345678` must be
+   changed (STATUS; the app flags it). Serial console = physical access.
+
+The functional compromise: none for the owner's app; a browser tab from
+another site can no longer read EngineLink data or trigger actions, and a
+tool that scripts EngineLink's API must send the `X-EngineLink` header and a
+correct `Host`. Approval P12.
+
+### 6.10 Boot self-test and OTA rollback (official mechanism, no watchdog)
+
+The bootloader's rollback is already on (`CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE=y`
+in the prebuilt core; `Update` returns `verifyRollbackLater()=true`, so a new
+image boots in `ESP_OTA_IMG_PENDING_VERIFY`). IDF's instruction
+(`esp_ota_ops.h:81-83`): run the application's self-tests, then
+`esp_ota_mark_app_valid_cancel_rollback()`. 0.16.5 marks valid after 60 s if
+the radio is up — the owner rightly calls that insufficient.
+
+Self-test for Wi-Fi 2.0 (replaces the loopback self-check task and its
+heal/restart logic, P11):
+
+```
+from 60 s after boot, every 20 s, until 600 s, while rollbackPending:
+  pass = httpd handle != NULL
+      && (apStarted || STA has an IP)
+      && (a non-loopback client received a 2xx response from the server since boot
+          || one GET http://127.0.0.1/api/health answered 200 just now)
+  pass → esp_ota_mark_app_valid_cancel_rollback(); log "firmware confirmed: <which evidence>"
+at 600 s without pass → log, saveTotals(), esp_ota_mark_app_invalid_rollback_and_reboot()
+```
+
+The loopback GET is one `NetworkClient` request (10 lines), used only as the
+fallback evidence when no phone has connected yet (a file upload from a
+laptop that is then closed must not roll back a good image). A real client
+response is the strong evidence: Wi-Fi, IP, TCP, server and a handler all
+worked. There is no runtime HTTP watchdog: the server task is the official
+component, the loop keeps its task watchdog (60 s, panic → core dump →
+`crashinfo`), and a hung server would show in the field as "no answer" with
+the counters intact for the next report. If that ever happens, the next step
+is the official `esp_task_wdt_add()` for the server task, not a custom
+monitor.
+
 ---
 
 ## 7. Acceptance criteria (measured; a release needs all of them)
@@ -530,32 +702,40 @@ and drops the rest.
 |---|---|---|
 | Standalone stability | 24 h with an iPhone and a PC joined, app open on one of them: 0 `left … code 2` series; ≤ 1 unexplained AP leave (reason 8/3) per hour; every DHCP lease followed by a port-80 connection from that phone within 30 s; station RSSI ≥ −60 dBm at 1 m | Wi-Fi report, SD log |
 | Router stability | 24 h on the router: ≤ 2 `lostEvents`, each recovered (IP again) within 15 s; 0 Standalone fallbacks with the router up | report |
-| HTTP latency | `/api/live` round trip (the app's existing RTT stat) p95 ≤ 150 ms on the own Wi-Fi, ≤ 300 ms on the router; app page (`/`) first load ≤ 2 s on the own Wi-Fi; no non-transfer request > 2 s; `/api/live` p95 ≤ 500 ms while a 1 MB export runs | app speed/RTT stat, `httpdSendTimeouts` = 0 |
-| Throughput | own Wi-Fi ≥ 400 kB/s; router ≥ 300 kB/s with `netboost`; the router figure without `netboost` is recorded (P8) | "Test speed" ×5 |
+| HTTP latency | `/api/live` round trip (the app's RTT stat) p95 ≤ 150 ms on the own Wi-Fi, ≤ 300 ms on the router; app page first load ≤ 2 s on the own Wi-Fi; no non-transfer request > 2 s; `/api/live` p95 ≤ 500 ms while a 1 MB export runs | app stat; `httpdSendTimeouts` = 0 |
+| Dead client | a phone put in airplane mode mid-download and mid-polling: the other client's `/api/live` p95 ≤ 500 ms; its socket freed within 30 s (keepalive); `loopPartMaxMs` all ≤ 50 ms | bench 9.2 |
+| Throughput | own Wi-Fi ≥ 400 kB/s; router ≥ 300 kB/s with `netboost`; the router figure without it recorded (P8) | "Test speed" ×5 |
+| Sockets | 20 parallel `curl` connections held open: the 21st gets served after LRU purge, no `httpd_accept_conn` error, no reboot; sockets back to idle count within 60 s | bench 9.2 |
+| Security | from a foreign origin: GET answered without `Access-Control-Allow-Origin`; POST without `X-EngineLink` → 403; `Host: evil.example` → 421; a 3 KB form body → 413; a 4 MB or truncated upload → rejected, no flash write started or `Update` aborted; passwords never appear in `/api/state`, `/api/diag`, `/api/backup`, the report or the SD files | bench 9.2 `curl` list |
 | Scan / look | user scan ≤ 4 s and lists the boat router; a look on the known channel ≤ 0.3 s; a phone stays joined through 60 consecutive looks | report (`looks`, `apLeaves`), stopwatch |
-| Recovery | router off 5 min → `standalone` at 120 ± 5 s; router back → `router` ≤ 90 s with no phone joined; boot with router: IP ≤ 5 s median, ≤ 180 s worst, else Standalone; wrong code → result ≤ 25 s with the AP never down (`apStarts` unchanged for a router on channel 6) | 9.9 T2–T6 |
+| Recovery | router off 5 min → `standalone` at 120 ± 5 s; router back → `router` ≤ 90 s with no phone joined; boot with router: IP ≤ 5 s median, ≤ 180 s worst, else Standalone; wrong code → result ≤ 25 s with the AP never down | 9.9 T2–T6 |
 | Phone never cut off | T5: 30 min with a phone joined and the router back: `returns == 0`, phone never dropped; "Switch now" → router ≤ 25 s | D21 |
-| Memory | after 24 h: lowest free heap ≥ 40 KB, largest block ≥ 32 KB, free heap not falling more than 2 KB/h; `httpd_accept_conn` errors 0; `wifiEventOverflow` 0 | report |
-| Loop / engines | `engineWait max` < 200 ms during every test; `loopPartMaxMs[network]` ≤ 1 500 ms at a state change, ≤ 20 ms otherwise; the former "web" part ≤ 5 ms (the loop no longer serves HTTP); engine report answered-rate and NMEA frame count unchanged during Wi-Fi tests | engine report, Wi-Fi report |
+| Self-test / rollback | a new image confirms within 2 min of the app reconnecting (log says which evidence); the broken-`startAP()` test build rolls back at 600 s by itself; a build with a broken route table rolls back | 9.6 |
+| Memory | after 24 h: lowest free heap ≥ 40 KB, largest block ≥ 32 KB, free heap not falling more than 2 KB/h; server and xfer stack high-water marks ≥ 1 KB; `wifiEventOverflow` 0 | report |
+| Loop / engines | `engineWait max` < 200 ms during every test; `loopPartMaxMs[network]` ≤ 1 500 ms at a state change, ≤ 20 ms otherwise; engine report answered-rate and NMEA frame count unchanged during Wi-Fi tests | engine report, Wi-Fi report |
 | Radio truth | report shows AP bandwidth 20 MHz, inactive time 600 s, TX "driver reports 19.50 dBm" in both modes, `txReapplied` stable | report |
-| Rapid boots, rollback | T7; an OTA image with a deliberately broken `startAP()` (test build) rolls back after 60 s | 9.9 |
 
 ---
 
 ## 8. Test strategy
 
-1. **Host tests** (CI, `g++ -std=c++17 -Wall -Wextra`): `tools/test_wifistate.cpp`
-   with the scenarios in 9.3; `tools/test_tracefold.cpp` (F2 fold, 9.1c).
-2. **Source contracts** (CI, Python, `tools/fwsource.py`):
-   `tools/test_wifi_contract.py` (9.10) replaces `test_wifi_simple.py`;
-   `test_router_throughput_guard.py` keeps its non-radio assertions (the
-   `linkTune`/`radioTestWanted` ones go, its "rescue return rule" comment is
-   corrected).
+Tests prove behaviour; a few structural contracts guard the lessons that only
+a build can break.
+
+1. **Host tests** (CI, `g++ -std=c++17 -Wall -Wextra`), pure headers without
+   Arduino: `tools/test_wifistate.cpp` (9.3 scenarios);
+   `tools/test_tracefold.cpp`; `tools/test_httputil.cpp` for `httputil.h`
+   (URL decoding incl. `+`, `%2B`, bad `%` sequences, truncation at 2 KB;
+   `originAllowed()`/`hostAllowed()` with the four own addresses, a foreign
+   name, a foreign IP, a port suffix, upper-case, an empty header).
+2. **Structural contracts** (CI, `tools/test_wifi_contract.py`, 9.10): only
+   what cannot be executed on a host.
 3. **Compile** (CI): unchanged command, core pinned (D25), the
-   `__wrap_esp_wifi_init` objdump check stays.
-4. **Bench** (owner, USB from a charger, iPhone + PC, serial `wifi`): after
-   Stages 1, 2 and 5 as listed in 9.
-5. **Boat** (owner): protocol 9.9. D24: no merge, no release before it passes.
+   `__wrap_esp_wifi_init` objdump check.
+4. **Bench** (owner; USB from a charger; iPhone + PC; a laptop with `curl`):
+   the functional lists in 9.1, 9.2, 9.5, 9.6 — each item is a command or an
+   action with an expected observable result.
+5. **Boat** (owner): 9.9. D24: no merge, no release before it passes.
 
 ---
 
@@ -593,28 +773,46 @@ station RSSI printed; a router switched off for 2 min yields < 10 trace
 entries. No behaviour change otherwise. (The earlier "bounded writes"
 workaround is **dropped**: Stage 2 removes the cause.)
 
-### 9.2 Stage 2 — `esp_http_server` (F1 structurally)
+### 9.2 Stage 2 — `esp_http_server`, security model, boot self-test
 
-1. `httpd.ino` per 6.6: server start in `initializeWeb()`, the `Web`
-   adapter, URL decoding, static page, CORS, async transfer worker, upload.
+1. `httpd.ino` per 6.6; `httputil.h` (URL decoder, allow-lists) with
+   `tools/test_httputil.cpp`.
 2. Route table unchanged in `webapi.ino`; handlers that used
    `web.client()`/`web.upload()` adapted (`downloads.ino:34`,
-   `webapi.ino:870-`).
+   `webapi.ino:870-`); the OPTIONS preflight route; the `X-EngineLink` and
+   `Host` checks in the adapter's dispatch (6.9).
 3. Delete `webserver.h`, `liveHttpTask`, `speedHttpTask`,
    `httpSelfCheckTask`, `NetworkServer liveServer/speedServer`,
    `netWaitBegin/End`, `lastHttpMs`, `httpBusySince`, `httpHeal*`,
-   `httpSelf*`, the `web.rebindNetwork()` call in `serviceNetwork()`.
-4. `netboost.cpp` called from `open_fn` behind `#if EL_NETBOOST` (P8).
-5. App (two lines + upload): remove `url.port='81'` / `'82'`; `uploadFw()`
-   sends the `File` as the body instead of `FormData`. `python3
+   `httpSelf*`, the `web.rebindNetwork()` call.
+4. `netboost.cpp` behind `#if EL_NETBOOST` in `open_fn` (4.1, P8).
+5. Boot self-test (6.10) replaces the 60 s radio check at
+   `EngineLink.ino:601`; the `esp_app_desc_t` project-name check after
+   `Update.end()` in both OTA paths.
+6. App: remove `url.port='81'`/`'82'`; `post()` and `uploadFw()` send
+   `X-EngineLink: 1`; `uploadFw()` sends the `File` as the body. `python3
    tools/build_ui.py`.
-6. Contract tests (9.10) for the server.
+7. `tools/test_wifi_contract.py` server items (9.10).
 
-Bench acceptance (before Stage 3): the HTTP latency, throughput and memory
-rows of section 7 on the own Wi-Fi; a phone put in airplane mode mid-download:
-`loopPartMaxMs` all ≤ 50 ms, `httpdSendTimeouts ≥ 1`, the other phone's app
-keeps updating; 20 rapid page reloads: no `httpd_accept_conn` error; OTA from
-a file works.
+Bench acceptance (before Stage 3), each with the expected result:
+
+| Action | Expect |
+|---|---|
+| iPhone + PC, app open on both, 30 min | section 7 latency row; `httpdSendTimeouts` 0 |
+| PC: `curl -s -D- -o /dev/null http://192.168.4.1/api/live` | 200, `Content-Type: application/json`, no `Access-Control-Allow-Origin` |
+| `curl -s -D- -o /dev/null -H 'Origin: http://enginelink.local' http://192.168.4.1/api/live` | `Access-Control-Allow-Origin: http://enginelink.local` |
+| `curl -s -D- -o /dev/null -H 'Origin: http://evil.example' http://192.168.4.1/api/live` | no `Access-Control-Allow-Origin` |
+| `curl -s -D- -X POST -d 'kbs=1&rtt=1' http://192.168.4.1/api/speedlog` | 403 |
+| same with `-H 'X-EngineLink: 1'` | 200 |
+| `curl -s -D- -H 'Host: evil.example' http://192.168.4.1/api/live` | 421 |
+| `curl -s -D- -X POST -H 'X-EngineLink: 1' --data-binary @3k.txt http://192.168.4.1/api/cfg` | 413 |
+| `curl -s -D- -X POST -H 'X-EngineLink: 1' --data-binary @4mb.bin http://192.168.4.1/api/update` | 4xx, `otaBytes` 0, no restart |
+| `head -c 500000 enginelink-update.bin` uploaded as a 1.5 MB `Content-Length` (`curl --header 'Content-Length: 1500000'`, then cut) | `Update` aborted, no restart, app still answers |
+| `for i in $(seq 20); do curl -s http://192.168.4.1/api/live >/dev/null & done; wait` | all 200; `curl` #21 after that: 200; `httpd_accept_conn` not in the serial log |
+| phone in airplane mode during a 1 MB export; other phone polling | other phone's live p95 ≤ 500 ms; export ends with `httpd_req_async_handler_complete` logged; socket freed ≤ 30 s |
+| 20 page reloads in a row on Safari | all complete; `max_open_sockets` never exceeded (serial) |
+| OTA from a file (valid image) | restart, "firmware confirmed: client response" in the log within 2 min |
+| grep of `/api/state`, `/api/diag`, `/api/backup`, the report and `/WIFIREP.TXT` for the AP and router passwords | nothing |
 
 ### 9.3 Stage 3 — `wifistate.h` + host test
 
@@ -648,8 +846,7 @@ namespace wifistate {
 1 boot without router; 2 boot with router, IP at 1.4 s → ROUTER; 3 nothing
 for 180 s → STANDALONE at ≥ 180 000, not 120 000; 4 ROUTER → DISCONNECTED(200)
 → ROUTER_LOST → GOT_IP at +50 s → ROUTER, `lostEvents==1`; 5 ROUTER_LOST 120 s
-→ STANDALONE; 6 looks at 60/120/180 s, `lookKind` rules ported from
-`test_netpolicy.cpp`; 7 look seen, no phone → RETURN → OK → ROUTER; 8 look
+→ STANDALONE; 6 looks at 60/120/180 s; `lookKind`: phone joined → `LOOK_CHANNEL` when known, `LOOK_SKIP` when unknown (never `LOOK_ALL`); no phone → `LOOK_ALL` every fifth and whenever unknown, else `LOOK_CHANNEL`; 7 look seen, no phone → RETURN → OK → ROUTER; 8 look
 seen, phone joined → stays for 24 h of looks, `routerBackSeen`, `returns==0`;
 a later unseen look clears it; `cmdReturn()` with it set → RETURN → ROUTER;
 without → no change; 9 RETURN → 202, 202 → STANDALONE, `returnsFailed==1`,
@@ -714,12 +911,14 @@ right password → `test: setup ok`, AP off, router IP, `cfg.router` saved;
 router off 5 min → standalone at +2 min; back within 90 s with no phone;
 with a phone joined: stays standalone, `routerBack: true`.
 
-### 9.6 Stage 6 — Rapid boots, rollback, log texts
+### 9.6 Stage 6 — Rapid boots, rollback test builds, log texts
 
-D9 counter + `boots3` in the report; the rollback line
-`EngineLink.ino:601` unchanged (contract); `serialcmd.ino` boot line uses the
-state name; `serviceWifiLog()` logs state changes. Acceptance: T7; the
-broken-`startAP()` OTA test build rolls back after 60 s.
+D9 counter + `boots3` in the report; `serialcmd.ino` boot line uses the state
+name; `serviceWifiLog()` logs state changes. Rollback acceptance with two
+throw-away test builds (never released): (a) `startAP()` returns false and
+no router saved → the self-test never passes → rollback at 600 s, the old
+image boots; (b) `httpd_start()` fails (route table too large on purpose) →
+same. Also T7.
 
 ### 9.7 Stage 7 — Report, cleanup, docs, CI
 
@@ -732,7 +931,7 @@ drop `webserver.h`, `netpolicy.h`, `linktune`, `routerguard.h`);
 Acceptance: `wc -l wifi.ino < 300`, `httpd.ino < 300`, `netreport.ino < 220`;
 `grep -rn "linkTune\|netpolicy\|routerGuard\|staSecMode\|WebServer.h\|NetworkServer" firmware tools .github` empty; CI green.
 
-### 9.8 Stage 8 — App (D20; `firmware/ui/app.html`, then `tools/build_ui.py`)
+### 9.8 Stage 8 — App (D20 and P9; `firmware/ui/app.html`, then `tools/build_ui.py`)
 
 1. Router page: after `wifiConnect`, poll `/api/wifi/test` every second for
    25 s; show `testing` / `wrong-code` ("Wrong code or the router refused
@@ -746,7 +945,10 @@ Acceptance: `wc -l wifi.ino < 300`, `httpd.ino < 300`, `netreport.ino < 220`;
    router afterwards." → `POST /api/wifi/return`, `BASE=''`, `findHost()`.
    No modal that reappears (D21: staying is a valid choice).
 3. Texts at `app.html:1703, 1719` describe looks/return.
-4. `tools/test_mobile_ui_contract.py` keeps passing; Playwright desktop and
+4. The Stage 2 app items (ports, upload body, `X-EngineLink` header) are
+   already in; verify the home-screen app on iPhone still loads from both
+   origins and that `preferIp()` still switches to the router IP.
+5. `tools/test_mobile_ui_contract.py` keeps passing; Playwright desktop and
    iPhone viewports render the texts; reduced motion unaffected.
 
 ### 9.9 Stage 9 — Hardware validation, release 0.17.0 (D24)
@@ -774,31 +976,28 @@ Then `docs/RELEASING.md`: bump `EL_VERSION`, README badge,
 untested), merge, release. `docs/STATUS.md` says "verified on the board" only
 for rows T1–T10 passed.
 
-### 9.10 `tools/test_wifi_contract.py` (replaces `test_wifi_simple.py`)
+### 9.10 `tools/test_wifi_contract.py` (structural contracts only)
+
+Everything executable is in the host tests (section 8, item 1) or the bench lists; this file
+keeps the lessons that only a build or a code review can break:
 
 ```
 w = wifi.ino; h = httpd.ino; fw = firmware_source()
-- len(w.splitlines()) < 300 and len(h.splitlines()) < 300
-- "delay(" not in w and "delay(" not in h
-- body(w,"void onWiFi(") has "xQueueSend" and "traceWifi(" and no "WiFi." / "MDNS." / "esp_wifi_"   (D14, F5)
-- count("WiFi.mode(") in fw == count in body(w,"void radioApply(")                                   (one place)
-- "httpdSuspend()" precedes every "WiFi.mode(" in radioApply (regex)                                 (driver-buffer lesson)
-- body(w,"void startAP(") has 'WiFi.softAPConfig(IPAddress(192,168,4,1)' and
-  'WiFi.softAP(cfg.apName.c_str(),cfg.apPassword.c_str(),apChannelNow,false,6)'                     (D2)
-- body(w,"void apRadioSetup(") has "esp_wifi_set_bandwidth(WIFI_IF_AP,WIFI_BW_HT20)",
-  "esp_wifi_set_inactive_time(WIFI_IF_AP,600)", "esp_wifi_set_country(", "applyTxPower(false)"        (F19, D14)
-- body(w,"void startLook(") has "scanNetworks(true,true,false," and "cfg.ssid.c_str()"                (hidden SSIDs)
-- "scanNetworks(false" not in fw                                                                     (async only)
-- not re.search(r"print[f]?\([^;]*(apPassword|wifiPassword)", fw)                                    (never log passwords)
-- "saveSettings()" not in body(webapi,"void handleWifiConnect("); "cfg.ssid=" not in that body nor in handleOptions   (F9/P7)
-- "HTTPD_DEFAULT_CONFIG()" in h; "lru_purge_enable=true" in h; "max_uri_handlers=96" in h; "httpd_uri_match_wildcard" in h
-- "httpd_req_async_handler_begin(" in h and every path of the transfer list (6.6) appears in the async table in h
-- "xSemaphoreGive(engineMx)" precedes "httpd_resp_send" inside the adapter's send functions (regex on body(h,"size_t Web::send"))
-- "#include <WebServer.h>" not in fw; "NetworkServer" not in fw; "setTxTimeoutMs(0)" after "Serial.begin" in setup()
-- "wifistate.h" has no "#include <Arduino.h>", no "WiFi", no "millis("
-- the "esp_ota_mark_app_valid_cancel_rollback" line in loop() unchanged (string compare)              (F12)
+- len(w.splitlines()) < 300                                                  (D14)
+- body(w,"void onWiFi(") contains no "WiFi." / "MDNS." / "esp_wifi_"          (D14, F5)
+- count("WiFi.mode(") in fw == count in body(w,"void radioApply(")            (one place changes the mode)
+- "httpdSuspend()" precedes every "WiFi.mode(" in radioApply                  (driver-buffer lesson)
+- body(w,"void startAP(") has the exact softAPConfig/softAP lines of 6.2      (D2)
+- "scanNetworks(false" not in fw                                              (async only)
+- not re.search(r"print[f]?\([^;]*(apPassword|wifiPassword|ghToken)", fw)     (never log secrets)
+- "saveSettings()" not in body(webapi,"void handleWifiConnect("); "cfg.ssid=" not in it nor in handleOptions   (F9/P7)
+- "#include <WebServer.h>" not in fw; "NetworkServer" not in fw; "httpd_stop(" not in fw
+- "lwip/priv" appears only in netboost.cpp; "__wrap_" appears only in wifiwpa3.cpp   (section 4: no third exception)
+- "esp_ota_mark_app_valid_cancel_rollback" appears exactly once, inside body(fw,"void serviceSelfTest(")   (6.10)
+- "setTxTimeoutMs(0)" after "Serial.begin" in setup()
+- "wifistate.h", "httputil.h" have no "#include <Arduino.h>", no "WiFi", no "millis("
 - grep: no "netpolicy", "linkTune", "routerGuard", "staSecMode", "radioTestWanted", "lastHttpMs" in firmware/ or .github/
-- "esp32:esp32@3.3.12" in .github/workflows/*.yml                                                     (D25)
+- "esp32:esp32@3.3.12" in .github/workflows/*.yml                              (D25)
 ```
 
 ---
@@ -810,11 +1009,14 @@ w = wifi.ino; h = httpd.ino; fw = firmware_source()
   acceptance is reported.
 - D23: before writing a helper, name the IDF/core API that does it; if there
   is none, say so in the commit message. No new file may include
-  `lwip/priv/*` or wrap a core function; the two existing exceptions are the
-  only ones.
+  `lwip/priv/*`, wrap a core function or touch driver initialisation; the two
+  exceptions in 4.1 are the only ones, and a third needs the owner's written
+  approval and its own 4.1 entry first.
 - Never call `WiFi.*`, `MDNS.*`, `esp_wifi_*` from the event callback, an
   HTTP handler or another task. Handlers set flags; `serviceNetwork()` acts
-  ≥ 1.2 s later.
+  ≥ 1.2 s later. Handlers never keep an `httpd_req_t*` beyond their return
+  except through `httpd_req_async_handler_begin()`, and never call
+  `httpd_stop()`.
 - Every blocking core call (`WiFi.mode`, `WiFi.begin`, `MDNS.begin`) happens
   inside `radioApply()`/`startNameService()` only (`loopPartMaxMs[network]`
   measures them).
@@ -839,10 +1041,12 @@ Open, for approval:
 
 | # | Proposal | Recommendation | Why |
 |---|---|---|---|
-| P8 | Keep `netboost.cpp` (fenced exception) until option B | **keep**, with the no-`netboost` router throughput measured and recorded in T8 | it is the only way under A to lift the 5744-byte compile-time window that measured 7× on the router; 54 lines, kill switch, contract test |
-| P9 | Two app changes beyond D20: ports 81/82 removed from the app, firmware upload as a raw body | **approve** | both are consequences of using `esp_http_server` instead of three hand-written servers; two lines and one function |
-| P10 | Option B (ESP-IDF project with Arduino as a component) as a separate later plan under the triggers in 3.2 | **defer**; decide after T10 | measured need first; it is a full-firmware conversion |
-| P11 | The loopback web self-check and its automatic board restart are removed (official server timeouts and LRU purge replace them) | **approve** | the self-check existed to catch the single-threaded server hanging; that server is gone |
+| P8 | Keep `netboost.cpp` as the one private-structure exception until option B, behind `EL_NETBOOST`, with the no-boost router throughput measured in T8 | **keep** | no supported alternative under A (4.1); 54 lines; a struct change fails the build, not the boat |
+| P9 | App changes beyond D20: ports 81/82 removed, upload as a raw body, the `X-EngineLink` header on POSTs | **approve** | consequences of `esp_http_server` and of the security model; three small edits |
+| P10 | Option B as a separate later plan under the triggers in 3.2 | **defer**; decide after T10 | measured need first |
+| P11 | Replace the loopback self-check task and its heal/restart logic by the boot self-test of 6.10 (official rollback API; a real client response or one loopback GET as evidence; rollback by itself at 600 s) and no runtime HTTP watchdog | **approve** | the thing the old task guarded (a single-threaded server hanging the loop) no longer exists; the self-test is what IDF's OTA documentation asks for |
+| P12 | Security model 6.9: no login; CORS by own-origin allow-list, `X-EngineLink` header on POSTs, `Host` check, limits, OTA project-name check; LAN devices keep full access | **approve** | the simplest model LAN appliances use; blocks cross-site and rebinding attacks without users or passwords |
+| P13 | Add `sha256` per entry to `releases.json` (workflow) and verify it in the GitHub OTA path with mbedtls | **optional, later** | IDF already verifies the image's own checksum and SHA-256 at `set_boot_partition`; this would only add a check against the published list |
 
 Consequence of D21 the owner should keep in mind: a phone that stays
 associated to the own Wi-Fi holds EngineLink in Standalone (NTP, GitHub
@@ -854,39 +1058,46 @@ up to 10 min; shortening it is **not** in this plan.
 
 ## 12. Review log and open risks
 
-Final review 2026-11-05 (history, all folded into section 6): R1 rapid boots
-vs automatic return (`autoReturn`); R2 AP left on the router's channel after a
-failed test (restart on drift); R3 one 202 is not "wrong code" (two strikes);
-R4 the coalesced trace cannot feed the machine (queue); R5 hidden SSIDs
-(directed scan); R6 auto-reconnect off before the AP comes up; R7
-`lastJoinUsedSae`; R8 T6 wording; R9 a stale test comment.
-
-Third-revision review (2026-11-05, this document): the Stage 1a bounded-write
-workaround contradicted D23 and is replaced by Stage 2; the connection pool,
-keep-alive rewrite, two raw listeners and the self-check were four hand-made
-pieces of one component and are replaced by it; the hand ring for events is
-replaced by a FreeRTOS queue; `wifi_provisioning` was evaluated and rejected
-with reasons (section 4); the CI core version was unpinned (D25).
+Reviews (history, all folded into sections 4–9): the 2026-11-05 final review
+R1–R9 (rapid boots vs automatic return; AP channel after a failed test; two
+auth failures before "wrong code"; FreeRTOS queue instead of a hand ring;
+hidden SSIDs; auto-reconnect off before the AP comes up; `lastJoinUsedSae`;
+T6 wording; a stale comment); the third revision (bounded-write workaround
+dropped; four hand-made server pieces replaced by `esp_http_server`;
+`wifi_provisioning` rejected with reasons; CI core version pinned); the
+**fourth revision (quality pass, 2026-11-05)**: the two exceptions justified
+against the headers with supported alternatives checked (4.1); the adapter
+bounded (≤ 200 lines of logic, every call mapped to one server API, lifetimes
+and cleanup stated); TCP keepalive and the socket budget made explicit;
+looks with a phone joined restricted to the known channel (no full scans
+while anyone is connected); the SETUP-test channel move explained through
+the driver's CSA; the rollback confirmation upgraded from "radio up" to a
+real self-test with automatic rollback (6.10); a security model added (6.9);
+tests moved from line-presence checks to host tests of pure functions and
+`curl`-level bench checks (7, 8, 9.2, 9.10).
 
 Open risks:
 
 - `WIFI_AP_STA` idle STA (D19): RAM and a driver path the board has not run
   long; measured in 9.4 and T1/T10; revert switch exists.
-- `esp_http_server` in the prebuilt core uses `CONFIG_LWIP_MAX_SOCKETS=16`;
-  the socket budget in 6.6 leaves 5 for mDNS, SNTP, HTTPClient and the
-  loopback; measured by `httpd_accept_conn` errors in T1.
+- Whether iPhones follow the softAP's Channel Switch Announcement during a
+  SETUP test without dropping: documented driver behaviour, not yet observed
+  on this boat (T2/T3 measure it; the app recovers either way).
 - Handlers now wait for `engineMx` released by the loop; a long loop part
   (raw clean-up 461 ms, serial 584 ms with a console attached) delays a
-  request by that much. The latency criterion catches it; if it fails, the
-  fix is shortening that loop part, not a second lock.
+  request by that much. The latency criterion catches it; the fix is
+  shortening that loop part, not a second lock.
+- Pre-existing: `String` fields written by `fwWorker` (`fwList`, `fwError`,
+  `reportError`) are read by handlers without a lock; set-then-flag order
+  makes it benign today; noted, not changed.
 - A phone that never leaves keeps EngineLink off the router (D21).
 - iOS behaviour on networks without internet (F15) is outside the firmware.
 - The core's immediate reconnect (D3) hammers a refusing router every 1.6 s
   for 2 min; the trace no longer floods.
-- The 60 s rollback window confirms on `apStarted`; a build whose AP comes up
-  but whose server is dead would be confirmed (the self-check that restarted
-  the board in that case is gone, P11). Mitigation: the Stage 2 bench test
-  and T1 run on the same build that is released.
+- No signed firmware images under option A (6.9 item 5); the trust anchor is
+  TLS to GitHub and the pinned repository URL.
+- The root cause of the 2026-11-05 downlink failure is still open (section
+  13); nothing above fixes a hardware or RF fault.
 
 ---
 

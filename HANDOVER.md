@@ -251,7 +251,14 @@ Wi-Fi 0.16.0–0.16.5 (2026-11-04, standalone on the boat with an iPhone):
   (`wifistate.h`) replaces the ad-hoc timers; FreeRTOS queue for driver
   events. Two fenced exceptions remain until a possible later move to
   ESP-IDF-with-Arduino-as-component: `netboost.cpp` (compile-time 5744-byte
-  TCP window in the prebuilt core) and `wifiwpa3.cpp`. Findings worth
+  TCP window in the prebuilt core, no `SO_SNDBUF` in IDF's lwIP) and
+  `wifiwpa3.cpp` (the SAE capability is a compile-time macro in
+  `WIFI_INIT_CONFIG_DEFAULT()`); both justified in plan section 4.1. The
+  quality pass of 2026-11-05 also added a security model without login
+  (plan 6.9: own-origin CORS allow-list, `X-EngineLink` header on POSTs,
+  `Host` check, request limits) and a boot self-test that confirms a new
+  firmware only after the web server answered a client, with automatic
+  rollback otherwise (plan 6.10). Findings worth
   knowing now: the 5–10 s web stall is the core's `NetworkClient::write()`
   retry loop (10 × 1 s `select` when the phone stops acknowledging); the TX
   power check accepts the driver's unset 20 dBm as 19.5 dBm; 0.16.2 dropped
