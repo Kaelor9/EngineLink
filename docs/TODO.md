@@ -78,6 +78,9 @@ version instead of one update each. Newest at the bottom of each section.
 
 A clean rewrite of the Wi-Fi part, built in one release after a short router
 test on 0.16.5. Not written from zero: the lessons below become tests.
+The step-by-step implementation plan (audit of the 0.16.5 code, state
+machine, stages, tests, boat protocol) is
+[docs/WIFI_REWRITE_PLAN.md](WIFI_REWRITE_PLAN.md) (2026-11-05, plan only).
 
 **Why:** the Wi-Fi logic in `wifi.ino` is only ~100 lines; the clutter is the
 0.12–0.15 leftovers around it (`netpolicy.h`, `linktune.cpp`, channel survey,

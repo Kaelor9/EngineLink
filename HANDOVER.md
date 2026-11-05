@@ -238,7 +238,13 @@ Wi-Fi 0.16.0–0.16.5 (2026-11-04, standalone on the boat with an iPhone):
   test, router, router lost), `enginelink.local`, no retry settings. The plan,
   rules, what to remove/keep and the required tests are in
   [docs/TODO.md](docs/TODO.md) under "Wi-Fi 2.0". Follow it rather than the
-  0.15 rules above, which describe the old design.
+  0.15 rules above, which describe the old design. The implementation plan
+  with the code audit, state machine, stages and tests is
+  [docs/WIFI_REWRITE_PLAN.md](docs/WIFI_REWRITE_PLAN.md) (2026-11-05, nothing
+  built yet). Two findings from that audit worth knowing now: the 10 s web
+  stall is the Arduino core's `NetworkClient::write()` retry loop (10 × 1 s
+  `select` when the phone stops acknowledging), and the TX power check
+  accepts the driver's unset default (20 dBm) as 19.5 dBm.
 
 USB serial commands (0.16.3, 115200 baud, web installer "Logs & console" or any
 serial monitor): `wifi` (full Wi-Fi report), `wifi log` / `read wifi log`
