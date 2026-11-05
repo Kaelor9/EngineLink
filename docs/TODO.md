@@ -135,8 +135,12 @@ that is up now (0.16.3); TX power set after the country and checked
 callback; `wifi.ino` stays under ~300 lines.
 
 **Open:**
-- Owner's OK needed: the router test and the "Router is back" prompt need
-  small app changes, and he earlier said not to touch the app for Wi-Fi work.
+- Decided 2026-11-05 (details in `docs/WIFI_REWRITE_PLAN.md`, section 7):
+  the small app changes for the router test result and the "Router is back,
+  switch now?" prompt are approved; standalone may run the radio as AP+idle
+  station; a phone joined to the own Wi-Fi is **never** cut off automatically
+  (no idle timer) — only "Switch now" or the phone leaving lets EngineLink
+  return to the router; answering Apple's captive-portal probe is deferred.
 - 10 s main-loop stall in the web part (0.16.5 report): find the cause.
 - Only if EngineLink is ever sold: unique SSID (`EngineLink-XXXX`) and code
   per board on a label with a Wi-Fi QR code; a shared default password is

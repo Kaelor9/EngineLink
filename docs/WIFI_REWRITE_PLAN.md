@@ -41,6 +41,15 @@ From the owner (`docs/TODO.md`, "Wi-Fi 2.0", 2026-11-04) and `HANDOVER.md`:
 | D17 | Marine safety, truthful telemetry, offline first, no router changes required, privacy (router name hidden in reports), "EngineLink" only. | CLAUDE.md |
 | D18 | Built in **one release** (0.17.0) after the short 0.16.5 router baseline test the owner does on the boat. | TODO |
 
+Added by the owner on 2026-11-05 (answers to section 7):
+
+| # | Decision | Source |
+|---|---|---|
+| D19 | Standalone runs the radio as `WIFI_AP_STA` with an idle station interface, so scans and looks never change the radio mode (P1 approved). One `constexpr` reverts it. | owner, 2026-11-05 |
+| D20 | The app changes are approved: router-test result text and the "Router is back, switch now?" prompt (P2 approved; D6 fully in force). | owner, 2026-11-05 |
+| D21 | **A phone joined to the own Wi-Fi is never cut off automatically.** No idle timer counts as "no phone" (P3 rejected). EngineLink returns to the router only when no phone is joined, or when the owner taps "Switch now" in the app. | owner, 2026-11-05 |
+| D22 | Answering Apple's captive-portal probe (P4) is deferred; not built in 0.17.0. | owner, 2026-11-05 |
+
 ---
 
 ## 2. Audit of the current implementation (0.16.5)
@@ -101,16 +110,19 @@ disappeared" was never root-caused; 0.16.2 lost the HTTP rebind in a rewrite.
 The core's `mode()` waits up to 1 s for netif status bits. Fewer flips, in one
 place, with a test on their count, is the mitigation. → Stage 3 (one function
 `radioApply()`, Standalone runs as `WIFI_AP_STA` with the STA idle so scans
-and looks never change the mode; see 3.3 and decision P1).
+and looks never change the mode; see 3.3 and D19).
 
 **F5 — Shared state written from the Wi-Fi event task.** `onWiFi()`
 (`wifi.ino:114-130`) writes `staDownSince`, `staIpAt`, `networkIpEpoch`,
 `mdnsRefreshPending`… from the system event task (core 0) while
 `serviceNetwork()` (core 1) reads and clears them (`wifi.ino:224-236`). Most
 are plain `uint32_t`/`bool`, not atomic by contract. → Stage 3: the callback
-only appends to the trace ring (already under `traceMux`) and increments a
-`volatile uint32_t wifiEventSeq`; the state machine consumes events from the
-ring on the main loop.
+only appends, under `traceMux`, to two rings: the coalesced trace for the
+report (as today) and a **raw event FIFO** (`WifiEv wifiEvents[16]`, type,
+reason, ms, head/tail) for the state machine. The machine must see every
+single event (two 202s in a row decide "wrong code", 3.5), which the coalesced
+trace cannot give it. The main loop drains the FIFO each pass; an overflow
+increments `wifiEventOverflow` (reported) and never blocks the callback.
 
 **F6 — Dead state and false report lines.** `staRetryAt`, `staRetryFails`,
 `staConnecting`, `routerProbe*`, `routerReturnFailed`, `staSecSwitch*`,
@@ -175,7 +187,7 @@ known channel, full scan only every fifth minute when no channel is known.
 
 **F14 — Memory headroom is small.** Reports show lowest free heap 55–57 KB and
 largest block 41–57 KB (#126, #146). Running the STA interface idle alongside
-the AP (P1) costs a netif and driver buffers (measure; expected < 10 KB).
+the AP (D19) costs a netif and driver buffers (measure; expected < 10 KB).
 → Stage 3 acceptance: lowest free heap after 1 h ≥ 40 KB, largest block
 ≥ 32 KB, reported in the Wi-Fi report.
 
@@ -184,8 +196,8 @@ Not reproduced on 0.16.5 (phone stayed, 6 HTTP requests). Likely iOS deciding
 "no internet" and preferring another known network; the firmware cannot see
 this. The plan does **not** fake internet (captive-portal answers, DHCP option
 114 via `WiFi.AP.enableDhcpCaptivePortal()` would make iOS open a login sheet
-and is wrong for an app). → Stage 8 boat test measures it; decision P4 if it
-recurs.
+and is wrong for an app). → Stage 8 boat test measures it; the owner deferred
+the question (D22), so nothing is built unless T1 shows it recurring.
 
 **F16 — Keep-alive contracts others depend on.** `networkIpEpoch` /
 `networkIpEventAt` drive the port 81/82 rebind (`netreport.ino:238-246`), the
@@ -221,7 +233,8 @@ STANDALONE      own Wi-Fi on (AP up on apChannel), STA idle (no connect).
 ROUTER_TEST     own Wi-Fi stays on; STA tries the router once (≤ TEST_MS=20 s).
                 Entered from STANDALONE by /api/wifi/connect (setup) or by a
                 successful look (return). Ends in ROUTER (AP off) or back in
-                STANDALONE with a result code.
+                STANDALONE with a result code. A RETURN test starts only when
+                no phone is joined (D21) or after "Switch now" (D20).
 ROUTER_JOIN     boot only (D5): STA only, Arduino reconnect on, up to
                 BOOT_JOIN_MS=180 s without an IP → STANDALONE.
 ROUTER          STA only with an IP. Arduino reconnect on.
@@ -234,7 +247,7 @@ The owner's four states map as: Standalone = `STANDALONE`; Router test =
 `ROUTER_TEST`; Router = `ROUTER_JOIN` + `ROUTER`; Router lost = `ROUTER_LOST`.
 `ROUTER_JOIN` is separate only because its timeout differs (3 min vs 2 min).
 
-### 3.3 Radio modes per state (P1, see section 7)
+### 3.3 Radio modes per state (D19)
 
 | State | `WiFi.getMode()` | AP | STA |
 |---|---|---|---|
@@ -259,10 +272,11 @@ radioApply(want, allowSae):
   WiFi.persistent(false); WiFi.setHostname(cfg.hostName)   // before any interface starts
   switch want:
     RADIO_APSTA_IDLE / RADIO_APSTA_JOIN:
+      WiFi.setAutoReconnect(false)                 // FIRST: coming from ROUTER_LOST the core is still retrying (see 3.5 note)
       if mode != WIFI_AP_STA: web.closeClients(); WiFi.mode(WIFI_AP_STA)
       if !apUp: startAP()        // softAPConfig + softAP(...,apChannelNow,false,6) + setSleep(false) + applyTxPower(false)
-      if want == RADIO_APSTA_JOIN: WiFi.setAutoReconnect(false); WiFi.begin(ssid, pass or nullptr)
-      else if STA connected or connecting: WiFi.STA.disconnect(false, 0)   // esp_wifi_disconnect(), no wait, no reconnect (auto-reconnect is off here)
+      if want == RADIO_APSTA_JOIN: WiFi.begin(ssid, pass or nullptr)
+      else if STA connected or connecting: WiFi.STA.disconnect(false, 0)   // esp_wifi_disconnect(), no wait; auto-reconnect is already off
     RADIO_STA:
       if mode != WIFI_STA: web.closeClients(); WiFi.mode(WIFI_STA)   // takes the AP down
       WiFi.setSleep(false); WiFi.setAutoReconnect(true); applyTxPower(false)
@@ -285,7 +299,7 @@ EV_STA_CONNECTED, EV_STA_GOT_IP, EV_STA_LOST_IP, EV_STA_DISCONNECTED(reason),
 EV_SCAN_DONE(routerSeen, routerChannel, routerAuth)
 EV_CMD_CONNECT(ssid, pass)        from /api/wifi/connect (reply sent first)
 EV_CMD_FORGET                      from /api/wifi/forget
-EV_CMD_RETURN_OK                   from the app's "switch now" (P2; optional)
+EV_CMD_RETURN_OK                   from the app's "Switch now" (D20, POST /api/wifi/return)
 EV_RAPID_BOOTS                     at boot, when the 3-in-10-s rule fires (D9)
 ```
 
@@ -302,8 +316,12 @@ Constants (`wifistate.h`, `constexpr`, no settings — D7):
 | `LOOK_DWELL_MS` | 120 | active dwell per channel |
 | `RAPID_BOOT_WINDOW_MS` | 10 000 | D9 |
 | `RAPID_BOOT_COUNT` | 3 | D9 |
-| `RETURN_IDLE_MS` | 600 000 | P3: a phone joined but no HTTP request for 10 min counts as "no phone" |
 | `BIND_DELAY_MS` | 600 | HTTP/mDNS (re)bind after an IP epoch change (unchanged) |
+
+There is deliberately **no** idle timer (D21): "phone joined" means
+`WiFi.softAPgetStationNum() > 0`, nothing else. The machine input
+`phoneJoined` is that boolean; `lastHttpMs` is no longer an input to the
+Wi-Fi logic (it stays for the reports and the HTTP self-check).
 
 Timers are `uint32_t` millis with wrap-safe subtraction, as today.
 
@@ -311,7 +329,10 @@ Timers are `uint32_t` millis with wrap-safe subtraction, as today.
 
 ```
 BOOT:
-  rapidBoots >= 3            → STANDALONE (not saved; counter cleared)       [D9]
+  rapidBoots >= 3            → STANDALONE (not saved; counter cleared); autoReturn=false for this
+                               boot: looks still run so the app can show "Switch now", but no automatic
+                               RETURN test (the owner power-cycled to get the own Wi-Fi; a return 60 s
+                               later would defeat that). A normal boot restores autoReturn.   [D9, D21]
   else routerConfigured()    → ROUTER_JOIN   radio RADIO_STA
   else                       → STANDALONE    radio RADIO_APSTA_IDLE
 
@@ -334,24 +355,54 @@ ROUTER_LOST:
 STANDALONE:
   EV_CMD_CONNECT(ssid,pass)  → ROUTER_TEST (testKind=SETUP, pending creds kept in RAM only)
   routerConfigured() && t >= nextLookAt
-      && lookAllowed(phoneJoined, appIdleMs)      → start look (scan); nextLookAt += lookEvery
-  EV_SCAN_DONE(seen=true)    → if (!phoneJoined || appIdleMs >= RETURN_IDLE_MS || returnOkFromApp)
-                                     → ROUTER_TEST (testKind=RETURN, saved creds)
-                               else   → routerBackSeen=true (exposed to the app; P2), stay
-  EV_SCAN_DONE(seen=false)   → stay
-  EV_CMD_FORGET              → clear creds, save, stay (stops the looks)
+      && lookKind(lookNo, knownChannel, phoneJoined) != LOOK_SKIP
+                             → start look (scan); nextLookAt += lookEvery
+  EV_SCAN_DONE(seen=true)    → if (!phoneJoined && autoReturn) → ROUTER_TEST (testKind=RETURN, saved creds,
+                                                                   allowSae=lastJoinUsedSae)        [D6, D21]
+                               else                 → routerBackSeen=true (app shows "Switch now"), stay
+  EV_SCAN_DONE(seen=false)   → routerBackSeen=false, stay
+  EV_CMD_RETURN_OK           → if routerBackSeen → ROUTER_TEST (testKind=RETURN, returnOkFromApp=true)
+                               else ignored (handler already replied 409)
+  EV_STA_GOT_IP (stale: a join that completed just as ROUTER_LOST gave up, or a late
+    event after a test)      → if (!phoneJoined && autoReturn) → ROUTER (radio RADIO_STA)
+                               else → WiFi.STA.disconnect(false,0); routerBackSeen=true; stay   [D21]
+  EV_STA_DISCONNECTED(any)   → ignored (logged only): the core's first_connect retry and our own
+                               disconnect at the end of a test both produce late events here
+  EV_CMD_FORGET              → clear creds, save, routerBackSeen=false, stay (stops the looks)
 
 ROUTER_TEST (AP stays up, STA begin() once, auto-reconnect off):
-  EV_STA_GOT_IP              → testResult=OK; if SETUP: cfg.router=true, ssid, pass → saveSettings()
-                               save rch; → ROUTER  radio RADIO_STA (AP goes down here, D1)
+  EV_STA_GOT_IP              → testResult=OK; lastJoinUsedSae=allowSae; if SETUP: cfg.router=true, ssid,
+                               pass → saveSettings(); save rch; → ROUTER  radio RADIO_STA (AP goes down here, D1)
   EV_STA_DISCONNECTED(r):
-      r in {15, 202, 204, 205, 210, 211} → testResult=WRONG_CODE (205/210/211 texts differ, see 3.8)
-      r == 201                           → testResult=NOT_FOUND
-      other                              → keep waiting (Arduino's first_connect retry happens once)
+      r in {210, 211} and !saeTried and elSaeControlActive()
+                                         → saeTried=true; radioApply(RADIO_APSTA_JOIN, allowSae=true); keep testing
+                                           (D10: WPA3 only when the router demands it; the AP blips ~1 s, 3.3/F11)
+      r in {15, 202, 204, 205, 203, 210, 211} → ++authFails; if authFails >= 2 → testResult=WRONG_CODE
+                                           (one auth failure is not proof: HANDOVER "202 does not prove a wrong
+                                           password"; the core's first_connect retry supplies the second attempt
+                                           within a few seconds, STA.cpp:160-163)
+      r == 201                           → testResult=NOT_FOUND (deterministic: no beacon on 2.4 GHz)
+      other                              → keep waiting
       on a result: WiFi.STA.disconnect(false, 0) → STANDALONE; if RETURN: lookEvery = next LOOK_AFTER_FAIL step
-  t >= TEST_MS               → testResult=TIMEOUT → as above
-  EV_CMD_CONNECT while testing → reply 409 "A router test is running"
+                               then, if WiFi.channel() != apChannelNow (the AP followed the router's channel
+                               while the station associated and the driver leaves it there): startAP() again
+                               so the own Wi-Fi is back on its fixed channel (D2). Phones rejoin by themselves.
+  EV_AP_STA_JOIN while testKind==RETURN && !returnOkFromApp
+                             → abort: WiFi.STA.disconnect(false,0) → STANDALONE, routerBackSeen=true,
+                               no failure penalty (lookEvery unchanged)                          [D21]
+  t >= TEST_MS               → testResult = authFails ? WRONG_CODE : TIMEOUT → as above
+  EV_CMD_CONNECT / EV_CMD_RETURN_OK while testing → handler replies 409 "A router test is running"
+
+ROUTER_JOIN (boot):
+  EV_STA_DISCONNECTED(210|211) and !saeTried and elSaeControlActive()
+                             → saeTried=true; radioApply(RADIO_STA, allowSae=true)   (same D10 rule; STA only, nothing to disturb)
 ```
+
+Note on leaving `ROUTER_LOST`/`ROUTER_JOIN` for `STANDALONE`: the core's
+auto-reconnect is still running (`STA.cpp:164-172`). `radioApply()` turns it
+off **before** the mode change (3.3), otherwise the station keeps joining
+behind the AP and a late success would give two networks (D1) or cut a phone
+off (D21). The stale `EV_STA_GOT_IP` rule above is the belt to that brace.
 
 Rules that hold in every state:
 
@@ -360,7 +411,12 @@ Rules that hold in every state:
 - After `EV_AP_START` or `EV_STA_GOT_IP`: `networkIpEpoch++`,
   `networkIpEventAt = now`; `BIND_DELAY_MS` later `web.rebindNetwork()`,
   `applyTxPower(true)`, then `startNameService()` (mDNS on whichever interface
-  has the address). Ports 81/82 follow the epoch as today.
+  has the address). Ports 81/82 follow the epoch as today. `EV_AP_STOP` (the
+  AP going down after a successful test) sets only `mdnsRefreshPending`, so
+  the name is re-announced on the router interface; it does not bump the
+  epoch (the listeners bind to all interfaces).
+- `apChannelNow` in `/api/live`, the report and the log is read from
+  `WiFi.channel()` when the AP is up, never assumed (D17).
 - `WiFi.setSleep(false)` after every mode change (power save off, D14).
 - A state change writes one line to `/WIFI.LOG` (`wifiLog()`) and one to
   `Serial`, both without passwords.
@@ -397,7 +453,7 @@ Rules that hold in every state:
        "ip":<STA ip or null>,"conflict":false,"mode":"ap"|"sta","rescue":<routerHold>,
        "state":"standalone"|"router-test"|"router-join"|"router"|"router-lost",   // new
        "test":null|{"kind":"setup"|"return","result":"testing"|"ok"|"wrong-code"|"not-found"|"timeout","ms":<n>},  // new
-       "routerBack":<bool>}                                                            // new, P2
+       "routerBack":<bool>}                                                            // new, D20
 ```
 
 `"mode"` keeps its 0.16.5 definition `(WiFi.getMode()&WIFI_MODE_AP)?"ap":"sta"`,
@@ -416,6 +472,13 @@ EngineLink moves to the router and its own Wi-Fi goes off."` Then
 objects as in `/api/live`, for the app change in stage 7. Harmless without it.
 
 `POST /api/wifi/forget`: unchanged reply; becomes `EV_CMD_FORGET` 1.2 s later.
+
+`POST /api/wifi/return` (**new**, D20): 409 `"EngineLink is not on its own
+Wi-Fi"` unless `state==STANDALONE`; 409 `"The router has not been seen yet"`
+unless `routerBack` is true; otherwise reply `"Switching to <ssid>. Move your
+phone to the router; the app follows."` and `pendingCmd=CMD_RETURN`,
+`networkSwitchAt=now+1200` → `EV_CMD_RETURN_OK`. This is the only path on
+which a joined phone loses the own Wi-Fi (D21: the owner asked for it).
 
 `GET /api/wifi/scan?start=1`: unchanged JSON (`busy, done, nets[{s,r,lock,ch}]`,
 and the legacy `channel, pass, firstPassNets, passes, channels, raw, failures,
@@ -441,9 +504,9 @@ serial `wifi`: regenerated from the field list in 3.9.
 | Driver reason | Result | Report/log text |
 |---|---|---|
 | 201 `NO_AP_FOUND` | `not-found` | "Router not found (off, out of range, or 5 GHz only)" |
-| 15, 204 handshake timeout; 202 `AUTH_FAIL` | `wrong-code` | "Wrong code or the router refused the login (code n)" — 202 can also be a router that refuses; the text says so (HANDOVER: 202 does not prove a wrong password) |
-| 205 `CONNECTION_FAIL`, 203 `ASSOC_FAIL` | `wrong-code` | "Router refused the connection (code n)" |
-| 210/211 no compatible security | `wrong-code` | "Router security not supported (code n)" — with D10 the scan decides WPA3; if the router is WPA3-only and `elSaeControlActive()` is false (built without the wrap) this is the expected result |
+| 15, 204 handshake timeout; 202 `AUTH_FAIL` | `wrong-code` after the **second** such failure in one test (or at `TEST_MS` if there was one) | "Wrong code or the router refused the login (code n)" — 202 can also be a router that refuses; the text says so (HANDOVER: 202 does not prove a wrong password) |
+| 205 `CONNECTION_FAIL`, 203 `ASSOC_FAIL` | `wrong-code` (same two-strikes rule) | "Router refused the connection (code n)" |
+| 210/211 no compatible security | first time: retry once with WPA3 allowed (3.5); second time `wrong-code` | "Router security not supported (code n)" — reached when the WPA3 retry also fails or the build has no SAE switch (`elSaeControlActive()` false) |
 | 200 beacon timeout, 8 leave, 36, others | keep waiting | logged only |
 
 ### 3.9 Report: the only fields that exist after the rewrite
@@ -582,18 +645,20 @@ namespace wifistate {
   enum Look : uint8_t { LOOK_SKIP, LOOK_CHANNEL, LOOK_ALL };
   struct Machine {
     // inputs the .ino keeps up to date before calling tick()
-    bool routerSaved=false, phoneJoined=false; uint32_t appIdleMs=UINT32_MAX;
-    uint8_t knownChannel=0; bool returnOkFromApp=false;
+    bool routerSaved=false, phoneJoined=false;      // phoneJoined = softAPgetStationNum()>0, nothing else (D21)
+    uint8_t knownChannel=0; bool saeAvailable=true;  // elSaeControlActive()
     // outputs
     State state=STANDALONE; Radio radio=RADIO_APSTA_IDLE; bool radioDirty=false;
     TestKind testKind=TEST_NONE; TestResult testResult=TR_NONE; uint32_t testMs=0;
+    bool allowSae=false, saeTried=false, lastJoinUsedSae=false, returnOkFromApp=false, autoReturn=true;
+    uint8_t authFails=0;
     bool wantLook=false; Look lookKind=LOOK_SKIP; bool saveCreds=false; bool routerBackSeen=false;
     uint32_t looks=0, looksSeen=0, returns=0, returnsFailed=0, lostEvents=0;
     // api
     void boot(uint32_t now, bool routerSaved, bool rapidBoots);
     void event(uint32_t now, uint8_t ev, uint8_t reason);   // ev = EV_* above
     void scanResult(uint32_t now, bool seen, uint8_t channel);
-    void cmdConnect(uint32_t now); void cmdForget(uint32_t now);
+    void cmdConnect(uint32_t now); void cmdForget(uint32_t now); void cmdReturn(uint32_t now);
     void tick(uint32_t now);
     uint32_t nextLookInMs(uint32_t now) const;
   };
@@ -610,14 +675,19 @@ naming the rule):
 5. ROUTER_LOST for 120 s → STANDALONE (D4).
 6. STANDALONE with router: looks at 60, 120, 180… s; `lookKind` = CHANNEL when `knownChannel` set and phone joined, ALL every 5th when no phone; SKIP when phone joined and channel unknown except every 5th (ported from `test_netpolicy.cpp`, keep its asserts).
 7. Look sees the router, no phone → ROUTER_TEST(RETURN) → GOT_IP → ROUTER, `returns==1`.
-8. Look sees the router, phone joined, appIdle 30 s → stays STANDALONE, `routerBackSeen==true`; appIdle 600 s → ROUTER_TEST (P3).
+8. Look sees the router, phone joined → stays STANDALONE for ever while the phone stays (simulate 24 h of looks), `routerBackSeen==true`, `returns==0` (D21). A later look that does not see the router → `routerBackSeen==false`. `cmdReturn()` with `routerBackSeen` → ROUTER_TEST(RETURN, `returnOkFromApp`) → GOT_IP → ROUTER. `cmdReturn()` without `routerBackSeen` → no change.
 9. ROUTER_TEST(RETURN) → DISCONNECTED(202) → STANDALONE, `returnsFailed==1`, next look 300 s later, then 900 s, never more (D7 bound; HANDOVER lesson "wrong password cannot keep cutting the phone off").
-10. cmdConnect in STANDALONE → ROUTER_TEST(SETUP); GOT_IP → `saveCreds==true`, ROUTER. cmdConnect → DISCONNECTED(201) → TR_NOT_FOUND, `saveCreds==false`, STANDALONE (F9).
-11. ROUTER_TEST: DISCONNECTED(8) at 1 s is ignored; TIMEOUT at 20 s → TR_TIMEOUT.
-12. Rapid boots → STANDALONE even with router saved (D9).
+10. cmdConnect in STANDALONE → ROUTER_TEST(SETUP); GOT_IP → `saveCreds==true`, ROUTER. cmdConnect → DISCONNECTED(201) → TR_NOT_FOUND, `saveCreds==false`, STANDALONE (F9). cmdConnect → DISCONNECTED(202) at 2 s → still testing; DISCONNECTED(202) at 5 s → TR_WRONG_CODE (two strikes). One 202 then GOT_IP at 8 s → TR_OK (a slow first handshake is not a wrong code).
+11. ROUTER_TEST: DISCONNECTED(8) at 1 s is ignored; TIMEOUT at 20 s with no auth failure → TR_TIMEOUT; with one 202 → TR_WRONG_CODE.
+12. Rapid boots → STANDALONE even with router saved (D9); `autoReturn==false`: a look that sees the router sets `routerBackSeen` but starts no test even with no phone joined; `cmdReturn()` still works.
 13. cmdForget in ROUTER and ROUTER_LOST → STANDALONE, `routerSaved=false`, looks stop.
 14. `radioDirty` is true only on state changes that change the radio (count them: boot→ROUTER_JOIN→STANDALONE→TEST→ROUTER is 3 radio changes, looks are 0) — this is the F4 test.
 15. millis wrap: all timers correct across `0xFFFFFF00 → 0x100`.
+16. STANDALONE, stale GOT_IP: no phone → ROUTER; phone joined → stays STANDALONE, `routerBackSeen==true`, output "disconnect STA" set (D21). A DISCONNECTED(8) in STANDALONE changes nothing.
+17. ROUTER_TEST(RETURN) without `returnOkFromApp`: EV_AP_STA_JOIN at 3 s → STANDALONE, `routerBackSeen==true`, `returnsFailed==0`, next look still at 60 s (D21). With `returnOkFromApp` the same event is ignored and the test runs on.
+18. ROUTER_TEST and ROUTER_JOIN: DISCONNECTED(210) → `allowSae==true`, `radioDirty==true`, still testing; a second 210 → TR_WRONG_CODE. With `saeAvailable=false` the first 210 is already TR_WRONG_CODE (D10).
+19. Look timing after a failed return: 300 s, 900 s, 900 s…; after a successful return and a later loss the interval is 60 s again (3.4).
+20. `lastJoinUsedSae`: boot join needs the 210 retry (scenario 18) → ROUTER with `lastJoinUsedSae==true`; later loss → STANDALONE → look seen → the RETURN test starts with `allowSae==true` straight away (no second AP blip). A `cmdForget()` clears it.
 
 Acceptance: CI green; no Arduino includes in `wifistate.h`
 (`grep -L Arduino`).
@@ -627,9 +697,9 @@ Acceptance: CI green; no Arduino includes in `wifistate.h`
 1. Create `netsvc.ino`; move the clock, NTP, mDNS, reason/trace texts and the
    GitHub report scheduling (`wifi.ino:253-263`) there unchanged. The report
    scheduling condition becomes `state==ROUTER` instead of `online`.
-2. Rewrite `wifi.ino` as in 3.3–3.5: `onWiFi()` only `traceWifi()` (plus the
-   existing counters, which are `volatile`) and `++wifiEventSeq`;
-   `serviceNetwork()` drains new trace entries into `machine.event()`,
+2. Rewrite `wifi.ino` as in 3.3–3.5: `onWiFi()` only `traceWifi()`, the
+   raw FIFO push (F5) and the existing `volatile` counters;
+   `serviceNetwork()` drains the FIFO into `machine.event()`,
    updates inputs, calls `tick()`, performs `radioApply()` when `radioDirty`,
    handles the bind epoch, calls `applyTxPower`, `startNameService()` via the
    pending flag, and writes log lines on state change.
@@ -659,12 +729,15 @@ lost` log line, `standalone` at +120 s; router back on: a look sees it within
 
 Already specified by the machine; this stage implements the radio side:
 
-1. `startLook(kind)`: `WiFi.scanNetworks(true, false, false, LOOK_DWELL_MS,
-   kind==LOOK_CHANNEL ? routerKnownChannel : 0)`; `scanInFlight=true`. In
+1. `startLook(kind)`: `WiFi.scanNetworks(true, true, false, LOOK_DWELL_MS,
+   kind==LOOK_CHANNEL ? routerKnownChannel : 0, cfg.ssid.c_str())` — the
+   `ssid` argument (WiFiScan.h:39-40) makes the probe directed, so a router
+   with a **hidden** SSID (the app allows entering one) is found too;
+   `show_hidden=true` for the same reason. `scanInFlight=true`. In
    `serviceNetwork()`, when `WiFi.scanComplete()>=0`: find `cfg.ssid`
    (strongest BSSID), `saveKnownChannel(ch)` if seen,
    `machine.scanResult(now, seen, ch)`, `WiFi.scanDelete()`. A look never
-   changes the mode (P1). Timeout 5 s → treated as not seen.
+   changes the mode (D19). Timeout 5 s → treated as not seen.
 2. User scan (`/api/wifi/scan`) reuses the same scan code with `channel=0`
    and the 0.16.5 result snapshotting (`scanEntries`, dedupe by SSID keeping
    the strongest). WPA3-only detection: `auth==WIFI_AUTH_WPA3_PSK` on the
@@ -676,14 +749,24 @@ Already specified by the machine; this stage implements the radio side:
    here and only here. On any other result: `WiFi.STA.disconnect(false, 0)`,
    `radioApply(RADIO_APSTA_IDLE, false)` (restores WPA2 if SAE was tried; this
    is the one case with an `WIFI_OFF` cycle, F11).
-4. `/api/wifi/test` route and the `state/test/routerBack` keys in `/api/live`.
+4. `/api/wifi/test` and `/api/wifi/return` routes and the
+   `state/test/routerBack` keys in `/api/live`.
+5. `phoneJoined` is read once per `serviceNetwork()` pass from
+   `WiFi.softAPgetStationNum()`; a RETURN test that sees `EV_AP_STA_JOIN` is
+   aborted as in 3.5 (D21).
+6. After every test that ends in STANDALONE: if `WiFi.channel() !=
+   apChannelNow`, call `startAP()` again (3.5). Count it as `apStarts` so the
+   report shows it; the bench check "apStarts==1 after a wrong code" below
+   therefore applies only to a router on channel 6 — for a router on another
+   channel expect `apStarts==2` and the phone rejoined within 10 s.
 
 Acceptance (bench): wrong password → within 25 s the app's scan page is back,
 own Wi-Fi never went away (phone stays joined; `apStarts==1`), `wifi` report
 `test: setup wrong-code`; right password → `test: setup ok`, AP off, router IP,
 `cfg.router` saved; power the router off for 5 min → standalone at +2 min,
-back within 90 s of the router (no phone) — at most one 20 s AP channel hop
-while the phone is joined. Failed tests end with `WiFi.STA.disconnect(false, 0)`
+back within 90 s of the router when no phone is joined; with a phone joined
+EngineLink stays standalone (no channel hop, no drop) and the report shows
+`routerBack: true` until the phone leaves or "Switch now" is tapped. Failed tests end with `WiFi.STA.disconnect(false, 0)`
 (the non-waiting form; the core's `connect()` path uses `disconnect(true, 1000)`,
 which waits up to 1 s, and must not be reached from a failed test).
 
@@ -706,7 +789,9 @@ back after 60 s.
 1. `netreport.ino`: field list 3.9; remove `appendLinkJson`, `linkTuneTask`,
    the radio-test block; delete `linktune.cpp/.h`, `netpolicy.h`,
    `routerguard.h` and their tests; `test_router_throughput_guard.py` loses the
-   `linkTuneTask`/`runRadioTest`/`radioTestWanted` asserts (keep the rest).
+   `linkTuneTask`/`runRadioTest`/`radioTestWanted` asserts (keep the rest) and
+   its comment "(used by the rescue return rule)" at line 32 becomes "(for the
+   reports and the HTTP self-check; the Wi-Fi logic does not read it, D21)".
 2. `diagnosis.ino` wifi block per 3.9.
 3. `HANDOVER.md`: replace the "Wi-Fi" paragraph and the 0.15.0 rules with the
    four states and link this plan; code-layout table rows for `wifi.ino`,
@@ -719,9 +804,10 @@ Acceptance: `wc -l wifi.ino < 300`, `netreport.ino < 260`, no reference to
 removed symbols (`grep -rn "linkTune\|netpolicy\|routerGuard\|staSecMode"
 firmware tools .github` empty), CI green.
 
-### 5.7 Stage 7 — App changes (only with the owner's OK, D6/D16)
+### 5.7 Stage 7 — App changes (approved by the owner 2026-11-05, D20)
 
-Minimal, in `firmware/ui/app.html` then `python3 tools/build_ui.py`:
+Minimal, in `firmware/ui/app.html` then `python3 tools/build_ui.py`. Part of
+the same 0.17.0 release; the firmware works without them (routes are additive).
 
 1. Router page: after `wifiConnect`, poll `/api/wifi/test` every second for
    25 s; show `testing` ("Testing <ssid>…"), `wrong-code` ("Wrong code or the
@@ -729,10 +815,14 @@ Minimal, in `firmware/ui/app.html` then `python3 tools/build_ui.py`:
    ("No answer from the router"), `ok` ("OK, address <ip>. Switch your phone
    to the router; the app follows."). The result is kept in `S.wifiTest` until
    the page is left.
-2. Diagnostics Wi-Fi card: when `lv.net.routerBack` is true, a row "Router is
-   back · Switch now" → `POST /api/wifi/return` (new route, becomes
-   `EV_CMD_RETURN_OK`). Confirm dialog text: "Switch EngineLink to <ssid>?
-   Its own Wi-Fi turns off. Move your phone to the router afterwards."
+2. "Router is back, switch now?": when `lv.net.routerBack` turns true (rising
+   edge, once per app session) a toast "Router <ssid> is back" and, for as
+   long as it stays true, a row on the Diagnostics Wi-Fi card and on the
+   router page: "Router is back · Switch now" → confirm "Switch EngineLink to
+   <ssid>? Its own Wi-Fi turns off. Move your phone to the router afterwards."
+   → `POST /api/wifi/return`, then `BASE=''` and the existing `findHost()`
+   recovery. No modal that reappears every second; dismissing the toast is
+   enough (D21: staying is a valid choice).
 3. Texts at app.html:1703 and 1719 updated to describe looks/return
    (no "until you choose Connect again", no "every 10 minutes").
 4. `tools/test_mobile_ui_contract.py` keeps passing (it only pins the
@@ -754,8 +844,8 @@ protocol:
 | T2 | Pick the router in the app with a **wrong** code | own Wi-Fi stays, result `wrong-code` within 25 s, `apStarts` unchanged, nothing saved |
 | T3 | Pick the router with the right code | `ok`, router IP, app reachable at `http://enginelink.local` and the IP within 30 s |
 | T4 | Router power off for 5 min, then on; no phone on the own Wi-Fi | `router-lost` at the drop, `standalone` at +120 s ± 5 s, `router` within 90 s of the router coming back; trace < 10 entries for the outage |
-| T5 | Same as T4 but the iPhone joins the own Wi-Fi during the outage and the app is used | stays standalone while the app is in use; `routerBack` true in the report; back on the router 10 min after the last request (P3) or on "Switch now" |
-| T6 | Boat power: router and EngineLink on together, 5 times | `router` within 3 min every time; median time to IP noted |
+| T5 | Same as T4 but the iPhone joins the own Wi-Fi during the outage; leave the app open 15 min after the router is back, then close the app but keep the phone joined for another 15 min | stays standalone the whole 30 min (`returns==0`, phone never dropped, D21); `routerBack` true and the "Switch now" row shown; tapping it → router within 25 s. Repeat and instead turn the phone's Wi-Fi off: router within 90 s of the phone leaving |
+| T6 | Boat power: router and EngineLink on together, 5 times, no phone joined | `router` within 3 min every time; if the router needs longer, `standalone` at 3 min and `router` within 2 min of the router being up (look + return); median time to IP noted |
 | T7 | Power off/on 3 times within 10 s | `standalone`, LED S_ROUTER, `boots3==1`; next normal boot → `router` |
 | T8 | Speed test 5× in each mode | router ≥ 400 kB/s, standalone ≥ 400 kB/s; round trips noted |
 | T9 | Engines running during T4 | engine report `engineWait max` < 200 ms |
@@ -781,6 +871,9 @@ w = wifi.ino text; fw = firmware_source()
 - "WiFi.scanNetworks(true," in w and "scanNetworks(false" not in fw            (async scans only)
 - not re.search(r"print[f]?\([^;]*(apPassword|wifiPassword)", fw)             (never log passwords)
 - "saveSettings()" not in body(webapi,"void handleWifiConnect(")               (F9: credentials saved only on TR_OK)
+- "cfg.ssid=" not in body(webapi,"void handleOptions(") and not in body(webapi,"void handleWifiConnect(")   (P7/F9)
+- "wifiEvents[" in body(w,"void onWiFi(") and "traceWifi(" in body(w,"void onWiFi(")   (F5: raw FIFO + trace)
+- "scanNetworks(true,true,false," in body(w,"void startLook(") and "cfg.ssid.c_str()" in the same body   (hidden SSIDs)
 - "elWriteBounded(" in body(webserver.h,"size_t netWrite(")                    (F1)
 - "setTxTimeoutMs(0)" after "Serial.begin" in setup()                          (0.15.1)
 - "wifistate.h" has no "#include <Arduino.h>", no "WiFi", no "millis("
@@ -811,27 +904,73 @@ w = wifi.ino text; fw = firmware_source()
 
 ---
 
-## 7. Decisions the plan makes beyond the TODO (owner may overrule)
+## 7. Decisions the plan made beyond the TODO, and the owner's answers (2026-11-05)
 
-| # | Decision | Default in this plan | Why |
+| # | Proposal | Owner | Now |
 |---|---|---|---|
-| P1 | Standalone runs the radio as `WIFI_AP_STA` with an idle STA instead of `WIFI_AP` | **yes** (one `constexpr` to revert) | removes every mode flip for scans and looks (F4); one network is still served (D1) |
-| P2 | "Router is back, switch now?" in the app | built in Stage 7 **only if the owner says yes**; firmware exposes `routerBack` either way | D6/D16 |
-| P3 | Without the prompt, a phone joined but idle for 10 min counts as "no phone", so EngineLink returns to the router | **yes** | otherwise a phone left in the cabin keeps EngineLink off the router all day; 10 min was the 0.15 force rule the owner accepted |
-| P4 | If T1 still shows iPhones leaving the own Wi-Fi: answer Apple's `/hotspot-detect.html` with the "Success" page so iOS treats the network as usable | **not built**; ask first | it fakes internet reachability; the owner may prefer honesty |
-| P5 | Router test budget 20 s (owner said ~15 s) | 20 s | the core retries the first connect once (`STA.cpp:160-163`) and DHCP took 1.1–1.5 s on the boat |
-| P6 | `apch` other than 6 stays honoured | yes | no destructive setting change; the UI still only offers 1/6/11 |
-| P7 | `/api/options` (first-run flow) also goes through the router test | yes | otherwise F9 stays open on the setup screen |
+| P1 | Standalone runs the radio as `WIFI_AP_STA` with an idle STA instead of `WIFI_AP` | **approved** | D19; one `constexpr` reverts it |
+| P2 | "Router is back, switch now?" and the router-test result text in the app | **approved** | D20; Stage 7 is part of 0.17.0 |
+| P3 | A phone joined but idle for 10 min counts as "no phone" | **rejected** | D21; no idle timer anywhere in the Wi-Fi logic; a joined phone is never cut off except by "Switch now" |
+| P4 | Answer Apple's `/hotspot-detect.html` so iOS treats the network as usable | **deferred** | D22; not built; revisit only if T1 shows iPhones leaving |
+| P5 | Router test budget 20 s (owner said ~15 s) | no objection | 20 s: the core retries the first connect once (`STA.cpp:160-163`) and DHCP took 1.1–1.5 s on the boat |
+| P6 | `apch` other than 6 stays honoured | no objection | yes; the UI still only offers 1/6/11 |
+| P7 | `/api/options` (first-run flow) also goes through the router test | no objection | yes; otherwise F9 stays open on the setup screen |
+
+Consequence of D21 the owner should know: a phone that stays associated to
+the own Wi-Fi (for example an iPhone in a pocket that keeps the network) holds
+EngineLink in Standalone indefinitely, so NTP, GitHub reports and "Check for
+updates" wait until that phone leaves or "Switch now" is tapped. The AP drops a
+phone that has really gone (no frames at all) only after the driver's
+inactivity timeout (ESP-IDF default 5 min, `esp_wifi_set_inactive_time`), so a
+return can lag the phone's departure by up to 5 min. Shortening that timeout
+is **not** part of this plan; note it in TODO if T5 shows the lag matters.
 
 ---
 
-## 8. Risks that stay open after this plan
+## 8. Final review (2026-11-05): problems found and how the plan now handles them
+
+Done after the owner's answers, reading the whole plan against the source and
+the core once more. Each item is already folded into the sections above.
+
+| # | Problem found | Where fixed |
+|---|---|---|
+| R1 | D9 (rapid boots → Standalone) conflicted with the automatic return: with no phone joined EngineLink would have been back on the router within ~2 min, defeating the owner's power-cycle. | 3.5 BOOT: `autoReturn=false` for a rapid-boot session; looks and "Switch now" still work. Scenario 12. |
+| R2 | After a failed test the AP stays on the router's channel: in `WIFI_AP_STA` the driver moves the AP to the station's channel at association and leaves it there after the disconnect, so the "fixed channel 6" (D2) would drift silently. | 3.5 ROUTER_TEST exit: `startAP()` again when `WiFi.channel()!=apChannelNow`; `apChannelNow` always read from the driver. Stage 4 item 6. |
+| R3 | One 202/15 declared "wrong code": a router that is slow on the first handshake (0.11.x reports: Zyxel codes 2/4/202 on the first tries) would be reported as a wrong password and, for a RETURN test, start the 5/15 min back-off. | 3.5/3.8: two auth-class failures (or one plus the 20 s budget) decide `wrong-code`; the core's own first-connect retry supplies the second attempt. Scenarios 10–11. |
+| R4 | The coalesced trace ring cannot feed the state machine: repeated identical events become one entry with a count, so the machine would miss the second 202 needed for R3 and the SD log already has its own cursor on that ring. | F5: separate raw 16-entry event FIFO for the machine, overflow counted. Stage 3 item 2, contract test. |
+| R5 | Looks used `show_hidden=false` and no SSID filter: a router with a hidden SSID (the app explicitly supports entering one) would never be seen, so EngineLink would never return to it. | Stage 4 item 1: directed scan with `cfg.ssid` and `show_hidden=true`. Contract test. |
+| R6 | Leaving `ROUTER_LOST` for Standalone with the core's auto-reconnect still on: the station would keep joining behind the AP; a late success would be two networks (D1) or, with the stale `GOT_IP` rule, cut a joined phone off (D21). | 3.3 `radioApply()`: `setAutoReconnect(false)` **before** the mode change; 3.5 stale `GOT_IP` rule honours `phoneJoined` and `autoReturn`. Scenario 16. |
+| R7 | WPA3-only router: after a boot join that needed the SAE retry, every later RETURN test would start with WPA2, fail with 210, and blip the AP for the SAE switch each time. | 3.5: `lastJoinUsedSae` (RAM only, D10 allows no NVS mode) seeds `allowSae` for RETURN tests. Scenario 20. |
+| R8 | T6 as written failed on a router that boots slower than 3 min although the design handles it (fallback, look, return). | T6 criterion rewritten. |
+| R9 | `test_router_throughput_guard.py` comments call `lastHttpMs` "the rescue return rule"; after D21 nothing in the Wi-Fi logic reads it. The assertions stay (reports and self-check still use it); only the comment is stale. | Stage 6 item 1: fix the comment when the file is edited anyway. |
+
+Conflicts checked and found consistent: D1 vs D19 (idle STA is not a served
+network; the only AP+STA activity is the test, which D1 allows); D3 vs 1c and
+R6 (Arduino reconnect kept, bounded by `LOST_MS`, trace coalesced, switched off
+when the AP comes up); D6/D20/D21 (automatic return only with no phone joined,
+"Switch now" the only way a joined phone loses the own Wi-Fi, a phone joining
+mid-test aborts the test); D7 vs the 5/15 min back-off (internal constants,
+no setting); D10 vs the 210/211 retry (decided at connect from the driver's
+answer, nothing stored in NVS); D12 (no NVS format change except the new
+`rlog/quick` key); D14 (every lesson has a contract or host test in 5.9/5.2);
+D16/D20 (Stage 7 is now in scope, nothing else in the app changes).
+
+## 9. Risks that stay open after this plan
 
 - `WIFI_AP_STA` idle STA: more RAM and a driver path the board has not run
-  for long (F14, P1). Measured in Stage 3 and T1/T10; revert switch exists.
-- AP channel hop during a return test with a phone joined: the phone drops
-  for seconds; the app's `findHost()` recovers, but a user mid-tap sees a
-  pause. Bounded to one 20 s test per look that sees the router.
+  for long (F14, D19). Measured in Stage 3 and T1/T10; revert switch exists.
+- AP channel hop during a test with a phone joined now happens only in the
+  two cases the owner asked for: a SETUP test (the phone is on the own Wi-Fi
+  by definition) and "Switch now". The phone drops for seconds and the app's
+  `findHost()` recovers. A phone that joins during an automatic RETURN test
+  aborts it (3.5), so it is never dropped by a test it did not ask for.
+- A phone that never leaves the own Wi-Fi keeps EngineLink off the router
+  (D21, section 7). This is the owner's choice; the reports show
+  `routerBack: true` so it is visible, not silent.
+- The look (`scanNetworks` on one channel) takes the radio off channel 6 for
+  ~0.15 s once a minute while a phone is joined; with no channel known, a full
+  scan (~2 s) every fifth minute. Phones tolerate this; T1 measures it
+  (`apLeaves` with reason 8).
 - iOS behaviour on networks without internet (F15) is outside the firmware's
   control.
 - Arduino's immediate reconnect (D3) hammers a router that refuses EngineLink
