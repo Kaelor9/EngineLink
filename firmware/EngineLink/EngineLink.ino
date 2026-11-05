@@ -22,7 +22,7 @@
  */
 #include <Arduino.h>
 #include <WiFi.h>
-#include <WebServer.h>
+#include <lwip/sockets.h>
 #include <ESPmDNS.h>
 #include <Update.h>
 #include <Preferences.h>
@@ -55,13 +55,14 @@
 #include "routerguard.h"
 #include "nmea2k.h"
 #include "netpolicy.h"
-#include "miniz.h"   // the deflate compressor in the chip's ROM
 #include "wifiwpa3.h"
 #include "netboost.h"
 #include "crashinfo.h"
 #include "linktune.h"
 #include "model.h"
 #include "wifistate.h"
+#include "httputil.h"
+#include "httpd.h"
 // Transmit power step (0 = 8.5 dBm .. 4 = 19.5 dBm). Fixed: the automatic
 // choice (0.12.2-0.14.1) never took effect at start (the country setting
 // reset the power to 20 dBm, field reports #95/#125/#130) and its test never
@@ -81,35 +82,31 @@ SpeedLogRec speedLog[SPEED_LOG_N];uint8_t speedLogCount=0;
 
 // ---------- Engine task and its lock ----------
 // Reading the engines runs in its own task (engineTask, on core 0), so the
-// web server, Wi-Fi and SD work can no longer hold it up. The two share the
-// engine data under one lock: the main loop holds it while it works and
-// lets go whenever it waits for the network (a phone or computer that reads
-// slowly, a request that arrives in pieces), which is exactly when reading
-// used to stop.
+// web server, Wi-Fi and SD work can no longer hold it up. They share the
+// engine data under one lock: the main loop holds it while it works and lets
+// go once per pass; the web server (httpd.ino, its own task) takes it for a
+// handler and lets go whenever it waits for the network.
 SemaphoreHandle_t engineMx=nullptr;
 bool engineTaskOn=false;
-volatile uint32_t lastHttpMs=0;   // last app request (not the loopback self-check)
-volatile uint32_t httpBusySince=0; // a handler is running since (0 = idle)
-volatile bool httpHealPending=false;
-uint32_t httpSelfFails=0,httpHeals=0,httpSelfRestarts=0;
 // How the engine task is doing: when it last finished a round, since when it
 // waits for the lock, the longest wait and how often it waited over 100 ms.
 volatile uint32_t engineBeat=0,engineWaitSince=0;
 uint32_t engineMaxWaitMs=0,engineSlowWaits=0;
 // Macros, not functions: Arduino puts its prototypes before the first function.
-#define netWaitBegin() do{if(engineTaskOn)xSemaphoreGive(engineMx);}while(0)
-#define netWaitEnd() do{if(engineTaskOn)xSemaphoreTake(engineMx,portMAX_DELAY);}while(0)
+// The loop holds engineMx whenever it exists (also without the engine task),
+// so web handlers in the server task never run beside the loop's work.
+#define netWaitBegin() do{if(engineMx)xSemaphoreGive(engineMx);}while(0)
+#define netWaitEnd() do{if(engineMx)xSemaphoreTake(engineMx,portMAX_DELAY);}while(0)
 
-#include "webserver.h"
-
-EngineLinkWebServer web(80);
+Web web;  // esp_http_server adapter (httpd.h, httpd.ino)
 DlStat dlStat,spStat;  // last export; last speed test
 Coverage tripCov,bootCov;
 const Coverage *seriesCov=nullptr;  // added to the next series reply
-static tdefl_compressor *zComp=nullptr;
-void downloadBreath();
+// One streamed download at a time (the xfer task, httpd.ino): rows are
+// gathered into 8 kB pieces and each piece is one chunk, sent uncompressed
+// (plan D26).
 struct ChunkOut {
-  char b[8192];size_t n=0;bool z=false;
+  char b[8192];size_t n=0;
   ChunkOut &add(const void *s,size_t len){
     const char *p=(const char*)s;
     while(len){
@@ -124,25 +121,20 @@ struct ChunkOut {
   void flush(){
     if(!n)return;
     dlStat.raw+=n;
-    if(z){
-      tdefl_compress_buffer(zComp,b,n,TDEFL_NO_FLUSH);  // always takes all of it
-    }else send(b,n);
+    send(b,n);
     n=0;
   }
   void finish(){
     flush();
-    if(z)tdefl_compress_buffer(zComp,nullptr,0,TDEFL_FINISH);
     web.sendContent("");
   }
   void send(const char *s,size_t len){
-    feedLoopWDT();  // a long download over a weak link is not a hang
-    downloadBreath();
+    if(web.sendFailed())return;  // the phone went away: the rest is not sent
     const uint32_t t0=millis();web.sendContent(s,len);dlStat.netMs+=millis()-t0;dlStat.bytes+=len;
   }
 };
 // Functions with default arguments need their declaration written out:
 // Arduino does not generate prototypes for them.
-ChunkOut &beginDownload(const char *what,const char *type,const char *filename,bool compress=true);
 void traceWifi(uint8_t type,uint8_t reason=0);
 static ChunkOut chunkOut;
 Preferences pref;
@@ -364,7 +356,7 @@ volatile uint8_t staNegotiatedAuth=255;  // 255 = no successful association this
 volatile esp_err_t staSecurityConfigError=ESP_OK;
 volatile bool staSecurityConfigured=false;
 volatile uint32_t networkIpEpoch=0,networkIpEventAt=0;
-uint32_t httpBoundEpoch=0,httpBoundAt=0;
+uint32_t netEpochSeen=0;   // networkIpEpoch already followed up (TX power, log)
 // Last access point event. AP_STOP also arrives (late) when the network only
 // changed its settings, so the watchdog acts on "stopped and not started again".
 volatile uint8_t apLastEvent=0;      // 1 started, 2 stopped
@@ -435,15 +427,6 @@ float calZ[MAX_FUEL],calPump[MAX_FUEL],calCounted[MAX_FUEL],calBase[MAX_FUEL];
 uint32_t lastEngineOnMs=0,lastEngineOnSec=0;
 void finishTripHealth();
 
-// Independent, read-only live telemetry listener. Large CSV exports and
-// reports can occupy the regular WebServer for seconds, but cannot block port
-// 81. Its response is built under the existing engine-data mutex; network
-// writes happen AFTER releasing the lock. No J1708 TX is performed here.
-NetworkServer liveServer(81);
-// An independent, low-priority diagnostic endpoint. No engine data or SD
-// access is permitted here. A slow phone can occupy this task but cannot
-// block the main WebServer or the engine monitoring task.
-NetworkServer speedServer(82);
 
 void serialStatus(){
   if((uint32_t)(millis()-lastSerialStatus)<60000UL)return;
@@ -481,7 +464,6 @@ void setup(){
   // router association or standalone AP beaconing now proceeds in parallel.
   WiFi.onEvent(onWiFi);
   applyNetwork();
-  initializeWeb();
   loadTotals();
   // Formatting an existing data partition after a transient mount failure
   // would permanently destroy history. Permit auto-format only before the
@@ -539,22 +521,15 @@ void setup(){
   // every few ms), the chip restarts and the restart log says "watchdog".
   {esp_task_wdt_config_t w={60000,(1<<0),true};esp_task_wdt_reconfigure(&w);enableLoopWDT();}
   engineMx=xSemaphoreCreateMutex();
-  if(engineMx&&framesQueue){
+  if(engineMx){
     xSemaphoreTake(engineMx,portMAX_DELAY);  // the loop holds it while it works
-    engineTaskOn=xTaskCreatePinnedToCore(engineTask,"engines",16384,nullptr,3,nullptr,0)==pdPASS;
-    if(!engineTaskOn)xSemaphoreGive(engineMx);
-    if(engineTaskOn){
-      liveServer.begin();
-      xTaskCreatePinnedToCore(httpSelfCheckTask,"http-check",4096,nullptr,1,nullptr,0);
-      xTaskCreatePinnedToCore(linkTuneTask,"link-tune",4096,nullptr,1,nullptr,0);
-      if(xTaskCreatePinnedToCore(liveHttpTask,"live-http",8192,nullptr,5,nullptr,1)!=pdPASS)
-        Serial.println("Independent live server task could not start");
-    }
+    if(framesQueue)engineTaskOn=xTaskCreatePinnedToCore(engineTask,"engines",16384,nullptr,3,nullptr,0)==pdPASS;
+    if(engineTaskOn)xTaskCreatePinnedToCore(linkTuneTask,"link-tune",4096,nullptr,1,nullptr,0);
   }
-  speedServer.begin();
-  if(xTaskCreatePinnedToCore(speedHttpTask,"speed-http",4096,nullptr,5,nullptr,1)!=pdPASS)
-    Serial.println("Independent speed test listener could not start");
-  Serial.printf("EngineLink HTTP ready: %s (port 80 UI, 81 live, 82 speed test)\n",
+  // The web server starts last: every handler's data is loaded and the lock
+  // exists. It binds every interface, so a Wi-Fi change needs no rebind.
+  initializeWeb();
+  Serial.printf("EngineLink HTTP %s on port 80 (%s)\n",web.handle?"ready":"FAILED to start",
     routerConfigured()&&!routerHold?"router":"standalone");
 }
 void loop(){
@@ -570,8 +545,6 @@ void loop(){
   auto part=[&partAt](uint8_t i){const uint32_t t=millis(),d=t-partAt;if(d>loopPartMaxMs[i])loopPartMaxMs[i]=d;partAt=t;};
   serviceCAN();
   part(8);
-  web.handleClient();
-  part(0);
   serviceSD();
   part(1);
   if(!engineTaskOn){serviceKad();serviceAutoPoll();}
@@ -599,7 +572,7 @@ void loop(){
     Serial.println("Engine task stalled: restarting");
     prepareRestart();restartAt=millis()+200;
   }
-  if(rollbackPending&&millis()>60000&&(apStarted||WiFi.status()==WL_CONNECTED)){esp_ota_mark_app_valid_cancel_rollback();rollbackPending=false;}
+  serviceSelfTest();
   if(fwState==4&&!restartAt){prepareRestart();restartAt=millis()+2000;}
   if(restartAt&&(int32_t)(millis()-restartAt)>=0){delay(100);ESP.restart();}
   const uint32_t took=millis()-loopStart;if(took>loopMaxMs)loopMaxMs=took;

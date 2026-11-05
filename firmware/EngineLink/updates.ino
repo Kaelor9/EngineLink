@@ -83,6 +83,7 @@ void fwWorker(void *){
           }
           if(ok&&!checked){fwError="Firmware header incomplete";ok=false;}
           if(ok&&!Update.end(true)){fwError=Update.errorString();ok=false;}
+          if(ok){const String e=otaCheckNewImage();if(e.length()){fwError=e;ok=false;}}
           if(!ok){Update.abort();fwState=9;}else fwState=4;
         }
         http.end();
@@ -119,4 +120,19 @@ void handleFwStatus(){
   if(fwState==2&&fwList.length()&&fwList[0]=='{')s+=fwList;else s+="null";
   s+='}';
   sendJSON(200,s);
+}
+// After Update.end() (which made IDF verify the image and set it to boot
+// next): the new image must be the same application as this one (plan 6.9
+// item 5). Otherwise the running firmware stays the boot choice. Returns ""
+// when fine. Every Arduino-built image reports the core's project name, so
+// this rejects a non-Arduino ESP32 application, not another Arduino sketch
+// (plan section 12).
+String otaCheckNewImage(){
+  const esp_partition_t *run=esp_ota_get_running_partition(),*next=esp_ota_get_boot_partition();
+  if(!next||next==run)return "The new firmware was not set to start";
+  esp_app_desc_t d;
+  const bool read=esp_ota_get_partition_description(next,&d)==ESP_OK;
+  if(read&&strncmp(d.project_name,esp_app_get_description()->project_name,sizeof(d.project_name))==0)return "";
+  esp_ota_set_boot_partition(run);
+  return read?"Not an EngineLink firmware (different application)":"The new firmware's description could not be read";
 }

@@ -183,7 +183,7 @@ void applyNetwork(){
   if(scanInFlight)WiFi.scanDelete();
   scanBusy=false;scanRequested=false;scanInFlight=false;
   if(mdnsReady){MDNS.end();mdnsReady=false;}
-  web.closeClients();
+  httpdSuspend();   // close web sessions before the driver stops (plan 6.2)
   WiFi.mode(WIFI_OFF);
   elAllowSae=withRouter&&staSecMode==1;   // WPA3 only for a WPA3-only router
   WiFi.persistent(false);
@@ -256,17 +256,16 @@ void serviceNetwork(){
   if(ntpNotification){ntpNotification=false;if(allowTime("ntp")&&validWall()){hasTime=true;timeSource="ntp";backfillTripTime();}}
   serviceWifiScan();
   if(mdnsRefreshPending&&!scanBusy&&(uint32_t)(now-mdnsNetworkChangedAt)>=2000UL)startNameService();
-  // The web server must listen on the Wi-Fi that is up now: (re)bind it
-  // shortly after the own Wi-Fi started or the router gave an IP.
-  if(networkIpEpoch!=httpBoundEpoch&&!scanBusy&&(uint32_t)(now-networkIpEventAt)>=600UL){
+  // Shortly after the own Wi-Fi started or the router gave an IP. The web
+  // server binds every interface, so it needs nothing here (plan 6.6).
+  if(networkIpEpoch!=netEpochSeen&&!scanBusy&&(uint32_t)(now-networkIpEventAt)>=600UL){
     // Driver setup may reset the TX power after an interface start; check it
     // on every new network in both modes (plan Stage 1b).
     applyTxPower(true);
-    web.rebindNetwork();httpBoundEpoch=networkIpEpoch;httpBoundAt=now;
-    Serial.printf("HTTP/80 listening on %s\n",online?WiFi.localIP().toString().c_str():WiFi.softAPIP().toString().c_str());
-    wifiLog("Web server listening");
+    netEpochSeen=networkIpEpoch;
+    Serial.printf("Network ready at %s\n",online?WiFi.localIP().toString().c_str():WiFi.softAPIP().toString().c_str());
+    wifiLog("Network ready");
   }
-  if(httpHealPending){httpHealPending=false;++httpHeals;web.rebindNetwork();}
   // Device report to GitHub (only with a token and the router up).
   if(!reportedThisBoot&&cfg.ghToken.length()&&online&&staIpAt&&(uint32_t)(now-staIpAt)>=120000UL){
     reportedThisBoot=true;if(!reportWanted){reportWanted=true;reportManual=true;reportReason="connected after start";}

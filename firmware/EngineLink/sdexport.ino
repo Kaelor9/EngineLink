@@ -36,8 +36,11 @@ uint32_t removeTree(const String &path){
   File dir=SD.open(path);
   if(!dir)return 0;
   if(!dir.isDirectory()){dir.close();return SD.remove(path)?1:0;}
+  static uint8_t breath=0;
   for(File f=dir.openNextFile();f;f=dir.openNextFile()){
-    feedLoopWDT();
+    // Runs in a web handler holding the engine lock: let the main loop and
+    // the engine task have a turn now and then on a card with many files.
+    if(!(++breath&15)){netWaitBegin();netWaitEnd();}
     String child=String(f.path());
     const bool sub=f.isDirectory();
     f.close();
@@ -135,11 +138,7 @@ void handleExportRaw(){
   if(!parseIds(web.arg("ids"),ids,n)){web.send(400,"text/plain","No trips selected");return;}
   if(!sdReady){web.send(409,"text/plain","No SD card");return;}
   if(sdLogging)logFile.flush();
-  // Crash reports on 0.13.2 traced to tdefl_compress_buffer() from this
-  // raw-trip route while streaming over a weak Wi-Fi connection. Until that
-  // compressor path is independently validated, send raw CSV uncompressed.
-  // This protects the board and engine readings; large exports can take longer.
-  ChunkOut &out=beginDownload("raw engine data","text/csv","EngineLink-raw-trips.csv",false);
+  ChunkOut &out=beginDownload("raw engine data","text/csv","EngineLink-raw-trips.csv");
   out.add("trip_id,boot_id,uptime_ms,utc_epoch,channel,mid,checksum,raw_hex,engine,fuel_lph,rpm,direction,kad_index,kad_value\n");
   char line[400];
   for(uint8_t j=0;j<n;j++){
@@ -163,7 +162,7 @@ void handleExportRaw(){
     // Read the card in blocks and send in large pieces: one small piece per
     // row made a chunk and a network packet each, about 1 kB/s.
     size_t ll=0;bool done=false;
-    while(!done){
+    while(!done&&!web.sendFailed()){
       const uint32_t tr=millis();
       const int got=f.read(rawIn,sizeof(rawIn));
       dlStat.sdMs+=millis()-tr;
@@ -186,11 +185,25 @@ void handleExportRaw(){
   }
   endDownload(out);
 }
-// The ordinary WebServer is single-threaded. Never send a speed-test payload
-// from its request handler: on poor Wi-Fi the old 32 KiB request blocked every
-// other API endpoint for 30+ seconds. Speed tests use port 82 independently.
+// Download speed test (?kb=16..256, default 32), measured by the phone. It
+// runs in the xfer task (httpd.ino) and touches no engine data or SD card,
+// so every other request is answered meanwhile.
 void handleSpeedTest(){
-  reply(false,"Speed test moved to HTTP port 82; refresh EngineLink's page",409);
+  size_t total=32768;
+  if(web.hasArg("kb")){const long kb=web.arg("kb").toInt();if(kb>=16&&kb<=256)total=(size_t)kb*1024;}
+  static const char block[4096]={'E','n','g','i','n','e','L','i','n','k'};   // in flash, not RAM
+  web.sendHeader("Cache-Control","no-store");
+  web.setContentLength(CONTENT_LENGTH_UNKNOWN);
+  web.send(200,"application/octet-stream","");
+  const uint32_t begun=millis();size_t sent=0;uint32_t writes=0;
+  while(sent<total&&!web.sendFailed()){
+    const size_t n=min(sizeof(block),total-sent);
+    web.sendContent(block,n);++writes;
+    if(!web.sendFailed())sent+=n;
+  }
+  web.sendContent("");
+  // Server write time for the report; the browser measures the real speed.
+  speedTxLastBytes=(uint32_t)sent;speedTxLastWrites=writes;speedTxLastAt=millis();speedTxLastMs=millis()-begun;
 }
 // ---------- Backup ----------
 void handleBackup(){

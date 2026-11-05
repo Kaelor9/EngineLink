@@ -63,6 +63,10 @@ jobs:
         run: |
           g++ -O2 -std=c++17 -Wall -Wextra -I firmware/EngineLink tools/test_tracefold.cpp -o /tmp/test_tracefold
           /tmp/test_tracefold
+      - name: Host test URL decoding and the own-address allow-list (Wi-Fi 2.0 Stage 2)
+        run: |
+          g++ -O2 -std=c++17 -Wall -Wextra -I firmware/EngineLink tools/test_httputil.cpp -o /tmp/test_httputil
+          /tmp/test_httputil
       - name: Host test NMEA 2000 decoding
         run: |
           g++ -O2 -std=c++17 -Wall -Wextra -I firmware/EngineLink tools/test_nmea2k.cpp -o /tmp/test_nmea2k

@@ -35,6 +35,45 @@ assert "staRadioSetup()" in body(w, "void applyNetwork(){")
 # 1c: the trace folds through the host-tested function.
 assert "wifistate::traceFold(" in body(w, "void traceWifi(uint8_t type,uint8_t reason){")
 
+# --- Stage 2: esp_http_server, security model, self-test, no deflate ----
+h = (FW / "httpd.ino").read_text(encoding="utf-8")
+assert "#include <WebServer.h>" not in fw and "NetworkServer" not in fw, "one server: esp_http_server"
+assert "httpd_stop(" not in fw, "the server is started once and never stopped (6.6)"
+assert len(h.splitlines()) < 300, "httpd.ino stays small (6.1)"
+d = body(h, "static esp_err_t webDispatch(httpd_req_t *r) {")
+for need in ("httputil::hostAllowed(", "httputil::originAllowed(", '"X-EngineLink"', "421", "403", "413",
+             "httpd_req_async_handler_begin(", "ctxLock(c, 2000)"):
+    assert need in d, f"dispatcher lacks {need}"
+assert d.index("hostAllowed(") < d.index("X-EngineLink") < d.index("rt.fn();"), "checks run before any handler"
+wk = body(h, "static void xferWorker(void *) {")
+assert "httpd_req_async_handler_complete(j.r)" in wk, "async requests always complete (esp_http_server.h)"
+cfgs = body(h, "bool Web::begin() {")
+for need in ("lru_purge_enable = true", "max_open_sockets = 7", "keep_alive_enable = true",
+             "httpd_uri_match_wildcard", "open_fn = webOpen", "core_id = 1"):
+    assert need in cfgs, f"server config lacks {need}"
+assert "#if EL_NETBOOST" in body(h, "static esp_err_t webOpen(httpd_handle_t, int fd) {")
+assert "Access-Control-Allow-Origin\",\"*" not in fw and "Allow-Origin: *" not in fw, "no wildcard CORS (F22)"
+api = (FW / "webapi.ino").read_text(encoding="utf-8")
+for route in ("/api/export/raw.csv", "/api/export/trips.csv", "/api/export/series.csv", "/api/export/fast.csv",
+              "/api/log", "/api/segments.csv", "/api/backup", "/api/nmea/bus.csv", "/api/speedtest"):
+    line = next(l for l in api.splitlines() if f'web.on("{route}"' in l)
+    assert "R_ASYNC" in line, f"{route} must be a long transfer (6.6)"
+assert 'web.on("/api/update",HTTP_POST,handleUpdate,R_RAWBODY)' in api
+up = body(api, "void handleUpdate(){")
+assert "len<100000||len>3200000" in up and "otaCheckNewImage()" in up and "web.recv(" in up
+assert "otaCheckNewImage()" in body(fw, "void fwWorker(void *){")
+# D26: no deflate of downloads
+for gone in ("tdefl_", "deflate", "miniz.h", "zComp", "acceptsDeflate"):
+    assert gone not in fw, f"D26: {gone} is back"
+# 6.10: the only place that confirms a new firmware is the self-test
+assert fw.count("esp_ota_mark_app_valid_cancel_rollback") == 1
+assert "esp_ota_mark_app_valid_cancel_rollback" in body(fw, "void serviceSelfTest(){")
+assert "esp_ota_mark_app_invalid_rollback_and_reboot" in body(fw, "void serviceSelfTest(){")
+for gone in ("lastHttpMs", "httpBusySince", "httpSelfCheckTask", "liveHttpTask", "speedHttpTask", "rebindNetwork"):
+    assert gone not in fw, f"{gone} was removed in Stage 2"
+# Handlers never act on the radio or mDNS (they run in the server task now)
+assert "startNameService()" not in body(api, "void handleCfg(){")
+
 # --- Section 4: no third exception ---------------------------------------
 for p in sorted(FW.glob("*")):
     if p.suffix not in (".ino", ".h", ".cpp"):
@@ -56,7 +95,7 @@ for wf in ("build-engine.yml", "pages.yml"):
     assert '"Adafruit NeoPixel@' in t, f"{wf}: NeoPixel not pinned (D25)"
 
 # --- Pure headers stay pure ------------------------------------------------
-for h in ("wifistate.h",):
+for h in ("wifistate.h", "httputil.h"):
     t = (FW / h).read_text(encoding="utf-8")
     assert "#include <Arduino.h>" not in t and "WiFi" not in t and "millis(" not in t, h
 
