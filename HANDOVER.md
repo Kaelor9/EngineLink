@@ -243,7 +243,9 @@ Wi-Fi 0.16.0–0.16.5 (2026-11-04, standalone on the boat with an iPhone):
   [docs/TODO.md](docs/TODO.md) under "Wi-Fi 2.0". Follow it rather than the
   0.15 rules above, which describe the old design. **The one authoritative
   implementation plan is [docs/WIFI_REWRITE_PLAN.md](docs/WIFI_REWRITE_PLAN.md)**
-  (third revision 2026-11-05, nothing built yet). Its architecture decision:
+  (final revision 2026-11-05, planning closed, nothing built yet; status of
+  each stage is reported as built / bench-verified / boat-verified). Its
+  architecture decision:
   stay on the Arduino ESP32 core 3.3.12 (ESP-IDF 5.5.5) and use the official
   components directly — `esp_http_server` replaces the hand-written web
   server, connection pool, the port 81/82 listeners and the self-check;
@@ -258,7 +260,11 @@ Wi-Fi 0.16.0–0.16.5 (2026-11-04, standalone on the boat with an iPhone):
   (plan 6.9: own-origin CORS allow-list, `X-EngineLink` header on POSTs,
   `Host` check, request limits) and a boot self-test that confirms a new
   firmware only after the web server answered a client, with automatic
-  rollback otherwise (plan 6.10). Findings worth
+  rollback otherwise (plan 6.10). The owner's closing decisions: the deflate
+  compression of downloads is removed in Stage 2 (exports keep routes,
+  content and formats; `downloads.ino`/`sdexport.ino` then stream plain
+  chunks), and the Wi-Fi country is set with `esp_wifi_set_country_code("DK",
+  true)`. Findings worth
   knowing now: the 5–10 s web stall is the core's `NetworkClient::write()`
   retry loop (10 × 1 s `select` when the phone stops acknowledging); the TX
   power check accepts the driver's unset 20 dBm as 19.5 dBm; 0.16.2 dropped

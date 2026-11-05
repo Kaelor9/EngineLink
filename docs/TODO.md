@@ -86,10 +86,12 @@ technical realisation (Arduino core 3.3.12 + official ESP-IDF components:
 `esp_http_server` for the web server, `esp_wifi`/`WiFi` with a small
 host-tested state machine, FreeRTOS queue for events; owner's component
 policy D23; hardware validation before merge D24; pinned toolchain D25).
-Open approvals for the owner: P8–P13 in the plan's section 11 (keep
-`netboost.cpp` fenced; the three small app changes; option B later; the
-boot self-test instead of the loopback self-check; the security model of
-plan 6.9; an optional `sha256` per release entry).
+**Planning closed 2026-11-05.** The owner approved P8, P9, P11 and P12 with
+their documented limits, deferred P10 and P13, approved removing the deflate
+compression of downloads (exports keep routes, content and formats) and
+asked for a documented country configuration (`DK`, not `"EU"`). No further
+architecture revisions; the work now is building and testing stage by stage
+(plan section 9), each reported as built / bench-verified / boat-verified.
 
 **Why:** the Wi-Fi logic in `wifi.ino` is only ~100 lines; the clutter is the
 0.12–0.15 leftovers around it (`netpolicy.h`, `linktune.cpp`, channel survey,

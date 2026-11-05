@@ -1,6 +1,6 @@
 # Wi-Fi 2.0: the implementation plan
 
-Status: **plan, nothing built yet** (revised 2026-11-05, fourth revision: quality pass). This
+Status: **final plan, planning closed 2026-11-05 (fifth revision); nothing built yet.** This
 is the single authoritative plan. It replaces its earlier revisions (same
 file, git history) and must be followed stage by stage without guessing at
 architecture decisions. Where it keeps analysis and decision history, that is
@@ -17,6 +17,25 @@ Read first: `HANDOVER.md` (section "Wi-Fi"), `docs/TODO.md` ("Wi-Fi 2.0"),
 | ESP-IDF | `release/v5.5`: `components/esp_http_server/include/esp_http_server.h`, `components/esp_wifi/include/esp_wifi.h`, `esp_wifi_types_generic.h`, `components/esp_wifi/Kconfig`, `components/lwip/Kconfig`, `docs/en/api-guides/wifi.rst`; docs pages *Wi-Fi Driver*, *HTTP Server*, *Wi-Fi Provisioning* (v5.5, esp32s3) | HTTP server defaults and async handlers, scan/AP+STA/reconnect rules, PMF, BSS max idle, provisioning transport |
 | Arduino ESP32 docs | *Arduino as an ESP-IDF component* (latest; "Arduino Core ESP32 version (3.3.12) is now compatible with ESP-IDF v5.5") | option B facts |
 | Device reports | GitHub #95, #126, #141–#146; the owner's 2026-11-05 serial export (16 SD reports + SD log + live report) | field evidence (section 13) |
+
+**Instructions to the implementer (Opus):**
+
+1. Build with Espressif's official components and the Arduino core's thin
+   wrappers (D23, section 4). Before writing any helper, name the IDF or core
+   API that does the job; if none exists, say so in the commit message. The
+   two exceptions in 4.1 are the only ones; a third needs the owner's written
+   approval first.
+2. Follow the stages in section 9 in order. Stage 0 is a hardware gate the
+   owner runs; 9.0 says which work may proceed meanwhile.
+3. Every stage ends with its acceptance list. Report results with the status
+   vocabulary of D28: *built* (compiles, CI green), *bench-verified* (the
+   owner ran the stage's bench list and reported it), *boat-verified* (9.9
+   passed). Never write "verified", "works" or "fixed" about firmware that
+   has not been run on the board; say *built, untested on hardware*.
+4. Do not revise the architecture. If implementation reveals a concrete
+   critical defect in this plan, record it in section 12 with evidence and
+   stop at that stage; do not start a new plan (D29).
+5. No merge, no release before 9.9 is reported passed (D24).
 
 ---
 
@@ -36,6 +55,10 @@ Added as decisions:
 | D23 | **Component policy.** Use, in this order: (1) the ESP-IDF component or driver API (`esp_wifi`, `esp_event`, `esp_netif`, `esp_http_server`, `mdns`, `nvs`, `esp_sntp`, FreeRTOS primitives); (2) the Arduino ESP32 core's official wrapper of it when it is thin and complete (`WiFi`, `WiFi.AP`, `WiFi.STA`, `Preferences`, `ESPmDNS`, `Update`, `HTTPClient`, `SD`, `LittleFS`); (3) EngineLink code only for product logic (states, timers, reports, logs, the engine and trip domain). Anything that pokes into a component's internals or intercepts its initialisation is an **exception**: it lives in its own file, has a contract test, is listed in section 4, and has a removal plan. |
 | D24 | **Hardware validation gates merge and release.** A firmware change that touches networking is merged and released only after the bench protocol and the boat protocol in section 9.9 have been run by the owner and reported as passed. "Merge once CI is green" (HANDOVER) does not apply to such changes. |
 | D25 | **Pinned toolchain.** CI and the release workflow install `esp32:esp32@3.3.12` (not "latest") and the Adafruit NeoPixel version used today; a core/IDF update is its own change with the full test protocol. |
+| D26 | **No deflate compression of downloads.** The miniz streaming compressor (`ChunkOut.z`, `zComp`, `acceptsDeflate()`, `Content-Encoding: deflate`) is removed in Stage 2; every export keeps its route, content, columns and file format and is sent uncompressed in chunks. Known crash area (0.13.2) gone; the app page keeps its pre-built gzip. (owner, 2026-11-05) |
+| D27 | **Country configuration per Espressif's API.** `esp_wifi_set_country_code("DK", true)` (ISO code from the documented list, `esp_wifi.h` attention 6; 802.11d on so the station follows the router's country IE, attention 3/8). Never `"EU"`. (owner, 2026-11-05) |
+| D28 | **Status vocabulary.** *built* = compiles and CI is green; *bench-verified* = the owner ran the stage's bench list and reported it; *boat-verified* = 9.9 passed. Firmware is never called verified, working or fixed before the owner's report. |
+| D29 | **Planning closed 2026-11-05.** No further architecture revisions unless implementation reveals a concrete critical defect, recorded in section 12 with evidence. |
 
 ---
 
@@ -243,6 +266,7 @@ Line numbers refer to commit `9485843`.
 | F21 | A power-on reset occurred when the boat 12 V was connected while the board ran on USB (hardware, to be confirmed). | 5 Nov 10:48 UTC report | Stage 0 step 4. |
 | F22 | No access control and `Access-Control-Allow-Origin: *` on every response: a web page in the owner's browser, or a DNS-rebinding page, can read EngineLink data and POST to `/api/factory-reset`, `/api/update`, `/api/wifi/*`. | `webapi.ino:1053`, `netreport.ino:261,271,329` | 6.9, Stage 2 (P12). |
 | F23 | A new firmware confirms itself after 60 s whenever the radio is up, without proving the web server works; the loopback self-check task compensated with a heal/restart machine. | `EngineLink.ino:601`, `netreport.ino:382-409` | 6.10, Stage 2 (P11). |
+| F24 | Downloads are deflate-compressed on the fly with the ROM's miniz through a hand-written `ChunkOut`; the 0.13.2 crash backtrace went through it and one export is kept uncompressed as a guard. | `downloads.ino:1-45`, `EngineLink.ino:110-141` | removed, D26, Stage 2. |
 
 ---
 
@@ -323,10 +347,10 @@ after `WiFi.softAPConfig(192.168.4.1, 192.168.4.1, 255.255.255.0)`, with
 `apRadioSetup()` (restores F19, official calls only):
 `esp_wifi_set_bandwidth(WIFI_IF_AP, WIFI_BW_HT20)`;
 `esp_wifi_set_inactive_time(WIFI_IF_AP, 600)`; country
-`{"EU",1,13,20,WIFI_COUNTRY_POLICY_MANUAL}` via `esp_wifi_set_country()` only
-when `esp_wifi_get_country()` differs (setting it restarts the AP);
-`WiFi.setSleep(false)`; then `applyTxPower(false)` (the country resets the
-power — the 0.15.0 lesson).
+`esp_wifi_set_country_code("DK", true)` (D27) only when `esp_wifi_get_country()`
+does not already report `DK` (setting it restarts the AP and switches the PHY
+init data, `esp_wifi.h` attention 5); `WiFi.setSleep(false)`; then
+`applyTxPower(false)` (the country resets the power — the 0.15.0 lesson).
 
 ### 6.3 Inputs, timers and transitions (`wifistate.h`)
 
@@ -519,8 +543,11 @@ engine task; server → (lock, bounded) → nothing.
 reads a chunk of data and releases it before `httpd_resp_send_chunk()`. The
 worker calls `httpd_req_async_handler_complete()` on **every** exit path (done,
 send error, session closed by `httpdSuspend()`); the header warns that
-otherwise the server stops accepting connections. `ChunkOut` (static 8 KB
-deflate buffer) stays single-instance; the queue depth guarantees it.
+otherwise the server stops accepting connections. `ChunkOut` keeps only its
+8 KB send buffer; the miniz deflate path is removed (D26), so every export is
+plain chunked `text/csv` (or `application/json` for the backup) with no
+`Content-Encoding`. `ChunkOut` stays single-instance; the queue depth
+guarantees it.
 
 **Uploads** (`/api/update`): the app sends the file as the raw body
 (`application/octet-stream`, `esp_http_server` has no multipart parser);
@@ -713,7 +740,8 @@ monitor.
 | Self-test / rollback | a new image confirms within 2 min of the app reconnecting (log says which evidence); the broken-`startAP()` test build rolls back at 600 s by itself; a build with a broken route table rolls back | 9.6 |
 | Memory | after 24 h: lowest free heap ≥ 40 KB, largest block ≥ 32 KB, free heap not falling more than 2 KB/h; server and xfer stack high-water marks ≥ 1 KB; `wifiEventOverflow` 0 | report |
 | Loop / engines | `engineWait max` < 200 ms during every test; `loopPartMaxMs[network]` ≤ 1 500 ms at a state change, ≤ 20 ms otherwise; engine report answered-rate and NMEA frame count unchanged during Wi-Fi tests | engine report, Wi-Fi report |
-| Radio truth | report shows AP bandwidth 20 MHz, inactive time 600 s, TX "driver reports 19.50 dBm" in both modes, `txReapplied` stable | report |
+| Radio truth | report shows AP bandwidth 20 MHz, inactive time 600 s, country `DK`, TX "driver reports 19.50 dBm" in both modes, `txReapplied` stable | report |
+| Exports | every export route delivers byte-identical content to 0.16.5 on the same data (bench diff, 9.2), no `Content-Encoding` on CSV, a 1 MB export completes on the own Wi-Fi in ≤ 10 s | bench 9.2 |
 
 ---
 
@@ -748,9 +776,18 @@ produce the diagnostics the gate needs).
 
 ### 9.0 Stage 0 — Root-cause gate (section 13.6)
 
-No Stage 2–8 work before the decision table in 13.6 has a row. If the row is
-H3 (firmware regression), the owner decides whether Stage 1 ships alone first
-(see 13.7). If it is H1/H2/H4, the environment/hardware is fixed first.
+The gate (13.6) is the owner's work and splits into **physical measurements
+on the boat** (steps 0, 3 and 4: router channel/signal, router-off test,
+oscilloscope on 3V3/5 V) and **bench work at home** (steps 1 and 2 with USB
+from a charger and the version archive).
+
+What proceeds without waiting: Stage 1 and Stage 2 (built and bench-verified
+on the owner's bench, they are cause-independent and produce the diagnostics
+the gate needs), Stage 3 (host tests only). What waits for a row in the 13.6
+decision table: Stage 4 onwards, because their bench and boat acceptance
+needs a standalone link that is known to be reliable. If the row is H3
+(firmware regression), the owner decides whether Stage 1 ships alone first
+(13.7); if H1/H2/H4, the environment/hardware is fixed first.
 
 ### 9.1 Stage 1 — Diagnostics and cause-independent fixes
 
@@ -768,7 +805,7 @@ H3 (firmware regression), the owner decides whether Stage 1 ships alone first
 - **1e CI pinning** (D25): `esp32:esp32@3.3.12` and the NeoPixel version in
   `validate.yml`, `build-engine.yml`, `pages.yml`.
 
-Bench acceptance: report shows 20 MHz / 600 s / 19.50 dBm in both modes;
+Bench acceptance: report shows 20 MHz / 600 s / country `DK` / 19.50 dBm in both modes;
 station RSSI printed; a router switched off for 2 min yields < 10 trace
 entries. No behaviour change otherwise. (The earlier "bounded writes"
 workaround is **dropped**: Stage 2 removes the cause.)
@@ -792,7 +829,23 @@ workaround is **dropped**: Stage 2 removes the cause.)
 6. App: remove `url.port='81'`/`'82'`; `post()` and `uploadFw()` send
    `X-EngineLink: 1`; `uploadFw()` sends the `File` as the body. `python3
    tools/build_ui.py`.
-7. `tools/test_wifi_contract.py` server items (9.10).
+7. Remove the deflate path (D26): `ChunkOut.z`, `zComp`, `acceptsDeflate()`,
+   the `compress` parameter of `beginDownload()` and its seven call sites, the
+   `Content-Encoding: deflate`/`Vary` headers, `dlStat.z`, `#include "miniz.h"`;
+   `test_router_throughput_guard.py` loses its `handleExportRaw … false`
+   assertion. Routes, column headers, row content and file names stay.
+8. `tools/test_wifi_contract.py` server items (9.10).
+
+Export regression check (do it **before** flashing Stage 2 on the bench
+board): on 0.16.5 download every export route — `/api/export/trips.csv`,
+`/api/export/raw.csv`, `/api/export/series.csv`, `/api/export/fast.csv`,
+`/api/segments.csv`, `/api/log`, `/api/backup`, `/api/nmea/bus.csv`,
+`/api/trip/series`, `/api/event/series`, `/api/series/recent` — with
+`curl --compressed -o before/<name>`; after flashing Stage 2 on the same
+board and data, `curl -o after/<name>` and `diff -r before after` (only
+fields that are time-of-download by design may differ; list them in the
+report). Also `curl -sI /api/export/trips.csv | grep -i content-encoding`
+must print nothing.
 
 Bench acceptance (before Stage 3), each with the expected result:
 
@@ -813,6 +866,7 @@ Bench acceptance (before Stage 3), each with the expected result:
 | 20 page reloads in a row on Safari | all complete; `max_open_sockets` never exceeded (serial) |
 | OTA from a file (valid image) | restart, "firmware confirmed: client response" in the log within 2 min |
 | grep of `/api/state`, `/api/diag`, `/api/backup`, the report and `/WIFIREP.TXT` for the AP and router passwords | nothing |
+| the export regression check above | `diff` clean; no `Content-Encoding`; a 1 MB raw export ≤ 10 s on the own Wi-Fi |
 
 ### 9.3 Stage 3 — `wifistate.h` + host test
 
@@ -989,6 +1043,8 @@ w = wifi.ino; h = httpd.ino; fw = firmware_source()
 - "httpdSuspend()" precedes every "WiFi.mode(" in radioApply                  (driver-buffer lesson)
 - body(w,"void startAP(") has the exact softAPConfig/softAP lines of 6.2      (D2)
 - "scanNetworks(false" not in fw                                              (async only)
+- 'esp_wifi_set_country_code("DK"' in body(w,"void apRadioSetup("); '"EU"' not in fw   (D27)
+- "tdefl_" not in fw; "deflate" not in fw; "miniz.h" not in fw                   (D26)
 - not re.search(r"print[f]?\([^;]*(apPassword|wifiPassword|ghToken)", fw)     (never log secrets)
 - "saveSettings()" not in body(webapi,"void handleWifiConnect("); "cfg.ssid=" not in it nor in handleOptions   (F9/P7)
 - "#include <WebServer.h>" not in fw; "NetworkServer" not in fw; "httpd_stop(" not in fw
@@ -1028,6 +1084,13 @@ w = wifi.ino; h = httpd.ino; fw = firmware_source()
   same PR; never a silent different fix.
 - D24: the PR for 0.17.0 is not merged on green CI; it is merged when 9.9 is
   reported passed.
+- D28: commit messages, PR text, `docs/STATUS.md` and release notes use the
+  status vocabulary (*built* / *bench-verified* / *boat-verified*); firmware
+  that has not run on the board is "built, untested on hardware", never
+  "verified".
+- D29: no architecture revision; a concrete critical defect found while
+  building goes into section 12 with evidence, and work stops at that stage
+  until the owner decides.
 
 ---
 
@@ -1037,7 +1100,20 @@ Answered (history): P1 approved → D19; P2 approved → D20; P3 rejected → D2
 P4 deferred → D22; P5 (20 s test budget), P6 (`apch` honoured), P7
 (`/api/options` through the router test): no objection.
 
-Open, for approval:
+Final decisions (owner, 2026-11-05 — planning closed, D29):
+
+| # | Proposal | Decision |
+|---|---|---|
+| P8 | Keep `netboost.cpp` fenced until option B | **approved** with the conditions in 4.1 |
+| P9 | Ports 81/82 removed from the app, upload as a raw body, `X-EngineLink` header | **approved** |
+| P10 | Option B as a later plan | **deferred** |
+| P11 | Boot self-test and automatic rollback instead of the loopback self-check | **approved** |
+| P12 | Security model 6.9 | **approved** with its documented limits |
+| P13 | `sha256` per release entry | **deferred** |
+| — | Remove deflate compression of downloads | **approved** → D26 |
+| — | Country configuration | use Espressif's API with a real ISO code → D27 |
+
+Original proposals, kept for the record:
 
 | # | Proposal | Recommendation | Why |
 |---|---|---|---|
@@ -1074,7 +1150,12 @@ while anyone is connected); the SETUP-test channel move explained through
 the driver's CSA; the rollback confirmation upgraded from "radio up" to a
 real self-test with automatic rollback (6.10); a security model added (6.9);
 tests moved from line-presence checks to host tests of pure functions and
-`curl`-level bench checks (7, 8, 9.2, 9.10).
+`curl`-level bench checks (7, 8, 9.2, 9.10); the **fifth revision (closing,
+2026-11-05)**: the owner's final decisions recorded (section 11, D26–D29),
+deflate removal placed in Stage 2 with an export regression check, the
+country configuration set to the documented `esp_wifi_set_country_code("DK",
+true)`, Stage 0 split into physical and bench work, the status vocabulary and
+the implementer instructions added.
 
 Open risks:
 
