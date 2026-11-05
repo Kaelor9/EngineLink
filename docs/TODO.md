@@ -151,12 +151,27 @@ off and on; boot with router; power off/on 3 times; speed in both modes.
 
 ## To check on the boat
 
-- **Router mode on 0.16.5 (before Wi-Fi 2.0, ~15 min):** set up the router,
-  check it joins, "Test speed", restart the router once; send the USB
-  `wifi` report. Gives a baseline for the rewrite.
-- **Standalone 0.16.5:** the first USB report shows join, DHCP and HTTP
-  working (see STATUS). Still to confirm: the app is usable without USB over
-  a longer session, and no multi-second stalls.
+- **Own Wi-Fi root cause first (2026-11-05, blocks Wi-Fi 2.0 stages 2–8).**
+  The 5 Nov boat test of 0.16.5 showed the phone joining and getting DHCP
+  but EngineLink's frames not reaching the phone (0 TCP connections, code 2
+  ×8–10 then 209, DHCP asked twice, 60–72 kB/s). Follow
+  `docs/WIFI_REWRITE_PLAN.md` section 10.6 in order:
+  0. On the boat, 0.16.5: "Scan for networks" → note the boat router's
+     channel and dBm (read only); `/api/diag` → `wifi.bw`, `wifi.ch`.
+  1. At home, USB from a charger, 0.16.5, iPhone + PC, 15 min.
+  2. At home, 0.13.4 from the web installer's version list, same test.
+  3. On the boat, 12 V, the stable firmware from 1–2; 15 min with the
+     router on, then 5 min with the router powered off (no settings change).
+  4. Oscilloscope on 3V3 and the 5 V node: USB only, 12 V only, 12 V
+     connected while on USB (a power-on reset happened then on 5 Nov).
+  Send the `wifi` report after each step. The decision table in 10.6 says
+  what each outcome means.
+- **Hardware documentation needed for the power tests:** LDO and buck part
+  numbers, how USB 5 V and the buck output are combined, decoupling at the
+  module (`docs/HARDWARE.md` has none of it).
+- **Router mode on 0.16.5 (~15 min):** only after the standalone link is
+  reliable again: set up the router, check it joins, "Test speed", restart the
+  router once; send the USB `wifi` report. Baseline for the rewrite.
 
 ## Previous boat checks
 

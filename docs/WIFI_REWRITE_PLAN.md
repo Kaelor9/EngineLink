@@ -210,6 +210,20 @@ rollback confirmation. `routerConfigured()` is used by `led.ino`, `updates.ino`,
 `netreport.ino`, `serialcmd.ino`, `diagnosis.ino`. These names stay or get a
 one-line compatibility accessor (section 3.6).
 
+**F17–F21 — added 2026-11-05 from the boat test (details in section 10).**
+F17: the own Wi-Fi's uplink works (join, DHCP Discover) while the downlink
+to the phone fails (no TCP connection reaches port 80, DHCP asked twice,
+SA Query unanswered); cause open — gate in 10.6. F18: the softAP always runs
+PMF on this core (IDF 5.5, `capable` deprecated), so a phone re-joining a
+link it considers dead costs 3–97 s of "connected but dead" (reason 2 series
+ending in 209). F19: 0.16.2 dropped `esp_wifi_set_bandwidth(AP, HT20)`,
+the explicit country and `esp_wifi_set_inactive_time(AP, 600)` that every
+working version had (10.3 table). F20: the Wi-Fi report has no per-station
+RSSI/PHY and does not print the AP's real bandwidth/channel/PMF state.
+F21: a power-on reset occurred when the boat 12 V was connected while the
+board ran on USB (hardware; to be confirmed by the owner and measured in
+10.6 step 4).
+
 ---
 
 ## 3. Target architecture
@@ -592,8 +606,13 @@ Four layers; every stage names which apply.
 ## 5. Stages
 
 Each stage is one or two commits on the Wi-Fi 2.0 branch, compiles, passes
-CI, and can be read on its own. Stages 1–6 are firmware; 7 is the optional
-app part; 8 is the release. Order matters where stated.
+CI, and can be read on its own. Stages 1–6 are firmware; 7 is the app part;
+8 is the release. Order matters where stated.
+
+**Gate added 2026-11-05 (section 10):** Stages 2–8 do not start before the
+root-cause gate in 10.6 has a result. Stage 1 may be built and tested on the
+bench in the meantime because its three fixes are independent of the cause,
+and 10.7 adds the AP radio-configuration block and the link diagnostics to it.
 
 ### 5.1 Stage 1 — Independent fixes (no behaviour redesign)
 
@@ -981,3 +1000,216 @@ D16/D20 (Stage 7 is now in scope, nothing else in the app changes).
   self-check (`httpSelfCheckTask`) restarts the board after ~3 min in that
   case, which does **not** roll back. Known, unchanged from 0.16.5; noted for
   a later release.
+
+## 10. Field test 2026-11-05 (0.16.5 on the boat): analysis and root-cause gate
+
+Source: the owner's serial-console export of 2026-11-05 11:52 local (10:52
+UTC) containing `/WIFIREP.TXT` (16 reports, 2026-11-04 14:11 UTC to
+2026-11-05 10:48 UTC), `/WIFI.LOG` and one live `wifi` report at uptime
+400 s. Owner's setup: 0.16.5 from factory settings, both J1708 channels and
+NMEA 2000 connected (CAN listening off by default, `model.h:303`), 13.53 V
+at the input, 3.301 V at the LDO output (DMM, static). Tests: (1) boat 12 V
+only — phone joined, no web page at either address; (2) USB only — web page
+opens but "Waiting for EngineLink…" / "Reconnecting"; (3) USB + 12 V — got
+worse, then unreachable while the phone still showed the network. iPhone,
+PC, Safari/Chrome and the home-screen app all tried; IP and `.local` tried.
+
+Everything in 10.1–10.3 is read from the log and the source; 10.4 is
+hypotheses; 10.5 lists what only a measurement can settle.
+
+### 10.1 Telling today's tests apart from the older reports
+
+| Reports in `/WIFIREP.TXT` | Firmware | Belongs to |
+|---|---|---|
+| 2026-11-04 14:11, 14:23, 14:26 UTC | 0.16.3 / 0.16.4 | yesterday, USB (8.5 dBm, "Power save ON") — old |
+| 2026-11-04 14:47 UTC | 0.16.5 | yesterday, USB — old (the report quoted in HANDOVER) |
+| "up 120s", reset reason 1, no phone | 0.16.5 | first boat 12 V power-on (no wall clock: no phone had set the time) |
+| 2026-11-05 08:26 UTC (reason 11) | 0.16.5 | today, USB attached |
+| "up 120s" reason 1, phone joined +26 s, **0 non-loopback TCP accepts** | 0.16.5 | today, boat 12 V only (test 1) |
+| 2026-11-05 08:56 UTC, reason 1, speed tests 60–72 kB/s | 0.16.5 | today, 12 V (test 1, later boot) |
+| "up 120s" reason 1, web stall 10 022 ms | 0.16.5 | today, 12 V |
+| "up 8s", "up 120s" ×2, "up 27s", 09:25, 09:30 UTC (all reason 11) | 0.16.5 | today, USB only (test 2; the "up 8s"/"up 27s" ones are manual `wifi save`) |
+| 2026-11-05 10:48 UTC and the live report at 400 s (reason 1) | 0.16.5 | today, test 3: the boot that followed connecting the boat 12 V while on USB |
+
+Reading aid: reset reason 1 = power-on, 11 = USB/console reset. "reason 1
+after 0 s" does **not** mean the previous session was short: the `alive`
+marker is only written by `saveTotals()` (`storage.ino:78`), i.e. every 30 s
+while an engine runs or at a clean restart; with engines off it stays 0.
+
+### 10.2 Documented findings (from the log)
+
+| # | Finding | Evidence |
+|---|---|---|
+| L1 | The AP, association and DHCP work in every boot: the phone joins within 4–42 s and gets a lease (`apDhcpLeases ≥ 1` in 13 of 14 boots with a phone). | all 5 Nov reports |
+| L2 | In four boots the phone has a lease but **no TCP connection from the phone ever reaches port 80 within 2 min** (`httpExternalAccepts: 0`, `httpRequests: 2` = the loopback self-check only): the first 12 V boot and three USB boots. | "up 120s" reason 1 (+26 s join, 0 accepts); "up 120s" reason 11 ×2; 09:25 UTC |
+| L3 | In two of those boots the phone asked DHCP **twice** within 1–2 s of joining (`DHCP leases assigned 2`, `x2 until +8s/+11s`). | "up 120s" and "up 27s" USB boots |
+| L4 | The AP repeatedly reports the phone **leaving with reason 2 (AUTH_EXPIRE) 8–10 times in 4–20 s** for a single join (`joined 1 · left 8/10`), and each such series ends with **reason 209 (SA_QUERY_TIMEOUT)** 3–97 s after it began, followed by a new join. This happened on 0.16.4 at 8.5 dBm and on 0.16.5 at 19.5 dBm, on USB and on 12 V. | `/WIFI.LOG` 14:23:19→14:23:46, 14:26:53→14:26:59, 14:29:08→14:30:45, up 100s→123s, 09:20:21→09:20:24, 09:35:04→09:35:08 UTC; reports "left 11 (last code 2)", "left 8 (last code 2)" |
+| L5 | The phone also leaves by itself (reason 8, "station leaving") 7–45 s after joining in six boots, and once with reason 3 at +171 s. | 09:29:14, 09:29:31, 09:25:21, 09:21:08, 09:23:31, 10:49:02 UTC |
+| L6 | Every boot in which the phone exchanged data with the server shows the main loop blocked in the **web** part for 5.6–10.0 s (`web 5614 / 5773 / 6615 / 6675 / 9757 / 10 022 ms`), and the engine task waited the same time. The blocked time is a *consequence* of the dead link (F1: `NetworkClient::write()` retries 10 × 1 s while the phone does not acknowledge). | reports 08:26, 08:56, 09:30, 10:48 UTC and the 10 022 ms boots |
+| L7 | The two speed tests that completed on 12 V reached **60 and 72 kB/s at 215–307 ms round trip** on the own Wi-Fi, against 650 kB/s (0.13.4, 2 Nov) and 265–346 kB/s at 91–99 ms (0.15.0, 4 Nov morning, USB). | 08:56 UTC |
+| L8 | The driver reports 19.5 dBm, the self-check never failed more than once (`httpSelfFails ≤ 1`), heap lowest 76–78 KB, no HTTP parse failures, `httpRebinds: 1`, `apStarts 2` (one real start; the counter counts the config event twice). | all 5 Nov reports |
+| L9 | No brownout (reason 9), watchdog (5/6/7) or crash (4) reset in any report today. The 10:46 UTC boot is a **power-on reset (reason 1) of a board that was on USB** at the moment the boat 12 V was connected (test 3), if the owner's sequence is as described. | 10:48 UTC report, `Recent restarts` |
+| L10 | On the 0.16.3/0.16.4 reports (yesterday) the AP ran at 8.5 dBm with the station power-save flag on; the reason-2/209 series occurred there too. | 14:23, 14:26 UTC |
+
+### 10.3 What the source says about these findings
+
+- **The Wi-Fi driver is not stopped by the firmware's stalls.** The driver and
+  lwIP run in their own tasks on core 0; the blocked main loop (L6) runs on
+  core 1 and only holds `web.handleClient()`. Beacons, association, DHCP and
+  TCP acknowledgements are handled by the driver whether the loop is blocked
+  or not. L4/L5 are therefore not caused by L6; L6 is caused by whatever
+  makes the phone stop acknowledging (the link dies first, then the write
+  blocks). F1 remains a real defect: while blocked, nothing else in the loop
+  runs and the app shows "Reconnecting".
+- **L2 means the downlink (EngineLink → phone) fails while the uplink works.**
+  Auth, association and DHCP Discover are phone → EngineLink and succeed;
+  the DHCP Offer/Ack, the TCP SYN-ACK and the SA Query frames are
+  EngineLink → phone. A second DHCP request (L3) is what a phone does when
+  the first Ack did not arrive; zero accepted TCP connections after a lease
+  is a SYN-ACK that never arrived; a SA Query timeout (L4, 209) is a frame the
+  phone never answered. Three independent symptoms point the same way.
+- **PMF is always on for the softAP in this core.** ESP-IDF 5.5
+  (`esp_wifi_types_generic.h:505`): `capable` is "Deprecated … Device will
+  always connect in PMF mode if other device also advertises PMF
+  capability". iPhones and Windows PCs advertise PMF. The reason-209 events
+  are the AP dropping a PMF association after an unanswered SA Query, which
+  the AP sends when the phone tries to (re)associate while the AP still holds
+  the old association. L4 is therefore the phone re-joining a link it
+  considers dead while EngineLink considers it alive; the reason-2 series is
+  the AP invalidating the stale authentication each time the phone retries.
+  This is a *mechanism*, not the cause: the cause is why the phone stops
+  hearing EngineLink.
+- **0.16.2 removed four AP radio settings that every working version had.**
+  `git show d82911b:firmware/EngineLink/wifi.ino` (0.15.1) versus
+  `wifi.ino` today:
+
+  | Setting | 0.12.15–0.15.1 | 0.16.2–0.16.5 |
+  |---|---|---|
+  | Country | `{"EU",1,13,20 dBm,MANUAL}` set explicitly | not set (driver default "01" world-safe) |
+  | AP bandwidth | `esp_wifi_set_bandwidth(WIFI_IF_AP, WIFI_BW_HT20)` when not already HT20 | not set (driver default; `/api/diag` → `wifi.bw` prints the actual value) |
+  | AP inactive time | `esp_wifi_set_inactive_time(WIFI_IF_AP, 600)` | not set (default 300 s) |
+  | Power save | `WiFi.setSleep(false)` + `esp_wifi_set_ps(WIFI_PS_NONE)` | `WiFi.setSleep(false)` only (same effect) |
+  | Station auto-reconnect | `setAutoReconnect(false)` before `WiFi.mode(WIFI_AP)` | not touched in AP mode |
+
+  None of these is proven to matter, but HT20 vs HT40 is the one that changes
+  what the phone has to decode (a 40 MHz beacon/data set on channel 6 spans
+  channels 4–8), and it is the one difference between "worked" and "does
+  not work" that the firmware controls. 10.6 step 0 reads the actual value.
+- **The 0.16.0/0.16.1 failures do not clear 0.16.x.** 0.16.1 carried the
+  0.12.15 Wi-Fi code and still failed on the boat on 4 Nov, which is why the
+  rewrite happened; but 0.16.0 also added the TWAI/NMEA 2000 driver and the
+  drive-test UI. Nothing in the log shows what 0.16.1 did on the radio (its
+  reports are not in `/WIFIREP.TXT`, which starts with 0.16.3).
+- **Lower TX power did not remove the symptom** (L10: 8.5 dBm on 0.16.3/
+  0.16.4 showed the same reason-2/209 series). A pure "PA current droop"
+  explanation would predict improvement at 8.5 dBm; it did not improve,
+  though at 8.5 dBm the margin to the phone was also smaller, so this is
+  weak evidence either way.
+- **The symptom is not iOS-specific**: the owner saw it with a PC too (not in
+  the log; owner's statement).
+- **What the firmware cannot see**: the phone's RSSI as seen by the AP
+  (`esp_wifi_ap_get_sta_list()` has it, the report does not print it), the
+  AP's actual bandwidth/channel at run time (only in `/api/diag`, not in the
+  Wi-Fi report), TX failures/retries per station (the driver exposes no
+  counter), the router's channel today, the 3.3 V rail during a TX burst.
+
+### 10.4 Hypotheses, ranked by how well they fit L1–L10
+
+| # | Hypothesis | Fits | Does not fit / unknown | Decided by |
+|---|---|---|---|---|
+| H1 | **RF environment changed** (the Zyxel's automatic channel now overlaps channel 6, −39 dBm at the board on 2 Nov; or a new strong neighbour). The phone 1 m from EngineLink hears the router louder than EngineLink's frames. | L2/L3/L4 (downlink loss at the phone), L7 (0.15.0 already 3× slower RTT on 4 Nov morning than on 2 Nov when the router was on 11), "worked before". | Test 3 "got worse when 12 V was connected" without moving the board; one observation. | 10.6 step 0 (read the router's channel) and step 3 (router off 5 min — not a settings change). |
+| H2 | **Power path**: the 3.3 V rail sags or is noisy during TX bursts (LDO transient response, buck ripple, dropout on a weak USB 5 V), the 12 V path back-feeds or dips the 5 V node when connected (L9), or a ground loop via USB + boat negative. Degrades TX spectrum/EVM → phone decodes EngineLink's frames poorly → L2/L3/L4/L7. | L9 (reset when 12 V connected while on USB), worse with 12 V (test 3), marine environment and age. | Also unstable on USB only (test 2); no brownout resets; 8.5 dBm did not help (L10). The LDO/buck part numbers and the ORing between USB and 12 V are not in `docs/HARDWARE.md`. | 10.6 step 4 (oscilloscope) and step 1 (bench at home). |
+| H3 | **Firmware AP configuration regression in 0.16.2** (HT40 default, no country, inactive 300 s). | Exactly the versions without these settings fail; versions with them gave 650 kB/s. | 0.16.1 (old settings) also failed on 4 Nov, so at most part of the story; HT40 by default is not yet read from the board. | 10.6 step 0 (`wifi.bw`) and step 2 (install 0.13.4 from the version archive). |
+| H4 | **Board/antenna degradation** (moisture, corrosion, a loose antenna area, a damaged decoupling capacitor) since 2 Nov. | "worked before", boat environment. | nothing in the log distinguishes it from H2. | 10.6 steps 1–2 (home bench with the version that worked). |
+| H5 | **PMF/SA-Query interplay** makes every link loss cost 3–97 s of "connected but dead" (L4) and the phone's auto-leave (L5). | L4 timing. | It is a consequence of the link loss, not its origin; the same core ran 0.13.4 at 650 kB/s. | Only after H1–H4; if a mitigation is wanted it is `pmf_cfg.required=false` + shorter BSS idle, tested on the bench, never blind. |
+| H6 | **Main-loop stalls (F1) as the root cause.** | — | Ruled out as root cause (10.3, first bullet); confirmed as an aggravator. | Stage 1a fixes the aggravation regardless. |
+
+No hypothesis is accepted. H1 and H2 are the two with a cheap decisive test;
+H3 rides on the same tests.
+
+### 10.5 What only a measurement can settle
+
+- The router's current 2.4 GHz channel and its signal at EngineLink's
+  mounting place (read from the app's scan list or the router's status
+  page; **no router setting is changed**).
+- `wifi.bw` and `wifi.ch` from `http://192.168.4.1/api/diag` on 0.16.5
+  (whether the AP runs 20 or 40 MHz today).
+- The 3.3 V rail at the module pins and the 5 V node (buck output / USB)
+  on an oscilloscope while the app is open and a speed test runs: minimum
+  voltage, ripple, and what happens the instant 12 V is connected while on
+  USB. Needs the LDO and buck part numbers (not in the repository) to set
+  the pass limits; placeholders in step 4.
+- The phone's RSSI as the AP sees it (not in the report today; added in
+  10.7). Until then: the phone's own Wi-Fi signal indicator next to the
+  board.
+
+### 10.6 Troubleshooting procedure (fewest tests that separate the causes)
+
+Do the steps in order; stop when the table at the end gives a decision.
+Send the `wifi` report (USB console) or save it with `wifi save` after each
+step. Each step is 5–15 min.
+
+| Step | Where / supply / firmware | Do | Read |
+|---|---|---|---|
+| 0 | boat, any supply, 0.16.5 | Open Settings › Router › "Scan for networks" (standalone only; it does not connect) and note the boat router's channel and dBm; open `/api/diag` and note `wifi.bw`, `wifi.ch`. | Router channel within 4–8 ⇒ H1 likely; `bw: 40` ⇒ H3 possible. |
+| 1 | **home bench**, USB from a charger (not the laptop), 0.16.5, iPhone + PC, 15 min of app use | Same test as test 2. | Stable (no `left … code 2` series, `web` part < 1 s, speed ≥ 300 kB/s) ⇒ the boat is the difference (H1/H2/H4-at-the-boat). Unstable ⇒ board or firmware (go to 2). |
+| 2 | same place as step 1, **0.13.4** installed from the web installer's version list (erases settings; fine) | Same test. | Stable ⇒ firmware regression 0.14–0.16 (H3) — confirm by installing 0.15.1 and 0.16.5 again in the same session. Unstable ⇒ hardware (H2/H4): go to 4. |
+| 3 | boat, 12 V only, the firmware that was stable in 1–2 | 15 min with the router on; then switch the **router off** (power, not settings) for 5 min and repeat. | Stable only with the router off ⇒ H1 (channel overlap/interference). Unstable both ways ⇒ H2 (boat power) or H4. |
+| 4 | boat, oscilloscope on 3V3 (module pin, ground at the module) and on the 5 V node | (a) USB only, app open + speed test; (b) 12 V only, same; (c) on USB, connect 12 V and watch for a dip; (d) 12 V input ripple. Pass limits (placeholders until the regulator parts are known): 3V3 never < 3.0 V, ripple < 50 mVpp; 5 V node ≥ LDO dropout + 3.3 V at all times; no dip below 2.8 V on 3V3 in (c). | A fail in (b)/(c)/(d) ⇒ H2 confirmed. All pass ⇒ H4 or H1. |
+| 5 | boat, 12 V, when 1–4 are inconclusive | Second phone or a laptop as the only client, 1 m from the board, 15 min. | Same series ⇒ board/environment; clean ⇒ the first phone's behaviour (L5). |
+
+Decision table:
+
+| Step 1 (home, 0.16.5) | Step 2 (home, 0.13.4) | Step 3 (boat, router off) | Conclusion | Next action |
+|---|---|---|---|---|
+| stable | — | router off helps | H1: boat RF environment | firmware: Stage 1 + 10.7 (HT20, diagnostics), keep channel 6 fixed (D2) but add the router's channel to the report so the overlap is visible; owner decides whether the standalone channel may be chosen from 1/6/11 at setup (already allowed by `/api/options`, no UI change needed). No router change (D17). |
+| stable | — | no difference | H2/H4: boat power or board | step 4; hardware fix before any Wi-Fi 2.0 stage beyond Stage 1. |
+| unstable | stable | — | H3: firmware regression | compare 0.13.4 → 0.16.5 AP settings (10.3 table) by reinstating them one at a time in a bench build; Stage 1 ships the result; Wi-Fi 2.0 keeps the explicit AP block (10.7). |
+| unstable | unstable | — | hardware (H2/H4) regardless of place | step 4; the board, not the boat. |
+
+Keep for the record: owner to add the LDO and buck part numbers, the USB/12 V
+ORing arrangement and the decoupling at the module to `docs/HARDWARE.md`
+during the next authorized change (the plan cannot set pass limits without
+them).
+
+### 10.7 Consequences for this plan
+
+1. **Stage 0 gate (new):** no Stage 2–8 work before 10.6 has reached a row
+   of the decision table. A rewrite on top of a downlink problem would be
+   tested against noise and would be blamed for it.
+2. **Stage 1 grows by an explicit AP radio block and link diagnostics**, all
+   behaviour-neutral or restoring 0.15.1 behaviour:
+   - `apRadioSetup()` in `wifi.ino`, called after every `softAP()`:
+     `esp_wifi_set_bandwidth(WIFI_IF_AP, WIFI_BW_HT20)`,
+     `esp_wifi_set_inactive_time(WIFI_IF_AP, 600)`, country as in 0.15.1
+     (`{"EU",1,13,20,WIFI_COUNTRY_POLICY_MANUAL}`, only when not already set,
+     because setting it restarts the AP), then `applyTxPower(false)` (the
+     country resets the power — the 0.15.0 lesson). Contract test: all four
+     strings in `body(w,"void apRadioSetup(")`.
+   - Report and SD log print the AP's **actual** channel, bandwidth, PMF
+     mode and inactive time read back from the driver, and for every joined
+     station its RSSI and PHY flags from `esp_wifi_ap_get_sta_list()`
+     (`wifi_sta_info_t.rssi/phy_11b/g/n/lr`), at join, at leave and in the
+     2-minute report. This is the measurement 10.5 lacks.
+   - `/api/diag` keeps `wifi.bw`/`wifi.ch` (used by 10.6 step 0).
+   - The trace keeps reason 2 series as one entry with a count (1c already),
+     and the log line names 209 as "AP: SA Query unanswered (phone did not
+     hear EngineLink)" instead of the station-side router text.
+3. **F1 (bounded writes) is now priority one in Stage 1**: every link loss
+   costs 5–10 s of a frozen main loop today (L6), and the owner's
+   "Waiting for EngineLink…" is partly that.
+4. **New findings in section 2.2 numbering:** F17 = L2–L4 downlink loss with
+   working uplink (cause open); F18 = PMF always on, 209 = SA Query at the
+   AP; F19 = 0.16.2 dropped HT20/country/inactive-time; F20 = the Wi-Fi
+   report lacks per-station RSSI and the AP's real bandwidth; F21 = a
+   power-on reset when 12 V is connected while on USB (hardware, needs
+   confirmation).
+5. **T1 in 5.8 gains pass criteria**: `left … code 2` series = 0 per hour,
+   `httpExternalAccepts > 0` within 30 s of every DHCP lease, station RSSI
+   ≥ −60 dBm at 1 m.
+6. **If 10.6 ends in H1 or H2/H4**, Wi-Fi 2.0 proceeds unchanged after the
+   environment/hardware is fixed; the firmware changes in item 2 ship with
+   it. **If it ends in H3**, the owner decides whether item 2 ships first as
+   a 0.16.6 hotfix (D18 "one release" was about the rewrite, not about a
+   restored setting).
+7. Nothing here changes D1–D22.
