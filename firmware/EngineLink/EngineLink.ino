@@ -61,6 +61,7 @@
 #include "crashinfo.h"
 #include "linktune.h"
 #include "model.h"
+#include "wifistate.h"
 // Transmit power step (0 = 8.5 dBm .. 4 = 19.5 dBm). Fixed: the automatic
 // choice (0.12.2-0.14.1) never took effect at start (the country setting
 // reset the power to 20 dBm, field reports #95/#125/#130) and its test never

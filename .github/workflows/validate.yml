@@ -51,12 +51,18 @@ jobs:
           python3 tools/test_usb_recovery.py
       - name: Check the simple Wi-Fi
         run: python3 tools/test_wifi_simple.py
+      - name: Wi-Fi 2.0 structural contracts
+        run: cd tools && python3 test_wifi_contract.py
       - name: Check Wi-Fi throughput sampling and radio-test idle guard
         run: python3 tools/test_router_throughput_guard.py
       - name: Test router AP-rescue deadline and reboot-safe timer
         run: |
           g++ -O2 -std=c++17 -Wall -Wextra tools/test_routerguard.cpp -o /tmp/test_routerguard
           /tmp/test_routerguard
+      - name: Host test the Wi-Fi trace folding (Wi-Fi 2.0 Stage 1c)
+        run: |
+          g++ -O2 -std=c++17 -Wall -Wextra -I firmware/EngineLink tools/test_tracefold.cpp -o /tmp/test_tracefold
+          /tmp/test_tracefold
       - name: Host test NMEA 2000 decoding
         run: |
           g++ -O2 -std=c++17 -Wall -Wextra -I firmware/EngineLink tools/test_nmea2k.cpp -o /tmp/test_nmea2k

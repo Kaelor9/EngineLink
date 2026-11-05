@@ -485,6 +485,7 @@ String makeDiagJson(){
   s+=",\"apDriverSsid\":";jsonString(s,WiFi.softAPSSID());
   s+=",\"apDriverIp\":";jsonString(s,WiFi.softAPIP().toString());
   s+=",\"apStops\":";s+=(unsigned long)apStops;s+=",\"chMoves\":";s+=apChannelChanges;s+=",\"bw\":";{wifi_bandwidth_t b=WIFI_BW_HT20;esp_wifi_get_bandwidth(WIFI_IF_AP,&b);s+=b==WIFI_BW_HT40?40:20;}
+  appendApLinkJson(s);
   s+=",\"httpRebinds\":";s+=web.listenerRebinds;
   s+=",\"httpSelfFails\":";s+=httpSelfFails;s+=",\"httpHeals\":";s+=httpHeals;s+=",\"httpSelfRestarts\":";s+=httpSelfRestarts;
   s+=",\"httpRebindAgoMs\":";s+=httpBoundAt?(unsigned long)(millis()-httpBoundAt):0;

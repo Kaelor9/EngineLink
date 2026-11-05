@@ -1,6 +1,46 @@
 // Network report and health JSON, the port 81 (live/report) and 82
 // (speed test) listeners, the web server self-check and transmit power task.
 
+// Link diagnostics (plan Stage 1d, F20): what the driver really runs on the
+// access point and how each joined phone is heard. Only the maker prefix of a
+// phone's MAC address is shown.
+ApLink readApLink(){
+  ApLink a;
+  if(!(WiFi.getMode()&WIFI_MODE_AP))return a;
+  a.up=true;
+  uint8_t pri=0;wifi_second_chan_t sec=WIFI_SECOND_CHAN_NONE;if(esp_wifi_get_channel(&pri,&sec)==ESP_OK)a.ch=pri;
+  wifi_bandwidth_t b=WIFI_BW_HT20;if(esp_wifi_get_bandwidth(WIFI_IF_AP,&b)==ESP_OK)a.bw=b==WIFI_BW_HT40?40:20;
+  wifi_config_t c;if(esp_wifi_get_config(WIFI_IF_AP,&c)==ESP_OK){a.pmfCapable=c.ap.pmf_cfg.capable;a.pmfRequired=c.ap.pmf_cfg.required;}
+  uint16_t t=0;if(esp_wifi_get_inactive_time(WIFI_IF_AP,&t)==ESP_OK)a.inactiveS=t;
+  esp_wifi_get_country_code(a.cc);a.cc[2]=0;
+  return a;
+}
+// One line per joined phone: maker prefix, signal at EngineLink, b/g/n/LR.
+String apStationsText(const char *sep){
+  String s;wifi_sta_list_t l;
+  if(!(WiFi.getMode()&WIFI_MODE_AP)||esp_wifi_ap_get_sta_list(&l)!=ESP_OK||!l.num)return "none";
+  for(int i=0;i<l.num;i++){
+    const wifi_sta_info_t &x=l.sta[i];char b[64];
+    snprintf(b,sizeof(b),"%02X:%02X:%02X %d dBm %s%s%s%s",x.mac[0],x.mac[1],x.mac[2],(int)x.rssi,
+      x.phy_11b?"b":"",x.phy_11g?"g":"",x.phy_11n?"n":"",x.phy_lr?" LR":"");
+    if(i)s+=sep;s+=b;
+  }
+  return s;
+}
+void appendApLinkJson(String &s){
+  const ApLink a=readApLink();
+  s+=",\"apLink\":{\"up\":";s+=a.up?"true":"false";s+=",\"ch\":";s+=a.ch;s+=",\"bw\":";s+=a.bw;
+  s+=",\"pmfCapable\":";s+=a.pmfCapable?"true":"false";s+=",\"pmfRequired\":";s+=a.pmfRequired?"true":"false";
+  s+=",\"inactiveS\":";s+=a.inactiveS;s+=",\"country\":";jsonString(s,String(a.cc));
+  s+=",\"stations\":[";
+  wifi_sta_list_t l;
+  if(a.up&&esp_wifi_ap_get_sta_list(&l)==ESP_OK)for(int i=0;i<l.num;i++){
+    const wifi_sta_info_t &x=l.sta[i];char b[12];snprintf(b,sizeof(b),"%02X:%02X:%02X",x.mac[0],x.mac[1],x.mac[2]);
+    if(i)s+=',';s+="{\"oui\":\"";s+=b;s+="\",\"rssi\":";s+=(int)x.rssi;
+    s+=",\"phy\":\"";s+=x.phy_11b?"b":"";s+=x.phy_11g?"g":"";s+=x.phy_11n?"n":"";s+=x.phy_lr?"L":"";s+="\"}";
+  }
+  s+="]}";
+}
 // Minimal network-only diagnostic, intentionally independent of SD/engine
 // data. Usable by direct IP on router Wi-Fi or after rescue AP returns.
 String makeNetworkHealthJson(){
@@ -35,6 +75,9 @@ String makeNetworkHealthJson(){
   s+=",\"routerProbes\":";s+=routerProbeCount;s+=",\"routerProbeSeen\":";s+=routerProbeSeen;
   s+=",\"knownChannel\":";s+=(unsigned)routerKnownChannel;
   s+=",\"txReapplied\":";s+=txReapplied;
+  s+=",\"txTargetQdbm\":";s+=(int)elTxPower[txLevel<5?txLevel:TX_LEVEL_FIXED];
+  {int8_t q=0;s+=",\"txDriverQdbm\":";if(esp_wifi_get_max_tx_power(&q)==ESP_OK)s+=(int)q;else s+="null";}
+  appendApLinkJson(s);
   s+=",\"loopParts\":[";for(uint8_t i=0;i<LOOP_PARTS;i++){if(i)s+=',';s+=loopPartMaxMs[i];}s+=']';
   s+=",\"engineMaxWaitMs\":";s+=engineMaxWaitMs;
   s+=",\"apStations\":";s+=(unsigned)WiFi.softAPgetStationNum();
@@ -107,7 +150,8 @@ String buildNetworkReport(){
   s+="WPA3 switch in firmware: ";s+=elSaeControlActive()?"active":"NOT active (built without -Wl,--wrap=esp_wifi_init)";s+="\n";
   s+="Security switches: ";s+=staSecSwitches;s+="\n";
   s+="Transmit power: ";s+=elTxName[txLevel<5?txLevel:TX_LEVEL_FIXED];s+=" (fixed)";
-  {int8_t q=0;if(esp_wifi_get_max_tx_power(&q)==ESP_OK){s+=" · driver reports ";s+=q/4.0f;s+=" dBm";}}
+  s+=" · target ";s+=(int)elTxPower[txLevel<5?txLevel:TX_LEVEL_FIXED];s+=" quarter-dBm";
+  {int8_t q=0;if(esp_wifi_get_max_tx_power(&q)==ESP_OK){s+=" · driver reports ";s+=q/4.0f;s+=" dBm (";s+=(int)q;s+=" quarter-dBm)";}}
   s+=" · set again after the driver changed it: ";s+=txReapplied;s+=" time(s)\n";
   {wifi_ps_type_t ps=WIFI_PS_NONE;esp_wifi_get_ps(&ps);
    s+="Power save: ";s+=(WiFi.getMode()&WIFI_MODE_STA)?(ps==WIFI_PS_NONE?"off":ps==WIFI_PS_MIN_MODEM?"ON (minimum modem sleep)":"ON (maximum modem sleep)"):"not applicable (access point mode)";s+="\n";}
@@ -196,7 +240,14 @@ String buildNetworkReport(){
   s+=" · joined ";s+=(unsigned long)apJoins;s+=" · DHCP leases assigned ";s+=(unsigned long)apDhcpLeases;s+=" · left ";s+=(unsigned long)apLeaves;
   if(apLeaves){s+=" (last code ";s+=(unsigned)apReason;s+=")";}
   s+=" · started ";s+=(unsigned long)apStarts;s+=" · restarted by the watchdog ";s+=apRestarts;
-  s+=" · channel ";s+=(unsigned)apChannelNow;s+="\n\n";
+  s+=" · channel ";s+=(unsigned)apChannelNow;s+="\n";
+  {const ApLink a=readApLink();
+   if(a.up){s+="Access point as the driver runs it: channel ";s+=a.ch;s+=", ";s+=a.bw;s+=" MHz, PMF ";s+=a.pmfRequired?"required":a.pmfCapable?"capable":"off";
+     s+=", stations kept ";s+=a.inactiveS;s+=" s without traffic, country ";s+=a.cc[0]?a.cc:"?";s+="\n";
+     s+="Joined phones (maker prefix, signal at EngineLink, Wi-Fi standards): ";s+=apStationsText("; ");s+="\n";}
+   else s+="Access point: off (router mode)\n";
+   char cc[3]={};if(esp_wifi_get_country_code(cc)==ESP_OK){s+="Wi-Fi country (driver): ";s+=cc[0]?cc:"?";s+="\n";}}
+  s+="\n";
   s+="SYSTEM\n";
   s+="Chip: ";s+=ESP.getChipModel();s+=" rev ";s+=ESP.getChipRevision();s+=" · ";s+=ESP.getCpuFreqMHz();s+=" MHz · Arduino core ";s+=ESP_ARDUINO_VERSION_MAJOR;s+=".";s+=ESP_ARDUINO_VERSION_MINOR;s+=".";s+=ESP_ARDUINO_VERSION_PATCH;s+=" · IDF ";s+=esp_get_idf_version();s+="\n";
   s+="Memory: free ";s+=ESP.getFreeHeap()/1024;s+=" KB, lowest ";s+=ESP.getMinFreeHeap()/1024;s+=" KB, largest block ";s+=ESP.getMaxAllocHeap()/1024;s+=" KB · PSRAM free ";s+=ESP.getFreePsram()/1024;s+=" KB\n";

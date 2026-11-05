@@ -44,6 +44,8 @@ void serviceWifiLog(){
     for(uint8_t i=n-fresh;i<n;i++){
       String s=traceText(t[i].type);
       if(t[i].reason){s+=" (";s+=t[i].reason;s+=' ';s+=reasonText(t[i].reason);s+=')';}
+      // Phone joined or left: how every joined phone is heard (plan Stage 1d).
+      if(t[i].type==7||t[i].type==8){s+=" · phones now: ";s+=apStationsText(", ");}
       wifiLog(s);
     }
     wifiLogged=traceTotal;

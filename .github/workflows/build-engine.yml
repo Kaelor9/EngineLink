@@ -30,8 +30,8 @@ jobs:
       - name: Install ESP32-S3 board and required library
         run: |
           arduino-cli core update-index --additional-urls https://espressif.github.io/arduino-esp32/package_esp32_index.json
-          arduino-cli core install esp32:esp32 --additional-urls https://espressif.github.io/arduino-esp32/package_esp32_index.json
-          arduino-cli lib install "Adafruit NeoPixel"
+          arduino-cli core install esp32:esp32@3.3.12 --additional-urls https://espressif.github.io/arduino-esp32/package_esp32_index.json
+          arduino-cli lib install "Adafruit NeoPixel@1.15.5"
       - name: Validate embedded browser JavaScript
         run: |
           python3 tools/build_ui.py
