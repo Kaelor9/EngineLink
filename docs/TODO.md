@@ -74,13 +74,13 @@ version instead of one update each. Newest at the bottom of each section.
     log and heading match the ST60; the trip export has the navigation
     columns.
 
-## Wi-Fi 2.0 (plan, agreed with the owner 2026-11-04 — not built yet)
+## Wi-Fi 2.0 (plan agreed 2026-11-04; Stages 1–3 *built* in the 0.16.6 development build, untested on hardware)
 
 A clean rewrite of the Wi-Fi part, built in one release after a short router
 test on 0.16.5. Not written from zero: the lessons below become tests.
 **The one authoritative implementation plan is
-[docs/WIFI_REWRITE_PLAN.md](WIFI_REWRITE_PLAN.md)** (third revision
-2026-11-05, plan only). Where this section and the plan differ, the plan
+[docs/WIFI_REWRITE_PLAN.md](WIFI_REWRITE_PLAN.md)** (fifth and final
+revision 2026-11-05; implementation findings in its section 12.1). Where this section and the plan differ, the plan
 wins: it turns the wishes below into requirements D1–D22 and chooses the
 technical realisation (Arduino core 3.3.12 + official ESP-IDF components:
 `esp_http_server` for the web server, `esp_wifi`/`WiFi` with a small
@@ -92,6 +92,14 @@ compression of downloads (exports keep routes, content and formats) and
 asked for a documented country configuration (`DK`, not `"EU"`). No further
 architecture revisions; the work now is building and testing stage by stage
 (plan section 9), each reported as built / bench-verified / boat-verified.
+
+**Progress (2026-11-05):** Stage 1 (AP radio settings, TX power truth, trace
+fold, link diagnostics, pinned core), Stage 2 (`esp_http_server`, security
+model, raw-body upload, boot self-test, no deflate) and Stage 3 (state
+machine header + host test, not used by the firmware yet) are *built* in
+0.16.6 on branch `claude/wizardly-lovelace-v6tlqz`. Next: the owner's bench
+list for 0.16.6 (`docs/releases/v0.16.6.md`) and the Stage 0 gate; Stage 4
+(wiring the state machine into `wifi.ino`) starts only after both.
 
 **Why:** the Wi-Fi logic in `wifi.ino` is only ~100 lines; the clutter is the
 0.12–0.15 leftovers around it (`netpolicy.h`, `linktune.cpp`, channel survey,
@@ -152,7 +160,9 @@ callback; `wifi.ino` stays under ~300 lines.
   station; a phone joined to the own Wi-Fi is **never** cut off automatically
   (no idle timer) — only "Switch now" or the phone leaving lets EngineLink
   return to the router; answering Apple's captive-portal probe is deferred.
-- 10 s main-loop stall in the web part (0.16.5 report): find the cause.
+- 10 s main-loop stall in the web part (0.16.5 report): cause found (the
+  core's `NetworkClient::write()` retrying 10 × 1 s, plan F1); 0.16.6 moves
+  HTTP to `esp_http_server` in its own task (built, bench test pending).
 - Only if EngineLink is ever sold: unique SSID (`EngineLink-XXXX`) and code
   per board on a label with a Wi-Fi QR code; a shared default password is
   not allowed for new radio products in the EU since 2025-08-01 (RED / EN 18031).
@@ -162,7 +172,8 @@ off and on; boot with router; power off/on 3 times; speed in both modes.
 
 ## To check on the boat
 
-- **Own Wi-Fi root cause first (2026-11-05, blocks Wi-Fi 2.0 stages 2–8).**
+- **Own Wi-Fi root cause first (2026-11-05, gates Wi-Fi 2.0 Stage 4 onwards;
+  Stages 1–2 are built and bench-tested meanwhile, plan 9.0).**
   The 5 Nov boat test of 0.16.5 showed the phone joining and getting DHCP
   but EngineLink's frames not reaching the phone (0 TCP connections, code 2
   ×8–10 then 209, DHCP asked twice, 60–72 kB/s). Follow
@@ -184,6 +195,12 @@ off and on; boot with router; power off/on 3 times; speed in both modes.
 - **Router mode on 0.16.5 (~15 min):** only after the standalone link is
   reliable again: set up the router, check it joins, "Test speed", restart the
   router once; send the USB `wifi` report. Baseline for the rewrite.
+
+- **Bench test of 0.16.6 (Wi-Fi 2.0 Stages 1–2):** the list in
+  `docs/releases/v0.16.6.md` (self-test passes, AP 20 MHz / 600 s / DK and
+  19.50 dBm in the report, 30 min iPhone + PC, the `curl` security list,
+  export `diff` against 0.16.5, upload a file once). Do the "before" export
+  downloads on 0.16.5 first.
 
 ## Previous boat checks
 

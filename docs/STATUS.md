@@ -20,10 +20,11 @@ to engines.
 - Do not poll while a Volvo diagnostic tool (VODIA) is connected.
 - Change the factory Wi-Fi password `12345678` in Settings. Anyone with the
   Wi-Fi password (or on the boat router's network) can change settings; there
-  is no separate admin login. Today every response also carries
+  is no separate admin login. Up to 0.16.5 every response also carries
   `Access-Control-Allow-Origin: *`, so a web page open in your browser could
-  read EngineLink data or send it commands; Wi-Fi 2.0 closes that (plan
-  section 6.9) without adding a login.
+  read EngineLink data or send it commands; the 0.16.6 development build
+  closes that (plan section 6.9) without adding a login (built, not yet
+  tested on the board).
 
 ## Checked on the board
 
@@ -39,7 +40,8 @@ to engines.
 
 ## Not yet checked
 
-- Why the own Wi-Fi's downlink to the phone fails on the boat with 0.16.5 (2026-11-05): not yet separated between RF environment, power supply, the AP radio settings 0.16.2 dropped (20 MHz bandwidth, country, inactive time) and the board itself. Procedure: [WIFI_REWRITE_PLAN.md](WIFI_REWRITE_PLAN.md) 13.6. Until it is done, no Wi-Fi 2.0 stage beyond Stage 1 is built. The 5–10 s web stall is explained (Arduino core `NetworkClient::write()` retrying 10 × 1 s against a phone that does not acknowledge); the plan removes it by moving HTTP to `esp_http_server` (its own task) instead of patching the write. Wi-Fi 2.0 as a whole (plan section 7 acceptance criteria, section 9.9 bench and boat protocol) is untested; nothing of it is built. From here each stage is reported as *built* (CI green, untested on hardware), *bench-verified* (owner ran the stage's bench list) or *boat-verified* (plan 9.9 passed); this table says "verified on the board" only for the last.
+- Why the own Wi-Fi's downlink to the phone fails on the boat with 0.16.5 (2026-11-05): not yet separated between RF environment, power supply, the AP radio settings 0.16.2 dropped (20 MHz bandwidth, country, inactive time) and the board itself. Procedure: [WIFI_REWRITE_PLAN.md](WIFI_REWRITE_PLAN.md) 13.6. Until it is done, Wi-Fi 2.0 Stage 4 onwards is not built; Stages 1–2 may be built and bench-tested meanwhile and Stage 3 is host code (plan 9.0). The 5–10 s web stall is explained (Arduino core `NetworkClient::write()` retrying 10 × 1 s against a phone that does not acknowledge); the plan removes it by moving HTTP to `esp_http_server` (its own task) instead of patching the write. Wi-Fi 2.0 as a whole (plan section 7 acceptance criteria, section 9.9 bench and boat protocol) is untested. From here each stage is reported as *built* (CI green, untested on hardware), *bench-verified* (owner ran the stage's bench list) or *boat-verified* (plan 9.9 passed); this table says "verified on the board" only for the last.
+- **0.16.6 development build (Wi-Fi 2.0 Stages 1–3): *built*, untested on hardware.** CI-equivalent checks pass locally (pinned core 3.3.12 compile, host tests `test_tracefold`, `test_httputil`, `test_wifistate` with plan 9.3's 20 scenarios, `test_wifi_contract.py`). Nothing of it has run on the board: the access point settings (20 MHz, 600 s, country DK), the `esp_http_server` web server, the security checks, the raw-body firmware upload, the boot self-test and rollback all wait for the owner's bench list (`docs/releases/v0.16.6.md`, plan 9.1/9.2). Not merged, not released (D24).
 - Router mode with the simple Wi-Fi (since 0.16.2) is untested; it could not be tested on 2026-11-05 because the standalone link was already unreliable. The 3.3 V rail under Wi-Fi transmit bursts and the USB/12 V supply interaction have never been measured with an oscilloscope.
 - Long-term router stability across automatic router channel changes; #126 shows recovery after an outage but not why it occurred.
 - Whether the small Trip summary CSV fix in PR #123 resolves Chrome/iPhone download failures.

@@ -1,6 +1,8 @@
 # Wi-Fi 2.0: the implementation plan
 
-Status: **final plan, planning closed 2026-11-05 (fifth revision); nothing built yet.** This
+Status: **final plan, planning closed 2026-11-05 (fifth revision). Stages 1–3 *built*
+(development build 0.16.6, CI green, untested on hardware); Stage 4 onwards waits for
+the Stage 0 gate (9.0). Implementation findings: section 12.1.** This
 is the single authoritative plan. It replaces its earlier revisions (same
 file, git history) and must be followed stage by stage without guessing at
 architecture decisions. Where it keeps analysis and decision history, that is
@@ -844,7 +846,7 @@ board): on 0.16.5 download every export route — `/api/export/trips.csv`,
 `curl --compressed -o before/<name>`; after flashing Stage 2 on the same
 board and data, `curl -o after/<name>` and `diff -r before after` (only
 fields that are time-of-download by design may differ; list them in the
-report). Also `curl -sI /api/export/trips.csv | grep -i content-encoding`
+report). Also `curl -s -D- -o /dev/null http://192.168.4.1/api/export/trips.csv?ids=<id> | grep -i content-encoding`
 must print nothing.
 
 Bench acceptance (before Stage 3), each with the expected result:
@@ -1061,8 +1063,11 @@ w = wifi.ino; h = httpd.ino; fw = firmware_source()
 ## 10. Implementation rules for whoever builds it
 
 - Follow the stages in order; Stage 0 first; do not start Stage 4 before
-  `test_wifistate.cpp` passes; do not start Stage 3 before the Stage 2 bench
-  acceptance is reported.
+  `test_wifistate.cpp` passes. Stage 3 is host code only (`wifistate.h` and its
+  test) and may be written while the Stage 2 bench list is pending (9.0);
+  integrating it into `wifi.ino` is Stage 4, which waits for the Stage 0 gate
+  and the Stage 2 bench report. (Corrected 2026-11-05: the earlier wording
+  here contradicted 9.0.)
 - D23: before writing a helper, name the IDF/core API that does it; if there
   is none, say so in the commit message. No new file may include
   `lwip/priv/*`, wrap a core function or touch driver initialisation; the two
@@ -1179,6 +1184,21 @@ Open risks:
   TLS to GitHub and the pinned repository URL.
 - The root cause of the 2026-11-05 downlink failure is still open (section
   13); nothing above fixes a hardware or RF fault.
+
+### 12.1 Implementation findings (2026-11-05, while building Stages 1–3)
+
+None of these changes the architecture (D29); each is a parameter or a
+route assignment the plan left too tight, with the evidence that forced it.
+
+| # | Finding | Evidence | Resolution in 0.16.6 |
+|---|---|---|---|
+| I1 | A flat 2 KB form-body limit (6.6) breaks saving app preferences and restoring a backup. | `handlePrefsSet()` accepts up to 4000 characters of JSON; the app posts it URL-encoded (`p=%7B%22…`), up to ~12 KB; the default preferences alone are ~1 KB encoded (`app.html` `const P`). | `/api/prefs` POST has a 12 KB limit (`R_BIGBODY`); every other route keeps 2 KB. Larger bodies get 413. |
+| I2 | Making the series JSON routes (`/api/trip/series`, `/api/event/series`, `/api/series/recent`) one-at-a-time async transfers breaks the app. | `app.html` loads several series at once (`Promise.all` over trip parts, and event series beside event fast data); the second would get 503. | These bounded JSON replies (≤ 600 points) stay in the server task; the engine lock is released while they are sent. All CSV exports, `/api/log`, `/api/segments.csv`, `/api/backup`, `/api/nmea/bus.csv`, the motor-test CSV and `/api/speedtest` are async as planned. `/api/rtt` (an empty 204) is answered in the server task so it measures a request round trip, not the transfer queue. |
+| I3 | The OTA project-name check (6.9 item 5) is weaker than written. | Every Arduino-built image carries the core's `esp_app_desc_t.project_name` `arduino-lib-builder` (read from the 0.16.6 image at offset 0x50). | Implemented as planned (`otaCheckNewImage()`, both OTA paths); it rejects a non-Arduino ESP32 application, not another Arduino sketch. A stronger check needs option B (own `project_name`) or signed images; not changed. |
+| I4 | A refused large upload would be drained by the server before the next request. | `httpd_req_delete()` reads any unread body in 32-byte pieces (`httpd_parse.c`, IDF v5.5). | A refused body over 16 KB closes the connection (the handler returns `ESP_FAIL`, which skips the drain, `httpd_sess.c`); smaller ones are drained and the connection is kept. |
+| I5 | `curl -sI` sends HEAD, which no route answers (405), so the Content-Encoding check in 9.2 proved nothing. | `esp_http_server` dispatches by method. | 9.2 now uses `curl -s -D- -o /dev/null`. |
+| I6 | Handlers now run in the server task, so `handleCfg()` restarting mDNS inside a request would race the loop's own restart. | `webapi.ino` `handleCfg()` called `startNameService()` (F10). | The Stage 4 rule (set `mdnsRefreshPending`, the loop acts) applied in Stage 2. `removeTree()` gives the loop a turn every 16 files. |
+| I7 | Without the engine task the loop did not hold `engineMx`, so a handler in the server task could run beside the loop's engine work. | `setup()` gave the lock back when the task failed to start. | The loop holds `engineMx` whenever it exists; `netWaitBegin/End` test `engineMx`. |
 
 ---
 

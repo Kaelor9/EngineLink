@@ -59,10 +59,13 @@ program, so they share the globals in `EngineLink.ino`.
 | `storage.ino` | SD card, LittleFS, NVS settings and totals, restart log, raw logging |
 | `wifi.ino` | Own access point or router (simple since 0.16.2, kept under 300 lines by `tools/test_wifi_simple.py`), fallback, scans, mDNS |
 | `serialcmd.ino` | USB serial commands and the Wi-Fi log/reports on the SD card (0.16.3) |
-| `webserver.h` | The port 80 web server (connection pool) |
+| `httpd.h`, `httpd.ino` | The web server since 0.16.6: ESP-IDF `esp_http_server` on port 80 in its own task, the adapter that keeps the handlers' `web.arg()`/`web.send()` calls, the own-origin security checks, and the task for long transfers |
+| `httputil.h` | URL decoding and the own-address allow-list (host-tested, `tools/test_httputil.cpp`) |
+| `netsvc.ino` | Network services; since 0.16.6 the boot self-test that confirms a new firmware or rolls it back |
+| `wifistate.h` | Wi-Fi 2.0 trace folding (used) and the state machine (host-tested by `tools/test_wifistate.cpp`, not yet used by the firmware; Stage 4) |
 | `webapi.ino` | JSON helpers, the app's API handlers and the route table |
-| `netreport.ino` | Network report, ports 81 and 82, web server self-check, radio test task |
-| `downloads.ino`, `sdexport.ino` | Streaming (compressed) downloads, CSV exports, SD clean-up, backup |
+| `netreport.ino` | Network report and health JSON, link diagnostics (joined phones, the AP as the driver runs it), radio test task |
+| `downloads.ino`, `sdexport.ino` | Streaming downloads (uncompressed since 0.16.6), CSV exports, speed test, SD clean-up, backup |
 | `updates.ino` | Firmware updates from GitHub or a file, with rollback; sends the GitHub reports |
 | `enginereport.ino` | Engine report after each trip: how well both engines were read, plus the diagnostics JSON |
 | `led.ino`, `nmea2000.ino`, `enginetest.ino` | Status LED, NMEA 2000 listener (navigation, bus census, per-trip `.NAV` log, `/api/nmea`), engine test capture |
@@ -100,17 +103,19 @@ To release: bump `EL_VERSION` in `EngineLink.ino`, update the README badge and
 status table, and add `docs/releases/vX.Y.Z.md`. Merging to `main` builds and
 publishes release `vX.Y.Z` with `enginelink-update.bin` (Wi-Fi update) and
 `firmware.bin` (full USB image, erases settings and data). The board can update
-itself from GitHub; a version that does not run properly for its first minute
+itself from GitHub; a version that does not run properly for its first minute (since 0.16.6: that no web client got an answer within 10 minutes, plan 6.10)
 is rolled back. Details: [docs/RELEASING.md](docs/RELEASING.md).
 
 ## How the firmware works
 
 **Tasks.** Core 0: Wi-Fi, the two J1708 receiver tasks (UART to a frame queue
 in PSRAM) and the engine task (frames, KAD polling, once-a-second engine, trip
-and diagnosis work). Core 1: the main loop with the web server on port 80, and
-two small listeners: port 81 for live data and the network report, port 82 for
-the speed test. A mutex (`engineMx`) guards engine state between the engine
-task and the web server.
+and diagnosis work). Core 1: the main loop, and since 0.16.6 the web server
+(`esp_http_server` task `httpd`, port 80 only) and the `xfer` task for long
+downloads. A mutex (`engineMx`) guards shared state: the loop holds it while it
+works, a web handler takes it (2 s, else 503) and lets go whenever it waits for
+the phone. Up to 0.16.5 the web server ran inside the loop, with extra
+listeners on ports 81 (live data, report) and 82 (speed test).
 
 **KAD reading.** Request `01 43 21 hi lo cs`; our own request echoes on the bus
 about 8 ms later; the ECU answers `83 C1 <width>1 <value…> <cs>` (big-endian).
@@ -272,6 +277,18 @@ Wi-Fi 0.16.0–0.16.5 (2026-11-04, standalone on the boat with an iPhone):
   2026-11-05 boat test shows the own Wi-Fi's downlink to the phone failing
   with the cause still open (plan section 13, root-cause gate before any
   rewrite stage).
+
+  **Implementation status (2026-11-05):** Stages 1–3 are *built* in the
+  0.16.6 development build on branch `claude/wizardly-lovelace-v6tlqz`
+  (not merged, not released, untested on hardware). Stage 1: `apRadioSetup()`
+  (HT20, inactive 600 s, country DK), exact TX power check in both modes,
+  trace folding, per-phone RSSI/PHY and the AP's real settings in the report.
+  Stage 2: `esp_http_server` (`httpd.ino`), security model, raw-body upload
+  with length and project-name checks, boot self-test (`netsvc.ino`), no
+  deflate, ports 81/82 gone. Stage 3: `wifistate.h` state machine with the
+  20 plan scenarios as host test, not wired in. Deviations and their
+  evidence: plan section 12.1. Next: the owner's bench list
+  (`docs/releases/v0.16.6.md`) and the Stage 0 gate; then Stage 4.
 
 USB serial commands (0.16.3, 115200 baud, web installer "Logs & console" or any
 serial monitor): `wifi` (full Wi-Fi report), `wifi log` / `read wifi log`
