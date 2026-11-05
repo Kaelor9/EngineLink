@@ -74,6 +74,10 @@ version instead of one update each. Newest at the bottom of each section.
     log and heading match the ST60; the trip export has the navigation
     columns.
 
+## Deferred architecture work — after Wi-Fi 2.0
+
+- **High priority, BLOCKED until Wi-Fi 2.0 is accepted — decouple engine telemetry from Wi-Fi/web/SD/USB Serial** ([issue #161](https://github.com/Kaelor9/EngineLink/issues/161), [code audit](FIRMWARE_BLOCKING_AUDIT_2026-11-05.md)). The current two-core design uses a broad shared `engineMx` mutex; slow SD, Serial or HTTP operations can delay engine handling. After Fable's Wi-Fi 2.0 implementation and its bench + boat acceptance tests (planned 0.17.0), evaluate a dedicated real-time motor task, bounded FreeRTOS queues, read-only snapshots and separate SD/Serial workers. Choose core pinning based on measurement, not simply swapping tasks. Preserve fuel/trip correctness and record lost frames/queue depth. **Do not change the Wi-Fi 2.0 plan, PR #160 or firmware for this item now.** Implement later in a separate branch/PR, with regression tests and owner approval.
+
 ## To check on the boat
 
 - **Standalone Wi-Fi 0.16.5 — verify on the EngineLink PCB before calling this fixed.**
