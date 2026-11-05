@@ -76,6 +76,7 @@ void fwWorker(void *){
               if(imageHeader.complete()){
                 checked=true;
                 if(!imageHeader.valid()){fwError="Not an EngineLink update file";ok=false;break;}
+                if(!otaSameProject(imageHeader)){fwError="Not an EngineLink firmware (different application)";ok=false;break;}
               }
             }
             if(Update.write(buf,got)!=(size_t)got){fwError=Update.errorString();ok=false;break;}
@@ -83,7 +84,6 @@ void fwWorker(void *){
           }
           if(ok&&!checked){fwError="Firmware header incomplete";ok=false;}
           if(ok&&!Update.end(true)){fwError=Update.errorString();ok=false;}
-          if(ok){const String e=otaCheckNewImage();if(e.length()){fwError=e;ok=false;}}
           if(!ok){Update.abort();fwState=9;}else fwState=4;
         }
         http.end();
@@ -103,7 +103,7 @@ void handleFwInstall(){
   if(!url.startsWith(EL_RELEASE_PREFIX)||!url.endsWith(".bin")){reply(false,"Only EngineLink releases from GitHub can be installed",400);return;}
   if(!routerConfigured()||WiFi.status()!=WL_CONNECTED){reply(false,"Connect EngineLink to a router with internet first",409);return;}
   if(calActive){reply(false,"Stop the motor test first",409);return;}
-  if(fwJob!=FW_IDLE||fwState==3){reply(false,"Busy",409);return;}
+  if(fwJob!=FW_IDLE||fwState==3||otaActive){reply(false,"Busy",409);return;}
   for(uint8_t c=0;c<2;c++)if(kad[c].polling)stopPolling(c,"Firmware update");
   fwUrl=url;fwTarget=v;fwError="";fwJob=FW_INSTALL;
   reply(true,"Downloading "+v);
@@ -121,18 +121,10 @@ void handleFwStatus(){
   s+='}';
   sendJSON(200,s);
 }
-// After Update.end() (which made IDF verify the image and set it to boot
-// next): the new image must be the same application as this one (plan 6.9
-// item 5). Otherwise the running firmware stays the boot choice. Returns ""
-// when fine. Every Arduino-built image reports the core's project name, so
-// this rejects a non-Arduino ESP32 application, not another Arduino sketch
-// (plan section 12).
-String otaCheckNewImage(){
-  const esp_partition_t *run=esp_ota_get_running_partition(),*next=esp_ota_get_boot_partition();
-  if(!next||next==run)return "The new firmware was not set to start";
-  esp_app_desc_t d;
-  const bool read=esp_ota_get_partition_description(next,&d)==ESP_OK;
-  if(read&&strncmp(d.project_name,esp_app_get_description()->project_name,sizeof(d.project_name))==0)return "";
-  esp_ota_set_boot_partition(run);
-  return read?"Not an EngineLink firmware (different application)":"The new firmware's description could not be read";
-}
+// The new image must be the same application as this one (plan 6.9 item 5),
+// checked from its streamed app descriptor BEFORE Update.end(): once end()
+// has made an image bootable, switching back rewrites the OTA data and the
+// rejected image would become the rollback target (esp_ota_ops.c, plan
+// 12.1 I8). Every Arduino-built image carries the core's project name, so
+// this rejects a non-Arduino ESP32 application, not another Arduino sketch.
+bool otaSameProject(const OtaImageHeader &h){return h.sameProject(esp_app_get_description()->project_name);}

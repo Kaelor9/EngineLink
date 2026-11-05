@@ -40,7 +40,7 @@ uint32_t removeTree(const String &path){
   for(File f=dir.openNextFile();f;f=dir.openNextFile()){
     // Runs in a web handler holding the engine lock: let the main loop and
     // the engine task have a turn now and then on a card with many files.
-    if(!(++breath&15)){netWaitBegin();netWaitEnd();}
+    if(!(++breath&15)){netWaitBegin();vTaskDelay(pdMS_TO_TICKS(20));netWaitEnd();}
     String child=String(f.path());
     const bool sub=f.isDirectory();
     f.close();
@@ -52,6 +52,7 @@ uint32_t removeTree(const String &path){
 void handleSdWipe(){
   if(web.arg("confirm")!="WIPE"){reply(false,"Type WIPE to confirm",400);return;}
   if(!sdReady||!cardInserted()){reply(false,"No SD card",409);return;}
+  if(webXferBusy()){reply(false,"A download is running; try again when it has finished",409);return;}
   if(calActive)finishCalibration(false);
   const bool wasLogging=sdLogging;
   if(sdLogging)stopLog();

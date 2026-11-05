@@ -93,6 +93,7 @@ static esp_err_t finish(WebCtx &c, uint32_t t0) {
   return (c.failed || c.close) ? ESP_FAIL : ESP_OK;   // ESP_FAIL: the server closes the socket, nothing is drained
 }
 static esp_err_t answer(WebCtx &c, int code, const char *msg) {
+  if (c.r->content_len > 16384) c.close = true;   // an unread large body is not drained (plan 12.1 I4)
   web.send(code, "text/plain", msg);
   return finish(c, millis());
 }
@@ -106,9 +107,9 @@ static void xferWorker(void *) {
     if ((j.flags & R_NOLOCK) || ctxLock(x, 10000)) { httpdStats.xferWaitMs = millis() - t0; j.fn(); }
     else { ++httpdStats.busy503; x.code = 503; web.send(503, "text/plain", "EngineLink is busy; try again"); }
     const int fd = httpd_req_to_sockfd(j.r);
-    const bool broken = finish(x, t0) != ESP_OK;
+    // A broken reply: end the connection before the server watches it again.
+    if (finish(x, t0) != ESP_OK && fd >= 0) shutdown(fd, SHUT_RDWR);
     httpd_req_async_handler_complete(j.r);   // on every path, or the server stops accepting (esp_http_server.h)
-    if (broken) httpd_sess_trigger_close(web.handle, fd);
     xferFd = -1; xferBusy = false; xferAbort = false;
   }
 }
@@ -192,10 +193,12 @@ static void webClose(httpd_handle_t, int fd) {
 // waiting in a socket points into the driver's buffers. Bounded wait.
 void httpdSuspend() {
   if (!web.handle) return;
-  xferAbort = xferBusy;   // a transfer stops at its next piece and closes its own socket
+  xferAbort = xferBusy;   // a transfer stops at its next piece
   size_t n = 8; int fds[8];
+  // shutdown() ends every connection at once, also one a transfer is
+  // blocked on or one that sent nothing yet; the server then closes them.
   if (httpd_get_client_list(web.handle, &n, fds) == ESP_OK)
-    for (size_t i = 0; i < n; i++) if (fds[i] != xferFd) httpd_sess_trigger_close(web.handle, fds[i]);
+    for (size_t i = 0; i < n; i++) { shutdown(fds[i], SHUT_RDWR); if (fds[i] != xferFd) httpd_sess_trigger_close(web.handle, fds[i]); }
   netWaitBegin();
   for (uint8_t i = 0; i < 30; i++) { n = 8; if (httpd_get_client_list(web.handle, &n, fds) != ESP_OK || !n) break; delay(10); }
   netWaitEnd();

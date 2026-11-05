@@ -869,48 +869,67 @@ void prepareRestart(){
 // ---------- Wi-Fi firmware update (application image only) ----------
 // The app sends the file as the raw request body (esp_http_server has no
 // multipart parser, plan 6.6). The length is checked before anything is
-// written, the body is read in 2 KB blocks with the engine lock released
-// while waiting for the phone, and a short body fails by length instead of
-// flashing a cut image. IDF verifies the whole image (checksum, SHA-256) when
-// Update.end() sets the boot partition; then the project name is compared.
+// written; the image header and the application (project name, from the
+// app descriptor in the first 0x70 bytes) before Update.end() can make it
+// bootable. The body is read in 2 KB blocks with the engine lock released
+// while waiting for the phone; a short body fails by length. IDF verifies
+// the whole image (checksum, SHA-256) when Update.end() sets it to boot.
+// A refused upload is read to its end (bounded by its length and the 5 s
+// timeouts) so the phone receives the reason instead of a reset connection.
+static void drainUpload(uint8_t *buf,size_t left){
+  uint8_t waits=0;
+  while(left){
+    const int n=web.recv((char*)buf,min((size_t)2048,left));
+    if(n==HTTPD_SOCK_ERR_TIMEOUT&&++waits<3)continue;
+    if(n<=0){web.closeAfter();return;}
+    waits=0;left-=(size_t)n;
+  }
+}
 void handleUpdate(){
   const size_t len=web.contentLength();
   otaError="";otaBytes=0;otaChecked=false;
-  if(len<100000||len>3200000){web.closeAfter();reply(false,len>3200000?"Update failed: the file is too large for EngineLink":"Update failed: not an update file (too small)",len>3200000?413:400);return;}
-  if(calActive){web.closeAfter();reply(false,"Stop the motor test first",409);return;}
+  if(len>3200000){web.closeAfter();reply(false,"Update failed: the file is too large for EngineLink",413);return;}
+  uint8_t *buf=(uint8_t*)heap_caps_malloc(2048,MALLOC_CAP_SPIRAM);
+  if(!buf){web.closeAfter();reply(false,"Update failed: out of memory",503);return;}
+  const char *refuse=len<100000?"Update failed: not an update file (too small)":calActive?"Stop the motor test first"
+    :(otaActive||fwJob!=FW_IDLE||fwState==3)?"Another firmware update is running":webXferBusy()?"A download is running; try again when it has finished":nullptr;
+  if(refuse){drainUpload(buf,len);free(buf);reply(false,refuse,len<100000?400:409);return;}
   for(uint8_t c=0;c<2;c++)if(kad[c].polling)stopPolling(c,"Firmware update");
   otaResumeLogging=sdLogging;
   if(sdLogging)stopLog();
   otaActive=true;
-  if(!Update.begin(len,U_FLASH))otaError=Update.errorString();
-  uint8_t *buf=(uint8_t*)heap_caps_malloc(2048,MALLOC_CAP_SPIRAM);OtaImageHeader head;uint8_t waits=0;
-  if(!buf&&!otaError.length())otaError="Out of memory";
+  bool begun=Update.begin(len,U_FLASH);
+  if(!begun)otaError=Update.errorString();
+  OtaImageHeader head;uint8_t waits=0;
   while(!otaError.length()&&otaBytes<len){
     const int n=web.recv((char*)buf,min((size_t)2048,len-otaBytes));
     if(n==HTTPD_SOCK_ERR_TIMEOUT&&++waits<3)continue;
-    if(n<=0){otaError="Upload interrupted";break;}
+    if(n<=0){otaError="Upload interrupted";web.closeAfter();break;}
     waits=0;
-    // An ESP32 application image carries its app descriptor magic at 0x20.
     if(!otaChecked){
       head.feed(buf,(size_t)n);
-      if(head.complete()){otaChecked=true;if(!head.valid()){otaError="Not an ESP32 application image";break;}}
+      if(head.complete()){
+        otaChecked=true;
+        if(!head.valid()){otaError="Not an ESP32 application image";}
+        else if(!otaSameProject(head)){otaError="Not an EngineLink firmware (different application)";}
+      }
     }
-    if(Update.write(buf,(size_t)n)!=(size_t)n){otaError=Update.errorString();break;}
+    if(!otaError.length()&&Update.write(buf,(size_t)n)!=(size_t)n)otaError=Update.errorString();
     otaBytes+=(size_t)n;
   }
-  free(buf);
   if(!otaError.length()&&!otaChecked)otaError="Firmware header incomplete";
   if(!otaError.length()&&!Update.end(true))otaError=Update.errorString();
-  if(!otaError.length())otaError=otaCheckNewImage();
   otaActive=false;
   if(otaError.length()){
-    if(Update.isRunning())Update.abort();
+    if(begun&&Update.isRunning())Update.abort();
+    if(otaBytes<len)drainUpload(buf,len-otaBytes);
+    free(buf);
     if(otaResumeLogging&&!sdLogging)initSD();
     otaResumeLogging=false;
-    web.closeAfter();   // the rest of a refused body is not read
     reply(false,"Update failed: "+otaError,400);
     return;
   }
+  free(buf);
   prepareRestart();
   reply(true,"Update installed. EngineLink restarts now; reconnect in about 20 seconds.");
   restartAt=millis()+1500;
@@ -939,6 +958,7 @@ void initializeWeb(){
   web.on("/api/test/download",HTTP_GET,handleCalibrationDownload,R_ASYNC);
   web.on("/api/sd/remount",HTTP_POST,[](){
     if(sdLogging||calActive){reply(false,"Stop recording before remount",409);return;}
+    if(webXferBusy()){reply(false,"A download is running; try again when it has finished",409);return;}
     SD.end();sdReady=false;initSD();refreshTestAvailable();reply(sdReady,sdMessage);
   });
   web.on("/api/sd/stop",HTTP_POST,[](){if(calActive){reply(false,"Stop motor test first",409);return;}stopLog();reply(true,"Session recording stopped");});
@@ -949,6 +969,7 @@ void initializeWeb(){
   web.on("/api/reboot",HTTP_POST,[](){prepareRestart();reply(true,"EngineLink restarts now.");restartAt=millis()+1000;});
   web.on("/api/factory-reset",HTTP_POST,[](){
     if(web.arg("confirm")!="ERASE"){reply(false,"Confirmation missing",400);return;}
+    if(webXferBusy()){reply(false,"A download is running; try again when it has finished",409);return;}
     const bool keep=web.arg("keep")=="1";
     prepareRestart();
     pref.begin("enginelink",false);pref.clear();pref.end();

@@ -60,8 +60,13 @@ for route in ("/api/export/raw.csv", "/api/export/trips.csv", "/api/export/serie
     assert "R_ASYNC" in line, f"{route} must be a long transfer (6.6)"
 assert 'web.on("/api/update",HTTP_POST,handleUpdate,R_RAWBODY)' in api
 up = body(api, "void handleUpdate(){")
-assert "len<100000||len>3200000" in up and "otaCheckNewImage()" in up and "web.recv(" in up
-assert "otaCheckNewImage()" in body(fw, "void fwWorker(void *){")
+assert "len>3200000" in up and "len<100000" in up and "web.recv(" in up
+# The application check runs on the streamed descriptor, before Update.end()
+# makes the image bootable (plan 12.1 I8); never by switching back afterwards.
+assert up.index("otaSameProject(head)") < up.index("Update.end(true)")
+fwk = body(fw, "void fwWorker(void *){")
+assert fwk.index("otaSameProject(imageHeader)") < fwk.index("Update.end(true)")
+assert "esp_ota_set_boot_partition" not in fw, "never switch the boot partition back by hand"
 # D26: no deflate of downloads
 for gone in ("tdefl_", "deflate", "miniz.h", "zComp", "acceptsDeflate"):
     assert gone not in fw, f"D26: {gone} is back"
