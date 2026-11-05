@@ -673,7 +673,7 @@ Already specified by the machine; this stage implements the radio side:
 3. `ROUTER_TEST` radio: `radioApply(RADIO_APSTA_JOIN, allowSae)`. On
    `TR_OK`: if SETUP, write `cfg.router=true, cfg.ssid, cfg.wifiPassword`,
    `saveSettings()`; then `radioApply(RADIO_STA, allowSae)` — the AP stops
-   here and only here. On any other result: `WiFi.disconnect(false)`,
+   here and only here. On any other result: `WiFi.STA.disconnect(false, 0)`,
    `radioApply(RADIO_APSTA_IDLE, false)` (restores WPA2 if SAE was tried; this
    is the one case with an `WIFI_OFF` cycle, F11).
 4. `/api/wifi/test` route and the `state/test/routerBack` keys in `/api/live`.
