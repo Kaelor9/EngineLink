@@ -145,7 +145,7 @@ What the measurements say and what is deliberately left for later:
   it for microseconds to milliseconds and the frame timestamps come from the
   receivers.
 
-After Wi-Fi 2.0 acceptance (separate task, `docs/TODO.md`), in this order and
+After Wi-Fi 2.0 acceptance (separate task, [issue #161](https://github.com/Kaelor9/EngineLink/issues/161), `docs/TODO.md`), in this order and
 only with measurements: the loop takes `engineMx` around shared data instead
 of holding it; raw-log and other SD writes go to one writer task with a
 bounded queue, so no SD operation runs in the engine task or under its lock;

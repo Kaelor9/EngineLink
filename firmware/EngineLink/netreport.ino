@@ -107,7 +107,7 @@ String makeNetworkHealthJson(){
   s+=",\"saeSetupError\":";s+=(int)staSecurityConfigError;
   s+=",\"lastFailureDescription\":";jsonString(s,reasonText(routerFailureReason));
   s+=",\"events\":[";
-  RouterTrace trace[ROUTER_TRACE_CAP];const uint8_t n=getWifiTrace(trace);
+  RouterTrace trace[ROUTER_TRACE_CAP];const uint8_t n=getWifiTrace(trace,nullptr);
   for(uint8_t i=0;i<n;i++){
     if(i)s+=',';
     s+="{\"uptimeMs\":";s+=trace[i].ms;
@@ -278,7 +278,7 @@ String buildNetworkReport(){
   s+="TCP send window: 5744 bytes by default, raised to 17 KB per connection (";s+=elBoostedSockets;s+=" connections raised, ";s+=elBoostMisses;s+=" not found)\n";
   s+="Note: server write time is NOT the same as measured radio throughput.\n\n";
   s+="LATEST WI-FI EVENTS (oldest to newest; uptime seconds)\n";
-  RouterTrace trace[ROUTER_TRACE_CAP];const uint8_t n=getWifiTrace(trace);
+  RouterTrace trace[ROUTER_TRACE_CAP];const uint8_t n=getWifiTrace(trace,nullptr);
   if(!n)s+="No events recorded this boot.\n";
   for(uint8_t i=0;i<n;i++){
     s+="  +";s+=trace[i].ms/1000UL;s+="s  ";s+=traceText(trace[i].type);

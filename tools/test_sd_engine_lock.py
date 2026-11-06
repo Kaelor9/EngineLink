@@ -95,4 +95,18 @@ et = body(fw, "void engineTask(void *){")
 assert et.index("xSemaphoreGetMutexHolder(engineMx)") < et.index("xSemaphoreTake(engineMx,portMAX_DELAY)")
 assert "engineMaxWaitBy" in et
 
+# Serial export (audit 2026-11-05 item 1): one 2 s deadline in all, the file
+# read and its waits without the engine lock.
+ss = body(fw, "static bool serialSend(const uint8_t *p,size_t n){")
+assert "return false;" in ss and "if(k){p+=k;n-=k;stuck=millis();continue;}" in ss, "a port that takes nothing counts as stuck"
+assert "sdGapBegin();delay(1);sdGapEnd(gap);" in ss
+sf = body(fw, "static void serialFile(const char *name){")
+assert card_access_inside_gaps(sf, "serialFile") >= 1 and "while(ok&&" in sf, "stops at the first timeout"
+
+# Wi-Fi log trace (audit item 6): entries and total captured together.
+gt = body(fw, "uint8_t getWifiTrace(RouterTrace *out,uint32_t *total){")
+assert gt.index("portENTER_CRITICAL") < gt.index("*total=traceTotal") < gt.index("portEXIT_CRITICAL")
+wl = body(fw, "void serviceWifiLog(){")
+assert "getWifiTrace(t,&total)" in wl and "wifiLogged=total;" in wl and "wifiLogged=traceTotal" not in wl
+
 print("SD card work and engine lock contracts passed")

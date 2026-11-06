@@ -15,10 +15,13 @@ void traceWifi(uint8_t type,uint8_t reason){
   if(traceSize<ROUTER_TRACE_CAP)++traceSize;
   portEXIT_CRITICAL(&traceMux);
 }
-uint8_t getWifiTrace(RouterTrace *out){
+// The entries and the running total in one critical section, so the SD log
+// never counts an event as written that it did not copy (audit 2026-11-05 item 6).
+uint8_t getWifiTrace(RouterTrace *out,uint32_t *total){
   portENTER_CRITICAL(&traceMux);
   const uint8_t n=traceSize;
   for(uint8_t i=0;i<n;i++)out[i]=routerTrace[(traceHead+ROUTER_TRACE_CAP-n+i)%ROUTER_TRACE_CAP];
+  if(total)*total=traceTotal;
   portEXIT_CRITICAL(&traceMux);
   return n;
 }
