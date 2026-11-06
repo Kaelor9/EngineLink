@@ -170,6 +170,10 @@ callback; `wifi.ino` stays under ~300 lines.
 **Boat test after the release:** standalone; pick router; wrong code; router
 off and on; boot with router; power off/on 3 times; speed in both modes.
 
+## Deferred architecture work — after Wi-Fi 2.0
+
+- **High priority, BLOCKED until Wi-Fi 2.0 is accepted — decouple engine telemetry from Wi-Fi/web/SD/USB Serial** ([issue #161](https://github.com/Kaelor9/EngineLink/issues/161), [code audit](FIRMWARE_BLOCKING_AUDIT_2026-11-05.md)). The current two-core design uses a broad shared `engineMx` mutex; slow SD, Serial or HTTP operations can delay engine handling. After Fable's Wi-Fi 2.0 implementation and its bench + boat acceptance tests (planned 0.17.0), evaluate a dedicated real-time motor task, bounded FreeRTOS queues, read-only snapshots and separate SD/Serial workers. Choose core pinning based on measurement, not simply swapping tasks. Preserve fuel/trip correctness and record lost frames/queue depth. **Do not change the Wi-Fi 2.0 plan, PR #160 or firmware for this item now.** Implement later in a separate branch/PR, with regression tests and owner approval. Starting point: the task and core table, measured couplings and proposed order in HANDOVER "Tasks and cores" (2026-11-06). The targeted fixes of 2026-11-06 (plan 12.1 I10–I11: SD card work, Wi-Fi log and serial export without the engine lock; lock holder and engine round in the report) removed the measured stalls the owner asked to fix now, without changing lock ownership or tasks.
+
 ## To check on the boat
 
 - **Own Wi-Fi root cause first (2026-11-05, gates Wi-Fi 2.0 Stage 4 onwards;
@@ -223,12 +227,6 @@ off and on; boot with router; power off/on 3 times; speed in both modes.
   "Reading the card…" then the size), send the Wi-Fi report: engine task
   longest wait and the lock holder it names; then the remaining Stage 2 rows
   of `docs/releases/v0.16.6.md`.
-
-- **Task and core review after Wi-Fi 2.0 acceptance** (separate task, not
-  before 9.9 passed): measurements first (the report's lock holder and engine
-  round), then the three steps in HANDOVER "Tasks and cores": the loop takes
-  `engineMx` around shared data only; SD writes (raw log included) through
-  one writer task with a bounded queue; `/api/live` from a snapshot.
 
 ## Previous boat checks
 
