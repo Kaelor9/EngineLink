@@ -29,20 +29,6 @@ constexpr uint16_t HISTORY_LEN=360;            // 1 hour at 10 s
 constexpr uint32_t HISTORY_STEP_MS=10000;
 constexpr uint8_t MAX_SEGMENTS=12;
 constexpr uint8_t MAX_PIDS=96;
-// The stock WebServer serves one socket at a time. A socket that Safari opens
-// ahead of time and leaves silent, or one that stalls during a Wi-Fi blip,
-// blocks every other request for up to 5 s: the app then shows "Reconnecting".
-// This server accepts every connection at once, serves whichever socket has a
-// request waiting, and keeps sockets open between requests (HTTP keep-alive),
-// so the app's twice-a-second poll reuses one connection instead of setting up
-// a new one each time, which is where a weak link loses most requests.
-// lwIP has 16 sockets in all (CONFIG_LWIP_MAX_SOCKETS). The listeners on
-// 80/81/82, mDNS and the update client need some; 8 kept-open browser
-// connections on top could use up the rest, and then a new connection is
-// accepted by the stack but never answered ("server stopped responding").
-constexpr uint8_t HTTP_POOL=4;
-constexpr uint32_t HTTP_IDLE_MS=3000;      // silent sockets are closed after this
-constexpr uint32_t HTTP_IO_TIMEOUT_MS=1000;
 struct Frame {
   uint8_t channel=0;
   uint8_t length=0;
@@ -441,7 +427,7 @@ struct Decoded {
   int32_t kadValue=0;
 };
 struct DlStat {
-  char what[20]="";uint32_t bytes=0,raw=0,ms=0,findMs=0,sdMs=0,netMs=0;bool ap=false,z=false;int16_t rssi=0;bool active=false;
+  char what[20]="";uint32_t bytes=0,raw=0,ms=0,findMs=0,sdMs=0,netMs=0;bool ap=false;int16_t rssi=0;bool active=false;
 };
 // How much of the engine data was actually read: every second an engine runs
 // counts as read when a fresh answer (under 2 s old) is there. A gap counts
@@ -461,6 +447,8 @@ struct DiagRun { bool on=false; uint32_t startMs=0; uint32_t req0=0,rep0=0,inv0=
 // so a long retry series cannot push the first cause out of the list.
 struct RouterTrace {uint32_t ms,lastMs;uint16_t count;uint8_t type,reason;};
 constexpr uint8_t ROUTER_TRACE_CAP=64;
+// The access point as the driver runs it (netreport.ino, plan Stage 1d).
+struct ApLink{bool up=false;uint8_t ch=0,bw=0,pmfCapable=0,pmfRequired=0;uint16_t inactiveS=0;char cc[3]={};};
 // Discovery is a short-lived, explicit commissioning operation. Normal
 // operation remains either AP-only (standalone) or STA-only (router).
 // A channel-by-channel asynchronous scan returns to the AP channel between

@@ -724,7 +724,7 @@ void handleCfg(){
     String v=web.arg("host");v.trim();v.toLowerCase();v.replace(' ','-');
     if(v.endsWith(".local"))v.remove(v.length()-6);
     if(!validHostName(v)){reply(false,"Use 1 to 32 letters, digits or hyphens, for example enginelink",400);return;}
-    if(v!=cfg.hostName){cfg.hostName=v;WiFi.setHostname(v.c_str());startNameService();}
+    if(v!=cfg.hostName){cfg.hostName=v;mdnsRefreshPending=true;mdnsNetworkChangedAt=millis();}
   }
   if(web.hasArg("erep"))cfg.engReports=web.arg("erep").toInt()!=0;
   if(web.hasArg("ghtoken")){String v=web.arg("ghtoken");v.trim();if(v.length()>200){reply(false,"Token too long",400);return;}cfg.ghToken=v;reportError="";}
@@ -867,52 +867,69 @@ void prepareRestart(){
   saveTotals();
 }
 // ---------- Wi-Fi firmware update (application image only) ----------
-void handleUpdateUpload(){
-  HTTPUpload &u=web.upload();
-  static OtaImageHeader uploadHeader;
-  if(u.status==UPLOAD_FILE_START){
-    uploadHeader.reset();
-    otaError="";otaBytes=0;otaChecked=false;
-    if(calActive){otaError="Stop the motor test first";return;}
-    for(uint8_t c=0;c<2;c++)if(kad[c].polling)stopPolling(c,"Firmware update");
-    if(u.filename.indexOf("merged")>=0){otaError="This is the USB (merged) image. Use the Wi-Fi update file enginelink-update.bin";return;}
-    otaResumeLogging=sdLogging;
-    if(sdLogging)stopLog();
-    otaActive=true;
-    if(!Update.begin(UPDATE_SIZE_UNKNOWN,U_FLASH)){otaError=Update.errorString();otaActive=false;}
-  }else if(u.status==UPLOAD_FILE_WRITE){
-    if(otaError.length()||!otaActive)return;
-    // An ESP32 application image carries its app descriptor magic at 0x20.
-    if(!otaChecked){
-      uploadHeader.feed(u.buf,u.currentSize);
-      if(uploadHeader.complete()){
-        otaChecked=true;
-        if(!uploadHeader.valid()){
-          otaError="Not an ESP32 application image";Update.abort();otaActive=false;return;
-        }
-      }
-    }
-    feedLoopWDT();
-    if(Update.write(u.buf,u.currentSize)!=u.currentSize){otaError=Update.errorString();Update.abort();otaActive=false;return;}
-    otaBytes+=u.currentSize;
-  }else if(u.status==UPLOAD_FILE_END){
-    if(otaError.length()||!otaActive)return;
-    if(!otaChecked){otaError="Firmware header incomplete";Update.abort();otaActive=false;return;}
-    if(!Update.end(true)){otaError=Update.errorString();otaActive=false;}
-  }else if(u.status==UPLOAD_FILE_ABORTED){
-    if(otaActive)Update.abort();
-    otaError="Upload interrupted";
+// The app sends the file as the raw request body (esp_http_server has no
+// multipart parser, plan 6.6). The length is checked before anything is
+// written; the image header and the application (project name, from the
+// app descriptor in the first 0x70 bytes) before Update.end() can make it
+// bootable. The body is read in 2 KB blocks with the engine lock released
+// while waiting for the phone; a short body fails by length. IDF verifies
+// the whole image (checksum, SHA-256) when Update.end() sets it to boot.
+// A refused upload is read to its end (bounded by its length and the 5 s
+// timeouts) so the phone receives the reason instead of a reset connection.
+static void drainUpload(uint8_t *buf,size_t left){
+  uint8_t waits=0;
+  while(left){
+    const int n=web.recv((char*)buf,min((size_t)2048,left));
+    if(n==HTTPD_SOCK_ERR_TIMEOUT&&++waits<3)continue;
+    if(n<=0){web.closeAfter();return;}
+    waits=0;left-=(size_t)n;
   }
 }
-void handleUpdateDone(){
-  const bool ok=otaActive&&!otaError.length()&&!Update.hasError()&&otaBytes>0;
+void handleUpdate(){
+  const size_t len=web.contentLength();
+  otaError="";otaBytes=0;otaChecked=false;
+  if(len>3200000){web.closeAfter();reply(false,"Update failed: the file is too large for EngineLink",413);return;}
+  uint8_t *buf=(uint8_t*)heap_caps_malloc(2048,MALLOC_CAP_SPIRAM);
+  if(!buf){web.closeAfter();reply(false,"Update failed: out of memory",503);return;}
+  const char *refuse=len<100000?"Update failed: not an update file (too small)":calActive?"Stop the motor test first"
+    :(otaActive||fwJob!=FW_IDLE||fwState==3)?"Another firmware update is running":webXferBusy()?"A download is running; try again when it has finished":nullptr;
+  if(refuse){drainUpload(buf,len);free(buf);reply(false,refuse,len<100000?400:409);return;}
+  for(uint8_t c=0;c<2;c++)if(kad[c].polling)stopPolling(c,"Firmware update");
+  otaResumeLogging=sdLogging;
+  if(sdLogging)stopLog();
+  otaActive=true;
+  bool begun=Update.begin(len,U_FLASH);
+  if(!begun)otaError=Update.errorString();
+  OtaImageHeader head;uint8_t waits=0;
+  while(!otaError.length()&&otaBytes<len){
+    const int n=web.recv((char*)buf,min((size_t)2048,len-otaBytes));
+    if(n==HTTPD_SOCK_ERR_TIMEOUT&&++waits<3)continue;
+    if(n<=0){otaError="Upload interrupted";web.closeAfter();break;}
+    waits=0;
+    if(!otaChecked){
+      head.feed(buf,(size_t)n);
+      if(head.complete()){
+        otaChecked=true;
+        if(!head.valid()){otaError="Not an ESP32 application image";}
+        else if(!otaSameProject(head)){otaError="Not an EngineLink firmware (different application)";}
+      }
+    }
+    if(!otaError.length()&&Update.write(buf,(size_t)n)!=(size_t)n)otaError=Update.errorString();
+    otaBytes+=(size_t)n;
+  }
+  if(!otaError.length()&&!otaChecked)otaError="Firmware header incomplete";
+  if(!otaError.length()&&!Update.end(true))otaError=Update.errorString();
   otaActive=false;
-  if(!ok){
+  if(otaError.length()){
+    if(begun&&Update.isRunning())Update.abort();
+    if(otaBytes<len)drainUpload(buf,len-otaBytes);
+    free(buf);
     if(otaResumeLogging&&!sdLogging)initSD();
     otaResumeLogging=false;
-    reply(false,"Update failed: "+(otaError.length()?otaError:String("no data received")),400);
+    reply(false,"Update failed: "+otaError,400);
     return;
   }
+  free(buf);
   prepareRestart();
   reply(true,"Update installed. EngineLink restarts now; reconnect in about 20 seconds.");
   restartAt=millis()+1500;
@@ -926,8 +943,8 @@ void initializeWeb(){
     if(web.header("If-None-Match")=="\"" EL_VERSION "-" __DATE__ " " __TIME__ "\""){web.send(304,"text/plain","");return;}
     web.sendHeader("Content-Encoding","gzip");
     web.send_P(200,"text/html; charset=utf-8",(const char*)ENGINE_UI_GZ,ENGINE_UI_GZ_LEN);
-  });
-  web.on("/favicon.ico",HTTP_GET,[](){web.send(204,"text/plain","");});
+  },R_NOLOCK);
+  web.on("/favicon.ico",HTTP_GET,[](){web.send(204,"text/plain","");},R_NOLOCK);
   web.on("/api/state",HTTP_GET,handleState);
   web.on("/api/pids",HTTP_GET,handlePids);
   web.on("/api/history",HTTP_GET,handleHistory);
@@ -938,19 +955,23 @@ void initializeWeb(){
   web.on("/api/test/start",HTTP_POST,handleCalibrationStart);
   web.on("/api/test/mark",HTTP_POST,handleCalibrationMark);
   web.on("/api/test/stop",HTTP_POST,handleCalibrationStop);
-  web.on("/api/test/download",HTTP_GET,handleCalibrationDownload);
+  web.on("/api/test/download",HTTP_GET,handleCalibrationDownload,R_ASYNC);
   web.on("/api/sd/remount",HTTP_POST,[](){
     if(sdLogging||calActive){reply(false,"Stop recording before remount",409);return;}
-    SD.end();sdReady=false;initSD();refreshTestAvailable();reply(sdReady,sdMessage);
+    if(webXferBusy()){reply(false,"A download is running; try again when it has finished",409);return;}
+    if(sdOffLock){reply(false,"The SD card is busy; try again in a moment",409);return;}
+    sdWalkStop();SD.end();sdReady=false;initSD();refreshTestAvailable();reply(sdReady,sdMessage);
   });
   web.on("/api/sd/stop",HTTP_POST,[](){if(calActive){reply(false,"Stop motor test first",409);return;}stopLog();reply(true,"Session recording stopped");});
   web.on("/api/sd/start",HTTP_POST,[](){if(calActive){reply(false,"Stop motor test first",409);return;}if(sdLogging){reply(true,"Already recording");return;}initSD();reply(sdLogging,sdMessage);});
-  web.on("/api/log",HTTP_GET,handleDownload);
-  web.on("/api/segments.csv",HTTP_GET,handleSegmentsDownload);
+  web.on("/api/log",HTTP_GET,handleDownload,R_ASYNC);
+  web.on("/api/segments.csv",HTTP_GET,handleSegmentsDownload,R_ASYNC);
   web.on("/api/trip/reset",HTTP_POST,[](){resetTrip();reply(true,"Trip counter reset. Lifetime totals are kept.");});
   web.on("/api/reboot",HTTP_POST,[](){prepareRestart();reply(true,"EngineLink restarts now.");restartAt=millis()+1000;});
   web.on("/api/factory-reset",HTTP_POST,[](){
     if(web.arg("confirm")!="ERASE"){reply(false,"Confirmation missing",400);return;}
+    if(webXferBusy()){reply(false,"A download is running; try again when it has finished",409);return;}
+    if(sdOffLock){reply(false,"The SD card is busy; try again in a moment",409);return;}
     const bool keep=web.arg("keep")=="1";
     prepareRestart();
     pref.begin("enginelink",false);pref.clear();pref.end();
@@ -958,17 +979,20 @@ void initializeWeb(){
     if(!keep){
       pref.begin("totals",false);pref.clear();pref.end();
       for(const char *f:{"/trips.bin","/fuel.bin","/shiftlife.bin","/shifts.bin"})LittleFS.remove(f);
-      if(sdReady&&cardInserted()){if(sdLogging)stopLog();removeTree("/");}
+      if(sdReady&&cardInserted()){if(sdLogging)stopLog();sdWalkStop();removeTree("/");}
     }
     reply(true,keep?"Factory settings restored. Trips and the fuel log were kept. EngineLink restarts with Wi-Fi EngineLink, password 12345678.":"Everything erased. EngineLink restarts with Wi-Fi EngineLink, password 12345678.");
     restartAt=millis()+1200;
   });
-  web.on("/api/update",HTTP_POST,handleUpdateDone,handleUpdateUpload);
+  web.on("/api/update",HTTP_POST,handleUpdate,R_RAWBODY);
   web.on("/api/kad/poll",HTTP_POST,handleKadPoll);
   web.on("/api/kad/config",HTTP_POST,handleKadConfig);
-  web.on("/api/health",HTTP_GET,[](){web.send(200,"text/plain","OK");});
+  web.on("/api/health",HTTP_GET,[](){web.send(200,"text/plain","OK");},R_NOLOCK);
+  // Round trip of one small request, measured by the app's speed test.
+  web.on("/api/rtt",HTTP_GET,[](){web.sendHeader("Cache-Control","no-store");web.send(204,"text/plain","");},R_NOLOCK);
   web.on("/api/network-health",HTTP_GET,handleNetworkHealth);
   web.on("/api/network-report",HTTP_GET,handleNetworkReport);
+  web.on("/report",HTTP_GET,handleNetworkReport);
   // A download test measured by the phone, kept for the network report.
   web.on("/api/speedlog",HTTP_POST,[](){
     if(web.hasArg("kbs")){
@@ -1003,7 +1027,7 @@ void initializeWeb(){
   web.on("/api/economy",HTTP_GET,handleEconomy);
   web.on("/api/season/reset",HTTP_POST,handleSeasonReset);
   web.on("/api/prefs",HTTP_GET,handlePrefsGet);
-  web.on("/api/prefs",HTTP_POST,handlePrefsSet);
+  web.on("/api/prefs",HTTP_POST,handlePrefsSet,R_BIGBODY);
   web.on("/api/cfg",HTTP_POST,handleCfg);
   web.on("/api/wifi/ap",HTTP_POST,handleApSave);
   web.on("/api/wifi/scan",HTTP_GET,handleWifiScan);
@@ -1012,7 +1036,7 @@ void initializeWeb(){
   web.on("/api/diag",HTTP_GET,handleDiag);
   web.on("/api/nmea",HTTP_GET,handleNmea);
   web.on("/api/nmea/rec",HTTP_POST,handleNmeaRec);
-  web.on("/api/nmea/bus.csv",HTTP_GET,handleNmeaRecDownload);
+  web.on("/api/nmea/bus.csv",HTTP_GET,handleNmeaRecDownload,R_ASYNC);
   web.on("/api/diag/test",HTTP_POST,handleDiagTest);
   web.on("/api/diag/focus",HTTP_POST,handleDiagFocus);
   web.on("/api/kad/discover",HTTP_POST,handleKadDiscover);
@@ -1021,35 +1045,33 @@ void initializeWeb(){
   web.on("/api/event/fast",HTTP_GET,handleEventFast);
   web.on("/api/trip/fast",HTTP_GET,handleTripFast);
   web.on("/api/shifts",HTTP_GET,handleShifts);
-  web.on("/api/export/fast.csv",HTTP_GET,handleExportFast);
+  web.on("/api/export/fast.csv",HTTP_GET,handleExportFast,R_ASYNC);
   web.on("/api/events/ack",HTTP_POST,handleEventsAck);
   web.on("/api/mark",HTTP_POST,handleMark);
   web.on("/api/event/series",HTTP_GET,handleEventSeries);
   web.on("/api/trip/series",HTTP_GET,handleTripSeries);
   web.on("/api/series/recent",HTTP_GET,handleRecentSeries);
-  web.on("/api/export/series.csv",HTTP_GET,handleExportSeries);
+  web.on("/api/export/series.csv",HTTP_GET,handleExportSeries,R_ASYNC);
   web.on("/api/life",HTTP_GET,handleLife);
   web.on("/api/led",HTTP_GET,handleLed);
   web.on("/api/sd/info",HTTP_GET,handleSdInfo);
   web.on("/api/sd/wipe",HTTP_POST,handleSdWipe);
-  web.on("/api/export/trips.csv",HTTP_GET,handleExportTrips);
-  web.on("/api/export/raw.csv",HTTP_GET,handleExportRaw);
-  web.on("/api/speedtest",HTTP_GET,handleSpeedTest);
-  web.on("/api/backup",HTTP_GET,handleBackup);
+  web.on("/api/export/trips.csv",HTTP_GET,handleExportTrips,R_ASYNC);
+  web.on("/api/export/raw.csv",HTTP_GET,handleExportRaw,R_ASYNC);
+  web.on("/api/speedtest",HTTP_GET,handleSpeedTest,R_ASYNC|R_NOLOCK);
+  web.on("/api/backup",HTTP_GET,handleBackup,R_ASYNC);
   web.on("/api/fw/check",HTTP_POST,handleFwCheck);
   web.on("/api/fw/install",HTTP_POST,handleFwInstall);
   web.on("/api/fw/status",HTTP_GET,handleFwStatus);
-  web.on("/icon.svg",HTTP_GET,[](){sendStatic("image/svg+xml",(const uint8_t*)ICON_SVG,strlen_P(ICON_SVG));});
-  web.on("/apple-touch-icon.png",HTTP_GET,[](){sendStatic("image/png",ICON_PNG_180,ICON_PNG_180_LEN);});
-  web.on("/icon-192.png",HTTP_GET,[](){sendStatic("image/png",ICON_PNG_192,ICON_PNG_192_LEN);});
-  web.on("/icon-512.png",HTTP_GET,[](){sendStatic("image/png",ICON_PNG_512,ICON_PNG_512_LEN);});
+  web.on("/icon.svg",HTTP_GET,[](){sendStatic("image/svg+xml",(const uint8_t*)ICON_SVG,strlen_P(ICON_SVG));},R_NOLOCK);
+  web.on("/apple-touch-icon.png",HTTP_GET,[](){sendStatic("image/png",ICON_PNG_180,ICON_PNG_180_LEN);},R_NOLOCK);
+  web.on("/icon-192.png",HTTP_GET,[](){sendStatic("image/png",ICON_PNG_192,ICON_PNG_192_LEN);},R_NOLOCK);
+  web.on("/icon-512.png",HTTP_GET,[](){sendStatic("image/png",ICON_PNG_512,ICON_PNG_512_LEN);},R_NOLOCK);
   web.on("/manifest.webmanifest",HTTP_GET,[](){
     web.sendHeader("Cache-Control","no-cache");
     web.send(200,"application/manifest+json","{\"name\":\"Engine Link\",\"short_name\":\"Engine Link\",\"start_url\":\"/\",\"scope\":\"/\",\"display\":\"standalone\",\"background_color\":\"#0a1420\",\"theme_color\":\"#0a1420\",\"icons\":[{\"src\":\"/icon-192.png\",\"sizes\":\"192x192\",\"type\":\"image/png\"},{\"src\":\"/icon-512.png\",\"sizes\":\"512x512\",\"type\":\"image/png\",\"purpose\":\"any maskable\"}]}");
   });
-  web.onNotFound([](){web.send(404,"text/plain","Not found");});
-  const char *keep[]={"If-None-Match","Connection","Accept-Encoding"};
-  web.collectHeaders(keep,3);
-  web.enableCORS(true); // the app can also reach EngineLink through the boat router
-  web.begin();
+  // Unknown paths get 404 from the server; OPTIONS preflights and the
+  // Host/Origin/X-EngineLink checks are in httpd.ino (plan 6.9).
+  if(!web.begin())Serial.println("Web server could not start");
 }

@@ -20,15 +20,37 @@ static void wifiStamp(String &s){
   else snprintf(b,sizeof(b),"up %lus",(unsigned long)(millis()/1000));
   s+=b;
 }
+// Lines wait in RAM and serviceWifiLog() writes them in one go with the
+// engine lock let go: opening the file searches the root directory, up to
+// ~0.3 s on a card with many logs (plan 13.6.1). Bounded; the count of
+// lines dropped while the card was missing or slow is logged with the next.
+static const size_t WIFI_PENDING_MAX=3072;
+static String wifiPending;
+static uint32_t wifiDropped=0;
 void wifiLog(const String &what){
-  File f=wifiOpen("/WIFI.LOG");if(!f)return;
-  String s;wifiStamp(s);s+="  ";s+=what;s+='\n';f.print(s);f.close();
+  if(!sdReady)return;
+  String s;wifiStamp(s);s+="  ";s+=what;s+='\n';
+  if(wifiPending.length()+s.length()>WIFI_PENDING_MAX){++wifiDropped;return;}
+  wifiPending+=s;
+}
+static void wifiFlush(){
+  if(!wifiPending.length()&&!wifiDropped)return;
+  String out(std::move(wifiPending));wifiPending=String();
+  if(wifiDropped){String d;wifiStamp(d);d+="  (";d+=wifiDropped;d+=" Wi-Fi log lines dropped)\n";out+=d;wifiDropped=0;}
+  const bool gap1=sdGapBegin();
+  File f=wifiOpen("/WIFI.LOG");if(f){f.print(out);f.close();}
+  sdGapEnd(gap1);
 }
 void saveWifiReport(){
-  File f=wifiOpen("/WIFIREP.TXT");if(!f)return;
+  if(!sdReady||!cardInserted())return;
   String s="\n\n######## ";wifiStamp(s);s+=" ########\n";
   String r=buildNetworkReport();if(cfg.ssid.length()>=3)r.replace(cfg.ssid,"<router name hidden>");
-  f.print(s);f.print(r);f.close();wifiReportSavedAt=millis()?millis():1;
+  const bool gap2=sdGapBegin();
+  File f=wifiOpen("/WIFIREP.TXT");
+  const bool saved=(bool)f;
+  if(saved){f.print(s);f.print(r);f.close();}
+  sdGapEnd(gap2);
+  if(saved)wifiReportSavedAt=millis()?millis():1;
 }
 // New Wi-Fi events from the RAM trace go to /WIFI.LOG.
 void serviceWifiLog(){
@@ -39,33 +61,47 @@ void serviceWifiLog(){
       +", own Wi-Fi "+(apStarted?"on":"off")+" ("+cfg.apName+", channel "+apChannelNow+")");
   }
   if(wifiLogged!=traceTotal){
-    RouterTrace t[ROUTER_TRACE_CAP];const uint8_t n=getWifiTrace(t);
-    const uint32_t fresh=min<uint32_t>(traceTotal-wifiLogged,n);
+    RouterTrace t[ROUTER_TRACE_CAP];uint32_t total=0;const uint8_t n=getWifiTrace(t,&total);
+    const uint32_t fresh=min<uint32_t>(total-wifiLogged,n);
     for(uint8_t i=n-fresh;i<n;i++){
       String s=traceText(t[i].type);
       if(t[i].reason){s+=" (";s+=t[i].reason;s+=' ';s+=reasonText(t[i].reason);s+=')';}
+      // Phone joined or left: how every joined phone is heard (plan Stage 1d).
+      if(t[i].type==7||t[i].type==8){s+=" · phones now: ";s+=apStationsText(", ");}
       wifiLog(s);
     }
-    wifiLogged=traceTotal;
+    wifiLogged=total;
   }
+  wifiFlush();
   if((uint32_t)(millis()-wifiReportSavedAt)>=1800000UL||(!wifiReportSavedAt&&millis()>120000UL))saveWifiReport();
 }
-// Writes everything when a serial monitor reads; gives up after 2 s stuck.
-static void serialSend(const uint8_t *p,size_t n){
+// Writes everything while a serial monitor reads. False once it was stuck
+// 2 s (no room, or the port took nothing), so a caller sending more stops
+// at once instead of waiting 2 s per piece (audit 2026-11-05 item 1). The
+// waits let the engine lock go (sdGapBegin lets go only a lock this task holds).
+static bool serialSend(const uint8_t *p,size_t n){
   uint32_t stuck=millis();
   while(n){
     const int room=Serial.availableForWrite();
-    if(room>0){const size_t k=Serial.write(p,min<size_t>(n,(size_t)room));p+=k;n-=k;if(k)stuck=millis();}
-    else{if((uint32_t)(millis()-stuck)>2000)return;delay(1);}
+    const size_t k=room>0?Serial.write(p,min<size_t>(n,(size_t)room)):0;
+    if(k){p+=k;n-=k;stuck=millis();continue;}
+    if((uint32_t)(millis()-stuck)>2000)return false;
+    const bool gap=sdGapBegin();delay(1);sdGapEnd(gap);
   }
+  return true;
 }
-static void serialPrint(const String &s){serialSend((const uint8_t*)s.c_str(),s.length());}
+static bool serialPrint(const String &s){return serialSend((const uint8_t*)s.c_str(),s.length());}
+// A file from the SD card to the serial monitor, all of it with the engine lock let go.
 static void serialFile(const char *name){
   if(!sdReady||!cardInserted()){serialPrint("No SD card\n");return;}
-  File f=SD.open(name,FILE_READ);if(!f){serialPrint(String(name)+" not found on the SD card\n");return;}
-  uint8_t b[256];int got;
-  while((got=f.read(b,sizeof(b)))>0)serialSend(b,(size_t)got);
-  f.close();serialPrint("\n---- end of "+String(name)+" ----\n");
+  const bool gap=sdGapBegin();
+  File f=SD.open(name,FILE_READ);
+  const bool opened=(bool)f;
+  bool ok=opened;
+  if(opened){uint8_t b[256];int got;while(ok&&(got=f.read(b,sizeof(b)))>0)ok=serialSend(b,(size_t)got);f.close();}
+  sdGapEnd(gap);
+  if(!opened)serialPrint(String(name)+" not found on the SD card\n");
+  else if(ok)serialPrint("\n---- end of "+String(name)+" ----\n");
 }
 static void serialHelp(){
   serialPrint("EngineLink " EL_VERSION " commands:\n"

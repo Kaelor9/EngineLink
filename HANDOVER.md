@@ -7,7 +7,10 @@ tested on hardware is in [docs/STATUS.md](docs/STATUS.md).
 
 **Talk to the owner in Danish**, briefly and concretely. The app itself is in
 English. The owner has asked for pull requests to be merged without asking once
-CI is green.
+CI is green — except changes that touch networking: those are merged and
+released only after the owner has run the bench and boat protocol in
+[docs/WIFI_REWRITE_PLAN.md](docs/WIFI_REWRITE_PLAN.md) section 9.9 (owner's
+rule of 2026-11-05).
 
 Never ask for, repeat or store secrets (GitHub tokens, passwords) in chats,
 code or reports. The owner's GitHub token for reports lives only on the board.
@@ -56,10 +59,13 @@ program, so they share the globals in `EngineLink.ino`.
 | `storage.ino` | SD card, LittleFS, NVS settings and totals, restart log, raw logging |
 | `wifi.ino` | Own access point or router (simple since 0.16.2, kept under 300 lines by `tools/test_wifi_simple.py`), fallback, scans, mDNS |
 | `serialcmd.ino` | USB serial commands and the Wi-Fi log/reports on the SD card (0.16.3) |
-| `webserver.h` | The port 80 web server (connection pool) |
+| `httpd.h`, `httpd.ino` | The web server since 0.16.6: ESP-IDF `esp_http_server` on port 80 in its own task, the adapter that keeps the handlers' `web.arg()`/`web.send()` calls, the own-origin security checks, and the task for long transfers |
+| `httputil.h` | URL decoding and the own-address allow-list (host-tested, `tools/test_httputil.cpp`) |
+| `netsvc.ino` | Network services; since 0.16.6 the boot self-test that confirms a new firmware or rolls it back |
+| `wifistate.h` | Wi-Fi 2.0 trace folding (used) and the state machine (host-tested by `tools/test_wifistate.cpp`, not yet used by the firmware; Stage 4) |
 | `webapi.ino` | JSON helpers, the app's API handlers and the route table |
-| `netreport.ino` | Network report, ports 81 and 82, web server self-check, radio test task |
-| `downloads.ino`, `sdexport.ino` | Streaming (compressed) downloads, CSV exports, SD clean-up, backup |
+| `netreport.ino` | Network report and health JSON, link diagnostics (joined phones, the AP as the driver runs it), radio test task |
+| `downloads.ino`, `sdexport.ino` | Streaming downloads (uncompressed since 0.16.6), CSV exports, speed test, SD clean-up, backup |
 | `updates.ino` | Firmware updates from GitHub or a file, with rollback; sends the GitHub reports |
 | `enginereport.ino` | Engine report after each trip: how well both engines were read, plus the diagnostics JSON |
 | `led.ino`, `nmea2000.ino`, `enginetest.ino` | Status LED, NMEA 2000 listener (navigation, bus census, per-trip `.NAV` log, `/api/nmea`), engine test capture |
@@ -97,17 +103,54 @@ To release: bump `EL_VERSION` in `EngineLink.ino`, update the README badge and
 status table, and add `docs/releases/vX.Y.Z.md`. Merging to `main` builds and
 publishes release `vX.Y.Z` with `enginelink-update.bin` (Wi-Fi update) and
 `firmware.bin` (full USB image, erases settings and data). The board can update
-itself from GitHub; a version that does not run properly for its first minute
+itself from GitHub; a version that does not run properly for its first minute (since 0.16.6: that no web client got an answer within 10 minutes, plan 6.10)
 is rolled back. Details: [docs/RELEASING.md](docs/RELEASING.md).
 
 ## How the firmware works
 
 **Tasks.** Core 0: Wi-Fi, the two J1708 receiver tasks (UART to a frame queue
 in PSRAM) and the engine task (frames, KAD polling, once-a-second engine, trip
-and diagnosis work). Core 1: the main loop with the web server on port 80, and
-two small listeners: port 81 for live data and the network report, port 82 for
-the speed test. A mutex (`engineMx`) guards engine state between the engine
-task and the web server.
+and diagnosis work). Core 1: the main loop, and since 0.16.6 the web server
+(`esp_http_server` task `httpd`, port 80 only) and the `xfer` task for long
+downloads. A mutex (`engineMx`) guards shared state: the loop holds it while it
+works, a web handler takes it (2 s, else 503) and lets go whenever it waits for
+the phone. Up to 0.16.5 the web server ran inside the loop, with extra
+listeners on ports 81 (live data, report) and 82 (speed test). Since the
+2026-11-06 fixes, slow SD card work (directory walk, Wi-Fi log, wipe) runs
+with the lock let go (`sdGapBegin/End`, plan 12.1 I10), and nothing unmounts
+the card while it does.
+
+**Tasks and cores (review 2026-11-06, as built; FreeRTOS priority in brackets).**
+
+| Core 0 | Core 1 |
+|---|---|
+| Wi-Fi driver (23), esp_timer (22), event loop (20), lwIP `tcpip` (18), J1708 receivers `J7RX`/`J6RX` (4), `engines` (3), `fw` GitHub worker (1), `link-tune` (1, goes in Stage 4), mDNS (1) | `httpd` web server (5), `xfer` long transfers (4), Arduino network events, main `loopTask` (1) |
+
+What the measurements say and what is deliberately left for later:
+
+- **The waits are lock waits, not CPU.** The engine task needs little CPU;
+  its long waits came from `engineMx` held by others (SD 7.3 s, network switch
+  1.5–2.5 s). The report now names the holder at the longest wait and the
+  engine task's own longest round, so later changes start from numbers.
+- **The loop holds `engineMx` almost all the time** and lets go once a pass
+  (`delay(1)`), so engine processing waits for the loop's pass (typically
+  5–70 ms). Frames are not lost meanwhile: the receivers stamp each frame when
+  the UART's hardware timeout ends it and queue it (2048 frames in PSRAM).
+- **Priority inheritance crosses cores.** While the engine task (3) waits for
+  the loop (1), the loop inherits 3, but `httpd` (5) and `xfer` (4) on core 1
+  still run before it.
+- **The engine task writes the raw log itself** (`writeRecord()`), so a slow
+  card write stalls one engine round while it holds the lock.
+- Engine work on core 0 beside the Wi-Fi driver is fine: the driver preempts
+  it for microseconds to milliseconds and the frame timestamps come from the
+  receivers.
+
+After Wi-Fi 2.0 acceptance (separate task, [issue #161](https://github.com/Kaelor9/EngineLink/issues/161), `docs/TODO.md`), in this order and
+only with measurements: the loop takes `engineMx` around shared data instead
+of holding it; raw-log and other SD writes go to one writer task with a
+bounded queue, so no SD operation runs in the engine task or under its lock;
+`/api/live` reads a snapshot the engine task publishes. Core affinity and
+priorities stay as they are unless a measurement shows a need.
 
 **KAD reading.** Request `01 43 21 hi lo cs`; our own request echoes on the bus
 about 8 ms later; the ECU answers `83 C1 <width>1 <value…> <cs>` (big-endian).
@@ -231,6 +274,56 @@ Wi-Fi 0.16.0–0.16.5 (2026-11-04, standalone on the boat with an iPhone):
   8.5 dBm override and counts DHCP leases, port-80 accepts and HTTP parse
   failures separately. Not yet verified on the board (see TODO).
 - Reset reason 11 in web-installer logs is the console's USB reset, not a crash.
+- 0.16.5 USB report: phone joined, DHCP lease, 6 HTTP requests, 19.5 dBm, so
+  standalone reaches the web server again. Main loop stalled up to 10 s in
+  the web part (unexplained).
+- Next: **Wi-Fi 2.0**, a clean rewrite with four states (standalone, router
+  test, router, router lost), `enginelink.local`, no retry settings. The plan,
+  rules, what to remove/keep and the required tests are in
+  [docs/TODO.md](docs/TODO.md) under "Wi-Fi 2.0". Follow it rather than the
+  0.15 rules above, which describe the old design. **The one authoritative
+  implementation plan is [docs/WIFI_REWRITE_PLAN.md](docs/WIFI_REWRITE_PLAN.md)**
+  (final revision 2026-11-05, planning closed, nothing built yet; status of
+  each stage is reported as built / bench-verified / boat-verified). Its
+  architecture decision:
+  stay on the Arduino ESP32 core 3.3.12 (ESP-IDF 5.5.5) and use the official
+  components directly — `esp_http_server` replaces the hand-written web
+  server, connection pool, the port 81/82 listeners and the self-check;
+  `esp_wifi`/`WiFi` with a small host-tested product state machine
+  (`wifistate.h`) replaces the ad-hoc timers; FreeRTOS queue for driver
+  events. Two fenced exceptions remain until a possible later move to
+  ESP-IDF-with-Arduino-as-component: `netboost.cpp` (compile-time 5744-byte
+  TCP window in the prebuilt core, no `SO_SNDBUF` in IDF's lwIP) and
+  `wifiwpa3.cpp` (the SAE capability is a compile-time macro in
+  `WIFI_INIT_CONFIG_DEFAULT()`); both justified in plan section 4.1. The
+  quality pass of 2026-11-05 also added a security model without login
+  (plan 6.9: own-origin CORS allow-list, `X-EngineLink` header on POSTs,
+  `Host` check, request limits) and a boot self-test that confirms a new
+  firmware only after the web server answered a client, with automatic
+  rollback otherwise (plan 6.10). The owner's closing decisions: the deflate
+  compression of downloads is removed in Stage 2 (exports keep routes,
+  content and formats; `downloads.ino`/`sdexport.ino` then stream plain
+  chunks), and the Wi-Fi country is set with `esp_wifi_set_country_code("DK",
+  true)`. Findings worth
+  knowing now: the 5–10 s web stall is the core's `NetworkClient::write()`
+  retry loop (10 × 1 s `select` when the phone stops acknowledging); the TX
+  power check accepts the driver's unset 20 dBm as 19.5 dBm; 0.16.2 dropped
+  the AP's 20 MHz bandwidth, country and inactive-time settings; and the
+  2026-11-05 boat test shows the own Wi-Fi's downlink to the phone failing
+  with the cause still open (plan section 13, root-cause gate before any
+  rewrite stage).
+
+  **Implementation status (2026-11-05):** Stages 1–3 are *built* in the
+  0.16.6 development build on branch `claude/wizardly-lovelace-v6tlqz`
+  (not merged, not released, untested on hardware). Stage 1: `apRadioSetup()`
+  (HT20, inactive 600 s, country DK), exact TX power check in both modes,
+  trace folding, per-phone RSSI/PHY and the AP's real settings in the report.
+  Stage 2: `esp_http_server` (`httpd.ino`), security model, raw-body upload
+  with length and project-name checks, boot self-test (`netsvc.ino`), no
+  deflate, ports 81/82 gone. Stage 3: `wifistate.h` state machine with the
+  20 plan scenarios as host test, not wired in. Deviations and their
+  evidence: plan section 12.1. Next: the owner's bench list
+  (`docs/releases/v0.16.6.md`) and the Stage 0 gate; then Stage 4.
 
 USB serial commands (0.16.3, 115200 baud, web installer "Logs & console" or any
 serial monitor): `wifi` (full Wi-Fi report), `wifi log` / `read wifi log`
