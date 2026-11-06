@@ -55,6 +55,8 @@ jobs:
         run: cd tools && python3 test_wifi_contract.py
       - name: Check Wi-Fi throughput sampling and radio-test idle guard
         run: python3 tools/test_router_throughput_guard.py
+      - name: SD card work never holds the engine lock (plan 13.6.1)
+        run: cd tools && python3 test_sd_engine_lock.py
       - name: Test router AP-rescue deadline and reboot-safe timer
         run: |
           g++ -O2 -std=c++17 -Wall -Wextra tools/test_routerguard.cpp -o /tmp/test_routerguard

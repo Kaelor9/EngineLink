@@ -959,7 +959,8 @@ void initializeWeb(){
   web.on("/api/sd/remount",HTTP_POST,[](){
     if(sdLogging||calActive){reply(false,"Stop recording before remount",409);return;}
     if(webXferBusy()){reply(false,"A download is running; try again when it has finished",409);return;}
-    SD.end();sdReady=false;initSD();refreshTestAvailable();reply(sdReady,sdMessage);
+    if(sdOffLock){reply(false,"The SD card is busy; try again in a moment",409);return;}
+    sdWalkStop();SD.end();sdReady=false;initSD();refreshTestAvailable();reply(sdReady,sdMessage);
   });
   web.on("/api/sd/stop",HTTP_POST,[](){if(calActive){reply(false,"Stop motor test first",409);return;}stopLog();reply(true,"Session recording stopped");});
   web.on("/api/sd/start",HTTP_POST,[](){if(calActive){reply(false,"Stop motor test first",409);return;}if(sdLogging){reply(true,"Already recording");return;}initSD();reply(sdLogging,sdMessage);});
@@ -970,6 +971,7 @@ void initializeWeb(){
   web.on("/api/factory-reset",HTTP_POST,[](){
     if(web.arg("confirm")!="ERASE"){reply(false,"Confirmation missing",400);return;}
     if(webXferBusy()){reply(false,"A download is running; try again when it has finished",409);return;}
+    if(sdOffLock){reply(false,"The SD card is busy; try again in a moment",409);return;}
     const bool keep=web.arg("keep")=="1";
     prepareRestart();
     pref.begin("enginelink",false);pref.clear();pref.end();
@@ -977,7 +979,7 @@ void initializeWeb(){
     if(!keep){
       pref.begin("totals",false);pref.clear();pref.end();
       for(const char *f:{"/trips.bin","/fuel.bin","/shiftlife.bin","/shifts.bin"})LittleFS.remove(f);
-      if(sdReady&&cardInserted()){if(sdLogging)stopLog();removeTree("/");}
+      if(sdReady&&cardInserted()){if(sdLogging)stopLog();sdWalkStop();removeTree("/");}
     }
     reply(true,keep?"Factory settings restored. Trips and the fuel log were kept. EngineLink restarts with Wi-Fi EngineLink, password 12345678.":"Everything erased. EngineLink restarts with Wi-Fi EngineLink, password 12345678.");
     restartAt=millis()+1200;

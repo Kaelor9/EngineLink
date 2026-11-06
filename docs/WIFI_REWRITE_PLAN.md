@@ -61,6 +61,7 @@ Added as decisions:
 | D27 | **Country configuration per Espressif's API.** `esp_wifi_set_country_code("DK", true)` (ISO code from the documented list, `esp_wifi.h` attention 6; 802.11d on so the station follows the router's country IE, attention 3/8). Never `"EU"`. (owner, 2026-11-05) |
 | D28 | **Status vocabulary.** *built* = compiles and CI is green; *bench-verified* = the owner ran the stage's bench list and reported it; *boat-verified* = 9.9 passed. Firmware is never called verified, working or fixed before the owner's report. |
 | D29 | **Planning closed 2026-11-05.** No further architecture revisions unless implementation reveals a concrete critical defect, recorded in section 12 with evidence. |
+| D30 | **Router independence (owner, 2026-11-06).** Any router or hotspot that offers a compatible 2.4 GHz network works: home, 4G and 5G routers, iPhone and Android hotspots; WPA2, WPA3 and mixed WPA2/WPA3 as far as the ESP32-S3 supports them; automatic channel selection and channel changes; networks without internet; outages, reconnects and recovery. Never a router setting, a manual channel or code for one router, phone or brand (the owner's 4G router and Zyxel are test cases, not targets). Standalone works with no router at all. Accepted by 9.9 T11–T14; implementation notes I12–I13 (12.1). |
 
 ---
 
@@ -940,10 +941,20 @@ first 210 is WRONG_CODE; 19 look back-off reset after a success; 20
 6. `led.ino` mapping (6.4). `tools/test_wifi_contract.py` in CI; the
    `test_netpolicy`/`test_routerguard` steps replaced by `test_wifistate`.
 
+Lock rule (13.6.1; owner 2026-11-06): `radioApply()`, the station start,
+`httpdSuspend()`'s wait and every other network switch run with `engineMx`
+let go. The machine's state stays loop-owned; handlers only set `pendingCmd`
+and read values the loop published (the `Host` check uses the loop's copy of
+the router IP, not `WiFi.localIP()` mid-switch). 0.16.6 measured 1.5–2.5 s
+engine waits at a switch made with the lock held.
+
 Bench acceptance: standalone boot, phone joins, app loads, `state
 standalone`; heap lowest ≥ 40 KB after 1 h; router saved and present → `router`
 within 5 s; router off → `router lost`, `standalone` at +120 s; router back →
-seen within 60 s and (no phone) `router` within 25 s.
+seen within 60 s and (no phone) `router` within 25 s; across at least five
+switches (boot with router, router lost → standalone, return, forget, own
+Wi-Fi renamed) the report's engine task longest wait < 200 ms, with the lock
+holder it names.
 
 ### 9.5 Stage 5 — Router test, looks and return
 
@@ -1026,6 +1037,10 @@ Boat protocol (owner; send the `wifi` report after each):
 | T8 | "Test speed" 5× in each mode | throughput row |
 | T9 | Engines running during T4 | `engineWait max` < 200 ms, engine report unchanged |
 | T10 | 24 h on the router | router stability and memory rows |
+| T11 | D30, on the bench: a phone hotspot (iPhone with "Maximize Compatibility", and an Android phone) as the router, each T3 + T4 | `ok`, IP, recovery as T4; nothing changed on the phone beyond turning the hotspot on |
+| T12 | D30: the router's channel changed (its automatic choice or by hand) while EngineLink is on it | back on the router without a fallback (CSA, else the core's full-scan reconnect within the 2 min of D4) |
+| T13 | D30: a router with no internet (WAN unplugged) | `router` state, app works by IP and `.local`; NTP and GitHub only report "no internet" |
+| T14 | D30: WPA2/WPA3 mixed and, where available, WPA3-only | joins (WPA2 path for mixed, SAE for WPA3-only, D10) |
 
 Then `docs/RELEASING.md`: bump `EL_VERSION`, README badge,
 `docs/releases/v0.17.0.md` (what changed, the protocol results, what is
@@ -1172,7 +1187,8 @@ Open risks:
 - Handlers now wait for `engineMx` released by the loop; a long loop part
   (raw clean-up 461 ms, serial 584 ms with a console attached) delays a
   request by that much. The latency criterion catches it; the fix is
-  shortening that loop part, not a second lock.
+  shortening that loop part, not a second lock. The SD parts of it let the
+  lock go since I10 (12.1).
 - Pre-existing: `String` fields written by `fwWorker` (`fwList`, `fwError`,
   `reportError`) are read by handlers without a lock; set-then-flag order
   makes it benign today; noted, not changed.
@@ -1200,6 +1216,10 @@ route assignment the plan left too tight, with the evidence that forced it.
 | I6 | Handlers now run in the server task, so `handleCfg()` restarting mDNS inside a request would race the loop's own restart. | `webapi.ino` `handleCfg()` called `startNameService()` (F10). | The Stage 4 rule (set `mdnsRefreshPending`, the loop acts) applied in Stage 2. `removeTree()` gives the loop a turn every 16 files. |
 | I7 | Without the engine task the loop did not hold `engineMx`, so a handler in the server task could run beside the loop's engine work. | `setup()` gave the lock back when the task failed to start. | The loop holds `engineMx` whenever it exists; `netWaitBegin/End` test `engineMx`. |
 | I8 | Checking the project name *after* `Update.end()` (6.9 item 5 as written) and switching back on a mismatch makes the rejected image the rollback target. | `esp_ota_set_boot_partition()` rewrites the OTA data with the new entry in state NEW (`esp_ota_ops.c` `esp_rewrite_ota_data()`, `set_new_state_otadata()`, IDF v5.5); switching back writes a second NEW entry, so the running firmware is pending again and the other slot holds the rejected image. Found by the Stage 2 review. | The same `esp_app_desc_t.project_name` is read from the streamed image (first 0x70 bytes, `otaheader.h`, host-tested) and compared before `Update.end()`; a mismatch aborts the update. The boot partition is never switched by hand. |
+| I10 | SD card work held `engineMx` for seconds (13.6.1): `/api/sd/info` counted the root directory and free space in the request (7.3 s), the daily raw clean-up walked 4 entries a pass (485 ms), the Wi-Fi log opened its file inside the loop (~300 ms), wipe gave the lock back only every 16 files. | 0.16.6 bench reports (engine waits 7.3–7.5 s, loop parts `raw cleanup` 485 ms, `serial` 227–306 ms); every Arduino `openNextFile()`/open by name searches the whole directory (`vfs_api.cpp`, FatFs). | One root-directory walk in the loop (`serviceSdWalk`, 4 entries a pass) counts for `/api/sd/info` and does the daily clean-up; every card access in it, in `removeTree()`, the Wi-Fi log and the saved report runs with the lock let go (`sdGapBegin/End`, which only lets go a lock the caller holds). `/api/sd/info` answers from the last count at once (`known`, `counting`; the app asks again). No unmount while card work or a web reply runs without the lock (`sdUnmountBlocked`: a removed card stops a download and unmounts on a later check); remount, wipe and factory reset answer 409 meanwhile. The engine task's own raw-log writes are unchanged (see 13.6.1 residual risk). `tools/test_sd_engine_lock.py`. |
+| I11 | A 503 could not be attributed (13.6.1), nor an engine wait to its cause. | One counter for three causes. | 503s counted by cause (engine lock 2 s, another download, download lock 10 s) with the last path; the report names the task holding `engineMx` when the engine task's longest wait began, counts waits over 100 ms and the engine task's longest round of its own work; the report's firmware line carries the build time. |
+| I12 | D30: the station join uses the core's default `WIFI_FAST_SCAN`, which takes the first matching access point; the "strongest" sort applies only to an all-channel scan (`esp_wifi_types.h`). With a mesh or repeater (one SSID, several BSSIDs) it can join a weak one. | `STA.cpp` 3.3.12: `_scanMethod(WIFI_FAST_SCAN)`, `_sortMethod(WIFI_CONNECT_AP_BY_SIGNAL)`. | Stage 4: `WiFi.setScanMethod(WIFI_ALL_CHANNEL_SCAN)` before `begin()` (official core API; about 1–2 s more per join). Minimum security stays the core's WPA2 (open and WPA-only networks are not joined). |
+| I13 | D30: with a phone joined, looks use the known channel only (fourth revision, to keep the phone connected). A router that changed channel meanwhile is not seen, so "Router is back" waits until no phone is joined (then every fifth look is all channels). | 6.3 look rules; T12. | Kept (the phone's link wins, D21). Recorded so T12 is read correctly; the station itself follows a channel change through CSA or its full-scan reconnect. iPhone hotspots on iPhone 12 and later need "Maximize Compatibility" for 2.4 GHz: the ESP32-S3 has no 5 GHz radio. |
 | I9 | Review of the Stage 2 server (2026-11-05) found further lifecycle gaps. | Code review against the IDF sources. | Every early reply (421, 403, 503) closes a connection whose unread body is over 16 KB instead of draining it in the server task; a refused upload up to 3.2 MB is read to its end so the app shows the reason (a reset would hide it); a broken transfer is `shutdown()` before `httpd_req_async_handler_complete()`; `httpdSuspend()` also `shutdown()`s every client socket (trigger-close skips sockets that sent nothing yet and its queue holds 6 messages); remount, wipe and factory reset answer 409 while a download keeps an SD file open; a file upload answers 409 during a GitHub install and the GitHub install during an upload; `removeTree()` sleeps 20 ms every 16 files so the loop can feed its watchdog during a long wipe. Left open: the 110 KB app page is sent from the server task (a slow phone delays other requests while it loads); GET routes with side effects (e.g. starting a Wi-Fi scan) can still be triggered cross-site, without reading the answer. |
 
 ---
@@ -1372,7 +1392,47 @@ Findings from the reports (for Stages 4–7 and the owner):
   71 ms, so almost certainly the latter). Report both separately.
 - **Privacy:** the router name appears in the committed reports and README
   (CLAUDE.md asks for router names to be hidden); replace on the owner's
-  word, noting it stays in the git history.
+  word, noting it stays in the git history. *Done 2026-11-06: replaced by
+  `<router name hidden>` in the current files; history not rewritten
+  (squash merges keep it out of `main`).*
+
+Review of this assessment (second implementer, 2026-11-06; the owner then
+gave the go for the fixes listed after it):
+
+- "Stable both ways ⇒ H3" shows that the failure does **not reproduce with
+  0.16.6** (what 9.0 needs before Stage 4); it does not exclude a changed RF
+  environment. Write the result that way unless 0.16.5 fails in the same
+  session.
+- Existing data already settles two things: the speed spread is **not** the
+  supply (USB slow, lab slow, USB fast; one phone slow and fast at −47/−48
+  dBm), and round trips in whole beacon intervals (≈102 ms) point at phone
+  power save. Throughput is therefore no pass criterion for step 3.
+- The bench router is a **dedicated 4G router** (owner), not a phone hotspot,
+  so that explanation is out. Its losses (beacons lost, then 49 full scans
+  without it) stay unexplained and belong to Stage 5 diagnostics, not to the
+  gate: in router mode the own Wi-Fi is off, so they say nothing about the
+  standalone downlink.
+- Step 3 conditions: **no router saved** (else the boot joins the router with
+  the own Wi-Fi off); no scan or setting change during the 20 min (scan before
+  and after, note the router's channel and dBm); same mounting place, 12 V
+  only, J1708 and NMEA 2000 connected as on 2026-11-05; pass = TCP
+  connections from both devices, no code-2/209 leaves, 0 send failures, no
+  "Reconnecting". Unstable both ways ⇒ first 10 min on a USB power bank at the
+  same place (separates the 12 V path from the place without a scope), then
+  step 4 only if that points at the supply. Optional when stable: 10 min of
+  0.16.5 at the same place, last (if it fails, 0.16.6 can only be put back at
+  home).
+
+Fixes made after this review, before the gate (Stages 1–2 scope, 9.0; no
+Wi-Fi state machine, no network switch changed): I10 (SD work without the
+engine lock) and I11 (503 causes, lock holder, engine round, build time).
+Still open: the network switch holding the lock (Stage 4 lock rule, 9.4);
+"/" sent from the server task (I9, owner's choice later); the report fields
+that read 0 (Stage 4/7). Residual risk: the engine task writes the raw log
+itself (`writeRecord()` → `logFile`), so a slow card write or a card access
+running beside it can still stall one engine round; the report's new
+"longest round of its own work" measures it. Moving those writes to their own
+writer is part of the task/core review after Wi-Fi 2.0 (HANDOVER "Tasks").
 
 Stage status after these reports: Stage 1 bench items seen (20 MHz / 600 s /
 DK / 19.50 dBm, per-phone RSSI, 2 trace lines for a 2 min router loss);

@@ -92,11 +92,17 @@ bool engineTaskOn=false;
 // waits for the lock, the longest wait and how often it waited over 100 ms.
 volatile uint32_t engineBeat=0,engineWaitSince=0;
 uint32_t engineMaxWaitMs=0,engineSlowWaits=0;
+char engineMaxWaitBy[16]="";   // the task holding the lock when the longest wait began
+uint32_t engineMaxRoundMs=0;    // longest round of the engine task's own work (raw SD writes included)
 // Macros, not functions: Arduino puts its prototypes before the first function.
 // The loop holds engineMx whenever it exists (also without the engine task),
 // so web handlers in the server task never run beside the loop's work.
 #define netWaitBegin() do{if(engineMx)xSemaphoreGive(engineMx);}while(0)
 #define netWaitEnd() do{if(engineMx)xSemaphoreTake(engineMx,portMAX_DELAY);}while(0)
+// SD card work without the engine lock (sdGapBegin/End in storage.ino): how
+// many tasks are inside the card right now with the lock let go. Changed only
+// while holding engineMx; nothing unmounts the card while it is not 0.
+volatile uint8_t sdOffLock=0;
 
 Web web;  // esp_http_server adapter (httpd.h, httpd.ino)
 DlStat dlStat,spStat;  // last export; last speed test
@@ -551,7 +557,7 @@ void loop(){
   serviceDiag();
   if(!engineTaskOn){serviceFast();serviceEngines();}
   part(2);
-  serviceRawCleanup();
+  serviceSdWalk();
   part(3);
   serviceHistory();
   part(4);

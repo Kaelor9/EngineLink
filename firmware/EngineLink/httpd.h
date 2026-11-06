@@ -40,6 +40,9 @@ struct WebCtx {
 // Counters for the report (plan 6.8 HTTP block).
 struct HttpdStats {
   uint32_t requests = 0, async = 0, busy503 = 0, rejected = 0, sendFails = 0;
+  // busy503 by cause: the engine lock not free within 2 s, another download
+  // running (or its queue full), a download that waited 10 s for the lock.
+  uint32_t busyLock = 0, busyXfer = 0, busyXferLock = 0, busyAtMs = 0; char busyPath[40] = {};
   uint32_t opens = 0, closes = 0, openNow = 0, openMax = 0, external2xx = 0, xferWaitMs = 0;
   uint32_t slowMs = 0; char slowPath[40] = {};
 };

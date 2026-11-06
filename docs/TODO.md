@@ -204,15 +204,31 @@ off and on; boot with router; power off/on 3 times; speed in both modes.
 
 - **After the 2026-11-06 bench reports (plan 13.6.1):** the Stage 0 gate is
   still unclassified. Next, in this order:
-  1. Boat, 12 V only, 0.16.6, iPhone + PC on the own Wi-Fi: 15 min router on,
-     then 5 min router powered off (plan 13.6 step 3). This decides the gate.
-  2. "Test speed" ×5 alternating iPhone and a mains-powered PC, same spot
-     (phone power save vs channel).
-  3. Say which device the boat router is (a phone hotspot would explain the
-     beacon losses).
-  Small fixes waiting for the owner's go: `/api/sd/info` releasing the engine
-  lock while it counts files (7.3 s wait seen); hide the router name in the
-  committed test evidence.
+  1. Boat, 12 V only, **0.16.6 as installed now**, iPhone + PC on the own
+     Wi-Fi: 15 min router on, then 5 min router powered off (plan 13.6 step
+     3). This decides the gate. Conditions (13.6.1): no router saved on
+     EngineLink; scan for networks before and after only (note the router's
+     channel and dBm); same mounting place; J1708 and NMEA 2000 connected;
+     send the Wi-Fi report. Unstable both ways: 10 min on a USB power bank at
+     the same place before any scope work.
+  2. During it, "Test speed" ×5 alternating iPhone and PC (phone power save vs
+     channel; not a pass criterion).
+  3. ~~Say which device the bench router is~~: a dedicated 4G router (owner);
+     its losses go to Stage 5 diagnostics.
+  Done 2026-11-06 (owner's go): SD card work without the engine lock
+  (`/api/sd/info`, clean-up, Wi-Fi log, wipe; plan I10), 503 causes and the
+  engine lock holder in the report (I11), router name hidden in the test
+  evidence. *Built*; bench check after the boat test: install the new
+  `enginelink-update.bin` from a file, open Settings (SD card line shows
+  "Reading the card…" then the size), send the Wi-Fi report: engine task
+  longest wait and the lock holder it names; then the remaining Stage 2 rows
+  of `docs/releases/v0.16.6.md`.
+
+- **Task and core review after Wi-Fi 2.0 acceptance** (separate task, not
+  before 9.9 passed): measurements first (the report's lock holder and engine
+  round), then the three steps in HANDOVER "Tasks and cores": the loop takes
+  `engineMx` around shared data only; SD writes (raw log included) through
+  one writer task with a bounded queue; `/api/live` from a snapshot.
 
 ## Previous boat checks
 

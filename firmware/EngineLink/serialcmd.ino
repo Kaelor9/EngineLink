@@ -20,15 +20,37 @@ static void wifiStamp(String &s){
   else snprintf(b,sizeof(b),"up %lus",(unsigned long)(millis()/1000));
   s+=b;
 }
+// Lines wait in RAM and serviceWifiLog() writes them in one go with the
+// engine lock let go: opening the file searches the root directory, up to
+// ~0.3 s on a card with many logs (plan 13.6.1). Bounded; the count of
+// lines dropped while the card was missing or slow is logged with the next.
+static const size_t WIFI_PENDING_MAX=3072;
+static String wifiPending;
+static uint32_t wifiDropped=0;
 void wifiLog(const String &what){
-  File f=wifiOpen("/WIFI.LOG");if(!f)return;
-  String s;wifiStamp(s);s+="  ";s+=what;s+='\n';f.print(s);f.close();
+  if(!sdReady)return;
+  String s;wifiStamp(s);s+="  ";s+=what;s+='\n';
+  if(wifiPending.length()+s.length()>WIFI_PENDING_MAX){++wifiDropped;return;}
+  wifiPending+=s;
+}
+static void wifiFlush(){
+  if(!wifiPending.length()&&!wifiDropped)return;
+  String out(std::move(wifiPending));wifiPending=String();
+  if(wifiDropped){String d;wifiStamp(d);d+="  (";d+=wifiDropped;d+=" Wi-Fi log lines dropped)\n";out+=d;wifiDropped=0;}
+  const bool gap1=sdGapBegin();
+  File f=wifiOpen("/WIFI.LOG");if(f){f.print(out);f.close();}
+  sdGapEnd(gap1);
 }
 void saveWifiReport(){
-  File f=wifiOpen("/WIFIREP.TXT");if(!f)return;
+  if(!sdReady||!cardInserted())return;
   String s="\n\n######## ";wifiStamp(s);s+=" ########\n";
   String r=buildNetworkReport();if(cfg.ssid.length()>=3)r.replace(cfg.ssid,"<router name hidden>");
-  f.print(s);f.print(r);f.close();wifiReportSavedAt=millis()?millis():1;
+  const bool gap2=sdGapBegin();
+  File f=wifiOpen("/WIFIREP.TXT");
+  const bool saved=(bool)f;
+  if(saved){f.print(s);f.print(r);f.close();}
+  sdGapEnd(gap2);
+  if(saved)wifiReportSavedAt=millis()?millis():1;
 }
 // New Wi-Fi events from the RAM trace go to /WIFI.LOG.
 void serviceWifiLog(){
@@ -50,6 +72,7 @@ void serviceWifiLog(){
     }
     wifiLogged=traceTotal;
   }
+  wifiFlush();
   if((uint32_t)(millis()-wifiReportSavedAt)>=1800000UL||(!wifiReportSavedAt&&millis()>120000UL))saveWifiReport();
 }
 // Writes everything when a serial monitor reads; gives up after 2 s stuck.

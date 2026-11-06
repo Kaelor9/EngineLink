@@ -5,7 +5,7 @@
 
 ## Source material
 
-All five primary Wi-Fi reports below are preserved **verbatim** in this folder, including their embedded machine-readable JSON. These are user-supplied tests, not simulated runs.
+All five primary Wi-Fi reports below are preserved in this folder, including their embedded machine-readable JSON, verbatim except for one edit: the router's network name is replaced by `<router name hidden>` (2026-11-06, privacy; the earlier commits of this folder still contain it). These are user-supplied tests, not simulated runs.
 
 | File | Setup | Samples | Mean throughput | Mean request RTT | AP client RSSI at report | HTTP send failures |
 | --- | --- | ---: | ---: | ---: | ---: | ---: |
@@ -13,7 +13,7 @@ All five primary Wi-Fi reports below are preserved **verbatim** in this folder, 
 | [LAB-1.txt](LAB-1.txt) | LAB-1 standalone | 7 | 83.1 kB/s | 97.4 ms | -40 dBm | 0 |
 | [USB-2.txt](USB-2.txt) | USB-2 standalone | 5 | 707.1 kB/s | 13 ms | -40 dBm | 0 |
 | [STABILITY-30MIN.txt](STABILITY-30MIN.txt) | standalone, two clients, 2239 s uptime | 12 | 793.7 kB/s | 11.6 ms | -48 / -44 dBm | 0 |
-| [ROUTER.txt](ROUTER.txt) | router `Maggan`, then recovery AP | 0 | n/a | n/a | -40 dBm on recovery AP | 14 |
+| [ROUTER.txt](ROUTER.txt) | router (name hidden), then recovery AP | 0 | n/a | n/a | -40 dBm on recovery AP | 14 |
 
 **Important controls/limitations:**
 - All throughput numbers above are **client downloads on the board's own SoftAP**, not router throughput. The `ROUTER.txt` report contains **no router speed measurement**.
@@ -53,4 +53,4 @@ Do **not** conflate wrong-password WPA failures with the later beacon-loss event
 3. **Stage 2 partially demonstrated on hardware** (self-test, app, throughput, three security cases, two-client run), not all plan §9.2 acceptance rows completed. **Stage 0 not formally passed**; boat RF/router-off comparison and complete power-path characterization from §13.6 were not supplied. The old-firmware A/B comparison was not controlled.
 4. Preserve the user's settings and SD data. No firmware changes, branch merges, or releases in this evidence-only commit. Respect the draft PR #160 and boat acceptance gate (§9.9).
 
-**Privacy/provenance:** owner-submitted Wi-Fi reports contain router SSIDs, local addresses and station maker prefixes, but no router passwords. The personal `EngineLink-settings(1).json` backup was deliberately excluded as unnecessary for this diagnosis.
+**Privacy/provenance:** owner-submitted Wi-Fi reports contain local addresses and station maker prefixes (two of three are randomised private addresses), no router passwords; the router SSID is hidden. The router is a dedicated 4G router (owner, 2026-11-06), not a phone hotspot. The personal `EngineLink-settings(1).json` backup was deliberately excluded as unnecessary for this diagnosis.

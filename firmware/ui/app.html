@@ -404,7 +404,9 @@ async function load(what){
     if(what==='fuel')S.fuel=await get('/api/fuel',5000);
     if(what==='econ')S.econ=await get('/api/economy',5000);
     if(what==='diag')S.diag=await get('/api/diag',5000);
-    if(what==='sd')S.sd=await get('/api/sd/info',8000);
+    if(what==='sd'){S.sd=await get('/api/sd/info',8000);
+      // The board counts the card in the background: ask again until it is done (at most ~30 s).
+      if(S.sd&&S.sd.counting){if((S.sdAsk=(S.sdAsk||0)+1)<=20)setTimeout(()=>load('sd'),1500);}else S.sdAsk=0;}
     if(what==='state'){S.state=await get('/api/state',6000);
       // New firmware on the board: load its app instead of this old copy.
       if(S.state&&S.state.build){if(!S.bootBuild)S.bootBuild=S.state.build;else if(S.bootBuild!==S.state.build&&!BASE)location.reload();}}
@@ -1453,7 +1455,7 @@ function vSettings(){
     <div class="row"><span class="rt">Server</span><input class="field" style="width:170px;text-align:right" data-i="ntpServer" value="${esc(c.ntpServer)}" aria-label="NTP server"></div></div></div>`;
   // SD card
   const sd=S.sd;
-  h+=`<div class="hd">SD card</div><div class="sec"><div class="rowx"><div class="cth"><span class="rt">Storage</span><span class="sub">${sd&&sd.ok?NF(sd.usedMB/1024,1)+' of '+NF(sd.totalMB/1024,1)+' GB used':sd&&sd.inserted?'Card not readable':'No card'}</span></div>${sd&&sd.ok?`<div class="bar" style="height:6px;margin-top:8px"><i style="width:${clamp(sd.usedMB/Math.max(1,sd.totalMB)*100,1,100)}%;background:var(--teal)"></i></div>`:''}</div>
+  h+=`<div class="hd">SD card</div><div class="sec"><div class="rowx"><div class="cth"><span class="rt">Storage</span><span class="sub">${sd&&sd.ok?(sd.known===false?'Reading the card…':NF(sd.usedMB/1024,1)+' of '+NF(sd.totalMB/1024,1)+' GB used'):sd&&sd.inserted?'Card not readable':'No card'}</span></div>${sd&&sd.ok&&sd.known!==false?`<div class="bar" style="height:6px;margin-top:8px"><i style="width:${clamp(sd.usedMB/Math.max(1,sd.totalMB)*100,1,100)}%;background:var(--teal)"></i></div>`:''}</div>
     ${row('exportGo','','Export data','Trips as a report or a spreadsheet',rv('Choose trips'))}
     ${row('cycle','rawKeep','Keep raw engine data','Trip summaries are always kept',rv(c.rawKeep?c.rawKeep>=365?NF(c.rawKeep/365,0)+' year'+(c.rawKeep>=730?'s':''):c.rawKeep+' days':'Forever'))}
     <button class="row" data-a="sheet" data-v="wipe"><span><span class="rt" style="color:var(--red)">Wipe SD card</span><span class="rh">Deletes all trips and logs on the card</span></span></button></div>`;
@@ -1992,7 +1994,7 @@ function renderSheet(){
       <div style="display:grid;grid-template-columns:1fr 2fr;gap:10px"><button class="btn" data-a="close">Cancel</button><button class="btn pri" data-a="notesSave">Save</button></div>`;
   }else if(k==='wipe'||k==='reset'){
     const sd=S.sd,wipe=k==='wipe',keep=S.d.keep!==false,ok=String(S.d.wipe||'').trim().toUpperCase()==='WIPE';
-    const gone=wipe?[['All trips and trip notes on the card',S.trips?S.trips.trips.length+' trips':''],['Raw engine data and test recordings',sd?NF(sd.rawMB,0)+' MB':''],['Exported files on the card',sd?sd.exports+' files':'']]:[['All settings and the Wi-Fi password',''],['Saved places and service dates',P.places.length+' places'],['Calibration and fuel fine-tuning','']].concat(keep?[]:[['All trips, notes, the fuel log and the SD card','']]);
+    const gone=wipe?[['All trips and trip notes on the card',S.trips?S.trips.trips.length+' trips':''],['Raw engine data and test recordings',sd&&sd.known!==false?NF(sd.rawMB,0)+' MB':''],['Exported files on the card',sd&&sd.known!==false?sd.exports+' files':'']]:[['All settings and the Wi-Fi password',''],['Saved places and service dates',P.places.length+' places'],['Calibration and fuel fine-tuning','']].concat(keep?[]:[['All trips, notes, the fuel log and the SD card','']]);
     const kept=wipe?['Trips, notes and the fuel log inside EngineLink','All settings, places and calibration']:(keep?['Trips, notes and the fuel log']:['Nothing']).concat(['The installed firmware version']);
     h=`${grab}<div style="display:flex;gap:12px;align-items:center"><span style="width:44px;height:44px;border-radius:14px;background:rgba(255,107,107,.14);display:flex;align-items:center;justify-content:center">${svg(IC.trash,22,'var(--red)',2)}</span><span style="font-size:22px;font-weight:600">${wipe?'Wipe the SD card?':'Factory reset?'}</span></div>
       <div class="s14 sub" style="margin-top:-4px">${wipe?'Everything on the card is deleted in one go. It cannot be undone.':'EngineLink goes back to how it came from the factory. It cannot be undone.'}</div>
@@ -2099,7 +2101,8 @@ const A={
   restart:async()=>{if(!confirm('Restart EngineLink now? The app reconnects by itself.'))return;act('/api/reboot',{});},
   resetKeep:()=>{S.d.keep=S.d.keep===false;renderSheet();},
   resetDo:async()=>{const r=await act('/api/factory-reset',{confirm:'ERASE',keep:S.d.keep===false?0:1});if(r.ok)history.back();},
-  wipeDo:async()=>{const r=await act('/api/sd/wipe',{confirm:'WIPE'});if(r.ok){history.back();load('sd');}},
+  // A full card takes well over 10 s to wipe (17.9 s seen); the board keeps reading the engines meanwhile.
+  wipeDo:async()=>{toast('Wiping the SD card…');const r=await post('/api/sd/wipe',{confirm:'WIPE'},180000);toast(r.message||(r.ok?'Done':'Something went wrong'));if(r.ok){history.back();load('sd');}},
   os:v=>{S.d.os=v;renderSheet();},
   androidAdd:async()=>{if(window._bip){window._bip.prompt();window._bip=null;history.back();}else toast('Open the ⋮ menu in Chrome and choose "Add to Home screen"');},
   // Places, values

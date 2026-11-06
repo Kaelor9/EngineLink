@@ -2,57 +2,132 @@
 
 // ---------- SD card: info, wipe, clean-up, export ----------
 bool isRawName(const String &n){return n.startsWith("EL")||n.startsWith("TEST")||(n.startsWith("T")&&n.endsWith(".CSV")&&n!="TRIPS.CSV");}
-SdCounts sdCounts(){
-  SdCounts k;
-  if(!sdReady)return k;
-  File root=SD.open("/");
-  if(!root)return k;
-  for(File f=root.openNextFile();f;f=root.openNextFile()){
-    String n=f.name();
-    if(n.startsWith("/"))n=n.substring(1);
-    ++k.files;
-    if(!f.isDirectory()&&isRawName(n)){k.rawBytes+=f.size();++k.rawFiles;}
-    else if(!f.isDirectory()&&n.startsWith("EXPORT"))++k.exports;
-    f.close();
-  }
-  root.close();
-  return k;
+// ---- One walk through the root directory, a few entries per loop pass ----
+// Every open by name searches the whole directory, so on a card with many
+// logs each entry costs 0.1-0.4 s: counting in one go held the engine lock
+// for 7.3 s (/api/sd/info, plan 13.6.1) and four entries per pass up to
+// 485 ms. Each card access now runs with the lock let go (sdGapBegin); the
+// results are written with it held. The same walk counts for /api/sd/info
+// and, once a day, finds raw logs older than cfg.rawKeepDays.
+static File walkRoot;
+static bool walkOn=false,walkClean=false,walkRemoving=false,sdCountWanted=false,sdKnown=false;
+static SdCounts walkK,sdK;               // being counted; last finished count
+static uint64_t sdUsedB=0,sdTotalB=0;
+static uint32_t sdCountedAt=0;
+static String doomed[16];
+static uint8_t nDoomed=0,nRemoved=0;
+static time_t walkLimit=0;
+// Before any unmount (the loop, or a handler while the loop waits for the lock).
+void sdWalkStop(){
+  if(walkRoot)walkRoot.close();
+  walkOn=walkRemoving=false;nDoomed=nRemoved=0;sdKnown=false;
+  for(String &d:doomed)d=String();
 }
+static bool walkCardGone(){return !sdReady||!cardInserted()||calActive||otaActive;}
+void serviceSdWalk(){
+  if(walkRemoving){
+    if(walkCardGone()){sdWalkStop();return;}
+    if(nRemoved>=nDoomed){walkRemoving=false;nDoomed=nRemoved=0;sdCountedAt=0;return;}
+    if(webXferBusy())return;   // a download may be reading one of them
+    const String path=doomed[nRemoved];doomed[nRemoved++]=String();
+    if(path==sessionName||path==calName)return;
+    const bool gap1=sdGapBegin();SD.remove(path);sdGapEnd(gap1);
+    return;
+  }
+  if(walkOn){
+    if(walkCardGone()){sdWalkStop();return;}
+    for(uint8_t k=0;k<4;k++){
+      String name;bool dir=false;size_t size=0;time_t w=0;
+      const bool gap2=sdGapBegin();
+      File f=walkRoot.openNextFile();
+      const bool got=(bool)f;
+      if(got){name=f.name();dir=f.isDirectory();size=f.size();w=f.getLastWrite();f.close();}
+      sdGapEnd(gap2);
+      if(!got)break;
+      if(name.startsWith("/"))name=name.substring(1);
+      ++walkK.files;
+      if(!dir&&isRawName(name)){
+        walkK.rawBytes+=size;++walkK.rawFiles;
+        if(walkClean&&nDoomed<16&&w>1700000000&&w<walkLimit&&("/"+name)!=sessionName&&("/"+name)!=calName)doomed[nDoomed++]="/"+name;
+      }else if(!dir&&name.startsWith("EXPORT"))++walkK.exports;
+      if(k==3)return;   // more next pass
+    }
+    // End of the directory (or a read error: a removed card is noticed above).
+    walkRoot.close();
+    uint64_t used=0,total=0;
+    const bool gap3=sdGapBegin();
+    if(cardInserted()){total=SD.totalBytes();used=SD.usedBytes();}   // FAT free count: can be slow once after a mount
+    sdGapEnd(gap3);
+    walkOn=false;
+    if(walkCardGone()){sdWalkStop();return;}
+    sdK=walkK;sdUsedB=used;sdTotalB=total;sdKnown=true;sdCountedAt=millis()?millis():1;
+    walkRemoving=walkClean&&nDoomed>0;nRemoved=0;
+    return;
+  }
+  if(walkCardGone())return;
+  bool clean=false;
+  if(cfg.rawKeepDays&&validWall()&&(lastRawCleanup?(uint32_t)(millis()-lastRawCleanup)>=86400000UL:millis()>=120000)){
+    clean=true;lastRawCleanup=millis();
+  }
+  if(!clean&&!sdCountWanted)return;
+  sdCountWanted=false;
+  walkClean=clean;walkLimit=time(nullptr)-(time_t)cfg.rawKeepDays*86400;
+  walkK=SdCounts();nDoomed=nRemoved=0;
+  const bool gap4=sdGapBegin();
+  walkRoot=SD.open("/");
+  sdGapEnd(gap4);
+  walkOn=(bool)walkRoot;
+}
+// Never touches the card: the last finished count, and a new one asked from
+// the loop when it is older than 10 s. "counting" tells the app to ask again.
 void handleSdInfo(){
-  const SdCounts k=sdCounts();
+  const bool fresh=sdKnown&&sdCountedAt&&(uint32_t)(millis()-sdCountedAt)<10000UL;
+  if(sdReady&&!fresh&&!walkOn&&!walkRemoving)sdCountWanted=true;
+  const bool counting=sdReady&&(walkOn||sdCountWanted)&&!calActive&&!otaActive;
   String s="{\"ok\":";s+=sdReady?"true":"false";
   s+=",\"inserted\":";s+=cardInserted()?"true":"false";
   s+=",\"logging\":";s+=sdLogging?"true":"false";
-  s+=",\"usedMB\":";s+=(unsigned long)sdUsedMB();s+=",\"totalMB\":";s+=(unsigned long)sdTotalMB();
-  s+=",\"files\":";s+=k.files;s+=",\"rawMB\":";jnum(s,k.rawBytes/1048576.0,1);s+=",\"rawFiles\":";s+=k.rawFiles;
-  s+=",\"exports\":";s+=k.exports;
+  s+=",\"known\":";s+=sdReady&&sdKnown?"true":"false";
+  s+=",\"counting\":";s+=counting?"true":"false";
+  s+=",\"usedMB\":";s+=(unsigned long)(sdUsedB/1048576ULL);s+=",\"totalMB\":";s+=(unsigned long)(sdTotalB/1048576ULL);
+  s+=",\"files\":";s+=sdK.files;s+=",\"rawMB\":";jnum(s,sdK.rawBytes/1048576.0,1);s+=",\"rawFiles\":";s+=sdK.rawFiles;
+  s+=",\"exports\":";s+=sdK.exports;
   s+=",\"trips\":";s+=tripCount;s+=",\"fuel\":";s+=fuelCount;
   s+=",\"status\":";jsonString(s,sdMessage);
   s+='}';
   sendJSON(200,s);
 }
+// Wipe and factory reset (a web handler holding the engine lock): every card
+// access with the lock let go, and a short sleep every 16 files so the main
+// loop on the same core gets its turn and feeds its watchdog.
 uint32_t removeTree(const String &path){
   uint32_t n=0;
+  const bool gap5=sdGapBegin();
   File dir=SD.open(path);
-  if(!dir)return 0;
-  if(!dir.isDirectory()){dir.close();return SD.remove(path)?1:0;}
+  const bool isDir=dir&&dir.isDirectory();
+  if(dir&&!isDir){dir.close();n=SD.remove(path)?1:0;}
+  sdGapEnd(gap5);
+  if(!isDir)return n;
   static uint8_t breath=0;
-  for(File f=dir.openNextFile();f;f=dir.openNextFile()){
-    // Runs in a web handler holding the engine lock: let the main loop and
-    // the engine task have a turn now and then on a card with many files.
-    if(!(++breath&15)){netWaitBegin();vTaskDelay(pdMS_TO_TICKS(20));netWaitEnd();}
-    String child=String(f.path());
-    const bool sub=f.isDirectory();
-    f.close();
-    if(sub){n+=removeTree(child);SD.rmdir(child);}else if(SD.remove(child))++n;
+  for(;;){
+    const bool gap6=sdGapBegin();
+    File f=dir.openNextFile();
+    String child;bool sub=false;
+    if(f){child=String(f.path());sub=f.isDirectory();f.close();if(!sub&&SD.remove(child))++n;}
+    if(!(++breath&15))vTaskDelay(pdMS_TO_TICKS(20));
+    sdGapEnd(gap6);
+    if(!child.length())break;
+    if(sub){n+=removeTree(child);const bool gap7=sdGapBegin();SD.rmdir(child);sdGapEnd(gap7);}
   }
-  dir.close();
+  const bool gap8=sdGapBegin();dir.close();sdGapEnd(gap8);
   return n;
 }
 void handleSdWipe(){
   if(web.arg("confirm")!="WIPE"){reply(false,"Type WIPE to confirm",400);return;}
   if(!sdReady||!cardInserted()){reply(false,"No SD card",409);return;}
   if(webXferBusy()){reply(false,"A download is running; try again when it has finished",409);return;}
+  if(sdOffLock){reply(false,"The SD card is busy; try again in a moment",409);return;}
+  sdWalkStop();
   if(calActive)finishCalibration(false);
   const bool wasLogging=sdLogging;
   if(sdLogging)stopLog();
@@ -62,41 +137,6 @@ void handleSdWipe(){
   refreshTestAvailable();
   if(wasLogging)initSD();
   reply(true,String("SD card wiped: ")+n+" files deleted");
-}
-// Deletes raw logs older than the chosen number of days (needs the clock).
-// Once a day: delete raw logs older than cfg.rawKeepDays. In small steps
-// (a few directory entries, or one file, per loop pass): done in one go it
-// held the main loop, the web server and engine reading for 7.4 s (#141).
-void serviceRawCleanup(){
-  static File root;
-  static String doomed[16];
-  static uint8_t n=0,removed=0;
-  static time_t limit=0;
-  static bool scanning=false,removing=false;
-  if(scanning||removing){
-    if(!sdReady||calActive||otaActive){if(root)root.close();scanning=removing=false;n=removed=0;return;}
-    if(removing){
-      if(removed<n){SD.remove(doomed[removed]);doomed[removed++]="";return;}
-      removing=false;n=removed=0;return;
-    }
-    for(uint8_t k=0;k<4;k++){
-      File f=root.openNextFile();
-      if(!f||n>=16){if(f)f.close();root.close();scanning=false;removing=n>0;removed=0;return;}
-      String name=f.name();if(name.startsWith("/"))name=name.substring(1);
-      const time_t w=f.getLastWrite();
-      if(!f.isDirectory()&&isRawName(name)&&w>1700000000&&w<limit&&("/"+name)!=sessionName&&("/"+name)!=calName)doomed[n++]="/"+name;
-      f.close();
-    }
-    return;
-  }
-  if(!cfg.rawKeepDays||!sdReady||!validWall()||calActive||otaActive)return;
-  if(lastRawCleanup&&(uint32_t)(millis()-lastRawCleanup)<86400000UL)return;
-  if(!lastRawCleanup&&millis()<120000)return;
-  lastRawCleanup=millis();
-  limit=time(nullptr)-(time_t)cfg.rawKeepDays*86400;
-  root=SD.open("/");
-  if(!root)return;
-  n=removed=0;scanning=true;
 }
 void handleExportTrips(){
   uint32_t ids[MAX_TRIPS];uint8_t n;

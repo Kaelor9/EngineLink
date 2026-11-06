@@ -13,12 +13,18 @@ static TaskHandle_t xferTask = nullptr;
 static QueueHandle_t xferQ = nullptr;
 static volatile bool xferBusy = false, xferAbort = false;
 static volatile int xferFd = -1;   // the socket a long transfer is using
+static volatile uint8_t sendsOffLock = 0;   // replies sending with engineMx let go (an SD file may be open: sdUnmountBlocked)
 struct XferJob { httpd_req_t *r; WebFn fn; uint8_t flags; };
 static const WebRoute optionsRoute = {"/*", HTTP_OPTIONS, nullptr, R_NOLOCK};
 
 // The request of the task that calls: the server task or the xfer task.
 static WebCtx &cx() { return (xferTask && xTaskGetCurrentTaskHandle() == xferTask) ? xferCtx : srvCtx; }
 bool webXferBusy() { return xferBusy; }
+bool webSendInFlight() { return sendsOffLock != 0; }
+void webXferAbort() { if (xferBusy) xferAbort = true; }   // the transfer stops at its next piece
+static void count503(uint32_t &cause, httpd_req_t *r) {   // by cause, for the report (plan 13.6.1)
+  ++httpdStats.busy503; ++cause; strlcpy(httpdStats.busyPath, r->uri, sizeof(httpdStats.busyPath)); httpdStats.busyAtMs = millis();
+}
 // Bytes of stack never used so far (report, plan 6.6 "Memory").
 uint32_t webStackLeft(bool xfer) {
   const TaskHandle_t t = xfer ? xferTask : xTaskGetHandle("httpd");
@@ -57,9 +63,10 @@ static esp_err_t io(WebCtx &c, const char *p, size_t n, bool chunk) {
   if (&c == &xferCtx && xferAbort) c.failed = true;
   if (c.failed) return ESP_FAIL;
   const bool had = c.locked;
+  if (had) sendsOffLock = sendsOffLock + 1;   // changed only while holding engineMx
   ctxUnlock(c);
   const esp_err_t e = chunk ? httpd_resp_send_chunk(c.r, p, n) : httpd_resp_send(c.r, p, n);
-  if (had && xSemaphoreTake(engineMx, portMAX_DELAY) == pdTRUE) c.locked = true;
+  if (had && xSemaphoreTake(engineMx, portMAX_DELAY) == pdTRUE) { c.locked = true; if (sendsOffLock) sendsOffLock = sendsOffLock - 1; }
   if (e != ESP_OK) { c.failed = true; ++httpdStats.sendFails; }
   return e;
 }
@@ -105,7 +112,7 @@ static void xferWorker(void *) {
     WebCtx &x = xferCtx;
     const uint32_t t0 = millis();
     if ((j.flags & R_NOLOCK) || ctxLock(x, 10000)) { httpdStats.xferWaitMs = millis() - t0; j.fn(); }
-    else { ++httpdStats.busy503; x.code = 503; web.send(503, "text/plain", "EngineLink is busy; try again"); }
+    else { count503(httpdStats.busyXferLock, j.r); x.code = 503; web.send(503, "text/plain", "EngineLink is busy; try again"); }
     const int fd = httpd_req_to_sockfd(j.r);
     // A broken reply: end the connection before the server watches it again.
     if (finish(x, t0) != ESP_OK && fd >= 0) shutdown(fd, SHUT_RDWR);
@@ -156,18 +163,18 @@ static esp_err_t webDispatch(httpd_req_t *r) {
   whoIsAsking(c);
   if (rt.flags & R_ASYNC) {
     httpd_req_t *copy = nullptr;
-    if (xferBusy || httpd_req_async_handler_begin(r, &copy) != ESP_OK) { ++httpdStats.busy503; return answer(c, 503, "Another download is running; try again when it has finished"); }
+    if (xferBusy || httpd_req_async_handler_begin(r, &copy) != ESP_OK) { count503(httpdStats.busyXfer, r); return answer(c, 503, "Another download is running; try again when it has finished"); }
     WebCtx &x = xferCtx;
     resetCtx(x, copy);
     strlcpy(x.query, c.query, WEB_QUERY); strlcpy(x.origin, c.origin, sizeof(x.origin));
     x.onAp = c.onAp; x.external = c.external;
     xferFd = httpd_req_to_sockfd(copy); xferBusy = true;
     const XferJob j = {copy, rt.fn, rt.flags};
-    if (xQueueSend(xferQ, &j, 0) != pdTRUE) { xferBusy = false; httpd_req_async_handler_complete(copy); return answer(c, 503, "Busy"); }
+    if (xQueueSend(xferQ, &j, 0) != pdTRUE) { xferBusy = false; httpd_req_async_handler_complete(copy); count503(httpdStats.busyXfer, r); return answer(c, 503, "Busy"); }
     ++httpdStats.async;
     return ESP_OK;
   }
-  if (!(rt.flags & R_NOLOCK) && !ctxLock(c, 2000)) { ++httpdStats.busy503; return answer(c, 503, "EngineLink is busy; try again"); }
+  if (!(rt.flags & R_NOLOCK) && !ctxLock(c, 2000)) { count503(httpdStats.busyLock, r); return answer(c, 503, "EngineLink is busy; try again"); }
   rt.fn();
   return finish(c, t0);
 }

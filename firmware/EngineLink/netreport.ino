@@ -44,7 +44,7 @@ void appendApLinkJson(String &s){
 // data. Usable by direct IP on router Wi-Fi or after rescue AP returns.
 String makeNetworkHealthJson(){
   String s;s.reserve(3300);
-  s+="{\"version\":";jsonString(s,EL_VERSION);
+  s+="{\"version\":";jsonString(s,EL_VERSION);s+=",\"build\":\"" __DATE__ " " __TIME__ "\"";
   s+=",\"uptimeMs\":";s+=(unsigned long)millis();
   s+=",\"mode\":";
   jsonString(s,routerHold?"rescue":routerConfigured()?"router":"standalone");
@@ -78,7 +78,7 @@ String makeNetworkHealthJson(){
   {int8_t q=0;s+=",\"txDriverQdbm\":";if(esp_wifi_get_max_tx_power(&q)==ESP_OK)s+=(int)q;else s+="null";}
   appendApLinkJson(s);
   s+=",\"loopParts\":[";for(uint8_t i=0;i<LOOP_PARTS;i++){if(i)s+=',';s+=loopPartMaxMs[i];}s+=']';
-  s+=",\"engineMaxWaitMs\":";s+=engineMaxWaitMs;
+  s+=",\"engineMaxWaitMs\":";s+=engineMaxWaitMs;s+=",\"engineMaxWaitBy\":";jsonString(s,String(engineMaxWaitBy));s+=",\"engineSlowWaits\":";s+=engineSlowWaits;s+=",\"engineMaxRoundMs\":";s+=engineMaxRoundMs;
   s+=",\"apStations\":";s+=(unsigned)WiFi.softAPgetStationNum();
   s+=",\"apJoins\":";s+=(unsigned long)apJoins;s+=",\"apLeaves\":";s+=(unsigned long)apLeaves;s+=",\"apDhcpLeases\":";s+=(unsigned long)apDhcpLeases;
   s+=",\"apLeaveReason\":";s+=(unsigned)apReason;s+=",\"apRestarts\":";s+=apRestarts;
@@ -131,7 +131,7 @@ String buildNetworkReport(){
   String s;s.reserve(6500);
   s+="ENGINELINK - WI-FI REPORT\n";
   s+="========================\n\n";
-  s+="Firmware: ";s+=EL_VERSION;s+="\n";
+  s+="Firmware: ";s+=EL_VERSION;s+=" (built " __DATE__ " " __TIME__ ")\n";   // tells two bench builds of one version apart
   s+="Uptime: ";s+=millis()/1000UL;s+=" seconds\n";
   s+="Mode: ";s+=routerHold?"Recovery (EngineLink Wi-Fi)":routerConfigured()?"Router (station)":"Standalone (EngineLink Wi-Fi)";s+="\n";
   s+="Wi-Fi radio mode: ";s+=(unsigned)WiFi.getMode();s+=" (1=station, 2=access point)\n";
@@ -248,8 +248,10 @@ String buildNetworkReport(){
   s+="Chip: ";s+=ESP.getChipModel();s+=" rev ";s+=ESP.getChipRevision();s+=" · ";s+=ESP.getCpuFreqMHz();s+=" MHz · Arduino core ";s+=ESP_ARDUINO_VERSION_MAJOR;s+=".";s+=ESP_ARDUINO_VERSION_MINOR;s+=".";s+=ESP_ARDUINO_VERSION_PATCH;s+=" · IDF ";s+=esp_get_idf_version();s+="\n";
   s+="Memory: free ";s+=ESP.getFreeHeap()/1024;s+=" KB, lowest ";s+=ESP.getMinFreeHeap()/1024;s+=" KB, largest block ";s+=ESP.getMaxAllocHeap()/1024;s+=" KB · PSRAM free ";s+=ESP.getFreePsram()/1024;s+=" KB\n";
   s+="Main loop: longest pass ";s+=loopMaxMs;s+=" ms · engine reading in own task: ";s+=engineTaskOn?"yes":"no";
-  s+=" · engine task longest wait ";s+=engineMaxWaitMs;s+=" ms\n";
-  {static const char *part[LOOP_PARTS]={"(web: own task)","sd","diag","raw cleanup","history","network","led","serial","other"};
+  s+=" · engine task longest wait ";s+=engineMaxWaitMs;s+=" ms";
+  if(engineMaxWaitBy[0]){s+=" (lock held by ";s+=engineMaxWaitBy;s+=" when it began)";}
+  s+=" · waits over 100 ms: ";s+=engineSlowWaits;s+=" · longest round of its own work ";s+=engineMaxRoundMs;s+=" ms\n";
+  {static const char *part[LOOP_PARTS]={"(web: own task)","sd","diag","sd scan","history","network","led","serial","other"};
    s+="Longest part of the main loop (ms):";
    for(uint8_t i=0;i<LOOP_PARTS;i++){s+=i?", ":" ";s+=part[i];s+=' ';s+=loopPartMaxMs[i];}s+="\n";}
   s+="Reset reason: ";s+=(int)esp_reset_reason();s+=" (1 power on, 3 software/update, 4 crash, 5/6/7 watchdog, 9 brownout, 11 reset over USB)\n";
@@ -262,6 +264,10 @@ String buildNetworkReport(){
   {const HttpdStats &h=httpdStats;
    s+="Requests: ";s+=h.requests;s+=" · long transfers: ";s+=h.async;s+=" · answered busy (503): ";s+=h.busy503;
    s+=" · refused by the security checks: ";s+=h.rejected;s+=" · send failures (timeout or phone gone): ";s+=h.sendFails;s+="\n";
+   if(h.busy503){
+     s+="Busy (503) by cause: engine lock not free in 2 s ";s+=h.busyLock;s+=" · another download running ";s+=h.busyXfer;
+     s+=" · download waited 10 s for the engine lock ";s+=h.busyXferLock;s+=" · last: ";s+=h.busyPath;s+=" at uptime ";s+=h.busyAtMs/1000;s+=" s\n";
+   }
    s+="Connections opened: ";s+=h.opens;s+=" · closed: ";s+=h.closes;s+=" · open now: ";s+=h.openNow;s+=" · most at once: ";s+=h.openMax;
    s+=" · successful answers to other devices: ";s+=h.external2xx;s+="\n";
    s+="Slowest request: ";s+=h.slowMs;s+=" ms (";s+=h.slowPath;s+=") · last transfer waited ";s+=h.xferWaitMs;s+=" ms for the engine lock\n";
@@ -327,6 +333,8 @@ void linkTuneTask(void *){
 void appendHttpdJson(String &s){
   const HttpdStats &h=httpdStats;
   s+=",\"httpdRequests\":";s+=h.requests;s+=",\"httpdAsync\":";s+=h.async;s+=",\"httpdBusy503\":";s+=h.busy503;
+  s+=",\"httpdBusyLock\":";s+=h.busyLock;s+=",\"httpdBusyXfer\":";s+=h.busyXfer;s+=",\"httpdBusyXferLock\":";s+=h.busyXferLock;
+  s+=",\"httpdBusyPath\":";jsonString(s,String(h.busyPath));s+=",\"httpdBusyAtMs\":";s+=h.busyAtMs;
   s+=",\"httpdRejected\":";s+=h.rejected;s+=",\"httpdSendFails\":";s+=h.sendFails;
   s+=",\"httpdOpens\":";s+=h.opens;s+=",\"httpdCloses\":";s+=h.closes;s+=",\"httpdOpenNow\":";s+=h.openNow;s+=",\"httpdOpenMax\":";s+=h.openMax;
   s+=",\"httpdExternalOk\":";s+=h.external2xx;s+=",\"httpdSlowMs\":";s+=h.slowMs;s+=",\"httpdSlowPath\":";jsonString(s,String(h.slowPath));

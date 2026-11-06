@@ -33,11 +33,12 @@ assert "radioTestWanted=true" in body(ino,"void initializeWeb(){")
 # contract file (test_wifi_contract.py) checks that it stays gone.
 
 # USB serial must never block (#141: 2.2 s per print with a non-reading
-# host attached), and the daily SD clean-up runs in small steps (#141: 7.4 s).
+# host attached), and the daily SD clean-up runs in small steps (#141: 7.4 s),
+# now in the shared card walk with the engine lock let go (test_sd_engine_lock.py).
 setup=body(ino,"void setup(){")
 assert setup.index("Serial.begin(115200);") < setup.index("Serial.setTxTimeoutMs(0);")
-cleanup=body(ino,"void serviceRawCleanup(){")
-assert "for(uint8_t k=0;k<4;k++)" in cleanup and "static File root;" in cleanup
-assert "for(File f=root.openNextFile();" not in cleanup
+cleanup=body(ino,"void serviceSdWalk(){")
+assert "for(uint8_t k=0;k<4;k++)" in cleanup and "static File walkRoot;" in ino
+assert "for(File f=walkRoot.openNextFile();" not in cleanup
 
 print("Router throughput and export stability source checks passed")

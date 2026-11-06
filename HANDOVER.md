@@ -115,7 +115,42 @@ and diagnosis work). Core 1: the main loop, and since 0.16.6 the web server
 downloads. A mutex (`engineMx`) guards shared state: the loop holds it while it
 works, a web handler takes it (2 s, else 503) and lets go whenever it waits for
 the phone. Up to 0.16.5 the web server ran inside the loop, with extra
-listeners on ports 81 (live data, report) and 82 (speed test).
+listeners on ports 81 (live data, report) and 82 (speed test). Since the
+2026-11-06 fixes, slow SD card work (directory walk, Wi-Fi log, wipe) runs
+with the lock let go (`sdGapBegin/End`, plan 12.1 I10), and nothing unmounts
+the card while it does.
+
+**Tasks and cores (review 2026-11-06, as built; FreeRTOS priority in brackets).**
+
+| Core 0 | Core 1 |
+|---|---|
+| Wi-Fi driver (23), esp_timer (22), event loop (20), lwIP `tcpip` (18), J1708 receivers `J7RX`/`J6RX` (4), `engines` (3), `fw` GitHub worker (1), `link-tune` (1, goes in Stage 4), mDNS (1) | `httpd` web server (5), `xfer` long transfers (4), Arduino network events, main `loopTask` (1) |
+
+What the measurements say and what is deliberately left for later:
+
+- **The waits are lock waits, not CPU.** The engine task needs little CPU;
+  its long waits came from `engineMx` held by others (SD 7.3 s, network switch
+  1.5–2.5 s). The report now names the holder at the longest wait and the
+  engine task's own longest round, so later changes start from numbers.
+- **The loop holds `engineMx` almost all the time** and lets go once a pass
+  (`delay(1)`), so engine processing waits for the loop's pass (typically
+  5–70 ms). Frames are not lost meanwhile: the receivers stamp each frame when
+  the UART's hardware timeout ends it and queue it (2048 frames in PSRAM).
+- **Priority inheritance crosses cores.** While the engine task (3) waits for
+  the loop (1), the loop inherits 3, but `httpd` (5) and `xfer` (4) on core 1
+  still run before it.
+- **The engine task writes the raw log itself** (`writeRecord()`), so a slow
+  card write stalls one engine round while it holds the lock.
+- Engine work on core 0 beside the Wi-Fi driver is fine: the driver preempts
+  it for microseconds to milliseconds and the frame timestamps come from the
+  receivers.
+
+After Wi-Fi 2.0 acceptance (separate task, `docs/TODO.md`), in this order and
+only with measurements: the loop takes `engineMx` around shared data instead
+of holding it; raw-log and other SD writes go to one writer task with a
+bounded queue, so no SD operation runs in the engine task or under its lock;
+`/api/live` reads a snapshot the engine task publishes. Core affinity and
+priorities stay as they are unless a measurement shows a need.
 
 **KAD reading.** Request `01 43 21 hi lo cs`; our own request echoes on the bus
 about 8 ms later; the ECU answers `83 C1 <width>1 <value…> <cs>` (big-endian).
