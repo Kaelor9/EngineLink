@@ -202,6 +202,18 @@ off and on; boot with router; power off/on 3 times; speed in both modes.
   export `diff` against 0.16.5, upload a file once). Do the "before" export
   downloads on 0.16.5 first.
 
+- **After the 2026-11-06 bench reports (plan 13.6.1):** the Stage 0 gate is
+  still unclassified. Next, in this order:
+  1. Boat, 12 V only, 0.16.6, iPhone + PC on the own Wi-Fi: 15 min router on,
+     then 5 min router powered off (plan 13.6 step 3). This decides the gate.
+  2. "Test speed" ×5 alternating iPhone and a mains-powered PC, same spot
+     (phone power save vs channel).
+  3. Say which device the boat router is (a phone hotspot would explain the
+     beacon losses).
+  Small fixes waiting for the owner's go: `/api/sd/info` releasing the engine
+  lock while it counts files (7.3 s wait seen); hide the router name in the
+  committed test evidence.
+
 ## Previous boat checks
 
 - **Wi-Fi 0.15.0 test plan** (send a Wi-Fi report after each step; the report

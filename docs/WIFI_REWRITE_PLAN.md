@@ -1315,6 +1315,74 @@ For the record: the owner adds the LDO and buck part numbers, the USB/12 V
 ORing and the decoupling at the module to `docs/HARDWARE.md` during the next
 authorised change.
 
+### 13.6.1 Gate status after the owner's bench reports of 2026-11-06
+
+Evidence: `docs/test-evidence/wifi-0166-2026-11-06/` (eight 0.16.6 reports,
+oscilloscope notes). Assessment by the implementer, 2026-11-06, no code changed.
+
+**Gate: still unclassified.** No row of the decision table applies: step 1
+ran on 0.16.6 instead of 0.16.5, steps 2 and 3 were not run. What the
+evidence does support: the boat's failure (L2–L4: lease without TCP, code
+2/209 series) did **not** recur on the bench with 0.16.6 (30 min, two clients,
+0 AP leaves, 6658 successful answers, 0 send failures); the bench code 2/209
+entries are EngineLink's own mode changes (router attempt after 10 min,
+scan, password correction), not spontaneous series; H2 weakened on the bench
+(3.3 V never below 3.25 V) but not excluded on the boat (12 V and USB+12 V
+never measured); H4 (a degraded board) weakened, the same board delivers
+700–1100 kB/s; H1 versus H3 can only be told apart on the boat.
+
+**Minimal discriminating test: 13.6 step 3 with 0.16.6** (boat, 12 V only,
+iPhone + PC on the own Wi-Fi; 15 min router on, then 5 min router powered
+off). Stable both ways ⇒ H3 (the 0.16.2 AP settings, restored by Stage 1) and
+the gate closes; stable only with the router off ⇒ H1; unstable both ways ⇒
+step 4 on the 5 V and 12 V nodes while 12 V is connected. No further scope
+work otherwise.
+
+Findings from the reports (for Stages 4–7 and the owner):
+
+- **Throughput follows the request round trip.** Slow runs show `/api/rtt`
+  at ~100 ms (101–105, ~204 ms): one and two beacon intervals of 102.4 ms;
+  fast runs ~10 ms. Both phones were fast and slow at the same RSSI and
+  supply, so phone power save or channel-6 noise is more likely than the
+  supply or the firmware. Cheap test: "Test speed" ×5 alternating iPhone and
+  a mains-powered PC at the same spot; a steady ~10 ms PC and a varying phone
+  ⇒ phone power save; both varying ⇒ the channel.
+- **The router losses look like the router going away**: both correct-code
+  runs got an IP, lost beacons after 199 s and 1105 s, then 201 on every
+  channel for 2 min, while the phone was heard at −40 dBm right after. Next
+  time: check on the phone/PC at once whether the network is still visible
+  and run "Scan for networks". If the router is a phone hotspot, that is the
+  explanation.
+- **Report fields showing 0 without meaning** ("0 dBm / channel 0",
+  "Successful associations: 0") are F6 leftovers no longer written since
+  0.16.2; Stage 4/7 removes or fills them and records the router RSSI just
+  before a loss.
+- **Engine task waited 7.5 s** because `/api/sd/info` (7.3 s: counts files
+  and used space) holds `engineMx`; pre-existing (0.16.5 too), breaks the
+  < 200 ms criterion; fix: release the lock while counting, as `removeTree`
+  does.
+- **Router → own Wi-Fi switch held the lock 1.5–2.5 s** (engine wait
+  1.57 s): Stage 4's `radioApply()` must run without the lock.
+- **"/" is sent from the server task** (10.9 s when the router link died,
+  2.5 s on a slow link; everything else waits meanwhile): open item I9.
+  Proposal for the owner's approval: send the page and the series JSON
+  through the xfer task with a queue of 2–3 instead of 1.
+- **The one 503 and the 2.6 s `/api/series/recent`** cannot be attributed:
+  the counter merges "lock timed out" and "transfer busy" (loop never over
+  71 ms, so almost certainly the latter). Report both separately.
+- **Privacy:** the router name appears in the committed reports and README
+  (CLAUDE.md asks for router names to be hidden); replace on the owner's
+  word, noting it stays in the git history.
+
+Stage status after these reports: Stage 1 bench items seen (20 MHz / 600 s /
+DK / 19.50 dBm, per-phone RSSI, 2 trace lines for a 2 min router loss);
+missing: TX power and country in router mode. Stage 2 seen: self-test
+passed by a client response, 200/421/403, heap ≥ 68 KB, stacks ≥ 3980 /
+5856 bytes; missing: Origin, 413, 4 MB and truncated upload, 20 parallel
+requests, airplane mode, 20 Safari reloads, export diff; the "no request
+> 2 s" row failed (2.6 s). 0.16.6 is partially bench-tested, **not
+bench-verified**.
+
 ### 13.7 If the gate ends in H3
 
 The owner decides whether Stage 1 ships alone first as 0.16.6 (D18 "one
