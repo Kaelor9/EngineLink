@@ -26,10 +26,21 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      # An exact CLI version needs no GitHub API lookup ("1.x" failed with 504).
-      - uses: arduino/setup-arduino-cli@v2
-        with:
-          version: "1.2.2"
+      # arduino-cli 1.2.2 (the version every local build used) from Arduino's
+      # own download server, checked by its SHA-256: on 2026-11-08 the
+      # setup-arduino-cli action failed on GitHub 504s, exact version or not.
+      - name: Install arduino-cli 1.2.2
+        run: |
+          for i in 1 2 3 4; do
+            curl -fsSL --max-time 120 -o "$RUNNER_TEMP/acli.tgz" https://downloads.arduino.cc/arduino-cli/arduino-cli_1.2.2_Linux_64bit.tar.gz && break
+            [ "$i" = 4 ] && exit 1
+            sleep $((i*20))
+          done
+          echo "a5ad085d1b02fd4010df18b1bbf20453276efe6c6e2ac323baa0cac4e96a85b4  $RUNNER_TEMP/acli.tgz" | sha256sum -c -
+          mkdir -p "$HOME/.local/bin"
+          tar xzf "$RUNNER_TEMP/acli.tgz" -C "$HOME/.local/bin" arduino-cli
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          "$HOME/.local/bin/arduino-cli" version
       # The pinned core and toolchains (~1 GB) are downloaded once and kept, so a
       # package-server outage (504 on 2026-11-08) does not fail the build.
       - uses: actions/cache@v4
