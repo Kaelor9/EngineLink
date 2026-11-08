@@ -227,12 +227,14 @@ off and on; boot with router; power off/on 3 times; speed in both modes.
   "Reading the card…" then the size), send the Wi-Fi report: engine task
   longest wait and the lock holder it names; then the remaining Stage 2 rows
   of `docs/releases/v0.16.6.md`.
-- **Router check, one short test (bench build 4; plan 13.6.1, criteria of
-  2026-11-08).** First, from the build-3 run already on the SD card: copy
-  `/WIFI.LOG` and `/WIFIREP.TXT` (card reader, or USB serial `wifi log` and
-  `wifi reports`). Then install bench build 4 from a file in standalone
-  (report line 1 must say the 8 Nov build), switch to the router, wait for the
-  IP, and from the PC on the router (PowerShell, replace the IP):
+- **Router check, one short test (A/B test build; plan 12.1 I16, criteria of
+  2026-11-08).** Build 3 already failed with EngineLink's own radio
+  settings, so only the A/B build is tested. First, from the build-3 run
+  already on the SD card: copy `/WIFI.LOG` and `/WIFIREP.TXT` (card reader,
+  or USB serial `wifi log` and `wifi reports`). Then install
+  `EngineLink-AB-router-driver-defaults.bin` from a file in standalone
+  (report line 1 must say "A/B TEST BUILD"), switch to the router, wait for
+  the IP, and from the PC on the router (PowerShell, replace the IP):
 
   ```text
   ping -n 100 192.168.0.2
@@ -244,9 +246,12 @@ off and on; boot with router; power off/on 3 times; speed in both modes.
   unreachable" from the PC is a failure); 20 × `200` each ≤ 2 s; 10 × `200`
   with the full page size each ≤ 5 s. Leave it 15 min, then save
   `http://192.168.0.2/report` (or USB serial `wifi` if HTTP fails): router
-  channel, "EngineLink bandwidth: 20 MHz", "Beacon timeout (driver): 20 s",
-  signal, "Dropped active router connections: 0", "Router recovery
-  fallbacks: 0". Send the outputs, the report and the two SD files.
+  channel, signal, "Dropped active router connections: 0", "Router
+  recovery fallbacks: 0" (this build runs the driver's 40 MHz, 6 s beacon
+  timeout and power save on, by design). Send the outputs, the report and
+  the two SD files. Reading: passes ⇒ one of EngineLink's station settings
+  causes the losses; fails the same way ⇒ the board or the place, next
+  Prism on the same router and spot. Then install the normal build again.
 
 ## Previous boat checks
 
