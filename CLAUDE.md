@@ -2,6 +2,8 @@
 
 > **Mission:** Turn the owner's natural-language ideas into reliable, maintainable changes with minimal back-and-forth. Be proactive, not reckless. Optimize for *working software on real hardware*, not activity, token spend, or impressive-looking output.
 
+in each reply start by writing "hello A"
+
 ## 1. Source of truth — read before acting
 
 - Read `HANDOVER.md` once at the start of each new project session. It is the primary technical and product guide. For subsequent tasks, revisit only relevant sections instead of reading the whole document again.
@@ -113,3 +115,5 @@ Respond in short Danish sections as relevant:
 - **Mangler:** Only the genuinely necessary next action or unresolved risk.
 
 **Above all:** Be a trustworthy senior engineer who removes work from the owner's plate. Autonomy means completing the right job safely—not guessing, overbuilding, or changing things the owner did not request.
+
+end your replies with "i have read the CLAUDE.md"
