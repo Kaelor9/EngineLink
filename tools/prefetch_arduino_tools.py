@@ -5,11 +5,12 @@ does not fail CI (2026-11-08: every runner got 504 for the RISC-V toolchain,
 which the ESP32-S3 build does not even use, for over an hour).
 
 For each archive the platform needs on this host: keep it if the cache
-already holds it with the index's SHA-256; else download it from the
-index's URL, and for a github.com release asset from Espressif's official
-mirror (dl.espressif.com/github_assets/...) if GitHub fails. Every file is
-checked against the index's size and SHA-256 before it is kept, so the
-mirror can never change what is installed; arduino-cli checks it again.
+already holds it with the index's SHA-256; else download it, a github.com
+release asset first from Espressif's official mirror
+(dl.espressif.com/github_assets/...), then from the index's URL. Every file
+is checked against the index's size and SHA-256 before it is kept, so the
+source never changes what is installed; arduino-cli checks it again.
+Two tries per source, no more: a dead source fails fast.
 
 Usage: prefetch_arduino_tools.py [--version 3.3.12] [--only NAME ...]
 """
@@ -36,17 +37,19 @@ def sha256(path: Path) -> str:
 
 
 def sources(url: str):
-    yield url
+    # The mirror first: GitHub's release downloads were the part that failed
+    # (504 on 2026-11-08); the checksum makes the order irrelevant to content.
     if url.startswith("https://github.com/") and "/releases/download/" in url:
         yield MIRROR + url[len("https://github.com/"):]
+    yield url
 
 
-def fetch(url: str, dest: Path, size: int, digest: str, tries: int = 3) -> bool:
+def fetch(url: str, dest: Path, size: int, digest: str, tries: int = 2) -> bool:
     for src in sources(url):
         for attempt in range(1, tries + 1):
             part = dest.with_suffix(dest.suffix + ".part")
             try:
-                with urllib.request.urlopen(src, timeout=120) as r, part.open("wb") as f:
+                with urllib.request.urlopen(src, timeout=60) as r, part.open("wb") as f:
                     while chunk := r.read(1 << 20):
                         f.write(chunk)
                 if part.stat().st_size == size and sha256(part) == digest:
@@ -57,7 +60,7 @@ def fetch(url: str, dest: Path, size: int, digest: str, tries: int = 3) -> bool:
             except Exception as e:  # network errors: try again, then the next source
                 print(f"  {src.split('/')[2]} try {attempt}: {e}")
             part.unlink(missing_ok=True)
-            time.sleep(5 * attempt)
+            time.sleep(5)
     return False
 
 
