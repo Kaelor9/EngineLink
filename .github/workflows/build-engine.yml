@@ -97,6 +97,19 @@ jobs:
           # Arduino's Wi-Fi start does not go through the wrapper.
           OBJDUMP=$(ls ~/.arduino15/packages/esp32/tools/esp-x32/*/bin/xtensa-esp32s3-elf-objdump | head -1)
           "$OBJDUMP" -d build-app/*.elf --no-show-raw-insn | grep -q "call8.*<__wrap_esp_wifi_init>" || { echo "esp_wifi_init is not wrapped: WPA3 cannot be switched off"; exit 1; }
+      # Bench A/B only, never released (plan 12.1 I16): the same firmware with
+      # router mode on the Wi-Fi driver's defaults, as the Prism controller.
+      - name: Compile the A/B test build (router radio on driver defaults)
+        run: |
+          arduino-cli compile \
+            --fqbn "esp32:esp32:esp32s3:FlashSize=8M,PartitionScheme=default_8MB,PSRAM=opi,USBMode=hwcdc,CDCOnBoot=cdc" \
+            --output-dir build-ab \
+            --build-property "compiler.c.elf.extra_flags=-Wl,--wrap=esp_wifi_init" \
+            --build-property "compiler.cpp.extra_flags=-DEL_STA_DEFAULTS=1" \
+            firmware/EngineLink
+          strings build-ab/EngineLink.ino.bin | grep -q "A/B TEST BUILD" || { echo "A/B flag not in the test build"; exit 1; }
+          ! strings build-app/EngineLink.ino.bin | grep -q "A/B TEST BUILD" || { echo "A/B flag leaked into the normal build"; exit 1; }
+          cp build-ab/EngineLink.ino.bin build-ab/EngineLink-AB-router-driver-defaults.bin
       - name: Verify merged image
         run: |
           python3 - <<'PY'
@@ -113,4 +126,9 @@ jobs:
           path: |
             build-app/*.merged.bin
             build-app/EngineLink.ino.bin
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        with:
+          name: EngineLink-AB-test-router-driver-defaults-${{ github.sha }}
+          path: build-ab/EngineLink-AB-router-driver-defaults.bin
           if-no-files-found: error

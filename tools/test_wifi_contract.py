@@ -40,6 +40,13 @@ for call in ("esp_wifi_set_bandwidth(WIFI_IF_STA,WIFI_BW_HT20)", "esp_wifi_set_i
     assert call in st, f"staRadioSetup() lacks {call}"
 an = body(w, "void applyNetwork(){")
 assert an.index("WiFi.mode(WIFI_STA);") < an.index("staRadioSetup();") < an.index("connectRouter();"), "set after the station starts, before the join"
+# A/B test build switch (plan 12.1 I16): off by default, gates only the
+# station's settings and the TX power in router mode, and marks the report.
+el = (FW / "EngineLink.ino").read_text(encoding="utf-8")
+assert "#ifndef EL_STA_DEFAULTS\n#define EL_STA_DEFAULTS 0\n#endif" in el, "normal builds keep EngineLink's radio settings"
+assert body(w, "void staRadioSetup(){").splitlines()[1].strip().startswith("if(EL_STA_DEFAULTS){WiFi.setSleep(true);return;}")
+assert "if(EL_STA_DEFAULTS&&WiFi.getMode()==WIFI_MODE_STA)return;" in body(w, "void applyTxPower(bool check){")
+assert fw.count("EL_STA_DEFAULTS") == 6, "the switch is used nowhere else"
 # Router counters and signal the report prints (plan 12.1 I15): written by
 # the event callback from its event data only (no Wi-Fi calls there, D14),
 # the signal sampled by the loop, so a report after a loss is true.

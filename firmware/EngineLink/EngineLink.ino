@@ -75,6 +75,12 @@ volatile bool radioTestWanted=false;  // pings + channel survey (linkTuneTask)
 SpeedLogRec speedLog[SPEED_LOG_N];uint8_t speedLogCount=0;
 
 #define EL_VERSION "0.16.6"
+// A/B test build only (plan 12.1 I16, never released): 1 = router mode keeps
+// the Wi-Fi driver's own defaults like the Prism controller (no 20 MHz, beacon
+// timeout, country, power-save or TX-power settings). CI builds both.
+#ifndef EL_STA_DEFAULTS
+#define EL_STA_DEFAULTS 0
+#endif
 // Releases list published by the Pages workflow; firmware files come from
 // GitHub Releases of the same repository. Nothing else is downloaded.
 #define EL_RELEASES_URL "https://kaelor9.github.io/EngineLink/releases.json"

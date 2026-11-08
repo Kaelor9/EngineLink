@@ -100,6 +100,7 @@ void saveKnownChannel(uint8_t ch){
 // 19.5 dBm as 78 quarter-dBm exactly; its unset 20 dBm (80) is not accepted
 // as "close enough" any more (plan F7).
 void applyTxPower(bool check){
+  if(EL_STA_DEFAULTS&&WiFi.getMode()==WIFI_MODE_STA)return;   // A/B build: driver default in router mode
   if(check){
     int8_t q=0;
     if(esp_wifi_get_max_tx_power(&q)!=ESP_OK)return;   // Wi-Fi not running
@@ -108,14 +109,12 @@ void applyTxPower(bool check){
   }
   WiFi.setTxPower(elTxPower[txLevel]);
 }
-// Country per Espressif's API (plan D27): Denmark's ISO code from the
-// documented list, 802.11d on so the station follows the router's country
-// element. Set only when the driver reports another code, because setting
-// it restarts the AP and resets the transmit power (esp_wifi.h).
+// Country per Espressif's API (D27): DK, 802.11d on so the station follows the
+// router's country element. Set only when the driver reports another code:
+// setting it restarts the AP and resets the transmit power (esp_wifi.h).
 static bool countryIsDK(){char cc[3]={};return esp_wifi_get_country_code(cc)==ESP_OK&&cc[0]=='D'&&cc[1]=='K';}
-// The access point's radio settings every version before 0.16.2 had (plan
-// F19, Stage 1a): 20 MHz, stations kept 600 s without traffic, country DK,
-// no power save, then the fixed transmit power (the country resets it).
+// The AP's radio settings every version before 0.16.2 had (F19, Stage 1a): 20 MHz,
+// stations kept 600 s, country DK, no power save, then the fixed TX power.
 void apRadioSetup(){
   esp_wifi_set_bandwidth(WIFI_IF_AP,WIFI_BW_HT20);
   esp_wifi_set_inactive_time(WIFI_IF_AP,600);
@@ -127,6 +126,7 @@ void apRadioSetup(){
 // 0.16.1 (plan I14), country, no power save, transmit power. Right after the
 // station started and before begin(), so the router is joined at 20 MHz.
 void staRadioSetup(){
+  if(EL_STA_DEFAULTS){WiFi.setSleep(true);return;}   // A/B build: the core's defaults, modem sleep as in Prism
   esp_wifi_set_bandwidth(WIFI_IF_STA,WIFI_BW_HT20);
   esp_wifi_set_inactive_time(WIFI_IF_STA,20);
   if(!countryIsDK())esp_wifi_set_country_code("DK",true);

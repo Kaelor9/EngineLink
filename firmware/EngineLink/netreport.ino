@@ -44,7 +44,7 @@ void appendApLinkJson(String &s){
 // data. Usable by direct IP on router Wi-Fi or after rescue AP returns.
 String makeNetworkHealthJson(){
   String s;s.reserve(3300);
-  s+="{\"version\":";jsonString(s,EL_VERSION);s+=",\"build\":\"" __DATE__ " " __TIME__ "\"";
+  s+="{\"version\":";jsonString(s,EL_VERSION);s+=",\"build\":\"" __DATE__ " " __TIME__ "\"";s+=",\"staDefaults\":";s+=EL_STA_DEFAULTS?"true":"false";
   s+=",\"uptimeMs\":";s+=(unsigned long)millis();
   s+=",\"mode\":";
   jsonString(s,routerHold?"rescue":routerConfigured()?"router":"standalone");
@@ -131,7 +131,9 @@ String buildNetworkReport(){
   String s;s.reserve(6500);
   s+="ENGINELINK - WI-FI REPORT\n";
   s+="========================\n\n";
-  s+="Firmware: ";s+=EL_VERSION;s+=" (built " __DATE__ " " __TIME__ ")\n";   // tells two bench builds of one version apart
+  s+="Firmware: ";s+=EL_VERSION;s+=" (built " __DATE__ " " __TIME__ ")";   // tells two bench builds of one version apart
+  if(EL_STA_DEFAULTS)s+=" · A/B TEST BUILD: router radio on the driver's defaults (plan I16)";
+  s+="\n";
   s+="Uptime: ";s+=millis()/1000UL;s+=" seconds\n";
   s+="Mode: ";s+=routerHold?"Recovery (EngineLink Wi-Fi)":routerConfigured()?"Router (station)":"Standalone (EngineLink Wi-Fi)";s+="\n";
   s+="Wi-Fi radio mode: ";s+=(unsigned)WiFi.getMode();s+=" (1=station, 2=access point)\n";
