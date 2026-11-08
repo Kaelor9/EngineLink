@@ -7,12 +7,14 @@ on:
       - 'firmware/EngineLink/**'
       - 'firmware/ui/**'
       - 'tools/build_ui.py'
+      - 'tools/prefetch_arduino_tools.py'
       - '.github/workflows/build-engine.yml'
   pull_request:
     paths:
       - 'firmware/EngineLink/**'
       - 'firmware/ui/**'
       - 'tools/build_ui.py'
+      - 'tools/prefetch_arduino_tools.py'
       - '.github/workflows/build-engine.yml'
   workflow_dispatch:
 
@@ -41,8 +43,12 @@ jobs:
         run: |
           URL=https://espressif.github.io/arduino-esp32/package_esp32_index.json
           # Up to four tries: a download that times out is retried, not the build.
+          # The core's archives are fetched first: from GitHub, else from
+          # Espressif's official mirror, each checked against the index's
+          # SHA-256 (2026-11-08: GitHub gave the runners 504 for one asset).
           for i in 1 2 3 4; do
             arduino-cli core update-index --additional-urls "$URL" \
+              && python3 tools/prefetch_arduino_tools.py --version 3.3.12 \
               && arduino-cli core install esp32:esp32@3.3.12 --additional-urls "$URL" \
               && arduino-cli lib install "Adafruit NeoPixel@1.15.5" && break
             [ "$i" = 4 ] && exit 1
