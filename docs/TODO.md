@@ -227,6 +227,7 @@ off and on; boot with router; power off/on 3 times; speed in both modes.
   "Reading the card…" then the size), send the Wi-Fi report: engine task
   longest wait and the lock holder it names; then the remaining Stage 2 rows
   of `docs/releases/v0.16.6.md`.
+- **Router-mode fault: state and next step** in [the 2026-11-08 session handoff](test-evidence/wifi-0166-2026-11-08/SESSION-HANDOFF.md).
 - **Router check, one short test (A/B test build; plan 12.1 I16, criteria of
   2026-11-08).** Build 3 already failed with EngineLink's own radio
   settings, so only the A/B build is tested. First, from the build-3 run
