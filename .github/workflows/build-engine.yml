@@ -24,14 +24,30 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      # An exact CLI version needs no GitHub API lookup ("1.x" failed with 504).
       - uses: arduino/setup-arduino-cli@v2
         with:
-          version: "1.x"
+          version: "1.2.2"
+      # The pinned core and toolchains (~1 GB) are downloaded once and kept, so a
+      # package-server outage (504 on 2026-11-08) does not fail the build.
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.arduino15/staging
+            ~/.arduino15/packages
+            ~/Arduino/libraries
+          key: arduino-esp32-3.3.12-neopixel-1.15.5
       - name: Install ESP32-S3 board and required library
         run: |
-          arduino-cli core update-index --additional-urls https://espressif.github.io/arduino-esp32/package_esp32_index.json
-          arduino-cli core install esp32:esp32@3.3.12 --additional-urls https://espressif.github.io/arduino-esp32/package_esp32_index.json
-          arduino-cli lib install "Adafruit NeoPixel@1.15.5"
+          URL=https://espressif.github.io/arduino-esp32/package_esp32_index.json
+          # Up to four tries: a download that times out is retried, not the build.
+          for i in 1 2 3 4; do
+            arduino-cli core update-index --additional-urls "$URL" \
+              && arduino-cli core install esp32:esp32@3.3.12 --additional-urls "$URL" \
+              && arduino-cli lib install "Adafruit NeoPixel@1.15.5" && break
+            [ "$i" = 4 ] && exit 1
+            echo "Install failed (try $i), again in $((i*30)) s"; sleep $((i*30))
+          done
       - name: Validate embedded browser JavaScript
         run: |
           python3 tools/build_ui.py
