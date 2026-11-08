@@ -227,13 +227,26 @@ off and on; boot with router; power off/on 3 times; speed in both modes.
   "Reading the card…" then the size), send the Wi-Fi report: engine task
   longest wait and the lock holder it names; then the remaining Stage 2 rows
   of `docs/releases/v0.16.6.md`.
-- **Router check of bench build 3 (plan 12.1 I14), when convenient:** install
-  it from a file, put EngineLink on the bench router again, open
-  `http://<its router IP>/` on the PC. Send the Wi-Fi report: it must say
-  "EngineLink bandwidth: 20 MHz", and the slowest request and send failures
-  show whether `/` now loads. If `/` still fails, tap "Test speed" once on the
-  router and send that report too (speed through the transfer task and the
-  1400-byte ping test tell the link from the server path).
+- **Router check, one short test (bench build 4; plan 13.6.1, criteria of
+  2026-11-08).** First, from the build-3 run already on the SD card: copy
+  `/WIFI.LOG` and `/WIFIREP.TXT` (card reader, or USB serial `wifi log` and
+  `wifi reports`). Then install bench build 4 from a file in standalone
+  (report line 1 must say the 8 Nov build), switch to the router, wait for the
+  IP, and from the PC on the router (PowerShell, replace the IP):
+
+  ```text
+  ping -n 100 192.168.0.2
+  1..20 | % { curl.exe -s -m 2 -o NUL -w "%{http_code} %{time_total}`n" http://192.168.0.2/api/live }
+  1..10 | % { curl.exe -s -m 5 -o NUL -w "%{http_code} %{size_download} %{time_total}`n" http://192.168.0.2/ }
+  ```
+
+  Pass: ≥ 99 of 100 replies from 192.168.0.2 (a "Destination host
+  unreachable" from the PC is a failure); 20 × `200` each ≤ 2 s; 10 × `200`
+  with the full page size each ≤ 5 s. Leave it 15 min, then save
+  `http://192.168.0.2/report` (or USB serial `wifi` if HTTP fails): router
+  channel, "EngineLink bandwidth: 20 MHz", "Beacon timeout (driver): 20 s",
+  signal, "Dropped active router connections: 0", "Router recovery
+  fallbacks: 0". Send the outputs, the report and the two SD files.
 
 ## Previous boat checks
 

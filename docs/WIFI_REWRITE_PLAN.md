@@ -1228,6 +1228,7 @@ route assignment the plan left too tight, with the evidence that forced it.
 | I12 | D30: the station join uses the core's default `WIFI_FAST_SCAN`, which takes the first matching access point; the "strongest" sort applies only to an all-channel scan (`esp_wifi_types.h`). With a mesh or repeater (one SSID, several BSSIDs) it can join a weak one. | `STA.cpp` 3.3.12: `_scanMethod(WIFI_FAST_SCAN)`, `_sortMethod(WIFI_CONNECT_AP_BY_SIGNAL)`. | Stage 4: `WiFi.setScanMethod(WIFI_ALL_CHANNEL_SCAN)` before `begin()` (official core API; about 1–2 s more per join). Minimum security stays the core's WPA2 (open and WPA-only networks are not joined). |
 | I13 | D30: with a phone joined, looks use the known channel only (fourth revision, to keep the phone connected). A router that changed channel meanwhile is not seen, so "Router is back" waits until no phone is joined (then every fifth look is all channels). | 6.3 look rules; T12. | Kept (the phone's link wins, D21). Recorded so T12 is read correctly; the station itself follows a channel change through CSA or its full-scan reconnect. iPhone hotspots on iPhone 12 and later need "Maximize Compatibility" for 2.4 GHz: the ESP32-S3 has no 5 GHz radio. |
 | I14 | F19 was incomplete: 0.16.2 also dropped the **station** settings every version up to 0.16.1 had, `esp_wifi_set_bandwidth(WIFI_IF_STA, WIFI_BW_HT20)` and `esp_wifi_set_inactive_time(WIFI_IF_STA, 20)`; Stage 1 restored the AP half only. Without them the station joins a 20/40 MHz router at the driver's default 40 MHz and drops after 6 s without beacons. | `git grep` on 0.13.3 (`a292909` `wifi.ino:198,396`), 0.15.0 and 0.16.1 shows both; 0.16.2 (`7ade549`) and later none. 0.13.4 measured 584 kB/s on the router with them (#126); every 0.16.x router run since failed bulk replies: 2026-11-06 `/` 10.9 s with 14 send failures, reported 2026-11-08 (owner, lab supply, router at −42 dBm) `/api/live` (~2.5 KB) answered every time while `/` (110 KB) took 20.5 s and failed, 5 send failures, standalone 1048 kB/s. | `staRadioSetup()` sets both before the join (6.2), contract in `test_wifi_contract.py`. The most likely cause of the router bulk failures by elimination: power save is off, the TCP window boost and the server path are the same as in standalone, and a reply bigger than one packet gets through. **Not proven** until the router run is repeated (13.6.1). |
+| I15 | The router block of the report and `/api/diag` printed counters and "last router signal/channel" that nothing wrote since 0.16.2 (F6 leftovers): "Successful associations: 0", "0 dBm / channel 0", "Router recovery fallbacks: 0" while the router worked. A report after a router failure could not say whether EngineLink had left the router. | 2026-11-06 `ROUTER.txt`; build-3 evidence (2026-11-08) has no report at all. | The event callback writes associations, IP gains/losses, disconnects (drops of a live link apart from failed attempts; reason 8 is EngineLink's own leave), the router's channel and the negotiated security, from the event data only (D14); the loop samples the router's signal every 2 s, so the last value before a loss stays; fallbacks are counted. The report also reads back the station's beacon timeout. The SD Wi-Fi log adds the router's channel and last signal to every router join, IP and loss line. `test_wifi_contract.py`. Stage 4/7 replace these fields by 6.8 as planned. |
 | I9 | Review of the Stage 2 server (2026-11-05) found further lifecycle gaps. | Code review against the IDF sources. | Every early reply (421, 403, 503) closes a connection whose unread body is over 16 KB instead of draining it in the server task; a refused upload up to 3.2 MB is read to its end so the app shows the reason (a reset would hide it); a broken transfer is `shutdown()` before `httpd_req_async_handler_complete()`; `httpdSuspend()` also `shutdown()`s every client socket (trigger-close skips sockets that sent nothing yet and its queue holds 6 messages); remount, wipe and factory reset answer 409 while a download keeps an SD file open; a file upload answers 409 during a GitHub install and the GitHub install during an upload; `removeTree()` sleeps 20 ms every 16 files so the loop can feed its watchdog during a long wipe. Left open: the 110 KB app page is sent from the server task (a slow phone delays other requests while it loads); GET routes with side effects (e.g. starting a Wi-Fi scan) can still be triggered cross-site, without reading the answer. |
 
 ---
@@ -1446,6 +1447,32 @@ serves nothing else (I9, open). This changes neither the gate nor its test:
 the boat test of step 3 is standalone only. It also reopens the reading of
 the 2026-11-06 router losses above: beacons lost after the driver's 6 s
 default, not necessarily the router going away.
+
+Router mode, bench build 3 (owner, 2026-11-08,
+`docs/test-evidence/wifi-0166-2026-11-08/router-link-failure-build3.md`):
+`/`, `/api/live` and `enginelink.local` time out; 1 of 10 pings answered; the
+PC's own "Destination host unreachable" means its ARP request got no answer.
+No report of the running build exists. Analysis:
+
+- The router's client table keeps a DHCP lease after a station leaves, so it
+  does not show that EngineLink was still on the router. Two readings are
+  left: **(A)** EngineLink left the router (disconnects, then the 2 min
+  fallback to its own Wi-Fi; the browser's `ERR_NETWORK_CHANGED` fits a PC
+  that joined the known EngineLink network), or **(B)** it stayed associated
+  but most frames were lost (a link problem). Build 2's pattern (small
+  answers through, 110 KB not) fits (B) on a lighter day.
+- The code has no router-mode path that takes the radio off its channel or
+  into power save: no scan except the radio test after a speed test, power
+  save off and read back, nothing sets a channel. A single server task
+  amplifies (B): while `/` stalls on a lossy link nothing else is accepted, so
+  `/api/live` times out as well (I9, open, owner's decision).
+- (A) and (B) are told apart by the board's own `/WIFI.LOG` on the SD card,
+  which already covers the build-3 run (written at every Wi-Fi event):
+  disconnect lines and "Router not reached in 2 minutes" mean (A); none mean
+  (B). Bench build 4 (I15) adds the router's channel and last signal to
+  those lines and makes the report's router counters true, so the one
+  router check in `docs/TODO.md` documents itself even when HTTP is
+  unreachable (USB serial `wifi`, or the SD files).
 
 Fixes made after this review, before the gate (Stages 1–2 scope, 9.0; no
 Wi-Fi state machine, no network switch changed): I10 (SD work without the

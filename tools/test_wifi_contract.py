@@ -40,6 +40,19 @@ for call in ("esp_wifi_set_bandwidth(WIFI_IF_STA,WIFI_BW_HT20)", "esp_wifi_set_i
     assert call in st, f"staRadioSetup() lacks {call}"
 an = body(w, "void applyNetwork(){")
 assert an.index("WiFi.mode(WIFI_STA);") < an.index("staRadioSetup();") < an.index("connectRouter();"), "set after the station starts, before the join"
+# Router counters and signal the report prints (plan 12.1 I15): written by
+# the event callback from its event data only (no Wi-Fi calls there, D14),
+# the signal sampled by the loop, so a report after a loss is true.
+cb = body(w, "void onWiFi(WiFiEvent_t e,WiFiEventInfo_t info){")
+assert "esp_wifi_" not in cb and "WiFi." not in cb, "D14: no Wi-Fi calls from the event callback"
+for need in ("staAssociatedEvents=staAssociatedEvents+1", "staIpEvents=staIpEvents+1", "staIpLostEvents=staIpLostEvents+1",
+             "staDisconnects=staDisconnects+1", "staUnexpectedDisconnects=staUnexpectedDisconnects+1",
+             "staAssociationFailures=staAssociationFailures+1", "lastRouterChannel=info.wifi_sta_connected.channel",
+             "staLastReason!=WIFI_REASON_ASSOC_LEAVE", "ARDUINO_EVENT_WIFI_STA_LOST_IP"):
+    assert need in cb, f"onWiFi() lacks {need}"
+sn = body(w, "void serviceNetwork(){")
+assert "esp_wifi_sta_get_ap_info(&ap)" in sn and "lastRouterRssi=ap.rssi" in sn
+assert "++routerFallbacks;routerHold=true;" in sn, "the report counts every fallback to the own Wi-Fi"
 # 1c: the trace folds through the host-tested function.
 assert "wifistate::traceFold(" in body(w, "void traceWifi(uint8_t type,uint8_t reason){")
 

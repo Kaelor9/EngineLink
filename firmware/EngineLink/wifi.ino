@@ -123,12 +123,9 @@ void apRadioSetup(){
   WiFi.setSleep(false);
   applyTxPower(false);
 }
-// The station's share of the same: 20 MHz and a 20 s beacon timeout (instead
-// of the driver's 6 s), as every version up to 0.16.1 had (0.13.4 measured
-// 584 kB/s on the router with them; 0.16.2 dropped them, plan 12.1 I14),
-// country (when the AP never ran this boot), no power save, transmit power.
-// Called right after the station interface started and before begin(), so
-// the router is joined at 20 MHz (plan Stage 1b: router mode never set the power).
+// The station's share: 20 MHz and a 20 s beacon timeout (driver: 6 s) as up to
+// 0.16.1 (plan I14), country, no power save, transmit power. Right after the
+// station started and before begin(), so the router is joined at 20 MHz.
 void staRadioSetup(){
   esp_wifi_set_bandwidth(WIFI_IF_STA,WIFI_BW_HT20);
   esp_wifi_set_inactive_time(WIFI_IF_STA,20);
@@ -136,11 +133,9 @@ void staRadioSetup(){
   WiFi.setSleep(false);
   applyTxPower(false);
 }
-// ---- Wi-Fi, kept simple (0.16.2) ----
-// Standalone: EngineLink's own Wi-Fi at 192.168.4.1.
-// Router: join the boat router with the Arduino core's own reconnect. No IP
-// within 2 minutes: back to the own Wi-Fi, and try the router again every
-// 10 minutes while no phone is connected to it.
+// ---- Wi-Fi, kept simple (0.16.2) ---- Standalone: own Wi-Fi at 192.168.4.1.
+// Router: the core's own reconnect; no IP in 2 minutes: own Wi-Fi, and try the
+// router again every 10 minutes while no phone is connected to it.
 static uint32_t routerRetryAt=0;
 void onWiFi(WiFiEvent_t e,WiFiEventInfo_t info){
   const uint32_t now=millis();
@@ -150,12 +145,23 @@ void onWiFi(WiFiEvent_t e,WiFiEventInfo_t info){
     case ARDUINO_EVENT_WIFI_AP_STAIPASSIGNED:++apDhcpLeases;traceWifi(9);break;
     case ARDUINO_EVENT_WIFI_AP_STADISCONNECTED:++apLeaves;apReason=info.wifi_ap_stadisconnected.reason;traceWifi(8,apReason);break;
     case ARDUINO_EVENT_WIFI_AP_STOP:apLastEvent=2;apLastEventMs=now;break;
-    case ARDUINO_EVENT_WIFI_STA_CONNECTED:staAssociated=true;traceWifi(2);break;
-    case ARDUINO_EVENT_WIFI_STA_GOT_IP:staHadIp=true;staIpAt=now?now:1;staDownSince=0;++networkIpEpoch;networkIpEventAt=now;mdnsRefreshPending=true;mdnsNetworkChangedAt=now;traceWifi(3);break;
-    case ARDUINO_EVENT_WIFI_STA_DISCONNECTED:
-      staAssociated=false;staLastReason=info.wifi_sta_disconnected.reason;staLastDropAt=now;
+    // Router counters, channel and security from the event data only (D14; the
+    // loop samples the signal). Printed since 0.16.2, written again (I15).
+    case ARDUINO_EVENT_WIFI_STA_CONNECTED:
+      staAssociated=true;staAssociatedEvents=staAssociatedEvents+1;staAssociatedAt=now;
+      if(staBeginAt){staJoinMs=now-staBeginAt;staBeginAt=0;}   // the join EngineLink started, not the core's retries
+      lastRouterChannel=info.wifi_sta_connected.channel;staNegotiatedAuth=(uint8_t)info.wifi_sta_connected.authmode;traceWifi(2);break;
+    case ARDUINO_EVENT_WIFI_STA_GOT_IP:
+      staIpEvents=staIpEvents+1;if(staAssociatedAt)staDhcpMs=now-staAssociatedAt;
+      staHadIp=true;staIpAt=now?now:1;staDownSince=0;++networkIpEpoch;networkIpEventAt=now;mdnsRefreshPending=true;mdnsNetworkChangedAt=now;traceWifi(3);break;
+    case ARDUINO_EVENT_WIFI_STA_LOST_IP:staIpLostEvents=staIpLostEvents+1;staIpLostAt=now;traceWifi(5);break;
+    case ARDUINO_EVENT_WIFI_STA_DISCONNECTED:{
+      const bool wasUp=staAssociated;   // reason 8 = EngineLink left itself (mode change)
+      staAssociated=false;staLastReason=info.wifi_sta_disconnected.reason;staLastDropAt=now;staDisconnects=staDisconnects+1;
+      if(wasUp&&staLastReason!=WIFI_REASON_ASSOC_LEAVE){staUnexpectedDisconnects=staUnexpectedDisconnects+1;staLastUnexpectedReason=staLastReason;}
+      else if(!wasUp)staAssociationFailures=staAssociationFailures+1;
       if(!staDownSince)staDownSince=now?now:1;
-      traceWifi(4,staLastReason);break;
+      traceWifi(4,staLastReason);break;}
     default:break;
   }
 }
@@ -249,11 +255,15 @@ void serviceNetwork(){
   if(pendingNetwork&&(int32_t)(now-networkSwitchAt)>=0){pendingNetwork=false;routerHold=false;applyNetwork();return;}
   const bool online=routerConfigured()&&!routerHold&&WiFi.status()==WL_CONNECTED;
   if(online)lastRouterIp=WiFi.localIP().toString();
+  static uint32_t rssiAt=0;   // signal and channel every 2 s: the last values before a loss stay (I15)
+  if((WiFi.getMode()&WIFI_MODE_STA)&&staAssociated&&(uint32_t)(now-rssiAt)>=2000UL){
+    rssiAt=now;wifi_ap_record_t ap;if(esp_wifi_sta_get_ap_info(&ap)==ESP_OK){lastRouterRssi=ap.rssi;lastRouterChannel=ap.primary;}
+  }
   // Router not reached in 2 minutes: own Wi-Fi, and try again later.
   if(routerConfigured()&&!routerHold&&!online&&staDownSince&&(uint32_t)(now-staDownSince)>=120000UL){
     Serial.println("Router not reached in 2 minutes: EngineLink Wi-Fi on");
     wifiLog("Router not reached in 2 minutes: own Wi-Fi on");
-    routerHold=true;routerHoldSince=now;routerRetryAt=now+600000UL;applyNetwork();return;
+    ++routerFallbacks;routerHold=true;routerHoldSince=now;routerRetryAt=now+600000UL;applyNetwork();return;
   }
   if(routerHold&&routerConfigured()&&(int32_t)(now-routerRetryAt)>=0){
     if(WiFi.softAPgetStationNum()==0){routerHold=false;applyNetwork();return;}

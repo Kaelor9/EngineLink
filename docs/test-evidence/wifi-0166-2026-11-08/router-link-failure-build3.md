@@ -55,3 +55,14 @@ Earlier evidence: [v0.16.6 owner bench evidence, 2026-11-06](../wifi-0166-2026-1
 - Any proposed fix must have a defensible root-cause hypothesis, focused automated regression tests and updated plan/evidence documentation. **No unsolicited Stage 4 integration, merge to `main`, or release.** Mark Stage 0/Stage 2 acceptance accurately; the failed test is not a pass.
 
 **Provenance:** Observations and ping transcript transcribed from screenshots supplied by the owner in ChatGPT on 2026-11-08. The image files themselves have not been committed; the numeric output and paths above are the preserved evidence.
+
+## Engineering analysis (implementer, 2026-11-08)
+
+See plan 13.6.1 ("Router mode, bench build 3") and 12.1 I14/I15. In short:
+the router's client list keeps a DHCP lease after a station leaves, so the
+evidence cannot tell **(A)** EngineLink left the router (then the 2 min
+fallback to its own Wi-Fi) from **(B)** associated with heavy frame loss. The
+board's `/WIFI.LOG` on the SD card already records which for this run.
+No router-mode code path was found that leaves the channel or sleeps the
+radio. Bench build 4 makes the report's router counters and last signal true
+and adds them to the SD log; the single follow-up test is in `docs/TODO.md`.

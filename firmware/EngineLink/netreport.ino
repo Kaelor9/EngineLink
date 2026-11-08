@@ -139,7 +139,7 @@ String buildNetworkReport(){
   s+="Currently connected: ";s+=WiFi.status()==WL_CONNECTED?"Yes":"No";s+="\n";
   s+="Router IP now: ";s+=WiFi.status()==WL_CONNECTED?WiFi.localIP().toString():"None";s+="\n";
   s+="Last successful router IP: ";s+=lastRouterIp.isEmpty()?"None this boot":lastRouterIp;s+="\n";
-  s+="Last router signal: ";if(lastRouterIp.isEmpty())s+="Not measured";else{s+=lastRouterRssi;s+=" dBm";}s+="\n";
+  s+="Last router signal: ";if(!staAssociatedEvents)s+="Not measured";else{s+=lastRouterRssi;s+=" dBm";}s+="\n";
   s+="Last router channel: ";s+=lastRouterChannel;s+="\n";
   s+="Last negotiated Wi-Fi security: ";s+=stationSecurityName(staNegotiatedAuth);s+="\n";
   s+="Security mode: ";s+=staSecMode?"WPA3 allowed (router needs WPA3)":"WPA2, like most IoT devices (works on WPA2 and WPA2/WPA3 routers)";s+="\n";
@@ -216,6 +216,7 @@ String buildNetworkReport(){
     }
     uint8_t proto=0;if(esp_wifi_get_protocol(WIFI_IF_STA,&proto)==ESP_OK){s+="EngineLink allows: ";s+=proto&WIFI_PROTOCOL_11B?"b ":"";s+=proto&WIFI_PROTOCOL_11G?"g ":"";s+=proto&WIFI_PROTOCOL_11N?"n ":"";s+=proto&WIFI_PROTOCOL_LR?"LR ":"";s+="\n";}
     wifi_bandwidth_t bw;if(esp_wifi_get_bandwidth(WIFI_IF_STA,&bw)==ESP_OK){s+="EngineLink bandwidth: ";s+=bw==WIFI_BW_HT40?"40 MHz":"20 MHz";s+="\n";}
+    {uint16_t it=0;if(esp_wifi_get_inactive_time(WIFI_IF_STA,&it)==ESP_OK){s+="Beacon timeout (driver): ";s+=it;s+=" s\n";}}
     s+="Wi-Fi networks seen in the test: ";
     if(linkScanDone){s+=linkScanTotal;s+=" · others on the router's channel: ";s+=linkScanSame;if(linkScanSame){s+=" (strongest ";s+=(int)linkScanSameBest;s+=" dBm)";}s+=" · on overlapping channels: ";s+=linkScanOverlap;}
     else s+="not scanned yet";

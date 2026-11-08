@@ -68,6 +68,8 @@ void serviceWifiLog(){
       if(t[i].reason){s+=" (";s+=t[i].reason;s+=' ';s+=reasonText(t[i].reason);s+=')';}
       // Phone joined or left: how every joined phone is heard (plan Stage 1d).
       if(t[i].type==7||t[i].type==8){s+=" · phones now: ";s+=apStationsText(", ");}
+      // Router joined, IP, lost: its channel and the last signal before it (I15).
+      if(t[i].type>=2&&t[i].type<=5&&staAssociatedEvents){s+=" · router channel ";s+=lastRouterChannel;s+=", last signal ";s+=lastRouterRssi;s+=" dBm";}
       wifiLog(s);
     }
     wifiLogged=total;
