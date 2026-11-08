@@ -32,6 +32,14 @@ assert "apRadioSetup()" in sa
 tx = body(w, "void applyTxPower(bool check){")
 assert "abs(" not in tx and "!=ESP_OK" in tx and "==(int8_t)elTxPower[txLevel]" in tx
 assert "staRadioSetup()" in body(w, "void applyNetwork(){")
+# Router mode gets the station settings every version up to 0.16.1 had
+# (plan 12.1 I14): 20 MHz and a 20 s beacon timeout, before begin().
+st = body(w, "void staRadioSetup(){")
+for call in ("esp_wifi_set_bandwidth(WIFI_IF_STA,WIFI_BW_HT20)", "esp_wifi_set_inactive_time(WIFI_IF_STA,20)",
+             "WiFi.setSleep(false)", "applyTxPower(false)"):
+    assert call in st, f"staRadioSetup() lacks {call}"
+an = body(w, "void applyNetwork(){")
+assert an.index("WiFi.mode(WIFI_STA);") < an.index("staRadioSetup();") < an.index("connectRouter();"), "set after the station starts, before the join"
 # 1c: the trace folds through the host-tested function.
 assert "wifistate::traceFold(" in body(w, "void traceWifi(uint8_t type,uint8_t reason){")
 

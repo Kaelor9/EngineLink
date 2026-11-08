@@ -355,6 +355,13 @@ does not already report `DK` (setting it restarts the AP and switches the PHY
 init data, `esp_wifi.h` attention 5); `WiFi.setSleep(false)`; then
 `applyTxPower(false)` (the country resets the power — the 0.15.0 lesson).
 
+`staRadioSetup()` (router and the router test; restores I14): after the
+station interface starts and before the join,
+`esp_wifi_set_bandwidth(WIFI_IF_STA, WIFI_BW_HT20)` and
+`esp_wifi_set_inactive_time(WIFI_IF_STA, 20)`, then the same country,
+power-save and TX-power steps. Stage 4's `radioApply()` calls it for every
+radio that has the station interface.
+
 ### 6.3 Inputs, timers and transitions (`wifistate.h`)
 
 Events, delivered from the callback through a FreeRTOS queue of 16 `WifiEv
@@ -1220,6 +1227,7 @@ route assignment the plan left too tight, with the evidence that forced it.
 | I11 | A 503 could not be attributed (13.6.1), nor an engine wait to its cause. | One counter for three causes. | 503s counted by cause (engine lock 2 s, another download, download lock 10 s) with the last path; the report names the task holding `engineMx` when the engine task's longest wait began, counts waits over 100 ms and the engine task's longest round of its own work; the report's firmware line carries the build time. |
 | I12 | D30: the station join uses the core's default `WIFI_FAST_SCAN`, which takes the first matching access point; the "strongest" sort applies only to an all-channel scan (`esp_wifi_types.h`). With a mesh or repeater (one SSID, several BSSIDs) it can join a weak one. | `STA.cpp` 3.3.12: `_scanMethod(WIFI_FAST_SCAN)`, `_sortMethod(WIFI_CONNECT_AP_BY_SIGNAL)`. | Stage 4: `WiFi.setScanMethod(WIFI_ALL_CHANNEL_SCAN)` before `begin()` (official core API; about 1–2 s more per join). Minimum security stays the core's WPA2 (open and WPA-only networks are not joined). |
 | I13 | D30: with a phone joined, looks use the known channel only (fourth revision, to keep the phone connected). A router that changed channel meanwhile is not seen, so "Router is back" waits until no phone is joined (then every fifth look is all channels). | 6.3 look rules; T12. | Kept (the phone's link wins, D21). Recorded so T12 is read correctly; the station itself follows a channel change through CSA or its full-scan reconnect. iPhone hotspots on iPhone 12 and later need "Maximize Compatibility" for 2.4 GHz: the ESP32-S3 has no 5 GHz radio. |
+| I14 | F19 was incomplete: 0.16.2 also dropped the **station** settings every version up to 0.16.1 had, `esp_wifi_set_bandwidth(WIFI_IF_STA, WIFI_BW_HT20)` and `esp_wifi_set_inactive_time(WIFI_IF_STA, 20)`; Stage 1 restored the AP half only. Without them the station joins a 20/40 MHz router at the driver's default 40 MHz and drops after 6 s without beacons. | `git grep` on 0.13.3 (`a292909` `wifi.ino:198,396`), 0.15.0 and 0.16.1 shows both; 0.16.2 (`7ade549`) and later none. 0.13.4 measured 584 kB/s on the router with them (#126); every 0.16.x router run since failed bulk replies: 2026-11-06 `/` 10.9 s with 14 send failures, reported 2026-11-08 (owner, lab supply, router at −42 dBm) `/api/live` (~2.5 KB) answered every time while `/` (110 KB) took 20.5 s and failed, 5 send failures, standalone 1048 kB/s. | `staRadioSetup()` sets both before the join (6.2), contract in `test_wifi_contract.py`. The most likely cause of the router bulk failures by elimination: power save is off, the TCP window boost and the server path are the same as in standalone, and a reply bigger than one packet gets through. **Not proven** until the router run is repeated (13.6.1). |
 | I9 | Review of the Stage 2 server (2026-11-05) found further lifecycle gaps. | Code review against the IDF sources. | Every early reply (421, 403, 503) closes a connection whose unread body is over 16 KB instead of draining it in the server task; a refused upload up to 3.2 MB is read to its end so the app shows the reason (a reset would hide it); a broken transfer is `shutdown()` before `httpd_req_async_handler_complete()`; `httpdSuspend()` also `shutdown()`s every client socket (trigger-close skips sockets that sent nothing yet and its queue holds 6 messages); remount, wipe and factory reset answer 409 while a download keeps an SD file open; a file upload answers 409 during a GitHub install and the GitHub install during an upload; `removeTree()` sleeps 20 ms every 16 files so the loop can feed its watchdog during a long wipe. Left open: the 110 KB app page is sent from the server task (a slow phone delays other requests while it loads); GET routes with side effects (e.g. starting a Wi-Fi scan) can still be triggered cross-site, without reading the answer. |
 
 ---
@@ -1426,6 +1434,18 @@ gave the go for the fixes listed after it):
 Power parts for step 4's limits are now known (`hardware/PCB_GERBER_REVIEW_2026-11-05.md`:
 LM5164 buck at about 5.24 V, TLV76733 LDO, USB through a 0.5 A PTC); the
 antenna keepout and cutout were found adequate there.
+
+Router mode, reported 2026-11-08 (owner, lab supply, 0.16.6 bench build 2): joined at
+−42 dBm with IP; `/api/live` answered repeatedly from a PC on the same
+router, `/` timed out in the browser (20.5 s in the server, 5 send failures);
+standalone loads the page at 1048 kB/s. Analysis in 12.1 I14 (the station's
+20 MHz and beacon timeout lost in 0.16.2), restored in bench build 3;
+the next router run shows whether that was the cause. Side
+effect seen: while `/` waits for the router link, the single server task
+serves nothing else (I9, open). This changes neither the gate nor its test:
+the boat test of step 3 is standalone only. It also reopens the reading of
+the 2026-11-06 router losses above: beacons lost after the driver's 6 s
+default, not necessarily the router going away.
 
 Fixes made after this review, before the gate (Stages 1–2 scope, 9.0; no
 Wi-Fi state machine, no network switch changed): I10 (SD work without the

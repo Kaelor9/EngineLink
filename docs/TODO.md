@@ -227,6 +227,13 @@ off and on; boot with router; power off/on 3 times; speed in both modes.
   "Reading the card…" then the size), send the Wi-Fi report: engine task
   longest wait and the lock holder it names; then the remaining Stage 2 rows
   of `docs/releases/v0.16.6.md`.
+- **Router check of bench build 3 (plan 12.1 I14), when convenient:** install
+  it from a file, put EngineLink on the bench router again, open
+  `http://<its router IP>/` on the PC. Send the Wi-Fi report: it must say
+  "EngineLink bandwidth: 20 MHz", and the slowest request and send failures
+  show whether `/` now loads. If `/` still fails, tap "Test speed" once on the
+  router and send that report too (speed through the transfer task and the
+  1400-byte ping test tell the link from the server path).
 
 ## Previous boat checks
 

@@ -123,10 +123,15 @@ void apRadioSetup(){
   WiFi.setSleep(false);
   applyTxPower(false);
 }
-// The station's share of the same: country (when the AP never ran this boot),
-// no power save, transmit power. Called right after the station interface
-// started and before begin() (plan Stage 1b: router mode never set the power).
+// The station's share of the same: 20 MHz and a 20 s beacon timeout (instead
+// of the driver's 6 s), as every version up to 0.16.1 had (0.13.4 measured
+// 584 kB/s on the router with them; 0.16.2 dropped them, plan 12.1 I14),
+// country (when the AP never ran this boot), no power save, transmit power.
+// Called right after the station interface started and before begin(), so
+// the router is joined at 20 MHz (plan Stage 1b: router mode never set the power).
 void staRadioSetup(){
+  esp_wifi_set_bandwidth(WIFI_IF_STA,WIFI_BW_HT20);
+  esp_wifi_set_inactive_time(WIFI_IF_STA,20);
   if(!countryIsDK())esp_wifi_set_country_code("DK",true);
   WiFi.setSleep(false);
   applyTxPower(false);
