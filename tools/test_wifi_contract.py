@@ -31,7 +31,7 @@ assert "apRadioSetup()" in sa
 # 1b: TX power truth (F7): exact compare, set in router mode too.
 tx = body(w, "void applyTxPower(bool check){")
 assert "abs(" not in tx and "!=ESP_OK" in tx and "==(int8_t)elTxPower[txLevel]" in tx
-assert "staRadioSetup()" in body(w, "void applyNetwork(){")
+assert "WiFi.setAutoReconnect(true)" in body(w, "void applyNetwork(){")
 # Router STA must use the Arduino ESP32 Wi-Fi driver defaults.
 an = body(w, "void applyNetwork(){")
 assert "WiFi.mode(WIFI_STA);" in an and "WiFi.setAutoReconnect(true);" in an
