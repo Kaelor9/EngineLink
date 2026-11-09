@@ -117,21 +117,11 @@ void apRadioSetup(){
   WiFi.setSleep(false);
   applyTxPower(false);
 }
-// The station profile (docs/WIFI_PLAN_2026-11-09.md 2.2), official APIs only,
-// after WiFi.mode(WIFI_STA) and before WiFi.begin(). No modem sleep: a server
-// must receive unsolicited frames at once (esp_wifi.h: the default is
-// WIFI_PS_MIN_MODEM, which delays reception to the DTIM cycle); the same
-// country as the AP; 20 MHz as every version that worked on the boat router;
-// the all-channel scan so a mesh or repeater network joins its strongest
-// access point (STA.cpp defaults to WIFI_FAST_SCAN, the first match). All
-// else stays at the driver's default: PMF capable, WPA2 minimum, WPA3-SAE
-// negotiated by the driver, 20 dBm, 6 s beacon timeout, the core's reconnect.
-void staRadioSetup(){
-  WiFi.setSleep(false);
-  if(!countryIsDK())esp_wifi_set_country_code("DK",true);
-  esp_wifi_set_bandwidth(WIFI_IF_STA,WIFI_BW_HT20);
-  WiFi.setScanMethod(WIFI_ALL_CHANNEL_SCAN);
-}
+// The station runs on the ESP32 driver's defaults, exactly as the Prism
+// controller that joins the same routers (docs/WIFI_PLAN_2026-11-09.md 2.2,
+// owner's decision 2026-11-09): WiFi.mode(WIFI_STA), the core's reconnect,
+// WiFi.begin(). No power-save, country, bandwidth, scan or TX-power call on
+// the station interface, and nothing polls the driver while it connects.
 // ---- Wi-Fi, kept simple (0.16.2) ---- Standalone: own Wi-Fi at 192.168.4.1.
 // Router: the core's own reconnect; no IP in 2 minutes: own Wi-Fi (recovery,
 // not a mode), and try the router again every 10 minutes while no phone is
@@ -203,7 +193,6 @@ void applyNetwork(){
   apStarted=false;staAssociated=false;staHadIp=false;ntpStarted=false;
   if(withRouter){
     WiFi.mode(WIFI_STA);
-    staRadioSetup();
     WiFi.setAutoReconnect(true);
     staDownSince=millis()?millis():1;
     connectRouter();
@@ -253,10 +242,8 @@ void serviceNetwork(){
   if(pendingNetwork&&(int32_t)(now-networkSwitchAt)>=0){pendingNetwork=false;routerHold=false;applyNetwork();return;}
   const bool online=routerConfigured()&&!routerHold&&WiFi.status()==WL_CONNECTED;
   if(online)lastRouterIp=WiFi.localIP().toString();
-  static uint32_t rssiAt=0;   // signal and channel every 2 s: the last values before a loss stay (I15)
-  if((WiFi.getMode()&WIFI_MODE_STA)&&staAssociated&&(uint32_t)(now-rssiAt)>=2000UL){
-    rssiAt=now;wifi_ap_record_t ap;if(esp_wifi_sta_get_ap_info(&ap)==ESP_OK){lastRouterRssi=ap.rssi;lastRouterChannel=ap.primary;}
-  }
+  // The router's signal is read only when a report or the app asks for it
+  // (routerSignalSample); the channel comes from the connected event.
   // Router not reached in 2 minutes: own Wi-Fi, and try again later.
   if(routerConfigured()&&!routerHold&&!online&&staDownSince&&(uint32_t)(now-staDownSince)>=120000UL){
     Serial.println("Router not reached in 2 minutes: EngineLink Wi-Fi on");

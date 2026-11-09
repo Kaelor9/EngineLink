@@ -42,7 +42,13 @@ void appendApLinkJson(String &s){
 }
 // Minimal network-only diagnostic, intentionally independent of SD/engine
 // data. Usable by direct IP on router Wi-Fi or on the own Wi-Fi in recovery.
+// The router's signal, read when a report or the app asks for it while the
+// station is connected; the last value stays for a report after a loss.
+void routerSignalSample(){
+  if((WiFi.getMode()&WIFI_MODE_STA)&&WiFi.status()==WL_CONNECTED)lastRouterRssi=WiFi.RSSI();
+}
 String makeNetworkHealthJson(){
+  routerSignalSample();
   String s;s.reserve(3300);
   s+="{\"version\":";jsonString(s,EL_VERSION);s+=",\"build\":\"" __DATE__ " " __TIME__ "\"";
   s+=",\"uptimeMs\":";s+=(unsigned long)millis();
@@ -118,6 +124,7 @@ void handleNetworkReport(){
 String buildNetworkReport(){
   // Text is easy to select/copy on iPhone and can be sent to support.
   // Never include the saved Wi-Fi password or engine/boat telemetry.
+  routerSignalSample();
   String s;s.reserve(6500);
   s+="ENGINELINK - WI-FI REPORT\n";
   s+="========================\n\n";
@@ -133,6 +140,7 @@ String buildNetworkReport(){
   s+="Last router signal: ";if(!staAssociatedEvents)s+="Not measured";else{s+=lastRouterRssi;s+=" dBm";}s+="\n";
   s+="Last router channel: ";s+=lastRouterChannel;s+="\n";
   s+="Last negotiated Wi-Fi security: ";s+=stationSecurityName(staNegotiatedAuth);s+="\n";
+  s+="Station: ESP32 driver defaults, as the Prism controller (no power-save, country, bandwidth or scan setting)\n";
   s+="Security: ESP32 core WPA2/WPA3 negotiation (no custom SAE handling)\n";
   s+="Transmit power: ";if(WiFi.getMode()&WIFI_MODE_STA)s+="ESP32 driver default";else{s+=elTxName[txLevel<5?txLevel:TX_LEVEL_FIXED];s+=" (fixed)";}
   if(!(WiFi.getMode()&WIFI_MODE_STA)){s+=" · target ";s+=(int)elTxPower[txLevel<5?txLevel:TX_LEVEL_FIXED];s+=" quarter-dBm";}

@@ -1,6 +1,6 @@
 # To do
 
-**NOW — Wi-Fi (owner, 2026-11-09):** the review and plan are in [WIFI_PLAN_2026-11-09.md](WIFI_PLAN_2026-11-09.md); **0.17.0-rc1 implements it (*built*, CI and the local ESP32-S3 compile green, not yet run on the board)**. Next: the one bench session of plan section 5 (owner, about 40 min, with the PC's `netsh`/`ping` logs and the Prism control running), then the boat (5.5). No merge or release before 5.5 passes. No further A/B builds; a failure is read with the table in 5.4.
+**NOW — Wi-Fi (owner, 2026-11-09):** the review and plan are in [WIFI_PLAN_2026-11-09.md](WIFI_PLAN_2026-11-09.md); **0.17.0-rc2 implements it (*built*, CI and the local ESP32-S3 compile green, not yet run on the board)**; rc1 failed the bench on 2026-11-09 (the home router answered neither auth nor association, reasons 2/4/15), so rc2 runs the station on the driver's defaults exactly as the Prism controller (plan 2.2 revision 2). Next: the one bench session of plan section 5 (owner, about 40 min, with the PC's `netsh`/`ping` logs and the Prism control running), then the boat (5.5). No merge or release before 5.5 passes. No further A/B builds; a failure is read with the table in 5.4.
 
 Small fixes and wishes, collected here and released together in the next
 version instead of one update each. Newest at the bottom of each section.
@@ -76,13 +76,14 @@ version instead of one update each. Newest at the bottom of each section.
     log and heading match the ST60; the trip export has the navigation
     columns.
 
-## Wi-Fi (plan revised 2026-11-09, implemented as 0.17.0-rc1)
+## Wi-Fi (plan revised 2026-11-09, implemented as 0.17.0-rc2)
 
 The authoritative plan is [docs/WIFI_PLAN_2026-11-09.md](WIFI_PLAN_2026-11-09.md);
 `docs/WIFI_REWRITE_PLAN.md` is history. Two modes (Standalone, Router) plus
-the recovery mechanism; station profile = power save off, country DK, 20 MHz,
-all-channel scan; the Wi-Fi 2.0 state machine (Stage 4) and the 0.15.0
-leftovers are removed. Open items from the old section that are **not**
+the recovery mechanism; the station runs on the driver's defaults as the
+Prism controller (rc2; rc1's profile of power save off, country DK, 20 MHz
+and all-channel scan failed the bench); the Wi-Fi 2.0 state machine (Stage 4)
+and the 0.15.0 leftovers are removed. Open items from the old section that are **not**
 dropped: Apple's captive-portal probe (deferred by the owner), "Router is
 back, switch now?" (withdrawn with Stage 4: the app's Connect does it).
 
@@ -92,7 +93,7 @@ back, switch now?" (withdrawn with Stage 4: the app's Connect does it).
 
 ## To check on the boat
 
-- **Wi-Fi 0.17.0-rc1, one bench session then the boat (plan section 5).**
+- **Wi-Fi 0.17.0-rc2, one bench session then the boat (plan section 5).**
   Bench (home 4G router, default settings, about 40 min): PC `netsh wlan show
   interfaces` first (which band the PC uses), `ping -t` and the `netsh wlan
   show networks mode=bssid` loop logging while EngineLink is in router mode,

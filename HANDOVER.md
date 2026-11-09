@@ -183,17 +183,16 @@ implemented 2026-11-09, *built*, bench pending). Two modes, never both:
 - **Standalone:** access point only, `EngineLink` at 192.168.4.1, channel 6
   (saved `apch`), max 6 phones. `apRadioSetup()`: 20 MHz, stations kept 600 s,
   country DK (802.11d on), no power save, then the fixed 19.5 dBm.
-- **Router:** station only, at the router's address and `enginelink.local`.
-  `staRadioSetup()` after `WiFi.mode(WIFI_STA)`, before `WiFi.begin()`:
-  `WiFi.setSleep(false)` (no modem sleep: a server must receive unsolicited
-  frames at once; the driver's default `WIFI_PS_MIN_MODEM` delays reception
-  to the DTIM cycle), the same country as the AP (the driver is deinitialised
-  at every mode switch, so each mode sets it), 20 MHz, and
-  `WiFi.setScanMethod(WIFI_ALL_CHANNEL_SCAN)` so a mesh joins its strongest
-  access point. Everything else is the driver's default: PMF capable, WPA2
-  minimum, WPA3-SAE negotiated by the driver, 20 dBm, 6 s beacon timeout, and
-  the core's own reconnect (`WiFi.setAutoReconnect(true)`: a new attempt right
-  after every failure).
+- **Router:** station only, at the router's address and `enginelink.local`,
+  on the ESP32 driver's defaults exactly as the Prism controller
+  (`Kaelor9/Marine-RGB-Light-Controller`, same module) that joins the same
+  routers: `WiFi.mode(WIFI_STA)`, `WiFi.setAutoReconnect(true)`,
+  `WiFi.begin(ssid, pass)`, nothing else on the station interface and nothing
+  polling the driver while it connects (0.17.0-rc2, plan 2.2 revision 2; rc1
+  had power save off, country DK, 20 MHz and the all-channel scan on the
+  station, and failed on the home router with reasons 2/4/15 = the router's
+  answers never arrived). Modem sleep, 40 MHz, fast scan, country "01", PMF
+  capable, WPA2 minimum, WPA3-SAE by the driver, 20 dBm, 6 s beacon timeout.
 - **Recovery (a mechanism, not a mode):** no router IP for 120 s → the own
   Wi-Fi comes up; the router is tried again every 10 min while no phone is
   joined, or at once when the app's Connect is used. Not saved: every start
@@ -219,7 +218,8 @@ the firmware's logic: the router's 2.4 GHz radio, the place, or the board's
 receive path; plan section 5 tells them apart in one bench session. The
 firmware defects found (modem sleep on, country only in AP mode, the unwired
 Wi-Fi 2.0 state machine and 0.15.0 leftovers, the "Recovery" mode wording, the
-app page in the server task) are fixed in 0.17.0-rc1.
+app page in the server task) are fixed in 0.17.0-rc1; rc2 then set the
+station back to the driver's defaults as Prism (plan 2.2 revision 2).
 
 The network report
 (`/api/network-report`, also on port 81 at `/report`) holds everything needed

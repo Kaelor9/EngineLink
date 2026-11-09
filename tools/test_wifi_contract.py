@@ -30,18 +30,20 @@ assert "apRadioSetup()" in sa
 # 1b: TX power truth (F7): exact compare, set in router mode too.
 tx = body(w, "void applyTxPower(bool check){")
 assert "abs(" not in tx and "!=ESP_OK" in tx and "==(int8_t)elTxPower[txLevel]" in tx
-# --- The station profile (plan 2.2): three documented settings, the
-# all-channel scan, nothing else; after WiFi.mode(WIFI_STA), before begin().
-st = body(w, "void staRadioSetup(){")
-for call in ("WiFi.setSleep(false)", 'esp_wifi_set_country_code("DK",true)',
-             "esp_wifi_set_bandwidth(WIFI_IF_STA,WIFI_BW_HT20)", "WiFi.setScanMethod(WIFI_ALL_CHANNEL_SCAN)"):
-    assert call in st, f"staRadioSetup() lacks {call}"
-for gone in ("esp_wifi_set_inactive_time(WIFI_IF_STA", "setTxPower", "esp_wifi_set_protocol", "esp_wifi_set_ps(WIFI_PS_M",
-             "listen_interval", "esp_wifi_set_config"):
-    assert gone not in st, f"staRadioSetup() must not set {gone}"
-assert "WiFi.setSleep(true)" not in fw, "modem sleep is never switched on (F1)"
+# --- The station runs on the driver's defaults, as the Prism controller
+# (plan 2.2, revision 2, owner 2026-11-09): WiFi.mode(WIFI_STA), the core's
+# reconnect, WiFi.begin(), and no station setting in between or anywhere else.
 an = body(w, "void applyNetwork(){")
-assert an.index("WiFi.mode(WIFI_STA);") < an.index("staRadioSetup();") < an.index("WiFi.setAutoReconnect(true);") < an.index("connectRouter();")
+sta = an[an.index("WiFi.mode(WIFI_STA);"):an.index("connectRouter();")]
+assert "staRadioSetup" not in fw, "no station profile: driver defaults as Prism"
+for gone in ("esp_wifi_", "setSleep", "setScanMethod", "setTxPower", "setMinSecurity", "setSortMethod", "WiFi.config("):
+    assert gone not in sta, f"no station setting between WiFi.mode(WIFI_STA) and connectRouter(): {gone}"
+assert "WiFi.setAutoReconnect(true);" in sta, "the core's own reconnect, as Prism"
+for gone in ("esp_wifi_set_bandwidth(WIFI_IF_STA", "esp_wifi_set_inactive_time(WIFI_IF_STA", "esp_wifi_set_protocol(WIFI_IF_STA",
+             "esp_wifi_set_ps(", "WiFi.setSleep(true)", "WiFi.setScanMethod("):
+    assert gone not in fw, f"{gone}: no station radio setting anywhere"
+cr = body(w, "void connectRouter(){")
+assert "WiFi.begin(cfg.ssid.c_str()," in cr and "esp_wifi_" not in cr
 assert "WiFi.mode(WIFI_AP_STA)" not in an, "two exclusive modes"
 assert "EL_STA_DEFAULTS" not in fw and "elAllowSae" not in fw and "staSecMode" not in fw
 assert "elBoostSocket" not in fw and "wifiwpa3" not in fw
@@ -53,9 +55,9 @@ assert '"rescue"' not in fw and "Recovery (" not in fw, "no third mode in the re
 for gone in ("wifistate", "RouterGuard", "netpolicy::", "linkTune", "runRadioTest", "routerProbe", "routerKnownChannel"):
     assert gone not in fw, f"{gone} was removed (plan P3)"
 
-# Router counters and signal the report prints (plan 12.1 I15): written by
-# the event callback from its event data only (no Wi-Fi calls there, D14),
-# the signal sampled by the loop, so a report after a loss is true.
+# Router counters the report prints: written by the event callback from its
+# event data only (no Wi-Fi calls there, D14). The signal is read only when a
+# report or the app asks (routerSignalSample), never polled while connecting.
 cb = body(w, "void onWiFi(WiFiEvent_t e,WiFiEventInfo_t info){")
 assert "esp_wifi_" not in cb and "WiFi." not in cb, "D14: no Wi-Fi calls from the event callback"
 for need in ("staAssociatedEvents=staAssociatedEvents+1", "staIpEvents=staIpEvents+1", "staIpLostEvents=staIpLostEvents+1",
@@ -64,7 +66,9 @@ for need in ("staAssociatedEvents=staAssociatedEvents+1", "staIpEvents=staIpEven
              "staLastReason!=WIFI_REASON_ASSOC_LEAVE", "ARDUINO_EVENT_WIFI_STA_LOST_IP"):
     assert need in cb, f"onWiFi() lacks {need}"
 sn = body(w, "void serviceNetwork(){")
-assert "esp_wifi_sta_get_ap_info(&ap)" in sn and "lastRouterRssi=ap.rssi" in sn
+assert "esp_wifi_sta_get_ap_info" not in sn and "WiFi.RSSI()" not in sn, "nothing polls the driver from the loop (as Prism)"
+nr = (FW / "netreport.ino").read_text(encoding="utf-8")
+assert "WiFi.RSSI()" in body(nr, "void routerSignalSample(){")
 assert "++routerFallbacks;routerHold=true;" in sn, "the report counts every fallback to the own Wi-Fi"
 # The trace folds through the host-tested function.
 assert "tracefold::traceFold(" in body(w, "void traceWifi(uint8_t type,uint8_t reason){")
