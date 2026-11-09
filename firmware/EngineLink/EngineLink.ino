@@ -55,8 +55,6 @@
 #include "routerguard.h"
 #include "nmea2k.h"
 #include "netpolicy.h"
-#include "wifiwpa3.h"
-#include "netboost.h"
 #include "crashinfo.h"
 #include "linktune.h"
 #include "model.h"
@@ -75,12 +73,6 @@ volatile bool radioTestWanted=false;  // pings + channel survey (linkTuneTask)
 SpeedLogRec speedLog[SPEED_LOG_N];uint8_t speedLogCount=0;
 
 #define EL_VERSION "0.16.6"
-// A/B test build only (plan 12.1 I16, never released): 1 = router mode keeps
-// the Wi-Fi driver's own defaults like the Prism controller (no 20 MHz, beacon
-// timeout, country, power-save or TX-power settings). CI builds both.
-#ifndef EL_STA_DEFAULTS
-#define EL_STA_DEFAULTS 0
-#endif
 // Releases list published by the Pages workflow; firmware files come from
 // GitHub Releases of the same repository. Nothing else is downloaded.
 #define EL_RELEASES_URL "https://kaelor9.github.io/EngineLink/releases.json"
@@ -336,17 +328,7 @@ volatile uint32_t staUnexpectedDisconnects=0;
 // Count failed association attempts separately from dropped live connections.
 volatile uint32_t staAssociationFailures=0;
 volatile bool staHadIp=false;
-// Router security, like most ESP32 products: 0 = WPA2 (the driver starts
-// without WPA3, see wifiwpa3.cpp), which works on WPA2 and WPA2/WPA3 mixed
-// routers; 1 = WPA3 allowed, only for a router that needs it (WPA3-only).
-// Chosen from the router's security in the network scan and switched to WPA3
-// on "no compatible security" (codes 210/211); kept in NVS (smode).
-uint8_t staSecMode=0;
-volatile bool staSecSwitchPending=false;volatile uint8_t staSecSwitchTo=0;
-bool routerGotIpThisSession=false;
-uint32_t routerHoldSince=0,staSecSwitches=0;
-// A macro: Arduino puts its prototypes before the first function.
-#define saveSecMode() do{Preferences sp_;if(sp_.begin("enginelink",false)){sp_.putUChar("smode",staSecMode);sp_.end();}}while(0)
+// WPA2/WPA3 use Arduino ESP32 core negotiation without driver interception.
 // The browser's 32-KiB speed measurement includes HTTP setup. Track the
 // worker's own TCP write duration separately to locate actual bottlenecks.
 volatile uint32_t speedTxLastMs=0,speedTxLastBytes=0,speedTxLastWrites=0,speedTxLastAt=0;
@@ -365,8 +347,6 @@ int lastRouterRssi=0;
 uint8_t lastRouterChannel=0;
 // WPA3 diagnostics: report what the driver negotiated, not just what the AP advertises.
 volatile uint8_t staNegotiatedAuth=255;  // 255 = no successful association this boot
-volatile esp_err_t staSecurityConfigError=ESP_OK;
-volatile bool staSecurityConfigured=false;
 volatile uint32_t networkIpEpoch=0,networkIpEventAt=0;
 uint32_t netEpochSeen=0;   // networkIpEpoch already followed up (TX power, log)
 // Last access point event. AP_STOP also arrives (late) when the network only
