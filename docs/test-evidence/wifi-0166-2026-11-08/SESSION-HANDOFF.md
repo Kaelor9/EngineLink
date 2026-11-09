@@ -1,5 +1,7 @@
 # Session handoff, 2026-11-08 (router-mode fault, CI)
 
+**2026-11-09 update, supersedes the A/B instructions below:** owner explicitly required removing `wifiwpa3` and `netboost`, including their build hooks, and relying on stock ESP32 station/TCP defaults. This has been committed on the development branch. Do not install or request the earlier A/B experiment. The Maggan router was powered on and usable by both phone and PC when 0.16.6 reported 206 pre-connection failures, 0 successful associations. The owner repaired an IC5 cold joint and restored 3.3 V before that report. No router fix is confirmed. Next gate is CI success, then a single router connectivity check with the normal app build. Do not merge or release.
+
 Read with plan `docs/WIFI_REWRITE_PLAN.md` 12.1 I14–I16 and 13.6.1, and the
 router check in `docs/TODO.md`. Branch `claude/wizardly-lovelace-v6tlqz`,
 draft PR [#160](https://github.com/Kaelor9/EngineLink/pull/160): no merge,
