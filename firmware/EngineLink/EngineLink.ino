@@ -328,6 +328,8 @@ volatile uint32_t staUnexpectedDisconnects=0;
 // Count failed association attempts separately from dropped live connections.
 volatile uint32_t staAssociationFailures=0;
 volatile bool staHadIp=false;
+// Recovery bookkeeping is independent of the removed WPA3 security handling.
+uint32_t routerHoldSince=0;
 // WPA2/WPA3 use Arduino ESP32 core negotiation without driver interception.
 // The browser's 32-KiB speed measurement includes HTTP setup. Track the
 // worker's own TCP write duration separately to locate actual bottlenecks.
