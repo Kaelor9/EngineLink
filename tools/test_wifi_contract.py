@@ -32,21 +32,13 @@ assert "apRadioSetup()" in sa
 tx = body(w, "void applyTxPower(bool check){")
 assert "abs(" not in tx and "!=ESP_OK" in tx and "==(int8_t)elTxPower[txLevel]" in tx
 assert "staRadioSetup()" in body(w, "void applyNetwork(){")
-# Router mode gets the station settings every version up to 0.16.1 had
-# (plan 12.1 I14): 20 MHz and a 20 s beacon timeout, before begin().
-st = body(w, "void staRadioSetup(){")
-for call in ("esp_wifi_set_bandwidth(WIFI_IF_STA,WIFI_BW_HT20)", "esp_wifi_set_inactive_time(WIFI_IF_STA,20)",
-             "WiFi.setSleep(false)", "applyTxPower(false)"):
-    assert call in st, f"staRadioSetup() lacks {call}"
+# Router STA must use the Arduino ESP32 Wi-Fi driver defaults.
 an = body(w, "void applyNetwork(){")
-assert an.index("WiFi.mode(WIFI_STA);") < an.index("staRadioSetup();") < an.index("connectRouter();"), "set after the station starts, before the join"
-# A/B test build switch (plan 12.1 I16): off by default, gates only the
-# station's settings and the TX power in router mode, and marks the report.
-el = (FW / "EngineLink.ino").read_text(encoding="utf-8")
-assert "#ifndef EL_STA_DEFAULTS\n#define EL_STA_DEFAULTS 0\n#endif" in el, "normal builds keep EngineLink's radio settings"
-assert body(w, "void staRadioSetup(){").splitlines()[1].strip().startswith("if(EL_STA_DEFAULTS){WiFi.setSleep(true);return;}")
-assert "if(EL_STA_DEFAULTS&&WiFi.getMode()==WIFI_MODE_STA)return;" in body(w, "void applyTxPower(bool check){")
-assert fw.count("EL_STA_DEFAULTS") == 6, "the switch is used nowhere else"
+assert "WiFi.mode(WIFI_STA);" in an and "WiFi.setAutoReconnect(true);" in an
+assert "staRadioSetup" not in fw and "EL_STA_DEFAULTS" not in fw
+assert "elAllowSae" not in fw and "staSecMode" not in fw
+assert "elBoostSocket" not in fw and "wifiwpa3" not in fw
+
 # Router counters and signal the report prints (plan 12.1 I15): written by
 # the event callback from its event data only (no Wi-Fi calls there, D14),
 # the signal sampled by the loop, so a report after a loss is true.
@@ -79,7 +71,7 @@ cfgs = body(h, "bool Web::begin() {")
 for need in ("lru_purge_enable = true", "max_open_sockets = 7", "keep_alive_enable = true",
              "httpd_uri_match_wildcard", "open_fn = webOpen", "core_id = 1"):
     assert need in cfgs, f"server config lacks {need}"
-assert "#if EL_NETBOOST" in body(h, "static esp_err_t webOpen(httpd_handle_t, int fd) {")
+assert "setsockopt(fd, IPPROTO_TCP, TCP_NODELAY" in body(h, "static esp_err_t webOpen(httpd_handle_t, int fd) {")
 assert "Access-Control-Allow-Origin\",\"*" not in fw and "Allow-Origin: *" not in fw, "no wildcard CORS (F22)"
 api = (FW / "webapi.ino").read_text(encoding="utf-8")
 for route in ("/api/export/raw.csv", "/api/export/trips.csv", "/api/export/series.csv", "/api/export/fast.csv",
@@ -107,15 +99,18 @@ for gone in ("lastHttpMs", "httpBusySince", "httpSelfCheckTask", "liveHttpTask",
 # Handlers never act on the radio or mDNS (they run in the server task now)
 assert "startNameService()" not in body(api, "void handleCfg(){")
 
-# --- Section 4: no third exception ---------------------------------------
+# --- 2026-11-09 owner override: no low-level hooks or private lwIP structs ---
+for removed in ("netboost.cpp", "netboost.h", "wifiwpa3.cpp", "wifiwpa3.h"):
+    assert not (FW / removed).exists(), f"{removed} must not return"
 for p in sorted(FW.glob("*")):
-    if p.suffix not in (".ino", ".h", ".cpp"):
-        continue
-    t = p.read_text(encoding="utf-8")
-    if "lwip/priv" in t:
-        assert p.name == "netboost.cpp", f"lwip/priv used in {p.name}"
-    if "__wrap_" in t:
-        assert p.name == "wifiwpa3.cpp", f"__wrap_ used in {p.name}"
+    if p.suffix in (".ino", ".h", ".cpp"):
+        t = p.read_text(encoding="utf-8")
+        assert "lwip/priv" not in t, f"{p.name}: private lwIP internals"
+        assert "__wrap_" not in t, f"{p.name}: linker wrapper"
+for wf in ("build-engine.yml", "pages.yml"):
+    t = (ROOT / ".github" / "workflows" / wf).read_text(encoding="utf-8")
+    assert "--wrap=esp_wifi_init" not in t
+    assert "AB-test-router-driver-defaults" not in t
 
 # --- Secrets never printed -----------------------------------------------
 assert not re.search(r"print[f]?\([^;]*(apPassword|wifiPassword|ghToken)", fw), "never log a secret"
