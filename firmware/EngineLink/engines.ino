@@ -467,18 +467,24 @@ void engineTask(void *){
     Frame f;
     xQueuePeek(framesQueue,&f,pdMS_TO_TICKS(5));  // wake as soon as a frame is in, or every 5 ms
     const uint32_t w0=millis();engineWaitSince=w0?w0:1;
+    // Who holds the lock now: named in the report with the longest wait, so
+    // a stall is attributed by measurement, not guessed (plan 13.6.1).
+    const TaskHandle_t holder=xSemaphoreGetMutexHolder(engineMx);
+    char by[16];strlcpy(by,holder?pcTaskGetName(holder):"none",sizeof(by));
     xSemaphoreTake(engineMx,portMAX_DELAY);
     engineWaitSince=0;
     const uint32_t waited=millis()-w0;
-    if(waited>engineMaxWaitMs)engineMaxWaitMs=waited;
+    if(waited>engineMaxWaitMs){engineMaxWaitMs=waited;memcpy(engineMaxWaitBy,by,sizeof(by));}
     if(waited>100)++engineSlowWaits;
+    const uint32_t r0=millis();
     int handled=0;
     while(handled<128&&xQueueReceive(framesQueue,&f,0)==pdTRUE){processFrame(f);handled++;}
     serviceKad();
     serviceAutoPoll();
     serviceFast();
     serviceEngines();
-    engineBeat=millis();
+    const uint32_t done=millis();engineBeat=done;
+    if(done-r0>engineMaxRoundMs)engineMaxRoundMs=done-r0;
     xSemaphoreGive(engineMx);
     vTaskDelay(1);  // leave time for the idle task on this core
   }

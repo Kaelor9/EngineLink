@@ -152,7 +152,7 @@ window.fetch=function(url,opt){
     if(p==='/api/fuel')return reply(fuelList());
     if(p==='/api/economy')return reply(econ);
     if(p==='/api/diag')return reply(diag());
-    if(p==='/api/sd/info')return reply({ok:true,inserted:true,logging:true,usedMB:2150,totalMB:30400,files:12,rawMB:1900,rawFiles:8,exports:0,trips:3,fuel:2,status:'Logging raw J1708'});
+    if(p==='/api/sd/info')return reply({ok:true,inserted:true,logging:true,known:true,counting:false,usedMB:2150,totalMB:30400,files:12,rawMB:1900,rawFiles:8,exports:0,trips:3,fuel:2,status:'Logging raw J1708'});
     if(p==='/api/state'){cfg.fuelCorr=[cal().f,cal().f];return reply({config:cfg,test:{running:false,available:false,rows:0,step:0,phase:'idle',seconds:0},recent:[]});}
     if(p==='/api/fw/status')return reply({state:0,bytes:0,total:0,error:'',target:'',running:'__VERSION__',pending:false,online:true,list:null});
     if(p==='/api/speedtest'){const kb=Math.min(4096,+u.searchParams.get('kb')||256);lastSp={what:'speed test',bytes:kb*1024,ms:1600,findMs:0,sdMs:0,netMs:1590,ap:false,rssi:-58};return new Promise(r=>setTimeout(()=>r(new Response('x'.repeat(kb*1024))),1600));}

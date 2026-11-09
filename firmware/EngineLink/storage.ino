@@ -110,8 +110,23 @@ void initSD(){
 void refreshTestAvailable(){
   testFileAvailable=sdReady&&cardInserted()&&calName.length()&&SD.exists(calName);
 }
-uint64_t sdTotalMB(){return sdReady?SD.totalBytes()/(1024ULL*1024ULL):0;}
-uint64_t sdUsedMB(){return sdReady?SD.usedBytes()/(1024ULL*1024ULL):0;}
+// Card work that may be slow (every open by name searches the whole root
+// directory: 0.1-0.4 s a file on a card with many logs, plan 13.6.1) runs
+// with the engine lock let go, so engine reading and the web server go on.
+// Only for work on the card itself and the caller's own variables; shared
+// data is read before and written after. Lets go only a lock the calling
+// task holds (giving a mutex another task holds is an assert in FreeRTOS).
+bool sdGapBegin(){
+  if(!engineMx||xSemaphoreGetMutexHolder(engineMx)!=xTaskGetCurrentTaskHandle())return false;
+  sdOffLock=sdOffLock+1;xSemaphoreGive(engineMx);return true;
+}
+void sdGapEnd(bool gap){
+  if(!gap)return;
+  xSemaphoreTake(engineMx,portMAX_DELAY);if(sdOffLock)sdOffLock=sdOffLock-1;
+}
+// A card that is being read without the lock, or a web reply that may hold a
+// file open while it waits for the phone, must not be unmounted under it.
+bool sdUnmountBlocked(){return sdOffLock||webSendInFlight()||webXferBusy();}
 void serviceSD(){
   // Card detect is checked for every state, not only while recording, so a
   // removed card unmounts cleanly and a re-inserted card mounts again.
@@ -120,6 +135,10 @@ void serviceSD(){
     const bool inserted=cardInserted();
     if(inserted!=cardWasInserted){cardWasInserted=inserted;cardChangeAt=millis();}
     if(!inserted&&(sdReady||sdLogging||calActive)){
+      // A download or a card scan still has the card: stop it and unmount on
+      // a later check (reads of a removed card fail at once, so it ends soon).
+      if(sdUnmountBlocked()){webXferAbort();return;}
+      sdWalkStop();
       const bool wasRecording=sdLogging||calActive;
       if(calActive)finishCalibration(false);
       if(sdLogging)stopLog();
@@ -138,8 +157,9 @@ void serviceSD(){
   }
   // After a write failure with the card still in, try again: mount anew,
   // resume the raw log and the trip log. Every minute, then every 5 minutes.
-  if(sdFaultLatched&&cardInserted()&&!calActive&&!otaActive&&(uint32_t)(millis()-lastSdRetry)>=(sdRetries<3?60000UL:300000UL)){
+  if(sdFaultLatched&&cardInserted()&&!calActive&&!otaActive&&!sdUnmountBlocked()&&(uint32_t)(millis()-lastSdRetry)>=(sdRetries<3?60000UL:300000UL)){
     lastSdRetry=millis();++sdRetries;
+    sdWalkStop();
     if(sdLogging)stopLog();
     if(tripSeries)tripSeries.close();
     if(sdReady){SD.end();sdReady=false;}
@@ -356,7 +376,6 @@ void loadSettings(){
   cfg.router=pref.getBool("router",false);
   // Rescue is not remembered: a start in router mode always tries the router.
   routerHold=false;
-  {Preferences sp;if(sp.begin("enginelink",true)){staSecMode=sp.getUChar("smode",0)?1:0;sp.end();}}
   routerKnownChannel=pref.getUChar("rch",0);
   routerFailureReason=pref.getUChar("rrsn",0);
   routerFailurePhase=pref.getUChar("rstage",0);

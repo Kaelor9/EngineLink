@@ -416,7 +416,7 @@ String makeDiagJson(){
     const DlStat &x=k?spStat:dlStat;
     if(!x.what[0])continue;
     s+=k?",\"sp\":":",\"dl\":";
-    s+="{\"what\":";jsonString(s,x.what);s+=",\"bytes\":";s+=x.bytes;s+=",\"raw\":";s+=x.raw;s+=",\"z\":";s+=x.z?"true":"false";s+=",\"ms\":";s+=x.ms;
+    s+="{\"what\":";jsonString(s,x.what);s+=",\"bytes\":";s+=x.bytes;s+=",\"raw\":";s+=x.raw;s+=",\"ms\":";s+=x.ms;
     s+=",\"findMs\":";s+=x.findMs;s+=",\"sdMs\":";s+=x.sdMs;s+=",\"netMs\":";s+=x.netMs;
     s+=",\"ap\":";s+=x.ap?"true":"false";s+=",\"rssi\":";s+=x.rssi;s+='}';
   }
@@ -485,19 +485,10 @@ String makeDiagJson(){
   s+=",\"apDriverSsid\":";jsonString(s,WiFi.softAPSSID());
   s+=",\"apDriverIp\":";jsonString(s,WiFi.softAPIP().toString());
   s+=",\"apStops\":";s+=(unsigned long)apStops;s+=",\"chMoves\":";s+=apChannelChanges;s+=",\"bw\":";{wifi_bandwidth_t b=WIFI_BW_HT20;esp_wifi_get_bandwidth(WIFI_IF_AP,&b);s+=b==WIFI_BW_HT40?40:20;}
-  s+=",\"httpRebinds\":";s+=web.listenerRebinds;
-  s+=",\"httpSelfFails\":";s+=httpSelfFails;s+=",\"httpHeals\":";s+=httpHeals;s+=",\"httpSelfRestarts\":";s+=httpSelfRestarts;
-  s+=",\"httpRebindAgoMs\":";s+=httpBoundAt?(unsigned long)(millis()-httpBoundAt):0;
-  s+=",\"httpBoundEpoch\":";s+=httpBoundEpoch;
+  appendApLinkJson(s);
   s+=",\"wifiIpEpoch\":";s+=(unsigned long)networkIpEpoch;
-  s+=",\"httpServed\":";s+=web.served;s+=",\"httpReused\":";s+=web.reused;
-  s+=",\"httpEvicted\":";s+=web.evicted;s+=",\"httpSlowMs\":";s+=web.slowestMs;
-  s+=",\"httpParseSlowMs\":";s+=web.worstParseMs;
-  s+=",\"httpHandleSlowMs\":";s+=web.worstHandlerMs;
-  s+=",\"httpSlowPath\":";jsonString(s,web.slowPath);
-  s+=",\"httpInteractiveSlowMs\":";s+=web.slowestInteractiveMs;
-  s+=",\"httpTransferSlowMs\":";s+=web.slowestTransferMs;
-  s+=",\"httpOpen\":";s+=web.openSockets();s+=",\"loopMaxMs\":";s+=loopMaxMs;
+  appendHttpdJson(s);
+  s+=",\"loopMaxMs\":";s+=loopMaxMs;
   s+=",\"mdns\":";s+=mdnsReady?"true":"false";
   s+=",\"mdnsStarts\":";s+=mdnsRestarts;
   s+=",\"mdnsFailures\":";s+=mdnsFailures;
