@@ -44,7 +44,7 @@ void appendApLinkJson(String &s){
 // data. Usable by direct IP on router Wi-Fi or after rescue AP returns.
 String makeNetworkHealthJson(){
   String s;s.reserve(3300);
-  s+="{\"version\":";jsonString(s,EL_VERSION);s+=",\"build\":\"" __DATE__ " " __TIME__ "\"";s+=",\"staDefaults\":";s+=EL_STA_DEFAULTS?"true":"false";
+  s+="{\"version\":";jsonString(s,EL_VERSION);s+=",\"build\":\"" __DATE__ " " __TIME__ "\"";
   s+=",\"uptimeMs\":";s+=(unsigned long)millis();
   s+=",\"mode\":";
   jsonString(s,routerHold?"rescue":routerConfigured()?"router":"standalone");
@@ -102,9 +102,7 @@ String makeNetworkHealthJson(){
   s+=",\"lastRouterChannel\":";s+=(unsigned)lastRouterChannel;
   s+=",\"lastSecurity\":";jsonString(s,stationSecurityName(staNegotiatedAuth));
   appendLinkJson(s);
-  s+=",\"secMode\":";s+=staSecMode?"\"wpa3\"":"\"wpa2\"";s+=",\"saeControl\":";s+=elSaeControlActive()?"true":"false";s+=",\"secSwitches\":";s+=staSecSwitches;{wifi_ps_type_t ps=WIFI_PS_NONE;esp_wifi_get_ps(&ps);s+=",\"powerSave\":";s+=(int)ps;}
-  s+=",\"saeConfigured\":";s+=staSecurityConfigured?"true":"false";
-  s+=",\"saeSetupError\":";s+=(int)staSecurityConfigError;
+  {wifi_ps_type_t ps=WIFI_PS_NONE;esp_wifi_get_ps(&ps);s+=",\"powerSave\":";s+=(int)ps;}
   s+=",\"lastFailureDescription\":";jsonString(s,reasonText(routerFailureReason));
   s+=",\"events\":[";
   RouterTrace trace[ROUTER_TRACE_CAP];const uint8_t n=getWifiTrace(trace,nullptr);
@@ -132,7 +130,6 @@ String buildNetworkReport(){
   s+="ENGINELINK - WI-FI REPORT\n";
   s+="========================\n\n";
   s+="Firmware: ";s+=EL_VERSION;s+=" (built " __DATE__ " " __TIME__ ")";   // tells two bench builds of one version apart
-  if(EL_STA_DEFAULTS)s+=" · A/B TEST BUILD: router radio on the driver's defaults (plan I16)";
   s+="\n";
   s+="Uptime: ";s+=millis()/1000UL;s+=" seconds\n";
   s+="Mode: ";s+=routerHold?"Recovery (EngineLink Wi-Fi)":routerConfigured()?"Router (station)":"Standalone (EngineLink Wi-Fi)";s+="\n";
@@ -144,11 +141,9 @@ String buildNetworkReport(){
   s+="Last router signal: ";if(!staAssociatedEvents)s+="Not measured";else{s+=lastRouterRssi;s+=" dBm";}s+="\n";
   s+="Last router channel: ";s+=lastRouterChannel;s+="\n";
   s+="Last negotiated Wi-Fi security: ";s+=stationSecurityName(staNegotiatedAuth);s+="\n";
-  s+="Security mode: ";s+=staSecMode?"WPA3 allowed (router needs WPA3)":"WPA2, like most IoT devices (works on WPA2 and WPA2/WPA3 routers)";s+="\n";
-  s+="WPA3 switch in firmware: ";s+=elSaeControlActive()?"active":"NOT active (built without -Wl,--wrap=esp_wifi_init)";s+="\n";
-  s+="Security switches: ";s+=staSecSwitches;s+="\n";
-  s+="Transmit power: ";s+=elTxName[txLevel<5?txLevel:TX_LEVEL_FIXED];s+=" (fixed)";
-  s+=" · target ";s+=(int)elTxPower[txLevel<5?txLevel:TX_LEVEL_FIXED];s+=" quarter-dBm";
+  s+="Security: ESP32 core WPA2/WPA3 negotiation (no custom SAE handling)\n";
+  s+="Transmit power: ";if(WiFi.getMode()&WIFI_MODE_STA)s+="ESP32 driver default";else{s+=elTxName[txLevel<5?txLevel:TX_LEVEL_FIXED];s+=" (fixed)";}
+  if(!(WiFi.getMode()&WIFI_MODE_STA)){s+=" · target ";s+=(int)elTxPower[txLevel<5?txLevel:TX_LEVEL_FIXED];s+=" quarter-dBm";}
   {int8_t q=0;if(esp_wifi_get_max_tx_power(&q)==ESP_OK){s+=" · driver reports ";s+=q/4.0f;s+=" dBm (";s+=(int)q;s+=" quarter-dBm)";}}
   s+=" · set again after the driver changed it: ";s+=txReapplied;s+=" time(s)\n";
   {wifi_ps_type_t ps=WIFI_PS_NONE;esp_wifi_get_ps(&ps);
@@ -169,7 +164,6 @@ String buildNetworkReport(){
   if(linkSmall.sent){s+="Small pings to the router (20 x 64 bytes): ";s+=linkSmall.got;s+="/";s+=linkSmall.sent;s+=" back, ";s+=linkSmall.minMs;s+="/";s+=linkSmall.avgMs;s+="/";s+=linkSmall.maxMs;s+=" ms\n";}
   if(linkNet.sent){s+="Pings to the internet (1.1.1.1, 10 x 64 bytes): ";s+=linkNet.got;s+="/";s+=linkNet.sent;s+=" back";if(linkNet.got){s+=", ";s+=linkNet.minMs;s+="/";s+=linkNet.avgMs;s+="/";s+=linkNet.maxMs;s+=" ms";}s+="\n";}
   s+="Note: if pings to the internet are faster than pings to the router, the router is slow to answer pings itself, not the Wi-Fi.\n";
-  s+="Security configuration result: ";s+=esp_err_to_name(staSecurityConfigError);s+="\n\n";
   s+="CONNECTIVITY (COUNTERS SINCE BOOT)\n";
   s+="Successful Wi-Fi associations: ";s+=(unsigned long)staAssociatedEvents;s+="\n";
   s+="Successful router IP assignments: ";s+=(unsigned long)staIpEvents;s+="\n";
@@ -278,7 +272,7 @@ String buildNetworkReport(){
    s+="Firmware self-test: ";s+=selfTestText();s+="\n";}
   s+="Last 32 KiB server write: ";s+=speedTxLastBytes;s+=" bytes in ";s+=speedTxLastMs;s+=" ms (";
   s+=speedTxLastWrites;s+=" write calls)\n";
-  s+="TCP send window: 5744 bytes by default, raised to 17 KB per connection (";s+=elBoostedSockets;s+=" connections raised, ";s+=elBoostMisses;s+=" not found)\n";
+  s+="TCP send window: ESP32 core default (not modified)\n";
   s+="Note: server write time is NOT the same as measured radio throughput.\n\n";
   s+="LATEST WI-FI EVENTS (oldest to newest; uptime seconds)\n";
   RouterTrace trace[ROUTER_TRACE_CAP];const uint8_t n=getWifiTrace(trace,nullptr);
