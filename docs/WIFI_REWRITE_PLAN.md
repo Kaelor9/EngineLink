@@ -1,5 +1,7 @@
 # Wi-Fi 2.0: the implementation plan
 
+> **Owner override, 2026-11-09 (supersedes the former exceptions in section 4.1, P8 and I16):** Remove `wifiwpa3.cpp/.h` and `netboost.cpp/.h` entirely. No linker interposition on `esp_wifi_init`, no private lwIP PCB edits, and no station-specific radio overrides. Router mode uses Arduino ESP32 3.3.12 / ESP-IDF driver defaults for WPA2/WPA3 and TCP. Preserve the official `esp_http_server`, OTA rollback, AP and engine safeguards. This is a deliberate simplification, **not** proof that router connectivity is repaired. Existing references below describe superseded design history; do not restore the exceptions. The A/B experimental build is retired.
+
 Status: **final plan, planning closed 2026-11-05 (fifth revision). Stages 1–3 *built*
 (development build 0.16.6, CI green, untested on hardware); Stage 4 onwards waits for
 the Stage 0 gate (9.0). Implementation findings: section 12.1.** This
