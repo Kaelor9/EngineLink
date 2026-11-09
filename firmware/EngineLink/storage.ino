@@ -376,7 +376,6 @@ void loadSettings(){
   cfg.router=pref.getBool("router",false);
   // Rescue is not remembered: a start in router mode always tries the router.
   routerHold=false;
-  {Preferences sp;if(sp.begin("enginelink",true)){staSecMode=sp.getUChar("smode",0)?1:0;sp.end();}}
   routerKnownChannel=pref.getUChar("rch",0);
   routerFailureReason=pref.getUChar("rrsn",0);
   routerFailurePhase=pref.getUChar("rstage",0);
