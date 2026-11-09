@@ -3,10 +3,6 @@
 // own-origin security checks (plan 6.9) and the worker for long transfers.
 // Sessions, keep-alive, timeouts, LRU purge, chunking, routing and query
 // parsing are the server's; this file only maps calls onto its API.
-#ifndef EL_NETBOOST
-#define EL_NETBOOST 1   // netboost.cpp exception (plan 4.1); 0 = the core's 5744-byte window
-#endif
-
 HttpdStats httpdStats;
 static WebCtx srvCtx, xferCtx;
 static TaskHandle_t xferTask = nullptr;
@@ -185,9 +181,6 @@ static esp_err_t web404(httpd_req_t *r, httpd_err_code_t) {
 }
 static esp_err_t webOpen(httpd_handle_t, int fd) {
   int one = 1; setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &one, sizeof(one));
-#if EL_NETBOOST
-  elBoostSocket(fd, 11488);   // 8 packets in flight instead of 4 (plan 4.1)
-#endif
   ++httpdStats.opens; if (++httpdStats.openNow > httpdStats.openMax) httpdStats.openMax = httpdStats.openNow;
   return ESP_OK;
 }
