@@ -100,7 +100,7 @@ void saveKnownChannel(uint8_t ch){
 // 19.5 dBm as 78 quarter-dBm exactly; its unset 20 dBm (80) is not accepted
 // as "close enough" any more (plan F7).
 void applyTxPower(bool check){
-  if(EL_STA_DEFAULTS&&WiFi.getMode()==WIFI_MODE_STA)return;   // A/B build: driver default in router mode
+  if(WiFi.getMode()==WIFI_MODE_STA)return; // use the STA driver default power setting
   if(check){
     int8_t q=0;
     if(esp_wifi_get_max_tx_power(&q)!=ESP_OK)return;   // Wi-Fi not running
@@ -122,17 +122,7 @@ void apRadioSetup(){
   WiFi.setSleep(false);
   applyTxPower(false);
 }
-// The station's share: 20 MHz and a 20 s beacon timeout (driver: 6 s) as up to
-// 0.16.1 (plan I14), country, no power save, transmit power. Right after the
-// station started and before begin(), so the router is joined at 20 MHz.
-void staRadioSetup(){
-  if(EL_STA_DEFAULTS){WiFi.setSleep(true);return;}   // A/B build: the core's defaults, modem sleep as in Prism
-  esp_wifi_set_bandwidth(WIFI_IF_STA,WIFI_BW_HT20);
-  esp_wifi_set_inactive_time(WIFI_IF_STA,20);
-  if(!countryIsDK())esp_wifi_set_country_code("DK",true);
-  WiFi.setSleep(false);
-  applyTxPower(false);
-}
+// Station mode uses the ESP32 core defaults (no radio overrides).
 // ---- Wi-Fi, kept simple (0.16.2) ---- Standalone: own Wi-Fi at 192.168.4.1.
 // Router: the core's own reconnect; no IP in 2 minutes: own Wi-Fi, and try the
 // router again every 10 minutes while no phone is connected to it.
@@ -199,13 +189,11 @@ void applyNetwork(){
   if(mdnsReady){MDNS.end();mdnsReady=false;}
   httpdSuspend();   // close web sessions before the driver stops (plan 6.2)
   WiFi.mode(WIFI_OFF);
-  elAllowSae=withRouter&&staSecMode==1;   // WPA3 only for a WPA3-only router
   WiFi.persistent(false);
   WiFi.setHostname(cfg.hostName.c_str());
   apStarted=false;staAssociated=false;staHadIp=false;ntpStarted=false;
   if(withRouter){
     WiFi.mode(WIFI_STA);
-    staRadioSetup();
     WiFi.setAutoReconnect(true);
     staDownSince=millis()?millis():1;
     connectRouter();
