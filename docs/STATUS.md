@@ -28,6 +28,9 @@ to engines.
 
 ## Checked on the board
 
+**2026-11-09 pending bench build:** Following the owner's explicit direction, the development branch now removes both custom low-level network exceptions (`wifiwpa3` and `netboost`) and the A/B build. Router mode uses ESP32 core defaults; the next compiled app must be tested once on the repaired PCB. No claim of fixed router connectivity or measured throughput is made. The owner repaired a suspected cold solder joint on IC5, restoring 3.3 V; standalone/recovery subsequently reached 845–1105 kB/s. A subsequent Maggan router attempt still had 0 associations and 206 pre-connection failures, although the PC and iPhone could use Maggan.
+
+
 | Area | Result |
 |------|--------|
 | J1708 receive | Bench loop: 36,000 frames in 30 minutes without errors |
