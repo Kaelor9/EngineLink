@@ -1,5 +1,7 @@
 # To do
 
+**Owner decision 2026-11-09 overrides historical Wi-Fi notes below:** do not retain or reintroduce `wifiwpa3.cpp`, `netboost.cpp` or the temporary A/B build. Firmware now uses the official ESP32 station and TCP defaults; compile and make one focused router check after the hardware solder repair. Prior instructions below to *keep* the two exceptions or *test* the A/B artifact are superseded.
+
 Small fixes and wishes, collected here and released together in the next
 version instead of one update each. Newest at the bottom of each section.
 
