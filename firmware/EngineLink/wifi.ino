@@ -194,6 +194,7 @@ void applyNetwork(){
   apStarted=false;staAssociated=false;staHadIp=false;ntpStarted=false;
   if(withRouter){
     WiFi.mode(WIFI_STA);
+    WiFi.setSleep(true);      // restore the Arduino ESP32 station default after AP mode
     WiFi.setAutoReconnect(true);
     staDownSince=millis()?millis():1;
     connectRouter();
