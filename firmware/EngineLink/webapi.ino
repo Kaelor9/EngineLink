@@ -497,9 +497,8 @@ String makeLiveJson(){
   s+=",\"ssid\":";jsonString(s,cfg.ssid);
   s+=",\"rssi\":";if(WiFi.status()==WL_CONNECTED)s+=WiFi.RSSI();else s+="null";
   s+=",\"ip\":";if(WiFi.status()==WL_CONNECTED)jsonString(s,WiFi.localIP().toString());else s+="null";
-  s+=",\"conflict\":";s+=staConflict?"true":"false";
   s+=",\"mode\":";jsonString(s,(WiFi.getMode()&WIFI_MODE_AP)?"ap":"sta");
-  s+=",\"rescue\":";s+=routerHold?"true":"false";
+  s+=",\"recovery\":";s+=routerHold?"true":"false";
   s+="},\"sd\":{\"ok\":";s+=sdReady?"true":"false";
   s+=",\"log\":";s+=sdLogging?"true":"false";
   s+="},\"test\":";s+=calActive?"true":"false";
@@ -768,7 +767,6 @@ void handleWifiScan(){
     if(!(WiFi.getMode()&WIFI_MODE_AP)||pendingNetwork||routerConfigured()&&!routerHold){
       reply(false,"Connect to EngineLink Wi-Fi before scanning for a router",409);return;
     }
-    if(routerProbing){reply(false,"EngineLink is looking for the saved router; try again in a few seconds",409);return;}
     if(!scanBusy&&!scanRequested){
       // Acknowledge the HTTP request BEFORE changing radio modes. This
       // prevents the phone losing the response that initiated the scan.
@@ -814,27 +812,21 @@ void handleWifiConnect(){
   if(!ssid.length()||ssid.length()>32){reply(false,"Choose a network",400);return;}
   const String pass=web.arg("pass");
   if(pass.length()>63){reply(false,"Password too long",400);return;}
-  // The user explicitly requested another router attempt; release rescue
-  // mode without modifying AP credentials.
+  // The user explicitly requested another router attempt; leave recovery
+  // without modifying AP credentials. WPA2/WPA3, channel and BSSID are the
+  // driver's business: the scan is only for choosing the name.
   if(scanBusy){reply(false,"Wait for the network scan to finish",409);return;}
-  routerHold=false;routerGuard.reset();
+  routerHold=false;
   routerAttempts=0;
-  routerReturnFailed=false;routerProbeEvery=netpolicy::PROBE_EVERY_MS;
   cfg.router=true;cfg.ssid=ssid;cfg.wifiPassword=pass;cfg.completed=true;
   saveSettings();
-  // WPA2/WPA3 are negotiated by the ESP32 driver; only remember channel.
-  {uint8_t ch=0;for(uint8_t k=0;k<scanEntriesCount;k++)if(scanEntries[k].ssid==ssid){ch=scanEntries[k].channel;break;}
-   if(ch!=routerKnownChannel){routerKnownChannel=0;Preferences rp;if(rp.begin("enginelink",false)){rp.remove("rch");rp.end();}saveKnownChannel(ch);}}
-  // The displayed scan is only for choosing the SSID. Never lock to its
-  // cached BSSID/channel: it can change before the connection begins.
-  staBssidKnown=false;
   String m="Connecting to "+ssid+". EngineLink will stop its own Wi-Fi and try the router for up to two minutes. Connect your phone to the router and open http://enginelink.local. If all attempts fail, EngineLink restores its own Wi-Fi automatically.";
   reply(true,m);
   networkSwitchAt=millis()+1200UL;
   pendingNetwork=true;
 }
 void handleWifiForget(){
-  routerHold=false;routerGuard.reset();
+  routerHold=false;
   cfg.router=false;cfg.ssid="";cfg.wifiPassword="";saveSettings();
   // Reply on the current router connection BEFORE disabling STA. Otherwise
   // Safari sees a failed HTTP request even when the mode change succeeded.
@@ -941,7 +933,7 @@ void initializeWeb(){
     if(web.header("If-None-Match")=="\"" EL_VERSION "-" __DATE__ " " __TIME__ "\""){web.send(304,"text/plain","");return;}
     web.sendHeader("Content-Encoding","gzip");
     web.send_P(200,"text/html; charset=utf-8",(const char*)ENGINE_UI_GZ,ENGINE_UI_GZ_LEN);
-  },R_NOLOCK);
+  },R_NOLOCK|R_ASYNC);   // 110 KB from the transfer task: a slow phone never holds the server task (plan P5)
   web.on("/favicon.ico",HTTP_GET,[](){web.send(204,"text/plain","");},R_NOLOCK);
   web.on("/api/state",HTTP_GET,handleState);
   web.on("/api/pids",HTTP_GET,handlePids);
@@ -999,8 +991,6 @@ void initializeWeb(){
       x.at=millis();x.level=web.hasArg("l")?(uint8_t)web.arg("l").toInt():txLevel;
       x.kbs10=(uint16_t)constrain(web.arg("kbs").toFloat()*10.0f,0.0f,65000.0f);
       x.rttMs=(uint16_t)constrain(web.arg("rtt").toInt(),0,65000);
-      // On the router: also measure pings and the channel for the report.
-      if(routerConfigured()&&!routerHold&&(!linkTuneAt||(uint32_t)(millis()-linkTuneAt)>=300000UL))radioTestWanted=true;
     }
     reply(true,"ok");
   });

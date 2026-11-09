@@ -1,8 +1,8 @@
-// Host test for wifistate::traceFold (Wi-Fi 2.0 plan Stage 1c, finding F2).
+// Host test for tracefold::traceFold (Wi-Fi 2.0 plan Stage 1c, finding F2).
 // g++ -std=c++17 -Wall -Wextra -I firmware/EngineLink tools/test_tracefold.cpp
 #include <cassert>
 #include <cstdio>
-#include "wifistate.h"
+#include "tracefold.h"
 
 struct Entry { uint32_t ms, lastMs; uint16_t count; uint8_t type, reason; };
 
@@ -10,13 +10,13 @@ struct Entry { uint32_t ms, lastMs; uint16_t count; uint8_t type, reason; };
 struct Ring {
   Entry e[64]; int n = 0;
   void add(uint8_t type, uint8_t reason, uint32_t now) {
-    if (n && wifistate::traceFold(e[n - 1], type, reason, now)) return;
+    if (n && tracefold::traceFold(e[n - 1], type, reason, now)) return;
     e[n++] = {now, now, 1, type, reason};
   }
 };
 
 int main() {
-  using wifistate::TRACE_DISCONNECTED;
+  using tracefold::TRACE_DISCONNECTED;
   {  // the plan's case: 201,36,201,36 at 0,0,1574,1574 ms -> 1 entry, count 2
     Ring r;
     r.add(TRACE_DISCONNECTED, 201, 0); r.add(TRACE_DISCONNECTED, 36, 0);

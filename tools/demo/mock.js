@@ -46,7 +46,7 @@ function live(){
     trip:{act:true,start:now()-1500-Math.round(t),run:1500+Math.round(t),l:[+(tripRaw/2*f*1.01).toFixed(2),+(tripRaw/2*f*0.99).toFixed(2)],max:2912},
     tank:{cap:575,aboard:+(575-since).toFixed(1),pm:+pm.toFixed(1),reserve:10},price:20.03,sog:+(21.4+Math.sin(t/30)*.4).toFixed(1),
     n2k:n2kNow(t),
-    net:{ap:'EngineLink',host:'enginelink',cl:1,ch:1,rt:true,sta:true,ssid:'Boat router',rssi:-42,ip:'192.168.1.20',conflict:false},
+    net:{ap:'EngineLink',host:'enginelink',cl:1,ch:1,rt:true,sta:true,ssid:'Boat router',rssi:-42,ip:'192.168.1.20',recovery:false},
     sd:{ok:true,log:true},test:false,rb:false,fw:0};
 }
 function fuelList(){
@@ -72,7 +72,7 @@ function diag(){
     reading:[0,1].map(c=>({polling:true,interval:[120,140][c],rate:[8.3,7.1][c],answered:[0.99,0.97][c],skip:c?[296]:[],disc:{active:disc[c]>=0&&disc[c]<64,done:disc[c]>=64,pos:Math.max(0,Math.min(63,disc[c])),found:disc[c]>=0?DISC_FOUND.filter(k=>k-256<disc[c]):[]}})),
     dl:lastDl,sp:lastSp,
     nmea:0,can:false,sog:null,fuelDiv:128,scaleOk:false,volt:0,voltOk:false,hrs:[772.3,773.1],missed:0,autoPoll:true,proto:'kad',
-    wifi:{apRestarts:0,joins:1,leaves:0,reason:0,staFails:0,staDrops:0,staConnects:1,ch:1,conflict:false,apStops:1,chMoves:0,httpServed:4126,httpReused:4061,httpEvicted:1,httpSlowMs:226,httpOpen:2,loopMaxMs:41},
+    wifi:{apRestarts:0,joins:1,leaves:0,reason:0,staFails:0,staDrops:0,staConnects:1,ch:1,apStops:1,chMoves:0,httpServed:4126,httpReused:4061,httpEvicted:1,httpSlowMs:226,httpOpen:2,loopMaxMs:41},
     heap:173488,minHeap:164424,reset:3,up:1800};
 }
 // Events: the starboard engine used more fuel than port at the same rpm (the

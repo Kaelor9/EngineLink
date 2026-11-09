@@ -1685,7 +1685,7 @@ const PAGE_VIEWS={
         <div class="rowx s13 sub">On the router's Wi-Fi, EngineLink is at <b style="color:var(--text)">http://${esc(lv.net.ip||'')}</b> or <b style="color:var(--text)">http://${esc(lv.net.host||'enginelink')}.local</b>. The app finds it there by itself.</div>
         <div class="rowx s13 sub">Bookmark <b style="color:var(--text)">http://${esc(lv.net.ip||'')}</b> (or add that to the home screen): it is faster and steadier than the .local name, which depends on the router passing name look-ups. Opened by name, the app switches to the address by itself. Tip: set a fixed address for EngineLink in the router (DHCP reservation), so the bookmark keeps working.</div></div>`;
     }else{
-      if(c.router)h+=`<div class="card s13" style="margin-bottom:14px">Saved: <b>${esc(c.ssid)}</b> · not reachable right now. EngineLink uses its own Wi-Fi as recovery until you choose Connect again. <button data-a="wifiForget" style="color:var(--teal)">Forget</button></div>`;
+      if(c.router)h+=`<div class="card s13" style="margin-bottom:14px">Saved: <b>${esc(c.ssid)}</b> · not reached right now. EngineLink's own Wi-Fi is on meanwhile; it tries the router again every 10 minutes while no phone is joined, or now when you choose Connect. <button data-a="wifiForget" style="color:var(--teal)">Forget</button></div>`;
       const sc=S.scan;
       h+=`<div class="sec">${sc&&sc.nets&&sc.nets.length?sc.nets.map(n=>{const pick=S.wifiPick===n.s;return `<div><button class="row" data-a="wifiPick" data-v="${esc(n.s)}"><span><span class="rt">${esc(n.s)}</span><span class="rh">${n.lock?'Password':'Open'} · channel ${n.ch}</span></span>${sigBars(n.r)}</button>
         ${pick?`<div style="display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;padding:0 0 12px">${n.lock?`<input class="field" type="password" maxlength="63" data-i="wifiPass" value="${esc(S.wifiPass)}" placeholder="Router password" aria-label="Router password" autocapitalize="off" autocorrect="off" spellcheck="false" autocomplete="off">`:'<span class="s13 sub" style="align-self:center">Open network</span>'}<button class="btn pri" data-a="wifiConnect" data-v="${esc(n.s)}" ${sc&&sc.busy?'disabled':''}>Connect</button></div>`:''}</div>`;}).join(''):`<div class="empty">${sc&&sc.error?esc(sc.error):sc&&sc.busy?'Searching for 2.4 GHz networks…':sc&&sc.done?'No 2.4 GHz networks found. Try scanning again closer to your router.':'Scan to find the boat router.'}</div>`}
@@ -1744,8 +1744,8 @@ const PAGE_VIEWS={
 
     const w=d.wifi||{};
     const routerUp=lv.net.mode==='sta'&&lv.net.sta;
-    const modeName=lv.net.rescue?'Recovery Wi-Fi':routerUp?'Connected to router':lv.net.mode==='sta'?'Connecting to router':'Standalone Wi-Fi';
-    const lastCode=routerUp?0:(w.routerFailureReason||w.routerUnexpectedReason||w.staReason||0);
+    const modeName=lv.net.recovery?'Router not reached':routerUp?'Connected to router':lv.net.mode==='sta'?'Connecting to router':'Standalone Wi-Fi';
+    const lastCode=routerUp?0:(w.routerUnexpectedReason||w.staReason||0);
     const lastLabel=routerUp?'No current connection error':lastCode?(STAR[lastCode]||'Wi-Fi driver error')+' (code '+lastCode+')':'None recorded';
     const boxes=[
       ['Mode',modeName],
@@ -1755,13 +1755,13 @@ const PAGE_VIEWS={
     ];
     const bars=routerUp&&lv.net.rssi?sigBars(lv.net.rssi):'';
     const rep=c.report||{};
-    const status=routerUp?`On <b>${esc(c.ssid||'router')}</b> · ${esc(lv.net.ip||'')}`:lv.net.rescue?`EngineLink's own Wi-Fi (router not found)`:lv.net.mode==='sta'?`Connecting to <b>${esc(c.ssid||'router')}</b>…`:`EngineLink's own Wi-Fi · 192.168.4.1`;
+    const status=routerUp?`On <b>${esc(c.ssid||'router')}</b> · ${esc(lv.net.ip||'')}`:lv.net.recovery?`EngineLink's own Wi-Fi is on meanwhile · 192.168.4.1`:lv.net.mode==='sta'?`Connecting to <b>${esc(c.ssid||'router')}</b>…`:`EngineLink's own Wi-Fi · 192.168.4.1`;
     h+=`<div class="hd">Wi-Fi</div><div class="sec">
       <div class="rowx"><div class="cth"><span class="rt">${modeName}</span><span class="rv">${bars}${routerUp?' '+lv.net.rssi+' dBm':''}</span></div>
         <div class="s13 sub" style="margin-top:3px">${status}</div>
         ${!routerUp&&lastCode?`<div class="s12" style="margin-top:4px;color:var(--orange)">${esc(lastLabel)}</div>`:''}
         ${routerUp?busyHint(d,lv):''}
-        ${lv.net.rescue&&c.ssid&&w.routerNextTryS!=null?`<div class="s12 sub" style="margin-top:4px">Looks for ${esc(c.ssid)} again ${w.routerNextTryS>60?'in about '+dur(w.routerNextTryS):'shortly'} and goes back to it by itself when the app is not in use.</div>`:''}</div>
+        ${lv.net.recovery&&c.ssid&&w.routerNextTryS!=null?`<div class="s12 sub" style="margin-top:4px">Tries ${esc(c.ssid)} again ${w.routerNextTryS>60?'in about '+dur(w.routerNextTryS):'shortly'}, while no phone is on EngineLink's Wi-Fi.</div>`:''}</div>
       ${dlBlock(d.dl,d.sp)}
       <button class="rowx" data-a="wifiAdv" style="width:100%;text-align:left;display:block"><div class="cth"><span class="rt">Advanced</span><span class="sub">${S.wifiAdv?'▾':'›'}</span></div></button>
       ${S.wifiAdv?`<div class="rowx"><div class="grid2" style="gap:8px">${boxes.slice(2).map(([k,v])=>`<div style="background:var(--track);border-radius:12px;padding:11px 12px;min-width:0"><div class="s12 sub">${k}</div><div style="font-size:15px;font-weight:600;margin-top:4px">${esc(String(v))}</div></div>`).join('')}</div>
@@ -1821,17 +1821,15 @@ function restartsBlock(d){
     <div class="rowx s12 sub">"Power on" is normal: the power was switched off and on. Totals are saved every 30 seconds while an engine runs, so a power cut loses at most that.</div></div>`;
   return h;
 }
-// A strong signal but slow, jumpy answers from the router: the router's
-// 2.4 GHz channel is busy. EngineLink cannot change the router's channel.
+// A strong signal but a slow speed test over the router: its 2.4 GHz channel
+// is busy or the link is lossy. EngineLink cannot change the router's channel.
 function busyHint(d,lv){
-  const t=d.linkTune||{},sm=t.small||{},sc=t.scan||{},sp=S.speed;
+  const sp=S.speed;
   if(!(lv.net.rssi>-67))return '';
   if(sp&&!sp.busy&&!sp.err&&sp.kbs>=150)return '';  // the speed test is fast: nothing to fix
-  if(t.scanCh&&t.channel&&t.scanCh!==t.channel)return '';  // measured on the router's old channel
   const slowTest=sp&&!sp.busy&&(sp.err||sp.kbs<40||sp.rtt>300);
-  if(!slowTest)return '';  // only a slow speed test counts: the router may just answer pings late
-  const ch=t.channel;
-  return `<div class="s12" style="margin-top:6px;color:var(--orange)">Strong signal, but the router's Wi-Fi is slow${sc.sameChannel?`: ${sc.sameChannel} other network${sc.sameChannel>1?'s':''} share${sc.sameChannel>1?'':'s'} its channel ${ch||''}${sc.sameBest?' (strongest '+sc.sameBest+' dBm)':''}`:''}. EngineLink stays connected, but transfers are slower. A router on automatic channel usually moves to a quieter one by itself.</div>`;
+  if(!slowTest)return '';  // only a slow speed test counts
+  return `<div class="s12" style="margin-top:6px;color:var(--orange)">Strong signal, but the router's Wi-Fi is slow. EngineLink stays connected, but transfers are slower. A router on automatic channel usually moves to a quieter one by itself.</div>`;
 }
 function dlBlock(dl,spd){
   const sp=S.speed,secs=ms=>ms<1000?NF(ms,0)+' ms':ms<60000?NF(ms/1000,ms<10000?1:0)+' s':dur(Math.round(ms/1000));

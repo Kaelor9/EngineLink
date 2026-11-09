@@ -428,7 +428,7 @@ String makeDiagJson(){
   s+=",\"fsWriteErrors\":";s+=fsWriteErrors;
   s+=",\"fsRecoveredFiles\":";s+=fsRecoveredFiles;
   s+=",\"fsLastFailure\":";jsonString(s,fsLastFailure);
-  appendLinkJson(s);
+  appendSpeedJson(s);
   s+=",\"engineTask\":";s+=engineTaskOn?"true":"false";
   s+=",\"engineWait\":{\"max\":";s+=engineMaxWaitMs;s+=",\"slow\":";s+=engineSlowWaits;s+='}';
   s+=",\"gearbox\":{\"gl\":";s+=gearLearned()?"true":"false";s+=",\"cl\":";s+=cfg.compMask?"true":"false";s+=",\"e\":[";shiftLifeJson(s,0);s+=',';shiftLifeJson(s,1);s+="]}";
@@ -453,7 +453,6 @@ String makeDiagJson(){
   s+=",\"staConnects\":";s+=staConnects;
   s+=",\"routerAttempts\":";s+=routerAttempts;
   s+=",\"routerNativeAutoReconnect\":";s+=(WiFi.getAutoReconnect()?"true":"false");
-  s+=",\"routerDriverNudges\":";s+=staRetries;
   s+=",\"routerAssociated\":";s+=staAssociated?"true":"false";
   s+=",\"staAssocEvents\":";s+=(unsigned long)staAssociatedEvents;
   s+=",\"routerAuthMode\":";jsonString(s,stationSecurityName(staNegotiatedAuth));
@@ -462,7 +461,7 @@ String makeDiagJson(){
   s+=",\"staAssocMs\":";s+=(unsigned long)staJoinMs;
   s+=",\"staDhcpMs\":";s+=(unsigned long)staDhcpMs;
   s+=",\"routerPhase\":";
-  jsonString(s,routerHold?"rescue":!routerConfigured()?"standalone":
+  jsonString(s,routerHold?"recovery":!routerConfigured()?"standalone":
     WiFi.status()==WL_CONNECTED?"online":staAssociated?"dhcp":"associating");
   s+=",\"routerLastReason\":";s+=(unsigned)staLastReason;
   s+=",\"routerUnexpectedReason\":";s+=(unsigned)staLastUnexpectedReason;
@@ -471,16 +470,10 @@ String makeDiagJson(){
   s+=",\"speedTxBytes\":";s+=(unsigned long)speedTxLastBytes;
   s+=",\"speedTxMs\":";s+=(unsigned long)speedTxLastMs;
   s+=",\"speedTxWrites\":";s+=(unsigned long)speedTxLastWrites;
-  s+=",\"routerFailureReason\":";s+=(unsigned)routerFailureReason;
-  s+=",\"routerFailurePhase\":";s+=(unsigned)routerFailurePhase;
-  s+=",\"routerFailureAfterMs\":";s+=(unsigned long)routerFailureAfterMs;
-  s+=",\"routerWaitSec\":";s+=routerGuard.disconnectedSince?(unsigned long)((millis()-routerGuard.disconnectedSince)/1000UL):0;
   s+=",\"ch\":";s+=apChannelNow;
-  s+=",\"conflict\":";s+=staConflict?"true":"false";
   s+=",\"routerHold\":";s+=routerHold?"true":"false";
-  s+=",\"routerFallbacks\":";s+=routerFallbacks;
-  s+=",\"routerAutoReturns\":";s+=routerAutoReturns;s+=",\"routerNextTryS\":";
-  if(routerHold&&routerConfigured())s+=(long)((int32_t)(routerProbeAt-millis())/1000);else s+="null";
+  s+=",\"routerFallbacks\":";s+=routerFallbacks;s+=",\"routerNextTryS\":";
+  if(routerHold&&routerConfigured())s+=(long)((int32_t)(routerRetryAt-millis())/1000);else s+="null";
   s+=",\"apMode\":";s+=(unsigned)WiFi.getMode();
   s+=",\"apDriverSsid\":";jsonString(s,WiFi.softAPSSID());
   s+=",\"apDriverIp\":";jsonString(s,WiFi.softAPIP().toString());

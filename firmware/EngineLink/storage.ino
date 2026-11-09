@@ -374,19 +374,16 @@ void loadSettings(){
   pref.begin("enginelink",true);
   cfg.completed=pref.getBool("done",false);
   cfg.router=pref.getBool("router",false);
-  // Rescue is not remembered: a start in router mode always tries the router.
+  // Recovery is not remembered: a start in router mode always tries the router.
   routerHold=false;
-  routerKnownChannel=pref.getUChar("rch",0);
-  routerFailureReason=pref.getUChar("rrsn",0);
-  routerFailurePhase=pref.getUChar("rstage",0);
-  routerFailureAfterMs=pref.getULong("rduration",0);
   cfg.canListen=pref.getBool("can",false);
   cfg.portChannel=pref.getUChar("port",1);
   cfg.apChannel=pref.getUChar("apch",6);
   txLevel=TX_LEVEL_FIXED;
   // Settings from earlier Wi-Fi experiments that no longer exist (txal: the
-  // automatic transmit power, rhold: the remembered rescue, until 0.14.1).
-  {Preferences old;if(old.begin("enginelink",false)){for(const char *k:{"txp","txp2","txp3","aggr","aggr2","agrx","agrxt","txal","rhold"})if(old.isKey(k))old.remove(k);old.end();}}
+  // automatic transmit power, rhold: the remembered recovery, until 0.14.1;
+  // rch/rrsn/rstage/rduration: the removed router looks and failure record).
+  {Preferences old;if(old.begin("enginelink",false)){for(const char *k:{"txp","txp2","txp3","aggr","aggr2","agrx","agrxt","txal","rhold","rch","rrsn","rstage","rduration"})if(old.isKey(k))old.remove(k);old.end();}}
   cfg.apPassword=pref.getString("appass","12345678");
   cfg.ssid=pref.getString("ssid","");
   cfg.wifiPassword=pref.getString("wpass","");

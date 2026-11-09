@@ -52,13 +52,10 @@
 #include "diagrules.h"
 #include "shiftrules.h"
 #include "otaheader.h"
-#include "routerguard.h"
 #include "nmea2k.h"
-#include "netpolicy.h"
 #include "crashinfo.h"
-#include "linktune.h"
 #include "model.h"
-#include "wifistate.h"
+#include "tracefold.h"
 #include "httputil.h"
 #include "httpd.h"
 // Transmit power step (0 = 8.5 dBm .. 4 = 19.5 dBm). Fixed: the automatic
@@ -69,10 +66,12 @@
 constexpr uint8_t TX_LEVEL_FIXED=4;
 uint8_t txLevel=TX_LEVEL_FIXED;
 uint32_t txReapplied=0;   // the driver had another power and it was set again
-volatile bool radioTestWanted=false;  // pings + channel survey (linkTuneTask)
+// Transmit power steps, lowest to highest (index = level); the AP uses 4.
+const wifi_power_t elTxPower[5]={WIFI_POWER_8_5dBm,WIFI_POWER_11dBm,WIFI_POWER_13dBm,WIFI_POWER_15dBm,WIFI_POWER_19_5dBm};
+const char *const elTxName[5]={"very low (8.5 dBm)","low (11 dBm)","moderate (13 dBm)","medium (15 dBm)","high (19.5 dBm)"};
 SpeedLogRec speedLog[SPEED_LOG_N];uint8_t speedLogCount=0;
 
-#define EL_VERSION "0.16.6"
+#define EL_VERSION "0.17.0-rc1"
 // Releases list published by the Pages workflow; firmware files come from
 // GitHub Releases of the same repository. Nothing else is downloaded.
 #define EL_RELEASES_URL "https://kaelor9.github.io/EngineLink/releases.json"
@@ -274,50 +273,22 @@ uint16_t tripHealthN[2][RPM_BUCKETS];
 DiagTest diagTests[2];
 bool ecuHoursChecked[2]={false,false};
 int64_t lastMissedUtc=0; float lastMissedL=0;
-// Wi-Fi robustness
+// Wi-Fi: own access point or router, never both (wifi.ino).
 uint8_t apChannelNow=6;          // channel the AP actually uses
-uint8_t staChannel=0;            // router channel found by the last scan
-uint8_t staBssid[6]={};
-bool staBssidKnown=false;
-// Rescue: the router could not be reached, EngineLink's own Wi-Fi is on
-// until the router is back. Not kept over a restart (each start in router
-// mode tries the router first); only the reason is saved for the report.
+// Recovery, not a mode: the router was not reached for 2 minutes, so
+// EngineLink's own Wi-Fi is on until the router is tried again, every
+// 10 minutes while no phone is joined or at once when the app asks. Not kept
+// over a restart: each start in router mode tries the router first.
 bool routerHold=false;
-uint32_t routerFallbacks=0;
-// Going back to the router by itself from rescue: a look every minute,
-// doubling after each failed return (up to 15 minutes), see netpolicy.h.
-uint32_t routerProbeAt=0,routerProbeEvery=netpolicy::PROBE_EVERY_MS,routerAutoReturns=0;
-bool routerAutoReturning=false,routerProbing=false,routerProbeHadSta=false;
-uint32_t routerProbeStarted=0;
-RouterGuard routerGuard;
-// Router reconnects are EngineLink's own (Arduino's auto-reconnect is off):
-// after every failed or lost connection one esp_wifi_connect() after a
-// growing pause (netpolicy.h). Written by the Wi-Fi event callback, acted on
-// in serviceNetwork().
-volatile uint32_t staRetryAt=0;      // next connect attempt (0 = none planned)
-volatile uint16_t staRetryFails=0;   // failed attempts in a row
-volatile bool staConnecting=false;   // an attempt is running (no answer yet)
-volatile uint32_t staConnectAt=0;
-uint32_t staRetries=0;               // attempts made by the back-off
-// Rescue: looks for the router (count) and whether the last return failed.
-uint32_t routerProbeCount=0,routerProbeSeen=0;
-bool routerReturnFailed=false;
-uint8_t routerKnownChannel=0;        // last channel the router was on (NVS "rch")
-// AP and STA are mutually exclusive; 192.168.4.x is a valid router subnet.
-bool staConflict=false;
+uint32_t routerFallbacks=0,routerRetryAt=0;
 // The application never calls begin()/disconnect() while authentication runs;
 // it only starts a new attempt after the driver reported the last one over.
-uint32_t staFails=0,staConnects=0,apRestarts=0,lastApCheck=0;
-uint32_t routerAttempts=0,routerLastSuccessMs=0,staConnectedAt=0;
+uint32_t staFails=0,staConnects=0,apRestarts=0;
+uint32_t routerAttempts=0;
 volatile uint8_t staLastReason=0;
 volatile uint32_t staLastDropAt=0;
 volatile bool staAssociated=false;
-uint32_t staDownSince=0,routerLastRecoveryAttempt=0;
-// Used by the 0.12.15 Wi-Fi code restored in 0.16.1 (wifi.ino).
-constexpr uint32_t ROUTER_LAST_RESORT_RETRY_MS=30000UL;
-uint32_t routerForcedReconnects=0,saQueryFastRetries=0,txAutoSteps=0;
-volatile uint32_t saQueryRetryAt=0;
-volatile uint16_t txNoAnswer=0;
+uint32_t staDownSince=0;
 // Only the driver event callback writes these measurements. The main loop
 // reads snapshots and performs network operations outside the callback.
 volatile uint32_t staBeginAt=0,staAssociatedAt=0,staIpAt=0,staIpLostAt=0;
@@ -328,18 +299,9 @@ volatile uint32_t staUnexpectedDisconnects=0;
 // Count failed association attempts separately from dropped live connections.
 volatile uint32_t staAssociationFailures=0;
 volatile bool staHadIp=false;
-// Recovery bookkeeping is independent of the removed WPA3 security handling.
-uint32_t routerHoldSince=0;
-// WPA2/WPA3 use Arduino ESP32 core negotiation without driver interception.
 // The browser's 32-KiB speed measurement includes HTTP setup. Track the
 // worker's own TCP write duration separately to locate actual bottlenecks.
 volatile uint32_t speedTxLastMs=0,speedTxLastBytes=0,speedTxLastWrites=0,speedTxLastAt=0;
-volatile bool routerIntentionalShutdown=false;
-// Last FAILED association is stored before the router interface goes away.
-// An intentional AP fallback must not overwrite the original Wi-Fi reason.
-uint8_t routerFailureReason=0;
-uint8_t routerFailurePhase=0;    // 1=no association, 2=associated but no DHCP IP
-uint32_t routerFailureAfterMs=0;
 RouterTrace routerTrace[ROUTER_TRACE_CAP]={};
 uint8_t traceHead=0,traceSize=0;
 uint32_t traceTotal=0;   // Wi-Fi events ever added; the SD log (serialcmd.ino) follows it
@@ -518,7 +480,6 @@ void setup(){
   if(engineMx){
     xSemaphoreTake(engineMx,portMAX_DELAY);  // the loop holds it while it works
     if(framesQueue)engineTaskOn=xTaskCreatePinnedToCore(engineTask,"engines",16384,nullptr,3,nullptr,0)==pdPASS;
-    if(engineTaskOn)xTaskCreatePinnedToCore(linkTuneTask,"link-tune",4096,nullptr,1,nullptr,0);
   }
   // The web server starts last: every handler's data is loaded and the lock
   // exists. It binds every interface, so a Wi-Fi change needs no rebind.

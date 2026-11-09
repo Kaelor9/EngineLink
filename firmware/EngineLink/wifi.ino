@@ -5,8 +5,8 @@ void traceWifi(uint8_t type,uint8_t reason){
   const uint32_t now=millis();
   portENTER_CRITICAL(&traceMux);
   // Repeats and the core's own reason-36 disconnect right after a failure
-  // are folded into the newest entry (wifistate.h, host-tested).
-  if(traceSize&&wifistate::traceFold(routerTrace[(traceHead+ROUTER_TRACE_CAP-1)%ROUTER_TRACE_CAP],type,reason,now)){
+  // are folded into the newest entry (tracefold.h, host-tested).
+  if(traceSize&&tracefold::traceFold(routerTrace[(traceHead+ROUTER_TRACE_CAP-1)%ROUTER_TRACE_CAP],type,reason,now)){
     portEXIT_CRITICAL(&traceMux);
     return;
   }
@@ -87,13 +87,6 @@ bool allowTime(const String &source){
   return cfg.timePreference==source;
 }
 void ntpCallback(struct timeval *tv){(void)tv;ntpNotification=true;}
-// Router channel for the rescue look (one channel instead of all); kept in
-// NVS, written only when the router really moved.
-void saveKnownChannel(uint8_t ch){
-  if(ch<1||ch>13||ch==routerKnownChannel)return;
-  routerKnownChannel=ch;
-  Preferences p;if(p.begin("enginelink",false)){p.putUChar("rch",ch);p.end();}
-}
 // The fixed transmit power (txLevel). Setting the country resets the power
 // to 20 dBm, so this runs after it; with `check` it only sets the power when
 // the driver reports another one (counted for the report). The driver keeps
@@ -109,10 +102,12 @@ void applyTxPower(bool check){
   }
   WiFi.setTxPower(elTxPower[txLevel]);
 }
-// Country per Espressif's API (D27): DK, 802.11d on so the station follows the
-// router's country element. Set only when the driver reports another code:
-// setting it restarts the AP and resets the transmit power (esp_wifi.h).
-static bool countryIsDK(){char cc[3]={};return esp_wifi_get_country_code(cc)==ESP_OK&&cc[0]=='D'&&cc[1]=='K';}
+// Country per Espressif's API (D27), in both modes: DK, 802.11d on so the
+// station follows the router's country element. The driver is deinitialised
+// at every mode switch, so each mode sets it again, and only when the driver
+// reports another code: setting it restarts the AP and resets the transmit
+// power (esp_wifi.h). The code is 3 bytes without a terminator: 4-byte buffer.
+static bool countryIsDK(){char cc[4]={};return esp_wifi_get_country_code(cc)==ESP_OK&&cc[0]=='D'&&cc[1]=='K';}
 // The AP's radio settings every version before 0.16.2 had (F19, Stage 1a): 20 MHz,
 // stations kept 600 s, country DK, no power save, then the fixed TX power.
 void apRadioSetup(){
@@ -122,11 +117,25 @@ void apRadioSetup(){
   WiFi.setSleep(false);
   applyTxPower(false);
 }
-// Station mode uses the ESP32 core defaults (no radio overrides).
+// The station profile (docs/WIFI_PLAN_2026-11-09.md 2.2), official APIs only,
+// after WiFi.mode(WIFI_STA) and before WiFi.begin(). No modem sleep: a server
+// must receive unsolicited frames at once (esp_wifi.h: the default is
+// WIFI_PS_MIN_MODEM, which delays reception to the DTIM cycle); the same
+// country as the AP; 20 MHz as every version that worked on the boat router;
+// the all-channel scan so a mesh or repeater network joins its strongest
+// access point (STA.cpp defaults to WIFI_FAST_SCAN, the first match). All
+// else stays at the driver's default: PMF capable, WPA2 minimum, WPA3-SAE
+// negotiated by the driver, 20 dBm, 6 s beacon timeout, the core's reconnect.
+void staRadioSetup(){
+  WiFi.setSleep(false);
+  if(!countryIsDK())esp_wifi_set_country_code("DK",true);
+  esp_wifi_set_bandwidth(WIFI_IF_STA,WIFI_BW_HT20);
+  WiFi.setScanMethod(WIFI_ALL_CHANNEL_SCAN);
+}
 // ---- Wi-Fi, kept simple (0.16.2) ---- Standalone: own Wi-Fi at 192.168.4.1.
-// Router: the core's own reconnect; no IP in 2 minutes: own Wi-Fi, and try the
-// router again every 10 minutes while no phone is connected to it.
-static uint32_t routerRetryAt=0;
+// Router: the core's own reconnect; no IP in 2 minutes: own Wi-Fi (recovery,
+// not a mode), and try the router again every 10 minutes while no phone is
+// connected to it, or at once when the app asks.
 void onWiFi(WiFiEvent_t e,WiFiEventInfo_t info){
   const uint32_t now=millis();
   switch(e){
@@ -194,7 +203,7 @@ void applyNetwork(){
   apStarted=false;staAssociated=false;staHadIp=false;ntpStarted=false;
   if(withRouter){
     WiFi.mode(WIFI_STA);
-    WiFi.setSleep(true);      // restore the Arduino ESP32 station default after AP mode
+    staRadioSetup();
     WiFi.setAutoReconnect(true);
     staDownSince=millis()?millis():1;
     connectRouter();
@@ -252,13 +261,12 @@ void serviceNetwork(){
   if(routerConfigured()&&!routerHold&&!online&&staDownSince&&(uint32_t)(now-staDownSince)>=120000UL){
     Serial.println("Router not reached in 2 minutes: EngineLink Wi-Fi on");
     wifiLog("Router not reached in 2 minutes: own Wi-Fi on");
-    ++routerFallbacks;routerHold=true;routerHoldSince=now;routerRetryAt=now+600000UL;applyNetwork();return;
+    ++routerFallbacks;routerHold=true;routerRetryAt=now+600000UL;applyNetwork();return;
   }
   if(routerHold&&routerConfigured()&&(int32_t)(now-routerRetryAt)>=0){
     if(WiFi.softAPgetStationNum()==0){routerHold=false;applyNetwork();return;}
     routerRetryAt=now+600000UL;
   }
-  routerProbeAt=routerRetryAt;
   if(online&&!ntpStarted&&cfg.ntpOn&&allowTime("ntp")){configTime(0,0,cfg.ntpServer.c_str(),"pool.ntp.org");ntpStarted=true;}
   if(ntpNotification){ntpNotification=false;if(allowTime("ntp")&&validWall()){hasTime=true;timeSource="ntp";backfillTripTime();}}
   serviceWifiScan();

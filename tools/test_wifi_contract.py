@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Wi-Fi 2.0 structural contracts (docs/WIFI_REWRITE_PLAN.md 9.10).
+"""Wi-Fi structural contracts (docs/WIFI_PLAN_2026-11-09.md section 3, P7).
 
 Only what a host test cannot execute: lessons a build or a code review can
-break. Items are added stage by stage; the Stage 4 items (state machine in
-wifi.ino) follow when that stage is built."""
+break. Two modes (AP only, STA only), the documented station profile, the
+esp_http_server adapter, the OTA self-test, no low-level hooks."""
 import re
 from pathlib import Path
 
@@ -13,8 +13,7 @@ ROOT = FW.parent.parent
 fw = firmware_source()
 w = (FW / "wifi.ino").read_text(encoding="utf-8")
 
-# --- Stage 1 -------------------------------------------------------------
-# 1a: the AP radio settings every version before 0.16.2 had (F19), D27 country.
+# --- Radio: the AP settings every version before 0.16.2 had, D27 country ---
 ap = body(w, "void apRadioSetup(){")
 for call in ("esp_wifi_set_bandwidth(WIFI_IF_AP,WIFI_BW_HT20)",
              "esp_wifi_set_inactive_time(WIFI_IF_AP,600)",
@@ -31,13 +30,28 @@ assert "apRadioSetup()" in sa
 # 1b: TX power truth (F7): exact compare, set in router mode too.
 tx = body(w, "void applyTxPower(bool check){")
 assert "abs(" not in tx and "!=ESP_OK" in tx and "==(int8_t)elTxPower[txLevel]" in tx
-assert "WiFi.setAutoReconnect(true)" in body(w, "void applyNetwork(){")
-# Router STA must use the Arduino ESP32 Wi-Fi driver defaults.
+# --- The station profile (plan 2.2): three documented settings, the
+# all-channel scan, nothing else; after WiFi.mode(WIFI_STA), before begin().
+st = body(w, "void staRadioSetup(){")
+for call in ("WiFi.setSleep(false)", 'esp_wifi_set_country_code("DK",true)',
+             "esp_wifi_set_bandwidth(WIFI_IF_STA,WIFI_BW_HT20)", "WiFi.setScanMethod(WIFI_ALL_CHANNEL_SCAN)"):
+    assert call in st, f"staRadioSetup() lacks {call}"
+for gone in ("esp_wifi_set_inactive_time(WIFI_IF_STA", "setTxPower", "esp_wifi_set_protocol", "esp_wifi_set_ps(WIFI_PS_M",
+             "listen_interval", "esp_wifi_set_config"):
+    assert gone not in st, f"staRadioSetup() must not set {gone}"
+assert "WiFi.setSleep(true)" not in fw, "modem sleep is never switched on (F1)"
 an = body(w, "void applyNetwork(){")
-assert "WiFi.mode(WIFI_STA);" in an and "WiFi.setAutoReconnect(true);" in an
-assert "staRadioSetup" not in fw and "EL_STA_DEFAULTS" not in fw
-assert "elAllowSae" not in fw and "staSecMode" not in fw
+assert an.index("WiFi.mode(WIFI_STA);") < an.index("staRadioSetup();") < an.index("WiFi.setAutoReconnect(true);") < an.index("connectRouter();")
+assert "WiFi.mode(WIFI_AP_STA)" not in an, "two exclusive modes"
+assert "EL_STA_DEFAULTS" not in fw and "elAllowSae" not in fw and "staSecMode" not in fw
 assert "elBoostSocket" not in fw and "wifiwpa3" not in fw
+assert "char cc[3]" not in fw, "the country code is 3 bytes without a terminator (F3)"
+# The recovery is a mechanism, not a mode: 120 s fallback, 10 min retries, named so.
+assert "routerRetryAt=now+600000UL" in body(w, "void serviceNetwork(){")
+assert '"rescue"' not in fw and "Recovery (" not in fw, "no third mode in the report (F6)"
+# Wi-Fi 2.0 Stage 4 is not built: no state machine, no looks, no AP+STA idle station.
+for gone in ("wifistate", "RouterGuard", "netpolicy::", "linkTune", "runRadioTest", "routerProbe", "routerKnownChannel"):
+    assert gone not in fw, f"{gone} was removed (plan P3)"
 
 # Router counters and signal the report prints (plan 12.1 I15): written by
 # the event callback from its event data only (no Wi-Fi calls there, D14),
@@ -52,10 +66,10 @@ for need in ("staAssociatedEvents=staAssociatedEvents+1", "staIpEvents=staIpEven
 sn = body(w, "void serviceNetwork(){")
 assert "esp_wifi_sta_get_ap_info(&ap)" in sn and "lastRouterRssi=ap.rssi" in sn
 assert "++routerFallbacks;routerHold=true;" in sn, "the report counts every fallback to the own Wi-Fi"
-# 1c: the trace folds through the host-tested function.
-assert "wifistate::traceFold(" in body(w, "void traceWifi(uint8_t type,uint8_t reason){")
+# The trace folds through the host-tested function.
+assert "tracefold::traceFold(" in body(w, "void traceWifi(uint8_t type,uint8_t reason){")
 
-# --- Stage 2: esp_http_server, security model, self-test, no deflate ----
+# --- esp_http_server, security model, self-test, no deflate ----------------
 h = (FW / "httpd.ino").read_text(encoding="utf-8")
 assert "#include <WebServer.h>" not in fw and "NetworkServer" not in fw, "one server: esp_http_server"
 assert "httpd_stop(" not in fw, "the server is started once and never stopped (6.6)"
@@ -78,6 +92,11 @@ for route in ("/api/export/raw.csv", "/api/export/trips.csv", "/api/export/serie
               "/api/log", "/api/segments.csv", "/api/backup", "/api/nmea/bus.csv", "/api/speedtest"):
     line = next(l for l in api.splitlines() if f'web.on("{route}"' in l)
     assert "R_ASYNC" in line, f"{route} must be a long transfer (6.6)"
+# The 110 KB app page streams from the transfer task too (plan P5), and one
+# request may wait behind a running transfer instead of getting 503.
+root = body(api, "void initializeWeb(){")
+assert "R_NOLOCK|R_ASYNC);" in root[root.index('web.on("/",HTTP_GET'):root.index('web.on("/favicon.ico"')]
+assert "xQueueCreate(2, sizeof(XferJob))" in cfgs and "uxQueueSpacesAvailable(xferQ) == 0" in d
 assert 'web.on("/api/update",HTTP_POST,handleUpdate,R_RAWBODY)' in api
 up = body(api, "void handleUpdate(){")
 assert "len>3200000" in up and "len<100000" in up and "web.recv(" in up
@@ -100,7 +119,7 @@ for gone in ("lastHttpMs", "httpBusySince", "httpSelfCheckTask", "liveHttpTask",
 assert "startNameService()" not in body(api, "void handleCfg(){")
 
 # --- 2026-11-09 owner override: no low-level hooks or private lwIP structs ---
-for removed in ("netboost.cpp", "netboost.h", "wifiwpa3.cpp", "wifiwpa3.h"):
+for removed in ("netboost.cpp", "netboost.h", "wifiwpa3.cpp", "wifiwpa3.h", "wifistate.h", "netpolicy.h", "routerguard.h", "linktune.cpp", "linktune.h"):
     assert not (FW / removed).exists(), f"{removed} must not return"
 for p in sorted(FW.glob("*")):
     if p.suffix in (".ino", ".h", ".cpp"):
@@ -123,7 +142,7 @@ for wf in ("build-engine.yml", "pages.yml"):
     assert '"Adafruit NeoPixel@' in t, f"{wf}: NeoPixel not pinned (D25)"
 
 # --- Pure headers stay pure ------------------------------------------------
-for h in ("wifistate.h", "httputil.h"):
+for h in ("tracefold.h", "httputil.h"):
     t = (FW / h).read_text(encoding="utf-8")
     assert "#include <Arduino.h>" not in t and "WiFi" not in t and "millis(" not in t, h
 

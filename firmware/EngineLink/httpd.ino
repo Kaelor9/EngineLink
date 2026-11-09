@@ -7,10 +7,10 @@ HttpdStats httpdStats;
 static WebCtx srvCtx, xferCtx;
 static TaskHandle_t xferTask = nullptr;
 static QueueHandle_t xferQ = nullptr;
-static volatile bool xferBusy = false, xferAbort = false;
-static volatile int xferFd = -1;   // the socket a long transfer is using
+static volatile bool xferBusy = false, xferAbort = false;   // busy: a transfer runs or waits in the queue
+static volatile int xferFd = -1;   // the socket the running long transfer is using
 static volatile uint8_t sendsOffLock = 0;   // replies sending with engineMx let go (an SD file may be open: sdUnmountBlocked)
-struct XferJob { httpd_req_t *r; WebFn fn; uint8_t flags; };
+struct XferJob { httpd_req_t *r; WebFn fn; uint8_t flags; bool onAp, external; char origin[72]; char query[WEB_QUERY]; };
 static const WebRoute optionsRoute = {"/*", HTTP_OPTIONS, nullptr, R_NOLOCK};
 
 // The request of the task that calls: the server task or the xfer task.
@@ -106,6 +106,10 @@ static void xferWorker(void *) {
   for (;;) {
     if (xQueueReceive(xferQ, &j, portMAX_DELAY) != pdTRUE) continue;
     WebCtx &x = xferCtx;
+    resetCtx(x, j.r);
+    strlcpy(x.query, j.query, WEB_QUERY); strlcpy(x.origin, j.origin, sizeof(x.origin));
+    x.onAp = j.onAp; x.external = j.external;
+    xferFd = httpd_req_to_sockfd(j.r);
     const uint32_t t0 = millis();
     if ((j.flags & R_NOLOCK) || ctxLock(x, 10000)) { httpdStats.xferWaitMs = millis() - t0; j.fn(); }
     else { count503(httpdStats.busyXferLock, j.r); x.code = 503; web.send(503, "text/plain", "EngineLink is busy; try again"); }
@@ -113,7 +117,7 @@ static void xferWorker(void *) {
     // A broken reply: end the connection before the server watches it again.
     if (finish(x, t0) != ESP_OK && fd >= 0) shutdown(fd, SHUT_RDWR);
     httpd_req_async_handler_complete(j.r);   // on every path, or the server stops accepting (esp_http_server.h)
-    xferFd = -1; xferBusy = false; xferAbort = false;
+    xferFd = -1; xferAbort = false; xferBusy = uxQueueMessagesWaiting(xferQ) != 0;
   }
 }
 
@@ -158,15 +162,15 @@ static esp_err_t webDispatch(httpd_req_t *r) {
   }
   whoIsAsking(c);
   if (rt.flags & R_ASYNC) {
+    // One transfer runs, one may wait (the app page behind a download); a
+    // third gets 503. The worker copies the job into its context when it starts.
     httpd_req_t *copy = nullptr;
-    if (xferBusy || httpd_req_async_handler_begin(r, &copy) != ESP_OK) { count503(httpdStats.busyXfer, r); return answer(c, 503, "Another download is running; try again when it has finished"); }
-    WebCtx &x = xferCtx;
-    resetCtx(x, copy);
-    strlcpy(x.query, c.query, WEB_QUERY); strlcpy(x.origin, c.origin, sizeof(x.origin));
-    x.onAp = c.onAp; x.external = c.external;
-    xferFd = httpd_req_to_sockfd(copy); xferBusy = true;
-    const XferJob j = {copy, rt.fn, rt.flags};
-    if (xQueueSend(xferQ, &j, 0) != pdTRUE) { xferBusy = false; httpd_req_async_handler_complete(copy); count503(httpdStats.busyXfer, r); return answer(c, 503, "Busy"); }
+    if (uxQueueSpacesAvailable(xferQ) == 0 || httpd_req_async_handler_begin(r, &copy) != ESP_OK) { count503(httpdStats.busyXfer, r); return answer(c, 503, "Another download is running; try again when it has finished"); }
+    static XferJob j;   // server task only
+    j.r = copy; j.fn = rt.fn; j.flags = rt.flags; j.onAp = c.onAp; j.external = c.external;
+    strlcpy(j.origin, c.origin, sizeof(j.origin)); strlcpy(j.query, c.query, WEB_QUERY);
+    xferBusy = true;
+    if (xQueueSend(xferQ, &j, 0) != pdTRUE) { xferBusy = uxQueueMessagesWaiting(xferQ) != 0; httpd_req_async_handler_complete(copy); count503(httpdStats.busyXfer, r); return answer(c, 503, "Busy"); }
     ++httpdStats.async;
     return ESP_OK;
   }
@@ -215,7 +219,7 @@ bool Web::begin() {
     if (c->bodyCap) c->body = (char *)heap_caps_calloc(1, c->bodyCap + 1, MALLOC_CAP_SPIRAM);
     if (!c->query || !c->val || (c->bodyCap && !c->body)) return false;
   }
-  xferQ = xQueueCreate(1, sizeof(XferJob));
+  xferQ = xQueueCreate(2, sizeof(XferJob));
   if (!xferQ || xTaskCreatePinnedToCore(xferWorker, "xfer", 8192, nullptr, tskIDLE_PRIORITY + 4, &xferTask, 1) != pdPASS) return false;
   httpd_config_t h = HTTPD_DEFAULT_CONFIG();
   h.server_port = 80; h.core_id = 1; h.task_priority = tskIDLE_PRIORITY + 5; h.stack_size = 8192;

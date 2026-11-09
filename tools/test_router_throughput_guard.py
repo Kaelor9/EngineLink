@@ -1,14 +1,12 @@
 #!/usr/bin/env python3
-"""Guard against Wi-Fi driver polling and automatic channel scans during live app use.
-
-These are source/architecture contracts, not evidence of RF performance.
+"""Source contracts for the main loop: no USB serial blocking, no long SD
+walks, no Wi-Fi driver polling per loop pass. Not evidence of RF performance.
 """
 from pathlib import Path
 from fwsource import firmware_source, body
 
 ino=firmware_source()
 network=body(ino,"void serviceNetwork(){")
-tune=body(ino,"void linkTuneTask(void *){")
 
 # All fast main-loop reads must share one timer/epoch guarded snapshot,
 # not execute once per loop (the loop may run hundreds of times each second).
@@ -21,13 +19,6 @@ tune=body(ino,"void linkTuneTask(void *){")
 # (0.16.1, Wi-Fi from 0.12.15) assert "const bool mdnsInterfaceReady=(routerConfigured()&&!routerHold)?routerIpReady:apIpReady;" in network
 # (0.16.1, Wi-Fi from 0.12.15) assert "&&routerIpReady&&staIpAt" in network
 
-# No radio tests in the background: the ping/channel test runs only after a
-# speed test on the router, and never changes the transmit power.
-assert "if(!radioTestWanted)continue;" in tune
-assert "if(otaActive||webXferBusy())continue;" in tune
-radio=body(ino,"void runRadioTest(uint8_t level) {")
-assert "setTxPower" not in radio
-assert "radioTestWanted=true" in body(ino,"void initializeWeb(){")
 # Downloads are sent uncompressed since Wi-Fi 2.0 Stage 2 (plan D26): the
 # 0.13.2 crash backtrace went through the deflate path, which is gone; the
 # contract file (test_wifi_contract.py) checks that it stays gone.
