@@ -254,7 +254,7 @@ First 0.15.0 reports (#141–#143, 2026-11-04, board started over USB):
   yet; possibly the phone's power save on a network without internet. Measure
   again without USB attached before changing anything.
 
-Wi-Fi 0.16.0–0.16.5 (2026-11-04, standalone on the boat with an iPhone):
+**CURRENT Wi-Fi handoff (2026-11-09; read before dated history below):** [Full current case and failure timeline](docs/test-evidence/wifi-0166-2026-11-09/README.md), including the [unabridged 0.16.6 report](docs/test-evidence/wifi-0166-2026-11-09/firmware-75faba4-maggan-recovery.txt). Branch `claude/wizardly-lovelace-v6tlqz`, draft PR #160, normal build **#261** at `75faba4` passed CI and was run on the repaired PCB. Own Wi-Fi served the UI at 540–746 kB/s; router Maggan associated at +1068 s and obtained 192.168.0.2 at +1069 s, **yet both / and /api/health timed out over LAN**, then disconnect reason 200 (beacons lost) at +1608 s and 49 reason-201 retries. Earlier firmware also failed, and router failure is **not fixed**. IC5 cold joint repaired; no proven 3.3 V transient correlation. The old exceptions `wifiwpa3` and `netboost` were removed. Fable is authorized to revise the Wi-Fi plan from scratch on evidence, **planning only**; implementation/merge/release require approval. All below is historical unless consistent with this case and the new owner directive.\n\nWi-Fi 0.16.0–0.16.5 (2026-11-04, standalone on the boat with an iPhone):
 - 0.16.0 (0.15 Wi-Fi): the phone saw `EngineLink` but could not join with
   `12345678`, then the network disappeared. 0.16.1 put back the 0.12.15 Wi-Fi
   code; it also failed.
