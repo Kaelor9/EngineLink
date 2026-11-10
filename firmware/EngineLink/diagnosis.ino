@@ -14,7 +14,7 @@ void loadEvents(){
   if(n>=sizeof(h)&&h.magic==0x31545645&&h.recSize==sizeof(EventRec)&&n==sizeof(h)+(size_t)h.count*sizeof(EventRec)){
     eventCount=min<uint16_t>(h.count,MAX_EVENTS);memcpy(events,buf+sizeof(h),sizeof(EventRec)*eventCount);
   }
-  free(buf);
+  elPsFree(buf);
   for(uint8_t i=0;i<eventCount;i++){
     if(events[i].id>=nextEventId)nextEventId=events[i].id+1;
     if(events[i].box==1)events[i].box=3; // EngineLink restarted before the black box was written
@@ -100,7 +100,7 @@ void tripSeriesClose(bool keep){
 // The black box of an event: two minutes before and after it, from the ring.
 void writeBlackBox(EventRec &e){
   if(!ring||!sdReady||!cardInserted()||!ensureDir("/EVENTS")){e.box=3;return;}
-  Sample *buf=(Sample*)ps_malloc(sizeof(Sample)*250);
+  Sample *buf=(Sample*)elPsAlloc(sizeof(Sample)*250);
   if(!buf){e.box=3;return;}
   const uint16_t n=ringCopy(e.up>120?e.up-120:0,e.up+120,buf,250);
   char name[32];snprintf(name,sizeof(name),"/EVENTS/E%06lu.BIN",(unsigned long)e.id);
@@ -110,7 +110,7 @@ void writeBlackBox(EventRec &e){
     f.write((const uint8_t*)&h,sizeof(h));f.write((const uint8_t*)buf,sizeof(Sample)*n);f.close();
     e.box=2;
   }else e.box=3;
-  free(buf);
+  elPsFree(buf);
 }
 void addEvent(const diag::Event &d,uint32_t up){
   EventRec r;
@@ -212,7 +212,7 @@ void sendSeriesFile(const char *path){
   const uint32_t total=(f.size()-sizeof(h))/sizeof(Sample);
   const uint16_t step=total>600?(uint16_t)((total+599)/600):1;
   const uint32_t n=(total+step-1)/step;
-  Sample *buf=(Sample*)ps_malloc(sizeof(Sample)*(n?n:1));
+  Sample *buf=(Sample*)elPsAlloc(sizeof(Sample)*(n?n:1));
   if(!buf){f.close();reply(false,"Out of memory",500);return;}
   uint32_t got=0;
   for(uint32_t i=0;i<total&&got<n;i+=step){
@@ -222,7 +222,7 @@ void sendSeriesFile(const char *path){
   }
   f.close();
   sendSeries(buf,got,h,step);
-  free(buf);
+  elPsFree(buf);
 }
 void handleEvents(){
   String s;s.reserve(160*eventCount+200);
@@ -259,12 +259,12 @@ void handleEventSeries(){
   if(e->box==2){char name[32];snprintf(name,sizeof(name),"/EVENTS/E%06lu.BIN",(unsigned long)id);sendSeriesFile(name);return;}
   // Not on the card (yet): from the last hour, if it is still there.
   if(!ring||e->boot!=bootId){reply(false,"This recording was not saved",404);return;}
-  Sample *buf=(Sample*)ps_malloc(sizeof(Sample)*250);
+  Sample *buf=(Sample*)elPsAlloc(sizeof(Sample)*250);
   if(!buf){reply(false,"Out of memory",500);return;}
   const uint16_t n=ringCopy(e->up>120?e->up-120:0,e->up+120,buf,250);
   SeriesHead h={SERIES_MAGIC,id,bootId,n?buf[0].up:e->up,e->utc?e->utc-(int64_t)(e->up-(n?buf[0].up:e->up)):0,(int8_t)portIndex(),{0,0,0}};
   sendSeries(buf,n,h,1);
-  free(buf);
+  elPsFree(buf);
 }
 void handleTripSeries(){
   const uint32_t id=web.arg("id").toInt();
@@ -285,14 +285,14 @@ void handleRecentSeries(){
   if(!ring){reply(false,"No recording",404);return;}
   const uint32_t secs=constrain(web.arg("secs").toInt(),60,3600),up=(uint32_t)(elapsedMs()/1000ULL);
   const uint16_t step=secs>600?(uint16_t)(secs/600):1,want=secs/step+1;
-  Sample *all=(Sample*)ps_malloc(sizeof(Sample)*min<uint32_t>(secs+1,RING_N));
+  Sample *all=(Sample*)elPsAlloc(sizeof(Sample)*min<uint32_t>(secs+1,RING_N));
   if(!all){reply(false,"Out of memory",500);return;}
   const uint16_t got=ringCopy(up>secs?up-secs:0,up,all,min<uint32_t>(secs+1,RING_N));
   uint16_t n=0;for(uint16_t i=0;i<got&&n<want;i+=step)all[n++]=all[i];
   const int64_t nowUtc=validWall()?(int64_t)time(nullptr):0;
   SeriesHead h={SERIES_MAGIC,0,bootId,n?all[0].up:up,nowUtc&&n?nowUtc-(int64_t)(up-all[0].up):0,(int8_t)portIndex(),{0,0,0}};
   sendSeries(all,n,h,step);
-  free(all);
+  elPsFree(all);
 }
 // Trip logs as one CSV for a spreadsheet: one row per second.
 void handleExportSeries(){
