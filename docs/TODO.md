@@ -93,7 +93,10 @@ back, switch now?" (withdrawn with Stage 4: the app's Connect does it).
 
 ## To check on the boat
 
-- **Wi-Fi 0.17.0-rc5 first (plan 10.6):** save Router mode, power off and on,
+- **Wi-Fi next: the bench sketch `tools/wifi-bench` on the home router, profile
+  0 then profile 1, 10 minutes each (plan section 12).** rc5/rc6 below are
+  done and failed.
+- Wi-Fi 0.17.0-rc5 (plan 10.6), done: save Router mode, power off and on,
   open `/api/health`, `/` and `http://enginelink.local` from the PC, send the
   Wi-Fi report after 15 minutes. If it fails: plan 10.4 lists what still
   differs from the owner's working sketch (answer size and duration first;
