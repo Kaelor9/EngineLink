@@ -179,7 +179,8 @@ stored life story counts only the first 22 event types (`LIFE_EV_N`); newer
 types are counted in `ShiftLife`.
 
 **Wi-Fi** (plan [docs/WIFI_PLAN_2026-11-09.md](docs/WIFI_PLAN_2026-11-09.md),
-implemented 2026-11-09, *built*, bench pending). Two modes, never both:
+implemented 2026-11-09; **section 8 of the plan (2026-11-10, 0.17.0-rc3) is
+the current state**, *built*, bench pending). Two modes, never both:
 - **Standalone:** access point only, `EngineLink` at 192.168.4.1, channel 6
   (saved `apch`), max 6 phones. `apRadioSetup()`: 20 MHz, stations kept 600 s,
   country DK (802.11d on), no power save, then the fixed 19.5 dBm.
@@ -193,6 +194,23 @@ implemented 2026-11-09, *built*, bench pending). Two modes, never both:
   station, and failed on the home router with reasons 2/4/15 = the router's
   answers never arrived). Modem sleep, 40 MHz, fast scan, country "01", PMF
   capable, WPA2 minimum, WPA3-SAE by the driver, 20 dBm, 6 s beacon timeout.
+  **rc3 (plan section 8):** one station setting, `WiFi.setSleep(false)` after
+  `WiFi.mode(WIFI_STA)`. Without it the core applied whatever was stored last:
+  modem sleep on after a start straight into router mode, off after the own
+  Wi-Fi had been up (`apRadioSetup()` stores it, `STA.cpp:122` applies it).
+- **Link measurement (`netdiag.ino`, rc3):** per router session EngineLink
+  pings the router every 2 s (`esp_ping`), records the router as the driver
+  saw it, the signal, and the HTTP connections/requests that came in through
+  the router; 5 s after a fallback one scan records whether anything is heard.
+  Kept after the session, printed in the report ("ROUTER LINK AS ENGINELINK
+  MEASURED IT") and written to `/WIFI.LOG`. It only measures; the contract
+  test forbids any connect/mode/setting call there. `rfCalibrateOnce()`
+  discards the stored RF calibration once (NVS `el_radio/cal`), because it
+  predates the IC5 repair.
+- **Same address in both modes:** `http://enginelink.local` (HTTP only, port
+  80; nothing listens on 443). The `Host` check also accepts the bare name and
+  `.lan`/`.home`/`.home.arpa`/`.internal` for routers whose DNS registers the
+  DHCP host name. Why a browser may show `https://`: plan 8.3.
 - **Recovery (a mechanism, not a mode):** no router IP for 120 s → the own
   Wi-Fi comes up; the router is tried again every 10 min while no phone is
   joined, or at once when the app's Connect is used. Not saved: every start

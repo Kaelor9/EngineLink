@@ -89,7 +89,9 @@ static void whoIsAsking(WebCtx &c) {
 static esp_err_t finish(WebCtx &c, uint32_t t0) {
   if (!c.started && !c.failed) { c.code = 500; prepare(c); io(c, "No reply", 8, false); }
   else if (c.chunked && !c.ended && !c.failed) io(c, nullptr, 0, true);
-  if (!c.failed && c.code >= 200 && c.code < 300 && c.external) ++httpdStats.external2xx;
+  const bool ok = !c.failed && c.code >= 200 && c.code < 300;
+  if (ok && c.external) ++httpdStats.external2xx;
+  if (c.external && !c.onAp) { ++httpdStats.rtrReq; if (ok) ++httpdStats.rtrOk; if (c.failed) ++httpdStats.rtrFail; httpdStats.rtrLastMs = millis(); }
   ctxUnlock(c);
   const uint32_t ms = millis() - t0;
   if (ms > httpdStats.slowMs) { httpdStats.slowMs = ms; strlcpy(httpdStats.slowPath, c.r->uri, sizeof(httpdStats.slowPath)); }
@@ -125,7 +127,7 @@ static esp_err_t webDispatch(httpd_req_t *r) {
   const WebRoute &rt = *(const WebRoute *)r->user_ctx;
   WebCtx &c = srvCtx;
   resetCtx(c, r);
-  ++httpdStats.requests;
+  ++httpdStats.requests; whoIsAsking(c);
   const uint32_t t0 = millis();
   char hv[96];
   // Plan 6.9 item 3: only our own names and addresses (defeats DNS rebinding).
@@ -160,7 +162,6 @@ static esp_err_t webDispatch(httpd_req_t *r) {
     }
     c.body[got] = 0;
   }
-  whoIsAsking(c);
   if (rt.flags & R_ASYNC) {
     // One transfer runs, one may wait (the app page behind a download); a
     // third gets 503. The worker copies the job into its context when it starts.
@@ -186,6 +187,8 @@ static esp_err_t web404(httpd_req_t *r, httpd_err_code_t) {
 static esp_err_t webOpen(httpd_handle_t, int fd) {
   int one = 1; setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &one, sizeof(one));
   ++httpdStats.opens; if (++httpdStats.openNow > httpdStats.openMax) httpdStats.openMax = httpdStats.openNow;
+  struct sockaddr_storage a = {}; socklen_t al = sizeof(a);   // not 192.168.4.1, not loopback: through the router
+  if (getsockname(fd, (struct sockaddr *)&a, &al) == 0 && ip4Of(a) != lwip_htonl(0xC0A80401) && ip4Of(a) != lwip_htonl(0x7F000001)) ++httpdStats.rtrOpens;
   return ESP_OK;
 }
 static void webClose(httpd_handle_t, int fd) {

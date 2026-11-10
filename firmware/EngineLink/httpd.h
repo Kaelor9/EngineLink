@@ -45,6 +45,8 @@ struct HttpdStats {
   uint32_t busyLock = 0, busyXfer = 0, busyXferLock = 0, busyAtMs = 0; char busyPath[40] = {};
   uint32_t opens = 0, closes = 0, openNow = 0, openMax = 0, external2xx = 0, xferWaitMs = 0;
   uint32_t slowMs = 0; char slowPath[40] = {};
+  // What came in through the router (not the own Wi-Fi, not the self-test).
+  uint32_t rtrOpens = 0, rtrReq = 0, rtrOk = 0, rtrFail = 0, rtrLastMs = 0;
 };
 
 class Web {

@@ -30,13 +30,14 @@ assert "apRadioSetup()" in sa
 # 1b: TX power truth (F7): exact compare, set in router mode too.
 tx = body(w, "void applyTxPower(bool check){")
 assert "abs(" not in tx and "!=ESP_OK" in tx and "==(int8_t)elTxPower[txLevel]" in tx
-# --- The station runs on the driver's defaults, as the Prism controller
-# (plan 2.2, revision 2, owner 2026-11-09): WiFi.mode(WIFI_STA), the core's
-# reconnect, WiFi.begin(), and no station setting in between or anywhere else.
+# --- The station runs on the driver's defaults with ONE setting, power save
+# off (plan section 8, 2026-11-10): a server must hear unsolicited packets.
+# WiFi.mode(WIFI_STA), WiFi.setSleep(false), the core's reconnect, WiFi.begin().
 an = body(w, "void applyNetwork(){")
 sta = an[an.index("WiFi.mode(WIFI_STA);"):an.index("connectRouter();")]
-assert "staRadioSetup" not in fw, "no station profile: driver defaults as Prism"
-for gone in ("esp_wifi_", "setSleep", "setScanMethod", "setTxPower", "setMinSecurity", "setSortMethod", "WiFi.config("):
+assert "staRadioSetup" not in fw, "no station profile beyond power save off"
+assert sta.count("setSleep") == 1 and "WiFi.setSleep(false);" in sta, "station power save off, set once after WiFi.mode(WIFI_STA)"
+for gone in ("esp_wifi_", "setScanMethod", "setTxPower", "setMinSecurity", "setSortMethod", "WiFi.config("):
     assert gone not in sta, f"no station setting between WiFi.mode(WIFI_STA) and connectRouter(): {gone}"
 assert "WiFi.setAutoReconnect(true);" in sta, "the core's own reconnect, as Prism"
 for gone in ("esp_wifi_set_bandwidth(WIFI_IF_STA", "esp_wifi_set_inactive_time(WIFI_IF_STA", "esp_wifi_set_protocol(WIFI_IF_STA",
@@ -67,6 +68,21 @@ for need in ("staAssociatedEvents=staAssociatedEvents+1", "staIpEvents=staIpEven
     assert need in cb, f"onWiFi() lacks {need}"
 sn = body(w, "void serviceNetwork(){")
 assert "esp_wifi_sta_get_ap_info" not in sn and "WiFi.RSSI()" not in sn, "nothing polls the driver from the loop (as Prism)"
+# Plan section 8: the link is measured per router session (netdiag.ino), read
+# once after the IP and ended on every network change; diagnostics only.
+nd = (FW / "netdiag.ino").read_text(encoding="utf-8")
+assert "if(online)routerSessionBegin();" in sn and "routerSessionEnd();" in an
+assert an.index("routerSessionEnd();") < an.index("WiFi.mode(WIFI_OFF);"), "the ping session stops before the driver does"
+for banned in ("esp_wifi_set_", "WiFi.begin", "WiFi.mode", "WiFi.disconnect", "WiFi.reconnect", "promiscuous"):
+    assert banned not in nd, f"netdiag.ino only measures: {banned}"
+assert "esp_ping_new_session(" in body(nd, "void routerSessionBegin(){") and "esp_ping_delete_session(" in body(nd, "void routerSessionEnd(){")
+assert fw.count("esp_phy_erase_cal_data_in_nvs") == 1 and 'getUChar("cal",0)<1' in body(nd, "void rfCalibrateOnce(){"), "RF calibration discarded once only"
+st = body(fw, "void setup(){")
+assert st.index("rfCalibrateOnce();") < st.index("applyNetwork();"), "before the Wi-Fi starts"
+assert "surveyAt=millis()+5000UL" in sn and "if(routerHold){surveyPending=true" in sn, "one scan after a fallback, only in recovery"
+# The web server tells router traffic from own-Wi-Fi traffic.
+assert "++httpdStats.rtrOpens" in body(h := (FW / "httpd.ino").read_text(encoding="utf-8"), "static esp_err_t webOpen(httpd_handle_t, int fd) {")
+assert "++httpdStats.rtrReq" in body(h, "static esp_err_t finish(WebCtx &c, uint32_t t0) {")
 nr = (FW / "netreport.ino").read_text(encoding="utf-8")
 assert "WiFi.RSSI()" in body(nr, "void routerSignalSample(){")
 assert "++routerFallbacks;routerHold=true;" in sn, "the report counts every fallback to the own Wi-Fi"

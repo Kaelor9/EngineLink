@@ -1,6 +1,6 @@
 # To do
 
-**NOW — Wi-Fi (owner, 2026-11-09):** the review and plan are in [WIFI_PLAN_2026-11-09.md](WIFI_PLAN_2026-11-09.md); **0.17.0-rc2 implements it (*built*, CI and the local ESP32-S3 compile green, not yet run on the board)**; rc1 failed the bench on 2026-11-09 (the home router answered neither auth nor association, reasons 2/4/15), so rc2 runs the station on the driver's defaults exactly as the Prism controller (plan 2.2 revision 2). Next: the one bench session of plan section 5 (owner, about 40 min, with the PC's `netsh`/`ping` logs and the Prism control running), then the boat (5.5). No merge or release before 5.5 passes. No further A/B builds; a failure is read with the table in 5.4.
+**NOW — Wi-Fi (2026-11-10):** rc2 failed on the home router (IP in 2 s, page timed out, beacons lost after 409 s; [evidence](test-evidence/wifi-0170rc2-2026-11-09/README.md)). The chain review and **0.17.0-rc3** are in [WIFI_PLAN_2026-11-09.md](WIFI_PLAN_2026-11-09.md) section 8: station power save off, RF calibration renewed once, `http://enginelink/` accepted, and EngineLink measures the router link itself. *Built* (local compile, host tests), not run on the board. Next (owner): install rc3, router mode on the home router for 15 minutes, try the page from the PC, send the Wi-Fi report; read it with the table in plan 8.5. Optional, no firmware needed: the two checks in 8.6 (phone hotspot as router; own Wi-Fi on channel 1). No merge or release before the bench and the boat (5.5) pass.
 
 Small fixes and wishes, collected here and released together in the next
 version instead of one update each. Newest at the bottom of each section.
@@ -76,7 +76,7 @@ version instead of one update each. Newest at the bottom of each section.
     log and heading match the ST60; the trip export has the navigation
     columns.
 
-## Wi-Fi (plan revised 2026-11-09, implemented as 0.17.0-rc2)
+## Wi-Fi (plan revised 2026-11-09, section 8 added 2026-11-10: 0.17.0-rc3)
 
 The authoritative plan is [docs/WIFI_PLAN_2026-11-09.md](WIFI_PLAN_2026-11-09.md);
 `docs/WIFI_REWRITE_PLAN.md` is history. Two modes (Standalone, Router) plus
@@ -93,7 +93,11 @@ back, switch now?" (withdrawn with Stage 4: the app's Connect does it).
 
 ## To check on the boat
 
-- **Wi-Fi 0.17.0-rc2, one bench session then the boat (plan section 5).**
+- **Wi-Fi 0.17.0-rc3 first: the 15-minute router session of plan 8.5** (no
+  PC scripts needed; the report's "ROUTER LINK AS ENGINELINK MEASURED IT"
+  block is the result). The longer session below (plan section 5) follows
+  only if 8.5 passes.
+- **Wi-Fi, one bench session then the boat (plan section 5).**
   Bench (home 4G router, default settings, about 40 min): PC `netsh wlan show
   interfaces` first (which band the PC uses), `ping -t` and the `netsh wlan
   show networks mode=bssid` loop logging while EngineLink is in router mode,

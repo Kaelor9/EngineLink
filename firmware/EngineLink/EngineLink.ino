@@ -41,6 +41,8 @@
 #include <esp_heap_caps.h>
 #include <math.h>
 #include <esp_wifi.h>
+#include <esp_phy_init.h>
+#include "ping/ping_sock.h"
 #include <esp_ota_ops.h>
 #include <esp_task_wdt.h>
 #include <HTTPClient.h>
@@ -71,7 +73,7 @@ const wifi_power_t elTxPower[5]={WIFI_POWER_8_5dBm,WIFI_POWER_11dBm,WIFI_POWER_1
 const char *const elTxName[5]={"very low (8.5 dBm)","low (11 dBm)","moderate (13 dBm)","medium (15 dBm)","high (19.5 dBm)"};
 SpeedLogRec speedLog[SPEED_LOG_N];uint8_t speedLogCount=0;
 
-#define EL_VERSION "0.17.0-rc2"
+#define EL_VERSION "0.17.0-rc3"
 // Releases list published by the Pages workflow; firmware files come from
 // GitHub Releases of the same repository. Nothing else is downloaded.
 #define EL_RELEASES_URL "https://kaelor9.github.io/EngineLink/releases.json"
@@ -327,6 +329,24 @@ uint16_t scanRawCount=0;
 ScanEntry scanEntries[WIFI_SCAN_MAX_RESULTS];
 uint8_t scanEntriesCount=0;
 uint32_t scanCompletedMs=0;
+// The router link as EngineLink itself measured it (netdiag.ino). Kept after
+// the session: the report can usually only be fetched later, on the own Wi-Fi.
+struct RouterSession{
+  bool active=false,seen=false,b=false,g=false,n=false;
+  uint32_t startMs=0,endMs=0;
+  int rssiStart=0,rssiMin=0,rssiLast=0;
+  uint8_t ch=0,second=0,phy=255,pair=255,group=255,ps=255,endReason=0;
+  volatile uint32_t pingSent=0,pingOk=0,pingSumMs=0,pingMaxMs=0,pingLostRow=0,pingLostRowMax=0;   // written by the ping task
+  uint32_t opens0=0,req0=0,ok0=0,fail0=0;   // the web server's router counters when the session began
+};
+RouterSession rsess;
+// One scan a few seconds after the router was given up: is the radio deaf,
+// or is only the router missing?
+struct Survey{bool done=false,failed=false,routerSeen=false;uint32_t atMs=0;uint16_t heard=0;int best=-127,routerRssi=0;uint8_t routerCh=0;};
+Survey survey;
+uint32_t surveyAt=0;
+bool surveyPending=false;
+bool rfRecalAtBoot=false;   // the stored RF calibration was discarded at this start (once)
 // Device reports to GitHub: the board files its Wi-Fi report as an issue in
 // the EngineLink repository when it has internet, so nobody has to fetch it
 // by hand. Needs a token that may only create issues; the router name is
@@ -419,6 +439,7 @@ void setup(){
   // Filesystem recovery and SD mounting can take several seconds; the
   // router association or standalone AP beaconing now proceeds in parallel.
   WiFi.onEvent(onWiFi);
+  rfCalibrateOnce();
   applyNetwork();
   loadTotals();
   // Formatting an existing data partition after a transient mount failure

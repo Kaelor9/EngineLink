@@ -49,7 +49,8 @@ inline bool ieq(const char *a, size_t an, const char *b) {
 }
 
 // EngineLink's own addresses (plan 6.9 item 1): 192.168.4.1, <name>.local,
-// enginelink.local and the current router IP (empty when not on a router).
+// enginelink.local, the name as a router's DNS serves it (<name>, <name>.lan,
+// ...) and the current router IP (empty when not on a router).
 // `host` is the bare host, no port. Case-insensitive; a trailing dot is
 // allowed (an absolute DNS name).
 inline bool ownHost(const char *host, size_t n, const char *hostName, const char *routerIp) {
@@ -58,8 +59,13 @@ inline bool ownHost(const char *host, size_t n, const char *hostName, const char
   if (ieq(host, n, "192.168.4.1") || ieq(host, n, "enginelink.local")) return true;
   if (routerIp && *routerIp && ieq(host, n, routerIp)) return true;
   if (hostName && *hostName) {
+    // <name>.local (mDNS), the bare name, and the suffixes home routers' own
+    // DNS gives DHCP clients. None of these can be registered on the internet,
+    // so the DNS-rebinding defence holds.
     const size_t hn = strlen(hostName);
-    if (n == hn + 6 && ieq(host, hn, hostName) && ieq(host + hn, 6, ".local")) return true;
+    if (n >= hn && ieq(host, hn, hostName))
+      for (const char *sfx : {"", ".local", ".lan", ".home", ".home.arpa", ".internal"})
+        if (ieq(host + hn, n - hn, sfx)) return true;
   }
   return false;
 }

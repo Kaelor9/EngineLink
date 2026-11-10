@@ -48,6 +48,17 @@ int main() {
   assert(hostAllowed("127.0.0.1", name, ip));
   assert(hostAllowed("boat.local", "boat", ip));          // a renamed board
   assert(hostAllowed("enginelink.local", "boat", ip));    // the default name stays ours
+  // The name as a home router's own DNS serves it to the LAN (not registrable publicly).
+  assert(hostAllowed("enginelink", name, ip));
+  assert(hostAllowed("EngineLink.lan:80", name, ip));
+  assert(hostAllowed("enginelink.home", name, ip));
+  assert(hostAllowed("enginelink.home.arpa", name, ip));
+  assert(hostAllowed("boat.lan", "boat", ip));
+  assert(!hostAllowed("enginelink.com", name, ip));
+  assert(!hostAllowed("enginelink.lan.evil.example", name, ip));
+  assert(!hostAllowed("enginelinkx", name, ip));
+  assert(!hostAllowed("engine", name, ip));
+  assert(originAllowed("http://enginelink", name, ip));
   assert(!hostAllowed("evil.example", name, ip));         // a foreign name (DNS rebinding)
   assert(!hostAllowed("192.168.1.58", name, ip));         // a foreign IP
   assert(!hostAllowed("192.168.1.57", name, ""));         // no router: its old IP is not ours

@@ -49,7 +49,7 @@ void routerSignalSample(){
 }
 String makeNetworkHealthJson(){
   routerSignalSample();
-  String s;s.reserve(3300);
+  String s;s.reserve(4200);
   s+="{\"version\":";jsonString(s,EL_VERSION);s+=",\"build\":\"" __DATE__ " " __TIME__ "\"";
   s+=",\"uptimeMs\":";s+=(unsigned long)millis();
   s+=",\"mode\":";jsonString(s,routerConfigured()?"router":"standalone");
@@ -101,6 +101,7 @@ String makeNetworkHealthJson(){
   s+=",\"lastRouterChannel\":";s+=(unsigned)lastRouterChannel;
   s+=",\"lastSecurity\":";jsonString(s,stationSecurityName(staNegotiatedAuth));
   appendSpeedJson(s);
+  appendRouterDiagJson(s);
   {wifi_ps_type_t ps=WIFI_PS_NONE;esp_wifi_get_ps(&ps);s+=",\"powerSave\":";s+=(int)ps;}
   s+=",\"events\":[";
   RouterTrace trace[ROUTER_TRACE_CAP];const uint8_t n=getWifiTrace(trace,nullptr);
@@ -125,7 +126,7 @@ String buildNetworkReport(){
   // Text is easy to select/copy on iPhone and can be sent to support.
   // Never include the saved Wi-Fi password or engine/boat telemetry.
   routerSignalSample();
-  String s;s.reserve(6500);
+  String s;s.reserve(8500);
   s+="ENGINELINK - WI-FI REPORT\n";
   s+="========================\n\n";
   s+="Firmware: ";s+=EL_VERSION;s+=" (built " __DATE__ " " __TIME__ ")";   // tells two bench builds of one version apart
@@ -140,14 +141,14 @@ String buildNetworkReport(){
   s+="Last router signal: ";if(!staAssociatedEvents)s+="Not measured";else{s+=lastRouterRssi;s+=" dBm";}s+="\n";
   s+="Last router channel: ";s+=lastRouterChannel;s+="\n";
   s+="Last negotiated Wi-Fi security: ";s+=stationSecurityName(staNegotiatedAuth);s+="\n";
-  s+="Station: ESP32 driver defaults, as the Prism controller (no power-save, country, bandwidth or scan setting)\n";
+  s+="Station: ESP32 driver defaults with power save off (no country, bandwidth, scan or TX-power setting)\n";
   s+="Security: ESP32 core WPA2/WPA3 negotiation (no custom SAE handling)\n";
   s+="Transmit power: ";if(WiFi.getMode()&WIFI_MODE_STA)s+="ESP32 driver default";else{s+=elTxName[txLevel<5?txLevel:TX_LEVEL_FIXED];s+=" (fixed)";}
   if(!(WiFi.getMode()&WIFI_MODE_STA)){s+=" · target ";s+=(int)elTxPower[txLevel<5?txLevel:TX_LEVEL_FIXED];s+=" quarter-dBm";}
   {int8_t q=0;if(esp_wifi_get_max_tx_power(&q)==ESP_OK){s+=" · driver reports ";s+=q/4.0f;s+=" dBm (";s+=(int)q;s+=" quarter-dBm)";}}
   s+=" · set again after the driver changed it: ";s+=txReapplied;s+=" time(s)\n";
   {wifi_ps_type_t ps=WIFI_PS_NONE;esp_wifi_get_ps(&ps);
-   s+="Power save: ";s+=(WiFi.getMode()&WIFI_MODE_STA)?(ps==WIFI_PS_NONE?"off":ps==WIFI_PS_MIN_MODEM?"ON (minimum modem sleep)":"ON (maximum modem sleep)"):"not applicable (access point mode)";s+="\n";}
+   s+="Power save: ";s+=(WiFi.getMode()&WIFI_MODE_STA)?(ps==WIFI_PS_NONE?"off":ps==WIFI_PS_MIN_MODEM?"ON (minimum modem sleep)":"ON (maximum modem sleep)"):"not applicable now (access point mode); the router session below has its own line";s+="\n";}
   if(WiFi.getMode()&WIFI_MODE_STA){
     wifi_phy_mode_t pm;
     if(esp_wifi_sta_get_negotiated_phymode(&pm)==ESP_OK){s+="Negotiated Wi-Fi standard: ";s+=pm==WIFI_PHY_MODE_11B?"802.11b (slow)":pm==WIFI_PHY_MODE_11G?"802.11g":pm==WIFI_PHY_MODE_HT20?"802.11n 20 MHz":pm==WIFI_PHY_MODE_HT40?"802.11n 40 MHz":pm==WIFI_PHY_MODE_HE20?"802.11ax":"other";s+="\n";}
@@ -177,6 +178,7 @@ String buildNetworkReport(){
     s+=" · request round trip ";s+=x.rttMs;s+=" ms";s+="\n";}
   }
   s+="\n";
+  appendRouterDiagText(s);
   if((WiFi.getMode()&WIFI_MODE_STA)&&WiFi.status()==WL_CONNECTED){
     s+="ROUTER (AS SEEN BY ENGINELINK)\n";
     wifi_ap_record_t ap;
@@ -234,6 +236,9 @@ String buildNetworkReport(){
    }
    s+="Connections opened: ";s+=h.opens;s+=" · closed: ";s+=h.closes;s+=" · open now: ";s+=h.openNow;s+=" · most at once: ";s+=h.openMax;
    s+=" · successful answers to other devices: ";s+=h.external2xx;s+="\n";
+   s+="Of these through the router since the start (the rest: own Wi-Fi and the self-test): connections ";s+=h.rtrOpens;s+=" · requests ";s+=h.rtrReq;
+   s+=" · answered ";s+=h.rtrOk;s+=" · failed while sending ";s+=h.rtrFail;
+   if(h.rtrReq){s+=" · last at uptime ";s+=h.rtrLastMs/1000UL;s+=" s";}s+="\n";
    s+="Slowest request: ";s+=h.slowMs;s+=" ms (";s+=h.slowPath;s+=") · last transfer waited ";s+=h.xferWaitMs;s+=" ms for the engine lock\n";
    s+="Stack left (bytes): web server ";s+=webStackLeft(false);s+=", transfers ";s+=webStackLeft(true);s+="\n";
    s+="Firmware self-test: ";s+=selfTestText();s+="\n";}
@@ -269,5 +274,6 @@ void appendHttpdJson(String &s){
   s+=",\"httpdRejected\":";s+=h.rejected;s+=",\"httpdSendFails\":";s+=h.sendFails;
   s+=",\"httpdOpens\":";s+=h.opens;s+=",\"httpdCloses\":";s+=h.closes;s+=",\"httpdOpenNow\":";s+=h.openNow;s+=",\"httpdOpenMax\":";s+=h.openMax;
   s+=",\"httpdExternalOk\":";s+=h.external2xx;s+=",\"httpdSlowMs\":";s+=h.slowMs;s+=",\"httpdSlowPath\":";jsonString(s,String(h.slowPath));
+  s+=",\"httpdRouterOpens\":";s+=h.rtrOpens;s+=",\"httpdRouterRequests\":";s+=h.rtrReq;s+=",\"httpdRouterOk\":";s+=h.rtrOk;s+=",\"httpdRouterSendFails\":";s+=h.rtrFail;s+=",\"httpdRouterLastMs\":";s+=h.rtrLastMs;
   s+=",\"httpdStackFree\":";s+=webStackLeft(false);s+=",\"xferStackFree\":";s+=webStackLeft(true);
 }

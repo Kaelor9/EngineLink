@@ -117,11 +117,10 @@ void apRadioSetup(){
   WiFi.setSleep(false);
   applyTxPower(false);
 }
-// The station runs on the ESP32 driver's defaults, exactly as the Prism
-// controller that joins the same routers (docs/WIFI_PLAN_2026-11-09.md 2.2,
-// owner's decision 2026-11-09): WiFi.mode(WIFI_STA), the core's reconnect,
-// WiFi.begin(). No power-save, country, bandwidth, scan or TX-power call on
-// the station interface, and nothing polls the driver while it connects.
+// The station runs on the ESP32 driver's defaults with one setting: power
+// save off (plan section 8, 2026-11-10). EngineLink is a server: with modem
+// sleep it hears another device's first packet only if it catches the router's
+// next beacon. No country, bandwidth, scan or TX-power call on the station.
 // ---- Wi-Fi, kept simple (0.16.2) ---- Standalone: own Wi-Fi at 192.168.4.1.
 // Router: the core's own reconnect; no IP in 2 minutes: own Wi-Fi (recovery,
 // not a mode), and try the router again every 10 minutes while no phone is
@@ -184,7 +183,8 @@ void startNameService(){
 void applyNetwork(){
   const bool withRouter=routerConfigured()&&!routerHold;
   if(scanInFlight)WiFi.scanDelete();
-  scanBusy=false;scanRequested=false;scanInFlight=false;
+  scanBusy=false;scanRequested=false;scanInFlight=false;surveyPending=false;
+  routerSessionEnd();
   if(mdnsReady){MDNS.end();mdnsReady=false;}
   httpdSuspend();   // close web sessions before the driver stops (plan 6.2)
   WiFi.mode(WIFI_OFF);
@@ -193,6 +193,7 @@ void applyNetwork(){
   apStarted=false;staAssociated=false;staHadIp=false;ntpStarted=false;
   if(withRouter){
     WiFi.mode(WIFI_STA);
+    WiFi.setSleep(false);
     WiFi.setAutoReconnect(true);
     staDownSince=millis()?millis():1;
     connectRouter();
@@ -235,6 +236,7 @@ void serviceWifiScan(){
   scanCount=r<0?WIFI_SCAN_FAILED:r;
   scanCompletedMs=millis()?millis():1;scanDurationMs=scanCompletedMs-scanStartedMs;
   scanInFlight=false;scanBusy=false;scanRequested=false;
+  if(surveyPending){surveyPending=false;surveyRecord();}
   if(scanStaTemporary){scanStaTemporary=false;WiFi.mode(WIFI_AP);}
 }
 void serviceNetwork(){
@@ -242,13 +244,14 @@ void serviceNetwork(){
   if(pendingNetwork&&(int32_t)(now-networkSwitchAt)>=0){pendingNetwork=false;routerHold=false;applyNetwork();return;}
   const bool online=routerConfigured()&&!routerHold&&WiFi.status()==WL_CONNECTED;
   if(online)lastRouterIp=WiFi.localIP().toString();
+  else if(rsess.active)routerSessionEnd();
   // The router's signal is read only when a report or the app asks for it
   // (routerSignalSample); the channel comes from the connected event.
   // Router not reached in 2 minutes: own Wi-Fi, and try again later.
   if(routerConfigured()&&!routerHold&&!online&&staDownSince&&(uint32_t)(now-staDownSince)>=120000UL){
     Serial.println("Router not reached in 2 minutes: EngineLink Wi-Fi on");
     wifiLog("Router not reached in 2 minutes: own Wi-Fi on");
-    ++routerFallbacks;routerHold=true;routerRetryAt=now+600000UL;applyNetwork();return;
+    ++routerFallbacks;routerHold=true;routerRetryAt=now+600000UL;applyNetwork();surveyAt=millis()+5000UL;return;
   }
   if(routerHold&&routerConfigured()&&(int32_t)(now-routerRetryAt)>=0){
     if(WiFi.softAPgetStationNum()==0){routerHold=false;applyNetwork();return;}
@@ -256,6 +259,7 @@ void serviceNetwork(){
   }
   if(online&&!ntpStarted&&cfg.ntpOn&&allowTime("ntp")){configTime(0,0,cfg.ntpServer.c_str(),"pool.ntp.org");ntpStarted=true;}
   if(ntpNotification){ntpNotification=false;if(allowTime("ntp")&&validWall()){hasTime=true;timeSource="ntp";backfillTripTime();}}
+  if(surveyAt&&(int32_t)(now-surveyAt)>=0&&!scanBusy){surveyAt=0;if(routerHold){surveyPending=true;scanBusy=true;scanInFlight=false;scanNextAt=now;}}
   serviceWifiScan();
   if(mdnsRefreshPending&&!scanBusy&&(uint32_t)(now-mdnsNetworkChangedAt)>=2000UL)startNameService();
   // Shortly after the own Wi-Fi started or the router gave an IP. The web
@@ -267,6 +271,7 @@ void serviceNetwork(){
     netEpochSeen=networkIpEpoch;
     Serial.printf("Network ready at %s\n",online?WiFi.localIP().toString().c_str():WiFi.softAPIP().toString().c_str());
     wifiLog("Network ready");
+    if(online)routerSessionBegin();
   }
   // Device report to GitHub (only with a token and the router up).
   if(!reportedThisBoot&&cfg.ghToken.length()&&online&&staIpAt&&(uint32_t)(now-staIpAt)>=120000UL){
