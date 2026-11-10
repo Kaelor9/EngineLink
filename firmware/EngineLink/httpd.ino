@@ -217,10 +217,10 @@ void Web::on(const char *uri, httpd_method_t m, WebFn fn, uint8_t flags) {
 bool Web::begin() {
   for (WebCtx *c : {&srvCtx, &xferCtx}) {
     c->bodyCap = c == &srvCtx ? WEB_BIG_BODY : 0;
-    c->query = (char *)elPsAlloc(WEB_QUERY);
-    c->val = (char *)elPsAlloc(WEB_BIG_BODY + 1);
-    if (c->bodyCap) c->body = (char *)elPsAlloc(c->bodyCap + 1);
-    if (!c->query || !c->val || (c->bodyCap && !c->body)) return false; c->query[0] = c->val[0] = 0; if (c->body) c->body[0] = 0;
+    c->query = (char *)heap_caps_calloc(1, WEB_QUERY, MALLOC_CAP_SPIRAM);
+    c->val = (char *)heap_caps_calloc(1, WEB_BIG_BODY + 1, MALLOC_CAP_SPIRAM);
+    if (c->bodyCap) c->body = (char *)heap_caps_calloc(1, c->bodyCap + 1, MALLOC_CAP_SPIRAM);
+    if (!c->query || !c->val || (c->bodyCap && !c->body)) return false;
   }
   xferQ = xQueueCreate(2, sizeof(XferJob));
   if (!xferQ || xTaskCreatePinnedToCore(xferWorker, "xfer", 8192, nullptr, tskIDLE_PRIORITY + 4, &xferTask, 1) != pdPASS) return false;

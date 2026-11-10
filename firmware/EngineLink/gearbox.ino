@@ -40,7 +40,7 @@ void loadShifts(){
   if(n>=sizeof(h)&&h.magic==0x31544853&&h.recSize==sizeof(ShiftRec)&&n==sizeof(h)+(size_t)h.count*sizeof(ShiftRec)){
     shiftCount=min<uint16_t>(h.count,SHIFT_N);memcpy(shiftLog,buf+sizeof(h),sizeof(ShiftRec)*shiftCount);
   }
-  elPsFree(buf);
+  free(buf);
   // Restored engine knowledge, so the first shifts after a start are judged right.
   for(uint8_t c=0;c<2;c++){if(isfinite(shiftLife.idleLph[c]))shiftTr[c].base=shiftLife.idleLph[c];if(isfinite(shiftLife.idleRpm[c]))shiftTr[c].baseRpm=shiftLife.idleRpm[c];}
 }
@@ -145,7 +145,7 @@ void tripFastClose(bool keep){
 void writeFastBox(uint32_t id,uint32_t atMs){
   if(!fastRing||!sdReady||!cardInserted()||!ensureDir("/EVENTS"))return;
   const uint16_t want=(uint16_t)(2*FAST_BOX_MS/FAST_MS+8);
-  FastSample *buf=(FastSample*)elPsAlloc(sizeof(FastSample)*want);
+  FastSample *buf=(FastSample*)ps_malloc(sizeof(FastSample)*want);
   if(!buf)return;
   const uint16_t n=fastCopy(atMs>FAST_BOX_MS?atMs-FAST_BOX_MS:0,atMs+FAST_BOX_MS,buf,want);
   char name[32];snprintf(name,sizeof(name),"/EVENTS/E%06lu.FST",(unsigned long)id);
@@ -155,7 +155,7 @@ void writeFastBox(uint32_t id,uint32_t atMs){
     SeriesHead h={FAST_MAGIC,id,bootId,n?buf[0].ms:atMs,utc0,(int8_t)portIndex(),{0,0,0}};
     f.write((const uint8_t*)&h,sizeof(h));f.write((const uint8_t*)buf,sizeof(FastSample)*n);f.close();
   }
-  elPsFree(buf);
+  free(buf);
 }
 // Events wait a minute for the "after" part; called from the fast loop.
 void serviceFastBoxes(uint32_t nowMs){
@@ -261,12 +261,12 @@ void handleFastRecent(){
   if(from>nowMs)from=nowMs;
   if(nowMs-from>120000UL)from=nowMs-120000UL;
   const uint16_t want=480;
-  FastSample *buf=(FastSample*)elPsAlloc(sizeof(FastSample)*want);
+  FastSample *buf=(FastSample*)ps_malloc(sizeof(FastSample)*want);
   if(!buf){reply(false,"Out of memory",500);return;}
   const uint16_t n=fastCopy(from,nowMs,buf,want);
   const int64_t utc0=validWall()&&n?(int64_t)time(nullptr)-(int64_t)((nowMs-buf[0].ms)/1000UL):0;
   sendFast(buf,n,n?buf[0].ms:nowMs,utc0,nowMs);
-  elPsFree(buf);
+  free(buf);
 }
 // Reads a fast file; ?from=&to= seconds from its start pick a window, at most
 // 1200 samples evenly spread.
@@ -283,7 +283,7 @@ void sendFastFile(const char *path){
   if(web.hasArg("to")){b=min<uint32_t>(total,(uint32_t)max(0L,web.arg("to").toInt())*1000UL/FAST_MS);}
   if(b<a)b=a;
   const uint32_t span=b-a,step=span>1200?(span+1199)/1200:1,n=(span+step-1)/step;
-  FastSample *buf=(FastSample*)elPsAlloc(sizeof(FastSample)*(n?n:1));
+  FastSample *buf=(FastSample*)ps_malloc(sizeof(FastSample)*(n?n:1));
   if(!buf){f.close();reply(false,"Out of memory",500);return;}
   uint16_t got=0;
   for(uint32_t i=a;i<b&&got<n;i+=step){
@@ -295,7 +295,7 @@ void sendFastFile(const char *path){
   const uint32_t ms0=got?buf[0].ms:h.startUp;
   const int64_t utc0=h.startUtc?h.startUtc+(int64_t)((ms0-h.startUp)/1000UL):0;
   sendFast(buf,got,ms0,utc0,0);
-  elPsFree(buf);
+  free(buf);
 }
 void handleEventFast(){
   const uint32_t id=web.arg("id").toInt();
@@ -308,13 +308,13 @@ void handleEventFast(){
   if(!fastRing||e->boot!=bootId){reply(false,"This recording was not saved",404);return;}
   const uint32_t at=e->up*1000UL;
   const uint16_t want=(uint16_t)(2*FAST_BOX_MS/FAST_MS+8);
-  FastSample *buf=(FastSample*)elPsAlloc(sizeof(FastSample)*want);
+  FastSample *buf=(FastSample*)ps_malloc(sizeof(FastSample)*want);
   if(!buf){reply(false,"Out of memory",500);return;}
   const uint16_t n=fastCopy(at>FAST_BOX_MS?at-FAST_BOX_MS:0,at+FAST_BOX_MS,buf,want);
   const uint32_t nowMs=(uint32_t)elapsedMs();
   const int64_t utc0=validWall()&&n?(int64_t)time(nullptr)-(int64_t)((nowMs-buf[0].ms)/1000UL):0;
   sendFast(buf,n,n?buf[0].ms:at,utc0,0);
-  elPsFree(buf);
+  free(buf);
 }
 void handleTripFast(){
   const uint32_t id=web.arg("id").toInt();

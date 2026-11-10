@@ -59,7 +59,6 @@ program, so they share the globals in `EngineLink.ino`.
 | `storage.ino` | SD card, LittleFS, NVS settings and totals, restart log, raw logging |
 | `wifi.ino` | Own access point or router, never both (kept under 300 lines by `tools/test_wifi_simple.py`): the AP and station radio profiles, the 2 min recovery fallback and 10 min retry, scans, mDNS, the Wi-Fi event trace |
 | `serialcmd.ino` | USB serial commands and the Wi-Fi log/reports on the SD card (0.16.3) |
-| `psram.h`, `psram.cpp` | EngineLink's own PSRAM pool (0.17.2): all PSRAM is taken at start so Wi-Fi buffers stay in internal memory |
 | `httpd.h`, `httpd.ino` | The web server since 0.16.6: ESP-IDF `esp_http_server` on port 80 in its own task, the adapter that keeps the handlers' `web.arg()`/`web.send()` calls, the own-origin security checks, and the task for long transfers |
 | `httputil.h` | URL decoding and the own-address allow-list (host-tested, `tools/test_httputil.cpp`) |
 | `netsvc.ino` | Network services; since 0.16.6 the boot self-test that confirms a new firmware or rolls it back |
@@ -244,15 +243,13 @@ Two modes, never both:
 - **rc6 (2026-11-10, plan section 11):** rc5 timed out on the board; the
   sketch also works with OPI PSRAM, so PSRAM is cleared; rc6 is rc5 built
   with core 3.2.0, the sketch's core. *Built*, bench pending.
-- **0.17.2 (2026-11-10, plan section 15), current:** 0.17.1 stayed on the
-  home router and showed the app, but slowly (router answers 441–770 ms).
-  0.17.2 takes all PSRAM at start (`psram.h`/`psram.cpp`: `elPsAlloc()` /
-  `elPsFree()` from a 2 MB `multi_heap` pool, the rest held as spare, lent
-  back during HTTPS jobs and when internal memory runs low), so the core's
-  Wi-Fi and lwIP buffers land in internal memory. **Never use `ps_malloc()`
-  or `MALLOC_CAP_SPIRAM` directly any more: no PSRAM is free.** Not
-  board-verified; watch the report's memory lines.
-- 0.17.1 (2026-11-10, plan section 14): 0.17.0 failed on the
+- **0.17.3 (2026-11-10, plan section 16), current = 0.17.1's firmware.**
+  0.17.2 took all PSRAM so the Wi-Fi's buffers would use internal memory;
+  on the board internal memory ran out (lowest 0 KB, 109 failed
+  allocations). **Do not repeat that without first moving about 100 KB of
+  EngineLink's static tables out of internal memory.** `psram.h/.cpp` are
+  deleted; PSRAM users are on `ps_malloc` again.
+- **0.17.1 (2026-11-10, plan section 14):** 0.17.0 failed on the
   board (pings gone within a minute, beacons lost 305 s after the join, as
   rc3/rc6). 0.17.1 restarts when the router is chosen in the app
   (`serviceNetwork()`, not during a trip), so router mode always joins

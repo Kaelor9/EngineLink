@@ -879,11 +879,11 @@ void handleUpdate(){
   const size_t len=web.contentLength();
   otaError="";otaBytes=0;otaChecked=false;
   if(len>3200000){web.closeAfter();reply(false,"Update failed: the file is too large for EngineLink",413);return;}
-  uint8_t *buf=(uint8_t*)elPsAlloc(2048);
+  uint8_t *buf=(uint8_t*)heap_caps_malloc(2048,MALLOC_CAP_SPIRAM);
   if(!buf){web.closeAfter();reply(false,"Update failed: out of memory",503);return;}
   const char *refuse=len<100000?"Update failed: not an update file (too small)":calActive?"Stop the motor test first"
     :(otaActive||fwJob!=FW_IDLE||fwState==3)?"Another firmware update is running":webXferBusy()?"A download is running; try again when it has finished":nullptr;
-  if(refuse){drainUpload(buf,len);elPsFree(buf);reply(false,refuse,len<100000?400:409);return;}
+  if(refuse){drainUpload(buf,len);free(buf);reply(false,refuse,len<100000?400:409);return;}
   for(uint8_t c=0;c<2;c++)if(kad[c].polling)stopPolling(c,"Firmware update");
   otaResumeLogging=sdLogging;
   if(sdLogging)stopLog();
@@ -913,13 +913,13 @@ void handleUpdate(){
   if(otaError.length()){
     if(begun&&Update.isRunning())Update.abort();
     if(otaBytes<len)drainUpload(buf,len-otaBytes);
-    elPsFree(buf);
+    free(buf);
     if(otaResumeLogging&&!sdLogging)initSD();
     otaResumeLogging=false;
     reply(false,"Update failed: "+otaError,400);
     return;
   }
-  elPsFree(buf);
+  free(buf);
   prepareRestart();
   reply(true,"Update installed. EngineLink restarts now; reconnect in about 20 seconds.");
   restartAt=millis()+1500;
