@@ -91,11 +91,9 @@ arduino-cli compile \
   firmware/EngineLink
 ```
 
-ESP32 Arduino core **3.2.0** (pinned in CI, built on ESP-IDF 5.4; since
-0.17.0-rc6, 2026-11-10: the owner's plain sketch that served a page through
-the home router was built with it, while every EngineLink build on 3.3.12 /
-ESP-IDF 5.5.5 failed there; plan section 11. Do not move the pin before rc6's
-board result is known) and Adafruit NeoPixel 1.15.5. No linker options: since 2026-11-09 the firmware
+ESP32 Arduino core **3.3.12** (pinned in CI, built on ESP-IDF 5.5.5; rc6 was
+built on 3.2.0 as a test and failed the same way, plan section 11) and
+Adafruit NeoPixel 1.15.5. No linker options: since 2026-11-09 the firmware
 uses only documented Arduino ESP32 and ESP-IDF APIs (`tools/test_wifi_contract.py`
 refuses `--wrap`, private lwIP headers and the removed hook files).
 
@@ -245,6 +243,13 @@ Two modes, never both:
 - **rc6 (2026-11-10, plan section 11):** rc5 timed out on the board; the
   sketch also works with OPI PSRAM, so PSRAM is cleared; rc6 is rc5 built
   with core 3.2.0, the sketch's core. *Built*, bench pending.
+- **rc7 (2026-11-10, plan section 13), read this before anything above:**
+  the owner's bench sketch (`tools/wifi-bench`, no EngineLink code) degrades
+  on the home router too (110 KB page 1.8 s → 16 s in 10 min; 802.11g-only
+  worse), so the degrading link is not EngineLink's code, not the core
+  version, not PSRAM and not 802.11n. Suspicion: the 3.3 V LDO IC5 when warm
+  (not proven). rc7 = rc5's station + the server's send timeout 30 s instead
+  of 5 s, so a slow link still delivers the page. *Built*, bench pending.
 - **Same address in both modes:** `http://enginelink.local` (HTTP only, port
   80; nothing listens on 443). The `Host` check also accepts the bare name and
   `.lan`/`.home`/`.home.arpa`/`.internal` for routers whose DNS registers the

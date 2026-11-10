@@ -40,7 +40,7 @@ jobs:
       - name: Install ESP32 core and NeoPixel
         run: |
           arduino-cli core update-index --additional-urls "$ARDUINO_CORE_URL"
-          arduino-cli core install esp32:esp32@3.2.0 --additional-urls "$ARDUINO_CORE_URL"
+          arduino-cli core install esp32:esp32@3.3.12 --additional-urls "$ARDUINO_CORE_URL"
           arduino-cli lib install "Adafruit NeoPixel@1.15.5"
 
       - name: Generate embedded on-device UI

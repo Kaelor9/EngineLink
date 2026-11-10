@@ -176,7 +176,7 @@ assert "setTxTimeoutMs(0)" in body(fw, "void setup(){")
 # --- D25: pinned toolchain -----------------------------------------------
 for wf in ("build-engine.yml", "pages.yml"):
     t = (ROOT / ".github" / "workflows" / wf).read_text(encoding="utf-8")
-    assert "esp32:esp32@3.2.0" in t, f"{wf}: core not pinned (D25)"
+    assert "esp32:esp32@3.3.12" in t, f"{wf}: core not pinned (D25)"
     assert '"Adafruit NeoPixel@' in t, f"{wf}: NeoPixel not pinned (D25)"
 
 # --- Pure headers stay pure ------------------------------------------------

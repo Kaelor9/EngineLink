@@ -227,7 +227,7 @@ bool Web::begin() {
   httpd_config_t h = HTTPD_DEFAULT_CONFIG();
   h.server_port = 80; h.core_id = 1; h.task_priority = tskIDLE_PRIORITY + 5; h.stack_size = 8192;
   h.max_uri_handlers = WEB_MAX_ROUTES; h.max_open_sockets = 7; h.max_resp_headers = WEB_MAX_HDRS + 2;
-  h.lru_purge_enable = true; h.recv_wait_timeout = 5; h.send_wait_timeout = 5;
+  h.lru_purge_enable = true; h.recv_wait_timeout = 5; h.send_wait_timeout = 30;   // 30 s, was 5: a slow router link needs 15 s for the app page (plan 13)
   h.keep_alive_enable = true; h.keep_alive_idle = 5; h.keep_alive_interval = 5; h.keep_alive_count = 3;
   h.uri_match_fn = httpd_uri_match_wildcard; h.open_fn = webOpen; h.close_fn = webClose;
   if (httpd_start(&handle, &h) != ESP_OK) { handle = nullptr; return false; }
