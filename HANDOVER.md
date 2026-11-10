@@ -243,6 +243,10 @@ Two modes, never both:
 - **rc6 (2026-11-10, plan section 11):** rc5 timed out on the board; the
   sketch also works with OPI PSRAM, so PSRAM is cleared; rc6 is rc5 built
   with core 3.2.0, the sketch's core. *Built*, bench pending.
+- **0.17.0 was released on 2026-11-10 with rc7's content, by the owner's
+  explicit decision, as a test version (not board-verified).** The owner
+  measured current and voltage during the tests and found nothing wrong;
+  the IC5 suspicion below is not supported.
 - **rc7 (2026-11-10, plan section 13), read this before anything above:**
   the owner's bench sketch (`tools/wifi-bench`, no EngineLink code) degrades
   on the home router too (110 KB page 1.8 s → 16 s in 10 min; 802.11g-only
