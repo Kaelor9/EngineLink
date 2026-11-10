@@ -2,6 +2,16 @@
 // with rollback when a new version does not start properly.
 
 // ---------- Firmware from GitHub ----------
+// GitHub's certificates are checked against the certificate bundle built into
+// the ESP32 core. Core 3.3 has one call for it; core 3.2 (the version the
+// owner's working Wi-Fi sketch was built with) takes the same bundle by address.
+#if ESP_ARDUINO_VERSION >= ESP_ARDUINO_VERSION_VAL(3,3,0)
+static void useRootCertificates(NetworkClientSecure &c){c.useBuiltinCACertBundle();}
+#else
+extern const uint8_t rootBundleStart[] asm("_binary_x509_crt_bundle_start");
+extern const uint8_t rootBundleEnd[] asm("_binary_x509_crt_bundle_end");
+static void useRootCertificates(NetworkClientSecure &c){c.setCACertBundle(rootBundleStart,rootBundleEnd-rootBundleStart);}
+#endif
 // The worker task fetches the release list or downloads and installs one
 // update file. The new image must confirm itself after a healthy minute,
 // otherwise the bootloader goes back to the previous version.
@@ -10,7 +20,7 @@ void fwWorker(void *){
     if(fwJob==FW_IDLE){vTaskDelay(pdMS_TO_TICKS(200));continue;}
     const uint8_t job=fwJob;
     NetworkClientSecure client;
-    client.useBuiltinCACertBundle();
+    useRootCertificates(client);
     HTTPClient http;
     http.setTimeout(15000);
     http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
@@ -76,6 +86,7 @@ void fwWorker(void *){
               if(imageHeader.complete()){
                 checked=true;
                 if(!imageHeader.valid()){fwError="Not an EngineLink update file";ok=false;break;}
+                if(!otaSameProject(imageHeader)){fwError="Not an EngineLink firmware (different application)";ok=false;break;}
               }
             }
             if(Update.write(buf,got)!=(size_t)got){fwError=Update.errorString();ok=false;break;}
@@ -102,7 +113,7 @@ void handleFwInstall(){
   if(!url.startsWith(EL_RELEASE_PREFIX)||!url.endsWith(".bin")){reply(false,"Only EngineLink releases from GitHub can be installed",400);return;}
   if(!routerConfigured()||WiFi.status()!=WL_CONNECTED){reply(false,"Connect EngineLink to a router with internet first",409);return;}
   if(calActive){reply(false,"Stop the motor test first",409);return;}
-  if(fwJob!=FW_IDLE||fwState==3){reply(false,"Busy",409);return;}
+  if(fwJob!=FW_IDLE||fwState==3||otaActive){reply(false,"Busy",409);return;}
   for(uint8_t c=0;c<2;c++)if(kad[c].polling)stopPolling(c,"Firmware update");
   fwUrl=url;fwTarget=v;fwError="";fwJob=FW_INSTALL;
   reply(true,"Downloading "+v);
@@ -120,3 +131,10 @@ void handleFwStatus(){
   s+='}';
   sendJSON(200,s);
 }
+// The new image must be the same application as this one (plan 6.9 item 5),
+// checked from its streamed app descriptor BEFORE Update.end(): once end()
+// has made an image bootable, switching back rewrites the OTA data and the
+// rejected image would become the rollback target (esp_ota_ops.c, plan
+// 12.1 I8). Every Arduino-built image carries the core's project name, so
+// this rejects a non-Arduino ESP32 application, not another Arduino sketch.
+bool otaSameProject(const OtaImageHeader &h){return h.sameProject(esp_app_get_description()->project_name);}

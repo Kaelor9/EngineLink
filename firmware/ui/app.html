@@ -276,7 +276,7 @@ async function preferIp(ip){
   if(BASE===want||(ipTried===ip&&Date.now()-ipTriedAt<30000))return;
   ipTried=ip;ipTriedAt=Date.now();
   const c=new AbortController(),id=setTimeout(()=>c.abort(),2500);
-  try{const r=await fetch(want+'/api/live',{cache:'no-store',signal:c.signal});if(r.ok){const d=await r.json();if(d&&d.net){BASE=want;liveSidecarWorked=false;liveSidecarRetryAt=0;}}}
+  try{const r=await fetch(want+'/api/live',{cache:'no-store',signal:c.signal});if(r.ok){const d=await r.json();if(d&&d.net){BASE=want;}}}
   catch(e){}finally{clearTimeout(id);}
 }
 let discoveryPending=null;
@@ -313,34 +313,17 @@ async function findHost(){
   });
   try{return await discoveryPending;}finally{discoveryPending=null;}
 }
-// Live samples use a separate read-only HTTP listener (port 81) so a long
-// file download on port 80 cannot starve the dashboard. Fall back to port 80
-// for older firmware, browser demo and transient sidecar failures.
-let liveSidecarRetryAt=0,liveSidecarWorked=false;
 async function get(u,t=3000){
-  if(u==='/api/live'&&Date.now()>=liveSidecarRetryAt){
-    try{
-      const url=new URL(BASE||location.origin,location.href);
-      if(url.protocol==='http:'){
-        url.port='81';
-        const c=new AbortController(),id=setTimeout(()=>c.abort(),Math.min(liveSidecarWorked?800:350,t));
-        try{
-          const r=await fetch(url.origin+u,{cache:'no-store',signal:c.signal});
-          if(r.ok){liveSidecarWorked=true;return await r.json();}
-        }finally{clearTimeout(id);}
-      }
-    }catch(e){}
-    liveSidecarWorked=false;
-    liveSidecarRetryAt=Date.now()+60000;
-  }
   const c=new AbortController(),id=setTimeout(()=>c.abort(),t);
   try{const r=await fetch(BASE+u,{cache:'no-store',signal:c.signal});if(!r.ok)throw new Error('HTTP '+r.status);return await r.json();}
   finally{clearTimeout(id);}
 }
+// Every POST carries X-EngineLink: a page from another site cannot add it
+// without EngineLink's permission, so it cannot change anything here.
 async function post(u,data={},t=10000){
   const c=new AbortController(),id=setTimeout(()=>c.abort(),t);
   try{
-    const r=await fetch(BASE+u,{method:'POST',body:new URLSearchParams(data),signal:c.signal,cache:'no-store'});
+    const r=await fetch(BASE+u,{method:'POST',headers:{'X-EngineLink':'1'},body:new URLSearchParams(data),signal:c.signal,cache:'no-store'});
     let j={ok:r.ok,message:''};try{j=await r.json();}catch(e){}
     return j;
   }catch(e){return {ok:false,message:'No answer from EngineLink. Check the Wi-Fi connection.'};}
@@ -421,7 +404,9 @@ async function load(what){
     if(what==='fuel')S.fuel=await get('/api/fuel',5000);
     if(what==='econ')S.econ=await get('/api/economy',5000);
     if(what==='diag')S.diag=await get('/api/diag',5000);
-    if(what==='sd')S.sd=await get('/api/sd/info',8000);
+    if(what==='sd'){S.sd=await get('/api/sd/info',8000);
+      // The board counts the card in the background: ask again until it is done (at most ~30 s).
+      if(S.sd&&S.sd.counting){if((S.sdAsk=(S.sdAsk||0)+1)<=20)setTimeout(()=>load('sd'),1500);}else S.sdAsk=0;}
     if(what==='state'){S.state=await get('/api/state',6000);
       // New firmware on the board: load its app instead of this old copy.
       if(S.state&&S.state.build){if(!S.bootBuild)S.bootBuild=S.state.build;else if(S.bootBuild!==S.state.build&&!BASE)location.reload();}}
@@ -1470,7 +1455,7 @@ function vSettings(){
     <div class="row"><span class="rt">Server</span><input class="field" style="width:170px;text-align:right" data-i="ntpServer" value="${esc(c.ntpServer)}" aria-label="NTP server"></div></div></div>`;
   // SD card
   const sd=S.sd;
-  h+=`<div class="hd">SD card</div><div class="sec"><div class="rowx"><div class="cth"><span class="rt">Storage</span><span class="sub">${sd&&sd.ok?NF(sd.usedMB/1024,1)+' of '+NF(sd.totalMB/1024,1)+' GB used':sd&&sd.inserted?'Card not readable':'No card'}</span></div>${sd&&sd.ok?`<div class="bar" style="height:6px;margin-top:8px"><i style="width:${clamp(sd.usedMB/Math.max(1,sd.totalMB)*100,1,100)}%;background:var(--teal)"></i></div>`:''}</div>
+  h+=`<div class="hd">SD card</div><div class="sec"><div class="rowx"><div class="cth"><span class="rt">Storage</span><span class="sub">${sd&&sd.ok?(sd.known===false?'Reading the card…':NF(sd.usedMB/1024,1)+' of '+NF(sd.totalMB/1024,1)+' GB used'):sd&&sd.inserted?'Card not readable':'No card'}</span></div>${sd&&sd.ok&&sd.known!==false?`<div class="bar" style="height:6px;margin-top:8px"><i style="width:${clamp(sd.usedMB/Math.max(1,sd.totalMB)*100,1,100)}%;background:var(--teal)"></i></div>`:''}</div>
     ${row('exportGo','','Export data','Trips as a report or a spreadsheet',rv('Choose trips'))}
     ${row('cycle','rawKeep','Keep raw engine data','Trip summaries are always kept',rv(c.rawKeep?c.rawKeep>=365?NF(c.rawKeep/365,0)+' year'+(c.rawKeep>=730?'s':''):c.rawKeep+' days':'Forever'))}
     <button class="row" data-a="sheet" data-v="wipe"><span><span class="rt" style="color:var(--red)">Wipe SD card</span><span class="rh">Deletes all trips and logs on the card</span></span></button></div>`;
@@ -1700,7 +1685,7 @@ const PAGE_VIEWS={
         <div class="rowx s13 sub">On the router's Wi-Fi, EngineLink is at <b style="color:var(--text)">http://${esc(lv.net.ip||'')}</b> or <b style="color:var(--text)">http://${esc(lv.net.host||'enginelink')}.local</b>. The app finds it there by itself.</div>
         <div class="rowx s13 sub">Bookmark <b style="color:var(--text)">http://${esc(lv.net.ip||'')}</b> (or add that to the home screen): it is faster and steadier than the .local name, which depends on the router passing name look-ups. Opened by name, the app switches to the address by itself. Tip: set a fixed address for EngineLink in the router (DHCP reservation), so the bookmark keeps working.</div></div>`;
     }else{
-      if(c.router)h+=`<div class="card s13" style="margin-bottom:14px">Saved: <b>${esc(c.ssid)}</b> · not reachable right now. EngineLink uses its own Wi-Fi as recovery until you choose Connect again. <button data-a="wifiForget" style="color:var(--teal)">Forget</button></div>`;
+      if(c.router)h+=`<div class="card s13" style="margin-bottom:14px">Saved: <b>${esc(c.ssid)}</b> · not reached right now. EngineLink's own Wi-Fi is on meanwhile; it tries the router again every 10 minutes while no phone is joined, or now when you choose Connect. <button data-a="wifiForget" style="color:var(--teal)">Forget</button></div>`;
       const sc=S.scan;
       h+=`<div class="sec">${sc&&sc.nets&&sc.nets.length?sc.nets.map(n=>{const pick=S.wifiPick===n.s;return `<div><button class="row" data-a="wifiPick" data-v="${esc(n.s)}"><span><span class="rt">${esc(n.s)}</span><span class="rh">${n.lock?'Password':'Open'} · channel ${n.ch}</span></span>${sigBars(n.r)}</button>
         ${pick?`<div style="display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;padding:0 0 12px">${n.lock?`<input class="field" type="password" maxlength="63" data-i="wifiPass" value="${esc(S.wifiPass)}" placeholder="Router password" aria-label="Router password" autocapitalize="off" autocorrect="off" spellcheck="false" autocomplete="off">`:'<span class="s13 sub" style="align-self:center">Open network</span>'}<button class="btn pri" data-a="wifiConnect" data-v="${esc(n.s)}" ${sc&&sc.busy?'disabled':''}>Connect</button></div>`:''}</div>`;}).join(''):`<div class="empty">${sc&&sc.error?esc(sc.error):sc&&sc.busy?'Searching for 2.4 GHz networks…':sc&&sc.done?'No 2.4 GHz networks found. Try scanning again closer to your router.':'Scan to find the boat router.'}</div>`}
@@ -1759,8 +1744,8 @@ const PAGE_VIEWS={
 
     const w=d.wifi||{};
     const routerUp=lv.net.mode==='sta'&&lv.net.sta;
-    const modeName=lv.net.rescue?'Recovery Wi-Fi':routerUp?'Connected to router':lv.net.mode==='sta'?'Connecting to router':'Standalone Wi-Fi';
-    const lastCode=routerUp?0:(w.routerFailureReason||w.routerUnexpectedReason||w.staReason||0);
+    const modeName=lv.net.recovery?'Router not reached':routerUp?'Connected to router':lv.net.mode==='sta'?'Connecting to router':'Standalone Wi-Fi';
+    const lastCode=routerUp?0:(w.routerUnexpectedReason||w.staReason||0);
     const lastLabel=routerUp?'No current connection error':lastCode?(STAR[lastCode]||'Wi-Fi driver error')+' (code '+lastCode+')':'None recorded';
     const boxes=[
       ['Mode',modeName],
@@ -1770,13 +1755,13 @@ const PAGE_VIEWS={
     ];
     const bars=routerUp&&lv.net.rssi?sigBars(lv.net.rssi):'';
     const rep=c.report||{};
-    const status=routerUp?`On <b>${esc(c.ssid||'router')}</b> · ${esc(lv.net.ip||'')}`:lv.net.rescue?`EngineLink's own Wi-Fi (router not found)`:lv.net.mode==='sta'?`Connecting to <b>${esc(c.ssid||'router')}</b>…`:`EngineLink's own Wi-Fi · 192.168.4.1`;
+    const status=routerUp?`On <b>${esc(c.ssid||'router')}</b> · ${esc(lv.net.ip||'')}`:lv.net.recovery?`EngineLink's own Wi-Fi is on meanwhile · 192.168.4.1`:lv.net.mode==='sta'?`Connecting to <b>${esc(c.ssid||'router')}</b>…`:`EngineLink's own Wi-Fi · 192.168.4.1`;
     h+=`<div class="hd">Wi-Fi</div><div class="sec">
       <div class="rowx"><div class="cth"><span class="rt">${modeName}</span><span class="rv">${bars}${routerUp?' '+lv.net.rssi+' dBm':''}</span></div>
         <div class="s13 sub" style="margin-top:3px">${status}</div>
         ${!routerUp&&lastCode?`<div class="s12" style="margin-top:4px;color:var(--orange)">${esc(lastLabel)}</div>`:''}
         ${routerUp?busyHint(d,lv):''}
-        ${lv.net.rescue&&c.ssid&&w.routerNextTryS!=null?`<div class="s12 sub" style="margin-top:4px">Looks for ${esc(c.ssid)} again ${w.routerNextTryS>60?'in about '+dur(w.routerNextTryS):'shortly'} and goes back to it by itself when the app is not in use.</div>`:''}</div>
+        ${lv.net.recovery&&c.ssid&&w.routerNextTryS!=null?`<div class="s12 sub" style="margin-top:4px">Tries ${esc(c.ssid)} again ${w.routerNextTryS>60?'in about '+dur(w.routerNextTryS):'shortly'}, while no phone is on EngineLink's Wi-Fi.</div>`:''}</div>
       ${dlBlock(d.dl,d.sp)}
       <button class="rowx" data-a="wifiAdv" style="width:100%;text-align:left;display:block"><div class="cth"><span class="rt">Advanced</span><span class="sub">${S.wifiAdv?'▾':'›'}</span></div></button>
       ${S.wifiAdv?`<div class="rowx"><div class="grid2" style="gap:8px">${boxes.slice(2).map(([k,v])=>`<div style="background:var(--track);border-radius:12px;padding:11px 12px;min-width:0"><div class="s12 sub">${k}</div><div style="font-size:15px;font-weight:600;margin-top:4px">${esc(String(v))}</div></div>`).join('')}</div>
@@ -1836,17 +1821,15 @@ function restartsBlock(d){
     <div class="rowx s12 sub">"Power on" is normal: the power was switched off and on. Totals are saved every 30 seconds while an engine runs, so a power cut loses at most that.</div></div>`;
   return h;
 }
-// A strong signal but slow, jumpy answers from the router: the router's
-// 2.4 GHz channel is busy. EngineLink cannot change the router's channel.
+// A strong signal but a slow speed test over the router: its 2.4 GHz channel
+// is busy or the link is lossy. EngineLink cannot change the router's channel.
 function busyHint(d,lv){
-  const t=d.linkTune||{},sm=t.small||{},sc=t.scan||{},sp=S.speed;
+  const sp=S.speed;
   if(!(lv.net.rssi>-67))return '';
   if(sp&&!sp.busy&&!sp.err&&sp.kbs>=150)return '';  // the speed test is fast: nothing to fix
-  if(t.scanCh&&t.channel&&t.scanCh!==t.channel)return '';  // measured on the router's old channel
   const slowTest=sp&&!sp.busy&&(sp.err||sp.kbs<40||sp.rtt>300);
-  if(!slowTest)return '';  // only a slow speed test counts: the router may just answer pings late
-  const ch=t.channel;
-  return `<div class="s12" style="margin-top:6px;color:var(--orange)">Strong signal, but the router's Wi-Fi is slow${sc.sameChannel?`: ${sc.sameChannel} other network${sc.sameChannel>1?'s':''} share${sc.sameChannel>1?'':'s'} its channel ${ch||''}${sc.sameBest?' (strongest '+sc.sameBest+' dBm)':''}`:''}. EngineLink stays connected, but transfers are slower. A router on automatic channel usually moves to a quieter one by itself.</div>`;
+  if(!slowTest)return '';  // only a slow speed test counts
+  return `<div class="s12" style="margin-top:6px;color:var(--orange)">Strong signal, but the router's Wi-Fi is slow. EngineLink stays connected, but transfers are slower. A router on automatic channel usually moves to a quieter one by itself.</div>`;
 }
 function dlBlock(dl,spd){
   const sp=S.speed,secs=ms=>ms<1000?NF(ms,0)+' ms':ms<60000?NF(ms/1000,ms<10000?1:0)+' s':dur(Math.round(ms/1000));
@@ -1860,7 +1843,7 @@ function dlBlock(dl,spd){
     const other=Math.max(0,dl.ms-dl.findMs-dl.sdMs-dl.netMs),parts=[['Finding the trip',dl.findMs],['Reading the SD card',dl.sdMs],['Sending',dl.netMs],['Other',other]];
     const top=parts.slice().sort((a,b)=>b[1]-a[1])[0];
     h+=`<div class="rowx"><div class="cth"><span class="rt">Last download · ${esc(dl.what)}</span><span class="rv">${NF(dl.bytes/1024,0)} kB · ${secs(dl.ms)}</span></div>
-      <div class="s12 sub" style="margin-top:3px">${parts.filter(x=>x[1]>0).map(([k,v])=>`${k} ${secs(v)}`).join(' · ')}, ${via(dl)}.${dl.z&&dl.raw>dl.bytes?` Compressed from ${NF(dl.raw/1024,0)} kB to ${NF(dl.bytes/1024,0)} kB.`:''}</div>
+      <div class="s12 sub" style="margin-top:3px">${parts.filter(x=>x[1]>0).map(([k,v])=>`${k} ${secs(v)}`).join(' · ')}, ${via(dl)}.</div>
       ${dl.ms>5000?`<div class="s12" style="margin-top:4px">Most of the time went to <b>${top[0].toLowerCase()}</b>.</div>`:''}</div>`;
   }
   return h;
@@ -1882,7 +1865,7 @@ function reportsSection(c,lv){
       <input class="field" style="margin-top:10px" type="password" autocomplete="off" data-i="ghTok" value="${esc(S.ghTok||'')}" placeholder="${tok?'Paste a new token to replace it':'Paste the token (github_pat_…)'}" aria-label="GitHub token">
       <button class="btn" style="width:100%;margin-top:8px" data-a="ghSave">${tok&&!S.ghTok?'Remove token':'Save token'}</button></div>
     <div class="rowx"><div class="cth"><span class="rt">Wi-Fi report</span><a class="s13" href="/api/network-report" target="_blank" rel="noopener" style="color:var(--teal)">Open</a></div>
-      ${ip?`<div class="s12 sub" style="margin-top:3px">Also at http://${esc(ip)}:81/report, even if the app stops answering.</div>`:''}</div></div>`;
+      ${ip?`<div class="s12 sub" style="margin-top:3px">Also as plain text at http://${esc(ip)}/report.</div>`:''}</div></div>`;
 }
 // Signal strength as four bars of rising height on one baseline (the old
 // text glyphs rendered differently on every phone).
@@ -2009,7 +1992,7 @@ function renderSheet(){
       <div style="display:grid;grid-template-columns:1fr 2fr;gap:10px"><button class="btn" data-a="close">Cancel</button><button class="btn pri" data-a="notesSave">Save</button></div>`;
   }else if(k==='wipe'||k==='reset'){
     const sd=S.sd,wipe=k==='wipe',keep=S.d.keep!==false,ok=String(S.d.wipe||'').trim().toUpperCase()==='WIPE';
-    const gone=wipe?[['All trips and trip notes on the card',S.trips?S.trips.trips.length+' trips':''],['Raw engine data and test recordings',sd?NF(sd.rawMB,0)+' MB':''],['Exported files on the card',sd?sd.exports+' files':'']]:[['All settings and the Wi-Fi password',''],['Saved places and service dates',P.places.length+' places'],['Calibration and fuel fine-tuning','']].concat(keep?[]:[['All trips, notes, the fuel log and the SD card','']]);
+    const gone=wipe?[['All trips and trip notes on the card',S.trips?S.trips.trips.length+' trips':''],['Raw engine data and test recordings',sd&&sd.known!==false?NF(sd.rawMB,0)+' MB':''],['Exported files on the card',sd&&sd.known!==false?sd.exports+' files':'']]:[['All settings and the Wi-Fi password',''],['Saved places and service dates',P.places.length+' places'],['Calibration and fuel fine-tuning','']].concat(keep?[]:[['All trips, notes, the fuel log and the SD card','']]);
     const kept=wipe?['Trips, notes and the fuel log inside EngineLink','All settings, places and calibration']:(keep?['Trips, notes and the fuel log']:['Nothing']).concat(['The installed firmware version']);
     h=`${grab}<div style="display:flex;gap:12px;align-items:center"><span style="width:44px;height:44px;border-radius:14px;background:rgba(255,107,107,.14);display:flex;align-items:center;justify-content:center">${svg(IC.trash,22,'var(--red)',2)}</span><span style="font-size:22px;font-weight:600">${wipe?'Wipe the SD card?':'Factory reset?'}</span></div>
       <div class="s14 sub" style="margin-top:-4px">${wipe?'Everything on the card is deleted in one go. It cannot be undone.':'EngineLink goes back to how it came from the factory. It cannot be undone.'}</div>
@@ -2072,7 +2055,7 @@ async function startRouterConnection(ssid,pass){
   if(r.ok){
     S.wifiPick=null;
     toast('EngineLink is joining the router. Switch your phone to that Wi-Fi.');
-    BASE='';liveSidecarWorked=false;liveSidecarRetryAt=Date.now()+3000;
+    BASE='';
   }
   return r;
 }
@@ -2116,7 +2099,8 @@ const A={
   restart:async()=>{if(!confirm('Restart EngineLink now? The app reconnects by itself.'))return;act('/api/reboot',{});},
   resetKeep:()=>{S.d.keep=S.d.keep===false;renderSheet();},
   resetDo:async()=>{const r=await act('/api/factory-reset',{confirm:'ERASE',keep:S.d.keep===false?0:1});if(r.ok)history.back();},
-  wipeDo:async()=>{const r=await act('/api/sd/wipe',{confirm:'WIPE'});if(r.ok){history.back();load('sd');}},
+  // A full card takes well over 10 s to wipe (17.9 s seen); the board keeps reading the engines meanwhile.
+  wipeDo:async()=>{toast('Wiping the SD card…');const r=await post('/api/sd/wipe',{confirm:'WIPE'},180000);toast(r.message||(r.ok?'Done':'Something went wrong'));if(r.ok){history.back();load('sd');}},
   os:v=>{S.d.os=v;renderSheet();},
   androidAdd:async()=>{if(window._bip){window._bip.prompt();window._bip=null;history.back();}else toast('Open the ⋮ menu in Chrome and choose "Add to Home screen"');},
   // Places, values
@@ -2191,11 +2175,10 @@ const A={
   reportEngine:async()=>{await act('/api/report/engine',{});setTimeout(()=>load('state'),3000);},
   reportSend:async()=>{await act('/api/report/send',{});setTimeout(()=>load('state'),3000);},
   speedTest:async()=>{
-    // Served by the separate speed-test listener on port 82, never by the main
-    // web server: a slow link would hold up every other request.
+    // The test runs beside every other request (its own task on EngineLink).
     const url=new URL(BASE||location.origin,location.href);
     if(url.protocol!=='http:'){S.speed={err:true};render(true);return;}
-    url.port='82';const KB=64;
+    const KB=64;
     const once=async()=>{const t0=performance.now(),ac=new AbortController(),id=setTimeout(()=>ac.abort(),20000);
       try{const r=await fetch(url.origin+'/api/speedtest?kb='+KB,{cache:'no-store',signal:ac.signal});if(!r.ok)throw Error('HTTP '+r.status);
         const data=await r.arrayBuffer();if(data.byteLength!==KB*1024)throw Error('Incomplete transfer');
@@ -2308,11 +2291,12 @@ async function diagPoll(){for(let i=0;i<40;i++){await load('diag');if(!S.diag||!
 function uploadFw(file){
   if(!file)return;
   if(/merged/i.test(file.name)){toast('That is the USB image. Use enginelink-update.bin');return;}
-  const x=new XMLHttpRequest(),f=new FormData();f.append('update',file,file.name);
+  // The file is the whole request body; EngineLink checks its length and header.
+  const x=new XMLHttpRequest();
   x.upload.onprogress=e=>{if(e.lengthComputable){S.upload=Math.round(e.loaded/e.total*100);render(true);}};
   x.onload=()=>{S.upload=null;let m='Update finished';try{m=JSON.parse(x.responseText).message;}catch(e){}toast(m);render(true);};
   x.onerror=()=>{S.upload=null;toast('Upload interrupted');render(true);};
-  x.open('POST',BASE+'/api/update');x.send(f);S.upload=0;render(true);
+  x.open('POST',BASE+'/api/update');x.setRequestHeader('X-EngineLink','1');x.setRequestHeader('Content-Type','application/octet-stream');x.send(file);S.upload=0;render(true);
 }
 
 // ---------- Theme, night mode, screen ----------

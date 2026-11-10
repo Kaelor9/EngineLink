@@ -22,7 +22,7 @@
  */
 #include <Arduino.h>
 #include <WiFi.h>
-#include <WebServer.h>
+#include <lwip/sockets.h>
 #include <ESPmDNS.h>
 #include <Update.h>
 #include <Preferences.h>
@@ -41,6 +41,8 @@
 #include <esp_heap_caps.h>
 #include <math.h>
 #include <esp_wifi.h>
+#include <esp_phy_init.h>
+#include "ping/ping_sock.h"
 #include <esp_ota_ops.h>
 #include <esp_task_wdt.h>
 #include <HTTPClient.h>
@@ -52,15 +54,13 @@
 #include "diagrules.h"
 #include "shiftrules.h"
 #include "otaheader.h"
-#include "routerguard.h"
 #include "nmea2k.h"
-#include "netpolicy.h"
-#include "miniz.h"   // the deflate compressor in the chip's ROM
-#include "wifiwpa3.h"
-#include "netboost.h"
 #include "crashinfo.h"
-#include "linktune.h"
 #include "model.h"
+#include "tracefold.h"
+#include "httputil.h"
+#include "netstat.h"
+#include "httpd.h"
 // Transmit power step (0 = 8.5 dBm .. 4 = 19.5 dBm). Fixed: the automatic
 // choice (0.12.2-0.14.1) never took effect at start (the country setting
 // reset the power to 20 dBm, field reports #95/#125/#130) and its test never
@@ -69,10 +69,12 @@
 constexpr uint8_t TX_LEVEL_FIXED=4;
 uint8_t txLevel=TX_LEVEL_FIXED;
 uint32_t txReapplied=0;   // the driver had another power and it was set again
-volatile bool radioTestWanted=false;  // pings + channel survey (linkTuneTask)
+// Transmit power steps, lowest to highest (index = level); the AP uses 4.
+const wifi_power_t elTxPower[5]={WIFI_POWER_8_5dBm,WIFI_POWER_11dBm,WIFI_POWER_13dBm,WIFI_POWER_15dBm,WIFI_POWER_19_5dBm};
+const char *const elTxName[5]={"very low (8.5 dBm)","low (11 dBm)","moderate (13 dBm)","medium (15 dBm)","high (19.5 dBm)"};
 SpeedLogRec speedLog[SPEED_LOG_N];uint8_t speedLogCount=0;
 
-#define EL_VERSION "0.16.5"
+#define EL_VERSION "0.17.0"
 // Releases list published by the Pages workflow; firmware files come from
 // GitHub Releases of the same repository. Nothing else is downloaded.
 #define EL_RELEASES_URL "https://kaelor9.github.io/EngineLink/releases.json"
@@ -80,35 +82,37 @@ SpeedLogRec speedLog[SPEED_LOG_N];uint8_t speedLogCount=0;
 
 // ---------- Engine task and its lock ----------
 // Reading the engines runs in its own task (engineTask, on core 0), so the
-// web server, Wi-Fi and SD work can no longer hold it up. The two share the
-// engine data under one lock: the main loop holds it while it works and
-// lets go whenever it waits for the network (a phone or computer that reads
-// slowly, a request that arrives in pieces), which is exactly when reading
-// used to stop.
+// web server, Wi-Fi and SD work can no longer hold it up. They share the
+// engine data under one lock: the main loop holds it while it works and lets
+// go once per pass; the web server (httpd.ino, its own task) takes it for a
+// handler and lets go whenever it waits for the network.
 SemaphoreHandle_t engineMx=nullptr;
 bool engineTaskOn=false;
-volatile uint32_t lastHttpMs=0;   // last app request (not the loopback self-check)
-volatile uint32_t httpBusySince=0; // a handler is running since (0 = idle)
-volatile bool httpHealPending=false;
-uint32_t httpSelfFails=0,httpHeals=0,httpSelfRestarts=0;
 // How the engine task is doing: when it last finished a round, since when it
 // waits for the lock, the longest wait and how often it waited over 100 ms.
 volatile uint32_t engineBeat=0,engineWaitSince=0;
 uint32_t engineMaxWaitMs=0,engineSlowWaits=0;
+char engineMaxWaitBy[16]="";   // the task holding the lock when the longest wait began
+uint32_t engineMaxRoundMs=0;    // longest round of the engine task's own work (raw SD writes included)
 // Macros, not functions: Arduino puts its prototypes before the first function.
-#define netWaitBegin() do{if(engineTaskOn)xSemaphoreGive(engineMx);}while(0)
-#define netWaitEnd() do{if(engineTaskOn)xSemaphoreTake(engineMx,portMAX_DELAY);}while(0)
+// The loop holds engineMx whenever it exists (also without the engine task),
+// so web handlers in the server task never run beside the loop's work.
+#define netWaitBegin() do{if(engineMx)xSemaphoreGive(engineMx);}while(0)
+#define netWaitEnd() do{if(engineMx)xSemaphoreTake(engineMx,portMAX_DELAY);}while(0)
+// SD card work without the engine lock (sdGapBegin/End in storage.ino): how
+// many tasks are inside the card right now with the lock let go. Changed only
+// while holding engineMx; nothing unmounts the card while it is not 0.
+volatile uint8_t sdOffLock=0;
 
-#include "webserver.h"
-
-EngineLinkWebServer web(80);
+Web web;  // esp_http_server adapter (httpd.h, httpd.ino)
 DlStat dlStat,spStat;  // last export; last speed test
 Coverage tripCov,bootCov;
 const Coverage *seriesCov=nullptr;  // added to the next series reply
-static tdefl_compressor *zComp=nullptr;
-void downloadBreath();
+// One streamed download at a time (the xfer task, httpd.ino): rows are
+// gathered into 8 kB pieces and each piece is one chunk, sent uncompressed
+// (plan D26).
 struct ChunkOut {
-  char b[8192];size_t n=0;bool z=false;
+  char b[8192];size_t n=0;
   ChunkOut &add(const void *s,size_t len){
     const char *p=(const char*)s;
     while(len){
@@ -123,25 +127,20 @@ struct ChunkOut {
   void flush(){
     if(!n)return;
     dlStat.raw+=n;
-    if(z){
-      tdefl_compress_buffer(zComp,b,n,TDEFL_NO_FLUSH);  // always takes all of it
-    }else send(b,n);
+    send(b,n);
     n=0;
   }
   void finish(){
     flush();
-    if(z)tdefl_compress_buffer(zComp,nullptr,0,TDEFL_FINISH);
     web.sendContent("");
   }
   void send(const char *s,size_t len){
-    feedLoopWDT();  // a long download over a weak link is not a hang
-    downloadBreath();
+    if(web.sendFailed())return;  // the phone went away: the rest is not sent
     const uint32_t t0=millis();web.sendContent(s,len);dlStat.netMs+=millis()-t0;dlStat.bytes+=len;
   }
 };
 // Functions with default arguments need their declaration written out:
 // Arduino does not generate prototypes for them.
-ChunkOut &beginDownload(const char *what,const char *type,const char *filename,bool compress=true);
 void traceWifi(uint8_t type,uint8_t reason=0);
 static ChunkOut chunkOut;
 Preferences pref;
@@ -277,50 +276,24 @@ uint16_t tripHealthN[2][RPM_BUCKETS];
 DiagTest diagTests[2];
 bool ecuHoursChecked[2]={false,false};
 int64_t lastMissedUtc=0; float lastMissedL=0;
-// Wi-Fi robustness
+// Wi-Fi: own access point or router, never both (wifi.ino).
 uint8_t apChannelNow=6;          // channel the AP actually uses
-uint8_t staChannel=0;            // router channel found by the last scan
-uint8_t staBssid[6]={};
-bool staBssidKnown=false;
-// Rescue: the router could not be reached, EngineLink's own Wi-Fi is on
-// until the router is back. Not kept over a restart (each start in router
-// mode tries the router first); only the reason is saved for the report.
+// Recovery, not a mode: the router was not reached for 2 minutes, so
+// EngineLink's own Wi-Fi is on until the router is tried again, every
+// 10 minutes while no phone is joined or at once when the app asks. Not kept
+// over a restart: each start in router mode tries the router first.
 bool routerHold=false;
-uint32_t routerFallbacks=0;
-// Going back to the router by itself from rescue: a look every minute,
-// doubling after each failed return (up to 15 minutes), see netpolicy.h.
-uint32_t routerProbeAt=0,routerProbeEvery=netpolicy::PROBE_EVERY_MS,routerAutoReturns=0;
-bool routerAutoReturning=false,routerProbing=false,routerProbeHadSta=false;
-uint32_t routerProbeStarted=0;
-RouterGuard routerGuard;
-// Router reconnects are EngineLink's own (Arduino's auto-reconnect is off):
-// after every failed or lost connection one esp_wifi_connect() after a
-// growing pause (netpolicy.h). Written by the Wi-Fi event callback, acted on
-// in serviceNetwork().
-volatile uint32_t staRetryAt=0;      // next connect attempt (0 = none planned)
-volatile uint16_t staRetryFails=0;   // failed attempts in a row
-volatile bool staConnecting=false;   // an attempt is running (no answer yet)
-volatile uint32_t staConnectAt=0;
-uint32_t staRetries=0;               // attempts made by the back-off
-// Rescue: looks for the router (count) and whether the last return failed.
-uint32_t routerProbeCount=0,routerProbeSeen=0;
-bool routerReturnFailed=false;
-uint8_t routerKnownChannel=0;        // last channel the router was on (NVS "rch")
-// AP and STA are mutually exclusive; 192.168.4.x is a valid router subnet.
-bool staConflict=false;
+uint32_t routerFallbacks=0,routerRetryAt=0;
 // The application never calls begin()/disconnect() while authentication runs;
-// it only starts a new attempt after the driver reported the last one over.
-uint32_t staFails=0,staConnects=0,apRestarts=0,lastApCheck=0;
-uint32_t routerAttempts=0,routerLastSuccessMs=0,staConnectedAt=0;
+// it only starts a new attempt after the driver reported the last one over
+// (staTryAt: when the last attempt started; serviceNetwork).
+uint32_t staTryAt=0;
+uint32_t staFails=0,staConnects=0,apRestarts=0;
+uint32_t routerAttempts=0;
 volatile uint8_t staLastReason=0;
 volatile uint32_t staLastDropAt=0;
 volatile bool staAssociated=false;
-uint32_t staDownSince=0,routerLastRecoveryAttempt=0;
-// Used by the 0.12.15 Wi-Fi code restored in 0.16.1 (wifi.ino).
-constexpr uint32_t ROUTER_LAST_RESORT_RETRY_MS=30000UL;
-uint32_t routerForcedReconnects=0,saQueryFastRetries=0,txAutoSteps=0;
-volatile uint32_t saQueryRetryAt=0;
-volatile uint16_t txNoAnswer=0;
+uint32_t staDownSince=0;
 // Only the driver event callback writes these measurements. The main loop
 // reads snapshots and performs network operations outside the callback.
 volatile uint32_t staBeginAt=0,staAssociatedAt=0,staIpAt=0,staIpLostAt=0;
@@ -331,26 +304,9 @@ volatile uint32_t staUnexpectedDisconnects=0;
 // Count failed association attempts separately from dropped live connections.
 volatile uint32_t staAssociationFailures=0;
 volatile bool staHadIp=false;
-// Router security, like most ESP32 products: 0 = WPA2 (the driver starts
-// without WPA3, see wifiwpa3.cpp), which works on WPA2 and WPA2/WPA3 mixed
-// routers; 1 = WPA3 allowed, only for a router that needs it (WPA3-only).
-// Chosen from the router's security in the network scan and switched to WPA3
-// on "no compatible security" (codes 210/211); kept in NVS (smode).
-uint8_t staSecMode=0;
-volatile bool staSecSwitchPending=false;volatile uint8_t staSecSwitchTo=0;
-bool routerGotIpThisSession=false;
-uint32_t routerHoldSince=0,staSecSwitches=0;
-// A macro: Arduino puts its prototypes before the first function.
-#define saveSecMode() do{Preferences sp_;if(sp_.begin("enginelink",false)){sp_.putUChar("smode",staSecMode);sp_.end();}}while(0)
 // The browser's 32-KiB speed measurement includes HTTP setup. Track the
 // worker's own TCP write duration separately to locate actual bottlenecks.
 volatile uint32_t speedTxLastMs=0,speedTxLastBytes=0,speedTxLastWrites=0,speedTxLastAt=0;
-volatile bool routerIntentionalShutdown=false;
-// Last FAILED association is stored before the router interface goes away.
-// An intentional AP fallback must not overwrite the original Wi-Fi reason.
-uint8_t routerFailureReason=0;
-uint8_t routerFailurePhase=0;    // 1=no association, 2=associated but no DHCP IP
-uint32_t routerFailureAfterMs=0;
 RouterTrace routerTrace[ROUTER_TRACE_CAP]={};
 uint8_t traceHead=0,traceSize=0;
 uint32_t traceTotal=0;   // Wi-Fi events ever added; the SD log (serialcmd.ino) follows it
@@ -360,10 +316,8 @@ int lastRouterRssi=0;
 uint8_t lastRouterChannel=0;
 // WPA3 diagnostics: report what the driver negotiated, not just what the AP advertises.
 volatile uint8_t staNegotiatedAuth=255;  // 255 = no successful association this boot
-volatile esp_err_t staSecurityConfigError=ESP_OK;
-volatile bool staSecurityConfigured=false;
 volatile uint32_t networkIpEpoch=0,networkIpEventAt=0;
-uint32_t httpBoundEpoch=0,httpBoundAt=0;
+uint32_t netEpochSeen=0;   // networkIpEpoch already followed up (TX power, log)
 // Last access point event. AP_STOP also arrives (late) when the network only
 // changed its settings, so the watchdog acts on "stopped and not started again".
 volatile uint8_t apLastEvent=0;      // 1 started, 2 stopped
@@ -378,6 +332,21 @@ uint16_t scanRawCount=0;
 ScanEntry scanEntries[WIFI_SCAN_MAX_RESULTS];
 uint8_t scanEntriesCount=0;
 uint32_t scanCompletedMs=0;
+// What EngineLink measures about its networks by itself (netdiag.ino,
+// netstat.h; plan section 9). Kept in RAM over network changes: the report
+// can usually only be fetched later, on the own Wi-Fi.
+netstat::Http httpStat;                                  // the web server by network, with a request log
+portMUX_TYPE httpStatMux=portMUX_INITIALIZER_UNLOCKED;   // two server tasks write it
+netstat::RouterSession rsessHist[netstat::SESSION_CAP];  // router sessions, rsessCur the newest
+uint8_t rsessCur=0,rsessCount=0;
+netstat::Slot slots[netstat::SLOT_CAP];                  // the newest session in 30 s pieces
+uint8_t slotHead=0,slotSize=0;
+netstat::Step netSteps[netstat::STEP_CAP];               // slow steps of the network part
+uint8_t netStepHead=0,netStepSize=0;
+// From the driver's events (data only, no Wi-Fi calls).
+volatile int8_t staDropRssi=0;
+volatile uint8_t staSessionEndReason=0;
+volatile uint32_t staBeaconTimeouts=0,staChannelChanges=0;
 // Device reports to GitHub: the board files its Wi-Fi report as an issue in
 // the EngineLink repository when it has internet, so nobody has to fetch it
 // by hand. Needs a token that may only create issues; the router name is
@@ -434,15 +403,6 @@ float calZ[MAX_FUEL],calPump[MAX_FUEL],calCounted[MAX_FUEL],calBase[MAX_FUEL];
 uint32_t lastEngineOnMs=0,lastEngineOnSec=0;
 void finishTripHealth();
 
-// Independent, read-only live telemetry listener. Large CSV exports and
-// reports can occupy the regular WebServer for seconds, but cannot block port
-// 81. Its response is built under the existing engine-data mutex; network
-// writes happen AFTER releasing the lock. No J1708 TX is performed here.
-NetworkServer liveServer(81);
-// An independent, low-priority diagnostic endpoint. No engine data or SD
-// access is permitted here. A slow phone can occupy this task but cannot
-// block the main WebServer or the engine monitoring task.
-NetworkServer speedServer(82);
 
 void serialStatus(){
   if((uint32_t)(millis()-lastSerialStatus)<60000UL)return;
@@ -462,7 +422,10 @@ void setup(){
   // Arduino core's HWCDC.cpp): the main loop, web server and engine reading
   // stood still for up to 9.4 s (#141). Without a reader output is dropped.
   Serial.setTxTimeoutMs(0);
-  delay(120); // launch Wi-Fi promptly; USB serial can attach later
+  // The radio calibrates once per start, when the Wi-Fi first comes up. The
+  // working test sketch waited a second after power-on before that; so does
+  // EngineLink (it started the Wi-Fi 120 ms after power-on until rc4).
+  delay(1000);
   Serial.println("\nEngineLink " EL_VERSION " - engine monitoring, listen-only at boot unless automatic reading is on");
   {
     esp_ota_img_states_t st;
@@ -480,7 +443,7 @@ void setup(){
   // router association or standalone AP beaconing now proceeds in parallel.
   WiFi.onEvent(onWiFi);
   applyNetwork();
-  initializeWeb();
+  netdiagInit();
   loadTotals();
   // Formatting an existing data partition after a transient mount failure
   // would permanently destroy history. Permit auto-format only before the
@@ -538,22 +501,14 @@ void setup(){
   // every few ms), the chip restarts and the restart log says "watchdog".
   {esp_task_wdt_config_t w={60000,(1<<0),true};esp_task_wdt_reconfigure(&w);enableLoopWDT();}
   engineMx=xSemaphoreCreateMutex();
-  if(engineMx&&framesQueue){
+  if(engineMx){
     xSemaphoreTake(engineMx,portMAX_DELAY);  // the loop holds it while it works
-    engineTaskOn=xTaskCreatePinnedToCore(engineTask,"engines",16384,nullptr,3,nullptr,0)==pdPASS;
-    if(!engineTaskOn)xSemaphoreGive(engineMx);
-    if(engineTaskOn){
-      liveServer.begin();
-      xTaskCreatePinnedToCore(httpSelfCheckTask,"http-check",4096,nullptr,1,nullptr,0);
-      xTaskCreatePinnedToCore(linkTuneTask,"link-tune",4096,nullptr,1,nullptr,0);
-      if(xTaskCreatePinnedToCore(liveHttpTask,"live-http",8192,nullptr,5,nullptr,1)!=pdPASS)
-        Serial.println("Independent live server task could not start");
-    }
+    if(framesQueue)engineTaskOn=xTaskCreatePinnedToCore(engineTask,"engines",16384,nullptr,3,nullptr,0)==pdPASS;
   }
-  speedServer.begin();
-  if(xTaskCreatePinnedToCore(speedHttpTask,"speed-http",4096,nullptr,5,nullptr,1)!=pdPASS)
-    Serial.println("Independent speed test listener could not start");
-  Serial.printf("EngineLink HTTP ready: %s (port 80 UI, 81 live, 82 speed test)\n",
+  // The web server starts last: every handler's data is loaded and the lock
+  // exists. It binds every interface, so a Wi-Fi change needs no rebind.
+  initializeWeb();
+  Serial.printf("EngineLink HTTP %s on port 80 (%s)\n",web.handle?"ready":"FAILED to start",
     routerConfigured()&&!routerHold?"router":"standalone");
 }
 void loop(){
@@ -569,15 +524,13 @@ void loop(){
   auto part=[&partAt](uint8_t i){const uint32_t t=millis(),d=t-partAt;if(d>loopPartMaxMs[i])loopPartMaxMs[i]=d;partAt=t;};
   serviceCAN();
   part(8);
-  web.handleClient();
-  part(0);
   serviceSD();
   part(1);
   if(!engineTaskOn){serviceKad();serviceAutoPoll();}
   serviceDiag();
   if(!engineTaskOn){serviceFast();serviceEngines();}
   part(2);
-  serviceRawCleanup();
+  serviceSdWalk();
   part(3);
   serviceHistory();
   part(4);
@@ -598,7 +551,7 @@ void loop(){
     Serial.println("Engine task stalled: restarting");
     prepareRestart();restartAt=millis()+200;
   }
-  if(rollbackPending&&millis()>60000&&(apStarted||WiFi.status()==WL_CONNECTED)){esp_ota_mark_app_valid_cancel_rollback();rollbackPending=false;}
+  serviceSelfTest();
   if(fwState==4&&!restartAt){prepareRestart();restartAt=millis()+2000;}
   if(restartAt&&(int32_t)(millis()-restartAt)>=0){delay(100);ESP.restart();}
   const uint32_t took=millis()-loopStart;if(took>loopMaxMs)loopMaxMs=took;

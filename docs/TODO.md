@@ -1,5 +1,7 @@
 # To do
 
+**NOW — Wi-Fi (2026-11-10, after rc3):** rc3 on the home router: 802.11n 40 MHz negotiated, 3 of 152 pings answered at −47 dBm, beacons lost after 302 s ([evidence](test-evidence/wifi-0170rc3-2026-11-10/README.md)). **0.17.0-rc4** ([plan section 9](WIFI_PLAN_2026-11-09.md)) fixes three rc3 faults (own Wi-Fi at once on a loss, engine lock held 1645 ms in a mode change, wrong end code), sets the station to 20 MHz, tries 802.11g after a poor session, leaves a dead link after a minute and records sessions, requests and radio samples. *Built* (local compile, host tests), not run on the board. Next (owner): install rc4, router mode on the home router for 15 minutes, open the page from the PC a few times, send the Wi-Fi report; read it with plan 9.6. Optional without firmware: plan 8.6 (phone hotspot as router; own Wi-Fi on channel 1). No merge or release before the bench and the boat (5.5) pass.
+
 Small fixes and wishes, collected here and released together in the next
 version instead of one update each. Newest at the bottom of each section.
 
@@ -74,28 +76,50 @@ version instead of one update each. Newest at the bottom of each section.
     log and heading match the ST60; the trip export has the navigation
     columns.
 
-## Deferred architecture work — after Wi-Fi 2.0
+## Wi-Fi (plan revised 2026-11-09, section 10 added 2026-11-10: 0.17.0-rc5)
 
-- **High priority, BLOCKED until Wi-Fi 2.0 is accepted — decouple engine telemetry from Wi-Fi/web/SD/USB Serial** ([issue #161](https://github.com/Kaelor9/EngineLink/issues/161), [code audit](FIRMWARE_BLOCKING_AUDIT_2026-11-05.md)). The current two-core design uses a broad shared `engineMx` mutex; slow SD, Serial or HTTP operations can delay engine handling. After Fable's Wi-Fi 2.0 implementation and its bench + boat acceptance tests (planned 0.17.0), evaluate a dedicated real-time motor task, bounded FreeRTOS queues, read-only snapshots and separate SD/Serial workers. Choose core pinning based on measurement, not simply swapping tasks. Preserve fuel/trip correctness and record lost frames/queue depth. **Do not change the Wi-Fi 2.0 plan, PR #160 or firmware for this item now.** Implement later in a separate branch/PR, with regression tests and owner approval.
+The authoritative plan is [docs/WIFI_PLAN_2026-11-09.md](WIFI_PLAN_2026-11-09.md);
+`docs/WIFI_REWRITE_PLAN.md` is history. Two modes (Standalone, Router) plus
+the recovery mechanism; the station runs on the driver's defaults as the
+Prism controller (rc2; rc1's profile of power save off, country DK, 20 MHz
+and all-channel scan failed the bench); the Wi-Fi 2.0 state machine (Stage 4)
+and the 0.15.0 leftovers are removed. Open items from the old section that are **not**
+dropped: Apple's captive-portal probe (deferred by the owner), "Router is
+back, switch now?" (withdrawn with Stage 4: the app's Connect does it).
+
+## Deferred architecture work — after the Wi-Fi plan's acceptance
+
+- **High priority, BLOCKED until Wi-Fi 2.0 is accepted — decouple engine telemetry from Wi-Fi/web/SD/USB Serial** ([issue #161](https://github.com/Kaelor9/EngineLink/issues/161), [code audit](FIRMWARE_BLOCKING_AUDIT_2026-11-05.md)). The current two-core design uses a broad shared `engineMx` mutex; slow SD, Serial or HTTP operations can delay engine handling. After the Wi-Fi plan's bench + boat acceptance (0.17.0), evaluate a dedicated real-time motor task, bounded FreeRTOS queues, read-only snapshots and separate SD/Serial workers. Choose core pinning based on measurement, not simply swapping tasks. Preserve fuel/trip correctness and record lost frames/queue depth. **Do not change the Wi-Fi plan or its firmware for this item now.** Implement later in a separate branch/PR, with regression tests and owner approval. Starting point: the task and core table, measured couplings and proposed order in HANDOVER "Tasks and cores" (2026-11-06). The targeted fixes of 2026-11-06 (plan 12.1 I10–I11: SD card work, Wi-Fi log and serial export without the engine lock; lock holder and engine round in the report) removed the measured stalls the owner asked to fix now, without changing lock ownership or tasks.
 
 ## To check on the boat
 
-- **Standalone Wi-Fi 0.16.5 — verify on the EngineLink PCB before calling this fixed.**
-  Evidence from the 0.16.4 USB report at 50 s: one phone joined at +23 s,
-  left at +40 s with reason 8 (station left), zero port-80 HTTP requests;
-  AP mode on channel 6, no watchdog restart. The driver actually reported
-  8.5 dBm despite the firmware claiming its fixed 19.5 dBm setting.
-  0.16.5 removes that AP-only override and records AP DHCP leases, port-80
-  TCP accepts and HTTP parse failures separately. With iPhone joined to
-  `EngineLink`, turn off mobile data for the controlled test and open
-  `http://192.168.4.1/api/health` directly in Safari, then the app at
-  `http://192.168.4.1/`. In the USB console check for
-  `HTTP/80 listening on 192.168.4.1`, and type `wifi` / `wifi log` to get the
-  report. Repeat once at normal distance and send the new
-  USB Wi-Fi report *before and after*. If it still fails, use the three
-  counters to locate whether failure is association/DHCP, TCP, or HTTP.
-  Do not attribute reason 8 to a radio fault without further evidence.
-
+- **Wi-Fi next: the bench sketch `tools/wifi-bench` on the home router, profile
+  0 then profile 1, 10 minutes each (plan section 12).** rc5/rc6 below are
+  done and failed.
+- Wi-Fi 0.17.0-rc5 (plan 10.6), done: save Router mode, power off and on,
+  open `/api/health`, `/` and `http://enginelink.local` from the PC, send the
+  Wi-Fi report after 15 minutes. If it fails: plan 10.4 lists what still
+  differs from the owner's working sketch (answer size and duration first;
+  the sketch extended with a 110 KB page and left running with `ping -t`
+  separates them without an EngineLink build). The rc4 item below is history.
+- Wi-Fi 0.17.0-rc4: the 15-minute router session of plan 9.6 (done, failed; no
+  PC scripts needed; the report's "ROUTER SESSIONS AS ENGINELINK MEASURED
+  THEM" block and the request log are the result). The longer session below (plan section 5) follows
+  only if 8.5 passes.
+- **Wi-Fi, one bench session then the boat (plan section 5).**
+  Bench (home 4G router, default settings, about 40 min): PC `netsh wlan show
+  interfaces` first (which band the PC uses), `ping -t` and the `netsh wlan
+  show networks mode=bssid` loop logging while EngineLink is in router mode,
+  20 × `/api/live`, 10 × `/`, 3 × `enginelink.local`, 30 min, report and
+  `/WIFI.LOG`; the Prism controller on the same router and spot as control.
+  Pass: ≥ 99/100 pings, 20/20 `/api/live` < 2 s, 10/10 `/` < 5 s, 0 reason
+  200, 0 fallbacks, report says power save off, country DK, 20 MHz. Read a
+  failure with the table in plan 5.4 (router / place / board); no new
+  firmware build for a diagnosis. Then the boat (5.5): one trip, the same
+  checks from the iPhone, one router power-cycle, standalone once.
+- **Hardware documentation needed for the power tests:** LDO and buck part
+  numbers, how USB 5 V and the buck output are combined, decoupling at the
+  module (`docs/HARDWARE.md` has none of it).
 ## Previous boat checks
 
 - **Wi-Fi 0.15.0 test plan** (send a Wi-Fi report after each step; the report

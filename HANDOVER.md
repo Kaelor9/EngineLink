@@ -7,7 +7,10 @@ tested on hardware is in [docs/STATUS.md](docs/STATUS.md).
 
 **Talk to the owner in Danish**, briefly and concretely. The app itself is in
 English. The owner has asked for pull requests to be merged without asking once
-CI is green.
+CI is green — except changes that touch networking: those are merged and
+released only after the owner has run the bench and boat protocol in
+[docs/WIFI_PLAN_2026-11-09.md](docs/WIFI_PLAN_2026-11-09.md) section 5 (owner's
+rule of 2026-11-05).
 
 Never ask for, repeat or store secrets (GitHub tokens, passwords) in chats,
 code or reports. The owner's GitHub token for reports lives only on the board.
@@ -54,22 +57,21 @@ program, so they share the globals in `EngineLink.ino`.
 | `diagnosis.ino` | Sample ring, rules, events and black boxes, engine life story, series downloads |
 | `gearbox.ino` | Gear and clutch: four readings a second (ring, trip and event files), shift timing per engine, compressor, warm-up and charging, `/api/shifts` and `/api/fast` |
 | `storage.ino` | SD card, LittleFS, NVS settings and totals, restart log, raw logging |
-| `wifi.ino` | Own access point or router (simple since 0.16.2, kept under 300 lines by `tools/test_wifi_simple.py`), fallback, scans, mDNS |
+| `wifi.ino` | Own access point or router, never both (kept under 300 lines by `tools/test_wifi_simple.py`): the AP and station radio profiles, the 2 min recovery fallback and 10 min retry, scans, mDNS, the Wi-Fi event trace |
 | `serialcmd.ino` | USB serial commands and the Wi-Fi log/reports on the SD card (0.16.3) |
-| `webserver.h` | The port 80 web server (connection pool) |
+| `httpd.h`, `httpd.ino` | The web server since 0.16.6: ESP-IDF `esp_http_server` on port 80 in its own task, the adapter that keeps the handlers' `web.arg()`/`web.send()` calls, the own-origin security checks, and the task for long transfers |
+| `httputil.h` | URL decoding and the own-address allow-list (host-tested, `tools/test_httputil.cpp`) |
+| `netsvc.ino` | Network services; since 0.16.6 the boot self-test that confirms a new firmware or rolls it back |
+| `tracefold.h` | Folding of repeated Wi-Fi events in the trace (host-tested by `tools/test_tracefold.cpp`) |
 | `webapi.ino` | JSON helpers, the app's API handlers and the route table |
-| `netreport.ino` | Network report, ports 81 and 82, web server self-check, radio test task |
-| `downloads.ino`, `sdexport.ino` | Streaming (compressed) downloads, CSV exports, SD clean-up, backup |
+| `netreport.ino` | Network report and health JSON, link diagnostics (joined phones, the AP as the driver runs it, the router as the station sees it) |
+| `downloads.ino`, `sdexport.ino` | Streaming downloads (uncompressed since 0.16.6), CSV exports, speed test, SD clean-up, backup |
 | `updates.ino` | Firmware updates from GitHub or a file, with rollback; sends the GitHub reports |
 | `enginereport.ino` | Engine report after each trip: how well both engines were read, plus the diagnostics JSON |
 | `led.ino`, `nmea2000.ino`, `enginetest.ino` | Status LED, NMEA 2000 listener (navigation, bus census, per-trip `.NAV` log, `/api/nmea`), engine test capture |
 | `nmea2k.h` | NMEA 2000 decoding, fast packets and census, host-tested (`tools/test_nmea2k.cpp`) |
-| `wifiwpa3.cpp/.h` | Wraps `esp_wifi_init` to switch WPA3-SAE off unless the router needs it |
-| `linktune.cpp/.h` | Transmit power steps; radio test (pings, channel survey) after a speed test |
-| `netpolicy.h` | Router reconnect back-off and rescue probe/return rules (host-tested) |
-| `netboost.cpp/.h` | Raises the TCP send window per connection |
 | `crashinfo.cpp/.h` | The last crash from the core dump, for the report |
-| `fuelcal.h`, `diagrules.h`, `shiftrules.h`, `ledpatterns.h`, `routerguard.h`, `netpolicy.h`, `otaheader.h` | Logic without Arduino, tested on a PC in CI |
+| `fuelcal.h`, `diagrules.h`, `shiftrules.h`, `ledpatterns.h`, `otaheader.h`, `httputil.h`, `tracefold.h` | Logic without Arduino, tested on a PC in CI |
 
 Elsewhere:
 
@@ -86,28 +88,67 @@ Elsewhere:
 ```bash
 arduino-cli compile \
   --fqbn "esp32:esp32:esp32s3:FlashSize=8M,PartitionScheme=default_8MB,PSRAM=opi,USBMode=hwcdc,CDCOnBoot=cdc" \
-  --build-property "compiler.c.elf.extra_flags=-Wl,--wrap=esp_wifi_init" \
   firmware/EngineLink
 ```
 
-ESP32 Arduino core 3.3.x and the Adafruit NeoPixel library. The link option is
-required: CI checks that the WPA3 switch is linked in.
+ESP32 Arduino core **3.3.12** (pinned in CI, built on ESP-IDF 5.5.5; rc6 was
+built on 3.2.0 as a test and failed the same way, plan section 11) and
+Adafruit NeoPixel 1.15.5. No linker options: since 2026-11-09 the firmware
+uses only documented Arduino ESP32 and ESP-IDF APIs (`tools/test_wifi_contract.py`
+refuses `--wrap`, private lwIP headers and the removed hook files).
 
 To release: bump `EL_VERSION` in `EngineLink.ino`, update the README badge and
 status table, and add `docs/releases/vX.Y.Z.md`. Merging to `main` builds and
 publishes release `vX.Y.Z` with `enginelink-update.bin` (Wi-Fi update) and
 `firmware.bin` (full USB image, erases settings and data). The board can update
-itself from GitHub; a version that does not run properly for its first minute
+itself from GitHub; a version that does not run properly for its first minute (since 0.16.6: that no web client got an answer within 10 minutes, plan 6.10)
 is rolled back. Details: [docs/RELEASING.md](docs/RELEASING.md).
 
 ## How the firmware works
 
 **Tasks.** Core 0: Wi-Fi, the two J1708 receiver tasks (UART to a frame queue
 in PSRAM) and the engine task (frames, KAD polling, once-a-second engine, trip
-and diagnosis work). Core 1: the main loop with the web server on port 80, and
-two small listeners: port 81 for live data and the network report, port 82 for
-the speed test. A mutex (`engineMx`) guards engine state between the engine
-task and the web server.
+and diagnosis work). Core 1: the main loop, and since 0.16.6 the web server
+(`esp_http_server` task `httpd`, port 80 only) and the `xfer` task for long
+downloads. A mutex (`engineMx`) guards shared state: the loop holds it while it
+works, a web handler takes it (2 s, else 503) and lets go whenever it waits for
+the phone. Up to 0.16.5 the web server ran inside the loop, with extra
+listeners on ports 81 (live data, report) and 82 (speed test). Since the
+2026-11-06 fixes, slow SD card work (directory walk, Wi-Fi log, wipe) runs
+with the lock let go (`sdGapBegin/End`, plan 12.1 I10), and nothing unmounts
+the card while it does.
+
+**Tasks and cores (review 2026-11-06, as built; FreeRTOS priority in brackets).**
+
+| Core 0 | Core 1 |
+|---|---|
+| Wi-Fi driver (23), esp_timer (22), event loop (20), lwIP `tcpip` (18), J1708 receivers `J7RX`/`J6RX` (4), `engines` (3), `fw` GitHub worker (1), mDNS (1) | `httpd` web server (5), `xfer` long transfers (4), Arduino network events, main `loopTask` (1) |
+
+What the measurements say and what is deliberately left for later:
+
+- **The waits are lock waits, not CPU.** The engine task needs little CPU;
+  its long waits came from `engineMx` held by others (SD 7.3 s, network switch
+  1.5–2.5 s). The report now names the holder at the longest wait and the
+  engine task's own longest round, so later changes start from numbers.
+- **The loop holds `engineMx` almost all the time** and lets go once a pass
+  (`delay(1)`), so engine processing waits for the loop's pass (typically
+  5–70 ms). Frames are not lost meanwhile: the receivers stamp each frame when
+  the UART's hardware timeout ends it and queue it (2048 frames in PSRAM).
+- **Priority inheritance crosses cores.** While the engine task (3) waits for
+  the loop (1), the loop inherits 3, but `httpd` (5) and `xfer` (4) on core 1
+  still run before it.
+- **The engine task writes the raw log itself** (`writeRecord()`), so a slow
+  card write stalls one engine round while it holds the lock.
+- Engine work on core 0 beside the Wi-Fi driver is fine: the driver preempts
+  it for microseconds to milliseconds and the frame timestamps come from the
+  receivers.
+
+After the Wi-Fi plan's acceptance (separate task, [issue #161](https://github.com/Kaelor9/EngineLink/issues/161), `docs/TODO.md`), in this order and
+only with measurements: the loop takes `engineMx` around shared data instead
+of holding it; raw-log and other SD writes go to one writer task with a
+bounded queue, so no SD operation runs in the engine task or under its lock;
+`/api/live` reads a snapshot the engine task publishes. Core affinity and
+priorities stay as they are unless a measurement shows a need.
 
 **KAD reading.** Request `01 43 21 hi lo cs`; our own request echoes on the bus
 about 8 ms later; the ECU answers `83 C1 <width>1 <value…> <cs>` (big-endian).
@@ -138,25 +179,112 @@ and compressor bits are learned by the guided drive test in the app (page
 stored life story counts only the first 22 event types (`LIFE_EV_N`); newer
 types are counted in `ShiftLife`.
 
-**Wi-Fi.** Two exclusive modes. Standalone: access point only, `EngineLink` at
-192.168.4.1. Router: station only, reachable at the router's address. The
-rules (0.15.0, `netpolicy.h`):
-- **Reconnect:** EngineLink's own, with Arduino's auto-reconnect off. One
-  `esp_wifi_connect()` after each DISCONNECTED event, with a pause of 1, 2, 4,
-  8, then 15 s, and never while an attempt runs. All Wi-Fi calls are made
-  in `serviceNetwork()`, never in the event callback.
-- **Rescue:** after 120 s without a router IP (300 s while a login is still
-  answered), the access point returns. Rescue is not saved: every start in
-  router mode tries the router first. In rescue EngineLink looks for the
-  router every minute (its last channel, NVS `rch`; all channels every fifth
-  time). It goes back when the router is there and the app has been unused
-  for 60 s, or after 10 min unless the last return failed. Failed returns
-  space the looks out to 15 min.
-- **Security and power:** WPA2 is used unless the router is WPA3-only. The
-  transmit power is fixed at 19.5 dBm, set after the country (setting the
-  country resets it) and checked after every new IP.
-- **Radio test:** pings and the channel survey run only after a speed test on
-  the router.
+**Wi-Fi** (plan [docs/WIFI_PLAN_2026-11-09.md](docs/WIFI_PLAN_2026-11-09.md),
+implemented 2026-11-09; **section 10 of the plan (2026-11-10, 0.17.0-rc5) is
+the current state**, *built*, bench pending; read the "rc5" paragraph below
+first: it replaces the rc4 station, link check and measurement bullets).
+Two modes, never both:
+- **Standalone:** access point only, `EngineLink` at 192.168.4.1, channel 6
+  (saved `apch`), max 6 phones. `apRadioSetup()`: 20 MHz, stations kept 600 s,
+  country DK (802.11d on), no power save, then the fixed 19.5 dBm.
+- **Router:** station only, at the router's address and `enginelink.local`,
+  on the ESP32 driver's defaults exactly as the Prism controller
+  (`Kaelor9/Marine-RGB-Light-Controller`, same module) that joins the same
+  routers: `WiFi.mode(WIFI_STA)`, `WiFi.setAutoReconnect(true)`,
+  `WiFi.begin(ssid, pass)`, nothing else on the station interface and nothing
+  polling the driver while it connects (0.17.0-rc2, plan 2.2 revision 2; rc1
+  had power save off, country DK, 20 MHz and the all-channel scan on the
+  station, and failed on the home router with reasons 2/4/15 = the router's
+  answers never arrived). Modem sleep, 40 MHz, fast scan, country "01", PMF
+  capable, WPA2 minimum, WPA3-SAE by the driver, 20 dBm, 6 s beacon timeout.
+  **rc4 (plan section 9), the station as it is now:** `WiFi.setSleep(false)`
+  and `staRadioSetup()` right after `WiFi.mode(WIFI_STA)`: 20 MHz
+  (`esp_wifi_set_bandwidth`, Espressif's recommendation near other networks;
+  rc3 negotiated 40 MHz and got 3 of 152 pings answered at −47 dBm) and
+  802.11b/g/n, or b/g when the last session's link check was poor
+  (`staPlainG`). Nothing else is set. Without the `setSleep` call the core
+  applies whatever was stored last (`STA.cpp:122`).
+- **Link check and its two decisions (rc4):** per router session EngineLink
+  pings the router every 2 s (`esp_ping`). `netstat::linkPoor` (fewer than
+  half of ≥ 30 answered) switches the next session between 802.11n and
+  802.11g. `netstat::linkDead` (30 lost in a row and no web request through
+  the router for 60 s, only for a router that answered a ping this start)
+  makes EngineLink join again once, then go to its own Wi-Fi with the normal
+  10 min return. The fallback timer compares **signed**: the event task can
+  set `staDownSince` after `now` was read (rc3 fell back at once).
+- **Measurement (`netdiag.ino`, `netstat.h`):** up to 4 router sessions with
+  everything the driver tells, the link check, a 2 s radio sample every 30 s
+  (promiscuous callback that only counts: beacons, repeats, 40 MHz, noise
+  floor), the session in 30 s pieces, scans after a fallback with networks by
+  channel, the web server by network with a 32-entry request log
+  (`httpConn()`/`httpRecord()` from `httpd.ino`), slow network steps by name,
+  tasks' CPU share and stack. Printed in the report, in its JSON and in
+  `/WIFI.LOG`. `netdiag.ino` never connects or changes a station setting
+  (contract test). `WiFi.mode()` calls run with `engineMx` let go
+  (`netWaitBegin/End`): they took 1645 ms in rc3 with the engine task waiting.
+  `rfCalibrateOnce()` discarded the stored RF calibration once (NVS
+  `el_radio/cal`), because it predated the IC5 repair.
+- **rc5 (2026-11-10, plan section 10), the station as it is now.** The owner
+  ran a plain sketch on this board (`WiFi.mode(WIFI_STA)`,
+  `WiFi.setSleep(false)`, `WiFi.begin()`, `MDNS`, Arduino `WebServer`) and
+  the PC opened its page through the home router
+  ([evidence](docs/test-evidence/wifi-sketch-2026-11-10/README.md)). rc5's
+  station is exactly that sequence: **no `esp_wifi_` call on the station**,
+  no `WiFi.persistent()`, the core's reconnect at its default, Wi-Fi started
+  1 s after power-on as in the sketch. Removed from rc4: `staRadioSetup()`
+  (20 MHz, 802.11g/n switch), the promiscuous radio sample, the "dead link"
+  rejoin, the scans after a fallback, the RF calibration erase. Added: one
+  `WiFi.reconnect()` after 20 s without an attempt, because the core stops
+  reconnecting after code 202 (rc4 stood idle 90 s). Kept: recovery (120 s /
+  10 min), the ping every 2 s and the session record (read only),
+  `esp_http_server` (plan 10.5 says why not `WebServer`). What still differs
+  from the sketch is listed in plan 10.4; start there if rc5 fails.
+  `tools/test_wifi_contract.py` refuses the removed mechanisms.
+- **rc6 (2026-11-10, plan section 11):** rc5 timed out on the board; the
+  sketch also works with OPI PSRAM, so PSRAM is cleared; rc6 is rc5 built
+  with core 3.2.0, the sketch's core. *Built*, bench pending.
+- **0.17.0 was released on 2026-11-10 with rc7's content, by the owner's
+  explicit decision, as a test version (not board-verified).** The owner
+  measured current and voltage during the tests and found nothing wrong;
+  the IC5 suspicion below is not supported.
+- **rc7 (2026-11-10, plan section 13), read this before anything above:**
+  the owner's bench sketch (`tools/wifi-bench`, no EngineLink code) degrades
+  on the home router too (110 KB page 1.8 s → 16 s in 10 min; 802.11g-only
+  worse), so the degrading link is not EngineLink's code, not the core
+  version, not PSRAM and not 802.11n. Suspicion: the 3.3 V LDO IC5 when warm
+  (not proven). rc7 = rc5's station + the server's send timeout 30 s instead
+  of 5 s, so a slow link still delivers the page. *Built*, bench pending.
+- **Same address in both modes:** `http://enginelink.local` (HTTP only, port
+  80; nothing listens on 443). The `Host` check also accepts the bare name and
+  `.lan`/`.home`/`.home.arpa`/`.internal` for routers whose DNS registers the
+  DHCP host name. Why a browser may show `https://`: plan 8.3.
+- **Recovery (a mechanism, not a mode):** no router IP for 120 s → the own
+  Wi-Fi comes up; the router is tried again every 10 min while no phone is
+  joined, or at once when the app's Connect is used. Not saved: every start
+  in router mode tries the router first. The report says
+  "Router (router not reached; EngineLink Wi-Fi on meanwhile …)" and the JSON
+  `recovery:true`.
+- All Wi-Fi calls run in `serviceNetwork()` (main loop); the event callback
+  only records counters (`tools/test_wifi_contract.py`). The web server
+  (`esp_http_server`) binds every interface and is never restarted; a mode
+  switch only closes its sessions (`httpdSuspend()`). The 110 KB app page
+  streams from the `xfer` task like the exports, so a slow phone never holds
+  the server task; one request may wait behind a running transfer, a third
+  gets 503.
+
+What the 2026-11-09 review found and why (short; the plan has the evidence):
+router mode worked for hours on the boat router (0.13.4, 0.15.0) but never
+served the page on the home 4G router, with power save on or off, 20 or
+40 MHz, with or without the WPA3 wrapper and the TCP window patch. There the
+station stops receiving (ARP, ping, TCP from the PC lost, beacons lost,
+reason 200) while its own outbound traffic works (a report reached GitHub over
+HTTPS), and 49 full scans in 2 min do not see the router at all. That is below
+the firmware's logic: the router's 2.4 GHz radio, the place, or the board's
+receive path; plan section 5 tells them apart in one bench session. The
+firmware defects found (modem sleep on, country only in AP mode, the unwired
+Wi-Fi 2.0 state machine and 0.15.0 leftovers, the "Recovery" mode wording, the
+app page in the server task) are fixed in 0.17.0-rc1; rc2 then set the
+station back to the driver's defaults as Prism (plan 2.2 revision 2).
 
 The network report
 (`/api/network-report`, also on port 81 at `/report`) holds everything needed
@@ -211,7 +339,7 @@ First 0.15.0 reports (#141–#143, 2026-11-04, board started over USB):
   yet; possibly the phone's power save on a network without internet. Measure
   again without USB attached before changing anything.
 
-Wi-Fi 0.16.0–0.16.5 (2026-11-04, standalone on the boat with an iPhone):
+**CURRENT Wi-Fi handoff (2026-11-09; read before dated history below):** [Full current case and failure timeline](docs/test-evidence/wifi-0166-2026-11-09/README.md), including the [unabridged 0.16.6 report](docs/test-evidence/wifi-0166-2026-11-09/firmware-75faba4-maggan-recovery.txt). Branch `claude/wizardly-lovelace-v6tlqz`, draft PR #160, normal build **#261** at `75faba4` passed CI and was run on the repaired PCB. Own Wi-Fi served the UI at 540–746 kB/s; router Maggan associated at +1068 s and obtained 192.168.0.2 at +1069 s, **yet both / and /api/health timed out over LAN**, then disconnect reason 200 (beacons lost) at +1608 s and 49 reason-201 retries. Earlier firmware also failed, and router failure is **not fixed**. IC5 cold joint repaired; no proven 3.3 V transient correlation. The old exceptions `wifiwpa3` and `netboost` were removed. Fable is authorized to revise the Wi-Fi plan from scratch on evidence, **planning only**; implementation/merge/release require approval. All below is historical unless consistent with this case and the new owner directive.\n\nWi-Fi 0.16.0–0.16.5 (2026-11-04, standalone on the boat with an iPhone):
 - 0.16.0 (0.15 Wi-Fi): the phone saw `EngineLink` but could not join with
   `12345678`, then the network disappeared. 0.16.1 put back the 0.12.15 Wi-Fi
   code; it also failed.
@@ -231,6 +359,17 @@ Wi-Fi 0.16.0–0.16.5 (2026-11-04, standalone on the boat with an iPhone):
   8.5 dBm override and counts DHCP leases, port-80 accepts and HTTP parse
   failures separately. Not yet verified on the board (see TODO).
 - Reset reason 11 in web-installer logs is the console's USB reset, not a crash.
+- 0.16.5 USB report: phone joined, DHCP lease, 6 HTTP requests, 19.5 dBm, so
+  standalone reaches the web server again. Main loop stalled up to 10 s in
+  the web part (unexplained).
+- Next was **Wi-Fi 2.0** (plan of 2026-11-04/05, `docs/WIFI_REWRITE_PLAN.md`,
+  now history). Of it, Stages 1–3 were built in the 0.16.6 development build
+  (`apRadioSetup()`, `esp_http_server` with the security model and the boot
+  self-test, trace folding) and stay. Its Stage 4 (four-state machine, AP+STA
+  idle station, router tests and looks) and its two exceptions (`wifiwpa3`,
+  `netboost`) were dropped on 2026-11-09 after the review in
+  [docs/WIFI_PLAN_2026-11-09.md](docs/WIFI_PLAN_2026-11-09.md), which is the
+  current plan; the "Wi-Fi" paragraph above describes what 0.17.0-rc1 does.
 
 USB serial commands (0.16.3, 115200 baud, web installer "Logs & console" or any
 serial monitor): `wifi` (full Wi-Fi report), `wifi log` / `read wifi log`

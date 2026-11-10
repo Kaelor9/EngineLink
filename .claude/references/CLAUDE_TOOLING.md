@@ -11,7 +11,7 @@ Addy Osmani's 25 Agent Skills are installed project-wide (source, version and li
 | EngineLink situation | Skill | EngineLink adaptation |
 |---|---|---|
 | Bug, CI failure, field/device report | `debugging-and-error-recovery` | Read the GitHub device/engine reports first; reproduce before fixing |
-| Change to host-testable logic (`fuelcal.h`, `diagrules.h`, `shiftrules.h`, `routerguard.h`, `otaheader.h`, `ledpatterns.h`) | `test-driven-development` | Tests live in `tools/test_*.cpp` / `tools/test_*.py` and run in CI |
+| Change to host-testable logic (`fuelcal.h`, `diagrules.h`, `shiftrules.h`, `tracefold.h`, `httputil.h`, `otaheader.h`, `ledpatterns.h`) | `test-driven-development` | Tests live in `tools/test_*.cpp` / `tools/test_*.py` and run in CI |
 | Multi-file feature or fix | `planning-and-task-breakdown`, `incremental-implementation` | Short internal plan; keep each slice building and the board usable |
 | Phone app (`firmware/ui/app.html`) | `frontend-ui-engineering` | iPhone PWA safe areas, reduced motion, `—` for missing data; regenerate `ui.h` |
 | Checking the app or website in a browser | `browser-testing-with-devtools` | Use the available browser tooling (Playwright in cloud sessions) and the demo |

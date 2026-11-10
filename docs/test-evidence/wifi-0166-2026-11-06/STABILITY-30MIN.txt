@@ -1,0 +1,93 @@
+STABILITY-30MIN.txt
+
+ENGINELINK - WI-FI REPORT
+========================
+
+Firmware: 0.16.6
+Uptime: 2239 seconds
+Mode: Standalone (EngineLink Wi-Fi)
+Wi-Fi radio mode: 2 (1=station, 2=access point)
+Router: Not configured
+Currently connected: No
+Router IP now: None
+Last successful router IP: None this boot
+Last router signal: Not measured
+Last router channel: 0
+Last negotiated Wi-Fi security: Not yet negotiated
+Security mode: WPA2, like most IoT devices (works on WPA2 and WPA2/WPA3 routers)
+WPA3 switch in firmware: active
+Security switches: 0
+Transmit power: high (19.5 dBm) (fixed) · target 78 quarter-dBm · driver reports 19.50 dBm (78 quarter-dBm) · set again after the driver changed it: 0 time(s)
+Power save: not applicable (access point mode)
+Radio test (after a speed test on the router; ping to the router, 20 x 1400 bytes, min/avg/max): not run yet (tap "Test speed" on the router)
+Note: if pings to the internet are faster than pings to the router, the router is slow to answer pings itself, not the Wi-Fi.
+Security configuration result: ESP_OK
+
+CONNECTIVITY (COUNTERS SINCE BOOT)
+Successful Wi-Fi associations: 0
+Successful router IP assignments: 0
+Router IP losses: 0
+Wi-Fi disconnect events: 0
+Dropped active router connections: 0
+Pre-connection failures: 0
+Reconnect attempts by EngineLink: 0 (pause 1, 2, 4, 8, then 15 s) · failed in a row now: 0
+App-initiated router attempts: 0
+Router recovery fallbacks: 0
+Last association time: 0 ms
+Last DHCP time: 0 ms
+Last successful IP at uptime: 0 seconds
+Last Wi-Fi event reason: 0 - No reason reported
+Last unexpected reason: 0 - No reason reported
+Last saved failure: 0 - No reason reported
+Failure stage at timeout: Not recorded
+Time before rescue: 0 ms
+Rescue looks for the router: 0 · router seen: 0 · automatic returns: 0 · last known router channel: 0
+Note: final failure stage does not erase any earlier successful IP events.
+Error 202 means authentication failure; it does not prove the password is wrong.
+
+DOWNLOAD TESTS FROM THE PHONE (newest last)
+  1659 s ago · 19.5 dBm · 673.70 kB/s · request round trip 10 ms
+  1657 s ago · 19.5 dBm · 587.20 kB/s · request round trip 19 ms
+  1657 s ago · 19.5 dBm · 744.20 kB/s · request round trip 12 ms
+  1655 s ago · 19.5 dBm · 842.10 kB/s · request round trip 11 ms
+  1655 s ago · 19.5 dBm · 810.10 kB/s · request round trip 10 ms
+  1562 s ago · 19.5 dBm · 711.10 kB/s · request round trip 9 ms
+  1561 s ago · 19.5 dBm · 927.50 kB/s · request round trip 11 ms
+  1560 s ago · 19.5 dBm · 853.30 kB/s · request round trip 10 ms
+  1480 s ago · 19.5 dBm · 744.20 kB/s · request round trip 16 ms
+  9 s ago · 19.5 dBm · 853.30 kB/s · request round trip 10 ms
+  4 s ago · 19.5 dBm · 876.70 kB/s · request round trip 9 ms
+  4 s ago · 19.5 dBm · 901.40 kB/s · request round trip 12 ms
+
+ENGINELINK WI-FI (ACCESS POINT, THIS START)
+Phones connected now: 2 · joined 2 · DHCP leases assigned 2 · left 0 · started 3 · restarted by the watchdog 0 · channel 6
+Access point as the driver runs it: channel 6, 20 MHz, PMF capable, stations kept 600 s without traffic, country DK
+Joined phones (maker prefix, signal at EngineLink, Wi-Fi standards): F6:93:FF -48 dBm bgn; 54:09:10 -44 dBm bgn
+Wi-Fi country (driver): DK 
+
+SYSTEM
+Chip: ESP32-S3 rev 2 · 240 MHz · Arduino core 3.3.12 · IDF v5.5.5
+Memory: free 98 KB, lowest 78 KB, largest block 57 KB · PSRAM free 7698 KB
+Main loop: longest pass 71 ms · engine reading in own task: yes · engine task longest wait 105 ms
+Longest part of the main loop (ms): (web: own task) 0, sd 15, diag 5, raw cleanup 71, history 5, network 12, led 11, serial 39, other 11
+Reset reason: 3 (1 power on, 3 software/update, 4 crash, 5/6/7 watchdog, 9 brownout, 11 reset over USB)
+Recent restarts (newest first): reason 3 after 1441 s on 0.16.6 | reason 1 after 0 s on 0.16.6 | reason 3 after 407 s on 0.16.6 | reason 1 after 0 s on 0.16.6 | reason 3 after 791 s on 0.16.6 | reason 1 after 0 s on 0.16.6 | reason 3 after 1336 s on 0.16.6 | reason 3 after 202 s on 0.16.6
+
+HTTP / WEB (esp_http_server, port 80)
+Requests: 6660 · long transfers: 20 · answered busy (503): 1 · refused by the security checks: 0 · send failures (timeout or phone gone): 0
+Connections opened: 55 · closed: 52 · open now: 3 · most at once: 7 · successful answers to other devices: 6658
+Slowest request: 2617 ms (/api/series/recent?secs=600) · last transfer waited 0 ms for the engine lock
+Stack left (bytes): web server 4576, transfers 5884
+Firmware self-test: not needed (this firmware was confirmed before)
+Last 32 KiB server write: 65536 bytes in 61 ms (16 write calls)
+TCP send window: 5744 bytes by default, raised to 17 KB per connection (55 connections raised, 0 not found)
+Note: server write time is NOT the same as measured radio throughput.
+
+LATEST WI-FI EVENTS (oldest to newest; uptime seconds)
+  +1s  Phone joined EngineLink Wi-Fi
+  +1s  Phone received an IP from EngineLink DHCP
+  +45s  Phone joined EngineLink Wi-Fi
+  +46s  Phone received an IP from EngineLink DHCP
+
+MACHINE-READABLE JSON (copy/send the entire report)
+{"version":"0.16.6","uptimeMs":2239504,"mode":"standalone","wifiMode":2,"ssid":"","status":254,"phase":"standalone","associated":false,"hasRouterIp":false,"ip":"","gateway":"","rssi":null,"associationEvents":0,"dhcpIpEvents":0,"lostIpEvents":0,"associationMs":0,"dhcpMs":0,"driverReason":0,"unexpectedReason":0,"unexpectedDrops":0,"associationFailures":0,"retryFails":0,"routerProbes":0,"routerProbeSeen":0,"knownChannel":0,"txReapplied":0,"txTargetQdbm":78,"txDriverQdbm":78,"apLink":{"up":true,"ch":6,"bw":20,"pmfCapable":true,"pmfRequired":false,"inactiveS":600,"country":"DK","stations":[{"oui":"F6:93:FF","rssi":-48,"phy":"bgn"},{"oui":"54:09:10","rssi":-44,"phy":"bgn"}]},"loopParts":[0,15,5,71,5,12,11,39,11],"engineMaxWaitMs":105,"apStations":2,"apJoins":2,"apLeaves":0,"apDhcpLeases":2,"apLeaveReason":0,"apRestarts":0,"speedTxBytes":65536,"speedTxMs":61,"speedTxWrites":16,"failedReason":0,"failedPhase":0,"failedAfterMs":0,"driverNudges":0,"networkEpoch":3,"httpdRequests":6660,"httpdAsync":20,"httpdBusy503":1,"httpdRejected":0,"httpdSendFails":0,"httpdOpens":55,"httpdCloses":52,"httpdOpenNow":3,"httpdOpenMax":7,"httpdExternalOk":6658,"httpdSlowMs":2617,"httpdSlowPath":"/api/series/recent?secs=600","httpdStackFree":3968,"xferStackFree":5884,"routerAttempts":0,"routerFallbacks":0,"routerAutoReturns":0,"routerNextTryS":null,"disconnectEvents":0,"lastGotIpUptimeMs":0,"lastRouterIp":"","lastRouterRssi":null,"lastRouterChannel":0,"lastSecurity":"Not yet negotiated","linkTune":{"running":false,"chosen":null,"agoS":null,"steps":[],"small":{"sent":0,"got":0,"min":0,"avg":0,"max":0},"internet":{"sent":0,"got":0,"min":0,"avg":0,"max":0},"channel":0,"quiet":0,"scanCh":0,"channelSurvey":{"completed":false,"failures":0,"durationMs":0,"ageSeconds":null,"otherAPsPerChannel":[0,0,0,0,0,0,0,0,0,0,0,0,0],"strongAPsPerChannel":[0,0,0,0,0,0,0,0,0,0,0,0,0]}},"txLevel":4,"phoneTests":[{"agoS":1659,"level":4,"kbs":673.70,"rttMs":10},{"agoS":1657,"level":4,"kbs":587.20,"rttMs":19},{"agoS":1657,"level":4,"kbs":744.20,"rttMs":12},{"agoS":1655,"level":4,"kbs":842.10,"rttMs":11},{"agoS":1655,"level":4,"kbs":810.10,"rttMs":10},{"agoS":1562,"level":4,"kbs":711.10,"rttMs":9},{"agoS":1561,"level":4,"kbs":927.50,"rttMs":11},{"agoS":1561,"level":4,"kbs":853.30,"rttMs":10},{"agoS":1480,"level":4,"kbs":744.20,"rttMs":16},{"agoS":9,"level":4,"kbs":853.30,"rttMs":10},{"agoS":4,"level":4,"kbs":876.70,"rttMs":9},{"agoS":4,"level":4,"kbs":901.40,"rttMs":12}],"secMode":"wpa2","saeControl":true,"secSwitches":0,"powerSave":1,"saeConfigured":false,"saeSetupError":0,"lastFailureDescription":"No reason reported","events":[{"uptimeMs":1803,"event":"Phone joined EngineLink Wi-Fi","reason":0,"count":1,"lastUptimeMs":1803},{"uptimeMs":1822,"event":"Phone received an IP from EngineLink DHCP","reason":0,"count":1,"lastUptimeMs":1822},{"uptimeMs":45517,"event":"Phone joined EngineLink Wi-Fi","reason":0,"count":1,"lastUptimeMs":45517},{"uptimeMs":46776,"event":"Phone received an IP from EngineLink DHCP","reason":0,"count":1,"lastUptimeMs":46776}]}

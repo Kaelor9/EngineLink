@@ -21,6 +21,10 @@ ESP32-S3-WROOM-1-N8R8: 8 MB flash and 8 MB OPI PSRAM.
 
 USB serial, status LED, microSD detection and read/write were tested. Two-channel physical bench UART traffic completed 36,000 frames over 30 minutes without recorded corruption in that specific test. **This does not validate arbitration or all SAE J1708 electrical rules.**
 
+## Repairs
+
+- **2026-11-09, IC5 (pins 5–8, especially pin 8): cold solder joint, reflowed by the owner.** Before: the 3.3 V rail and the own Wi-Fi's throughput varied between sessions (65–1 048 kB/s at the same phone signal). After: 3.3 V normal, standalone 540–1 105 kB/s, supply current 75–90 mA average at 13.5 V with brief transmit peaks. The router-mode failures look the same before and after, so this repair does not explain them (see [WIFI_PLAN_2026-11-09.md](WIFI_PLAN_2026-11-09.md) section 4).
+
 ## Safety before connecting engines
 
 - The J1708 transceivers have galvanically isolated supply domains. Before transmitting, measure *both* supplies relative to **their own** isolated grounds: nominal 4.75–5.25 V.

@@ -51,20 +51,28 @@ jobs:
           python3 tools/test_usb_recovery.py
       - name: Check the simple Wi-Fi
         run: python3 tools/test_wifi_simple.py
-      - name: Check Wi-Fi throughput sampling and radio-test idle guard
+      - name: Wi-Fi structural contracts (docs/WIFI_PLAN_2026-11-09.md)
+        run: cd tools && python3 test_wifi_contract.py
+      - name: Check the main loop never blocks on USB serial or the SD card
         run: python3 tools/test_router_throughput_guard.py
-      - name: Test router AP-rescue deadline and reboot-safe timer
+      - name: SD card work never holds the engine lock (plan 13.6.1)
+        run: cd tools && python3 test_sd_engine_lock.py
+      - name: Host test the Wi-Fi trace folding
         run: |
-          g++ -O2 -std=c++17 -Wall -Wextra tools/test_routerguard.cpp -o /tmp/test_routerguard
-          /tmp/test_routerguard
+          g++ -O2 -std=c++17 -Wall -Wextra -I firmware/EngineLink tools/test_tracefold.cpp -o /tmp/test_tracefold
+          /tmp/test_tracefold
+      - name: Host test URL decoding and the own-address allow-list (Wi-Fi 2.0 Stage 2)
+        run: |
+          g++ -O2 -std=c++17 -Wall -Wextra -I firmware/EngineLink tools/test_httputil.cpp -o /tmp/test_httputil
+          /tmp/test_httputil
+      - name: Test the link check, web counters by network and request log
+        run: |
+          g++ -O2 -std=c++17 -Wall -Wextra -I firmware/EngineLink tools/test_netstat.cpp -o /tmp/test_netstat
+          /tmp/test_netstat
       - name: Host test NMEA 2000 decoding
         run: |
           g++ -O2 -std=c++17 -Wall -Wextra -I firmware/EngineLink tools/test_nmea2k.cpp -o /tmp/test_nmea2k
           /tmp/test_nmea2k
-      - name: Host test router reconnect and rescue policy
-        run: |
-          g++ -O2 -std=c++17 -Wall -Wextra -I firmware/EngineLink tools/test_netpolicy.cpp -o /tmp/test_netpolicy
-          /tmp/test_netpolicy
       - name: Test packet-fragmented firmware headers
         run: |
           g++ -O2 -std=c++17 -Wall -Wextra tools/test_otaheader.cpp -o /tmp/test_otaheader
@@ -86,4 +94,4 @@ jobs:
           g++ -O2 -std=c++17 -Wall -I firmware/EngineLink tools/test_shiftrules.cpp -o /tmp/test_shiftrules
           /tmp/test_shiftrules
       - name: Check version is defined once in firmware
-        run: grep -E '^#define EL_VERSION "[0-9]+\.[0-9]+\.[0-9]+(-[a-z]+)?"' firmware/EngineLink/EngineLink.ino
+        run: grep -E '^#define EL_VERSION "[0-9]+\.[0-9]+\.[0-9]+(-[a-z0-9]+)?"' firmware/EngineLink/EngineLink.ino
