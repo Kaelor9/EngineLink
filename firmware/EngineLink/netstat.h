@@ -135,6 +135,9 @@ struct RouterSession {
   int32_t rssiSum = 0; uint32_t rssiN = 0;
   uint8_t ch = 0, second = 0, phy = 255, pair = 255, group = 255, ps = 255, bw = 0, proto = 0, endReason = 0;
   int8_t txQdbm = 0;
+  char country[3] = {};       // the driver's country code during the session (two letters and the end mark)
+  uint32_t fastUntilMs = 0;   // after the join: when the last ping came back in under 50 ms
+  bool afterOwnWifi = false;  // joined by switching from the own Wi-Fi, not straight after a start
   uint32_t ip = 0, mask = 0, gw = 0, dns = 0, beaconTimeouts = 0, channelChanges = 0;
   Rtt ping;
   HttpNet http0;    // the web server's router counters when the session began

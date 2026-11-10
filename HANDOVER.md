@@ -243,6 +243,12 @@ Two modes, never both:
 - **rc6 (2026-11-10, plan section 11):** rc5 timed out on the board; the
   sketch also works with OPI PSRAM, so PSRAM is cleared; rc6 is rc5 built
   with core 3.2.0, the sketch's core. *Built*, bench pending.
+- **0.17.1 (2026-11-10, plan section 14), current:** 0.17.0 failed on the
+  board (pings gone within a minute, beacons lost 305 s after the join, as
+  rc3/rc6). 0.17.1 restarts when the router is chosen in the app
+  (`serviceNetwork()`, not during a trip), so router mode always joins
+  straight after a start like the owner's sketch. The owner now installs
+  test versions with the web installer, so each one is a release.
 - **0.17.0 was released on 2026-11-10 with rc7's content, by the owner's
   explicit decision, as a test version (not board-verified).** The owner
   measured current and voltage during the tests and found nothing wrong;

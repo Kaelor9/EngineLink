@@ -28,6 +28,8 @@ to engines.
 
 ## Checked on the board
 
+**2026-11-10 (late) — 0.17.0 on the board, 0.17.1:** 0.17.0 on the home router joined in 376 ms at −40 dBm, answered 10 of 15 pings in the first 30 s and almost none after, delivered small answers in 3–6 ms and never the app page, and lost the beacons 305 s after the join (rc3 and rc6: 302 and 306 s). **0.17.1** restarts when the router is chosen, so the join happens straight after a start as in the owner's sketch, and the report says more per session ([plan section 14](WIFI_PLAN_2026-11-09.md)). ***Built*, not run on the board; the router is not fixed.**
+
 **2026-11-10 — 0.17.0 released as a test version (owner's decision):** content = rc7, so that builds can be installed with the web installer. Not verified on the board; router mode on the home router is not fixed. The owner reports the board checked for cold joints and current and voltage on the oscilloscope during the day's tests with nothing wrong, so the IC5 suspicion below is not supported by measurement.
 
 **2026-11-10 (late evening) — bench sketch on the board and 0.17.0-rc7:** a sketch without any EngineLink code (`tools/wifi-bench`) on the home router: 117 of 117 pings and the 110 KB page in 1.8 s at first, the same page in 15–16 s after 10 minutes at the same signal; the 802.11g-only variant flashed right after was nearly dead in 30 s. So the degrading link is not caused by EngineLink's code, the core version, PSRAM or 802.11n. Open suspicion: the 3.3 V regulator IC5 when warm (never measured under Wi-Fi traffic). **0.17.0-rc7** keeps rc5's station and lets a send wait 30 s instead of 5 s, so a slow link delivers the app page ([plan section 13](WIFI_PLAN_2026-11-09.md)). ***Built*, not run on the board; the router is not fixed.**

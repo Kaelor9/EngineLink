@@ -214,7 +214,19 @@ void serviceWifiScan(){
 }
 void serviceNetwork(){
   const uint32_t now=millis();
-  if(pendingNetwork&&(int32_t)(now-networkSwitchAt)>=0){pendingNetwork=false;routerHold=false;applyNetwork();return;}
+  if(pendingNetwork&&(int32_t)(now-networkSwitchAt)>=0){
+    pendingNetwork=false;routerHold=false;
+    // Router mode chosen while the own Wi-Fi is up: start again and join from a
+    // clean start, as the owner's sketch does (0.17.1). Every EngineLink
+    // session on the home router that began with a switch from the own Wi-Fi
+    // lost its pings within a minute; the sketch, which only ever starts as a
+    // station, kept them for minutes. Not during a trip: a restart ends it.
+    if(routerConfigured()&&WiFi.getMode()!=WIFI_MODE_NULL&&!totals.tripActive&&!restartAt){
+      wifiLog("Router chosen: restarting to join from a clean start");
+      prepareRestart();restartAt=millis()+300;return;
+    }
+    applyNetwork();return;
+  }
   const bool online=routerConfigured()&&!routerHold&&WiFi.status()==WL_CONNECTED;
   if(online)lastRouterIp=WiFi.localIP().toString();
   else routerSessionEnd(255);   // lost: the reason follows from the event
