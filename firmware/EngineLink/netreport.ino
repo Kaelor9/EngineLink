@@ -47,9 +47,11 @@ void appendApLinkJson(String &s){
 void routerSignalSample(){
   if((WiFi.getMode()&WIFI_MODE_STA)&&WiFi.status()==WL_CONNECTED)lastRouterRssi=WiFi.RSSI();
 }
-String makeNetworkHealthJson(){
+String makeNetworkHealthJson(){return makeNetworkJson(false);}
+// full: with every session, the 30 s pieces, scans and the request log (the report).
+String makeNetworkJson(bool full){
   routerSignalSample();
-  String s;s.reserve(4200);
+  String s;s.reserve(full?16000:5200);
   s+="{\"version\":";jsonString(s,EL_VERSION);s+=",\"build\":\"" __DATE__ " " __TIME__ "\"";
   s+=",\"uptimeMs\":";s+=(unsigned long)millis();
   s+=",\"mode\":";jsonString(s,routerConfigured()?"router":"standalone");
@@ -101,7 +103,7 @@ String makeNetworkHealthJson(){
   s+=",\"lastRouterChannel\":";s+=(unsigned)lastRouterChannel;
   s+=",\"lastSecurity\":";jsonString(s,stationSecurityName(staNegotiatedAuth));
   appendSpeedJson(s);
-  appendRouterDiagJson(s);
+  appendRouterDiagJson(s,full);
   {wifi_ps_type_t ps=WIFI_PS_NONE;esp_wifi_get_ps(&ps);s+=",\"powerSave\":";s+=(int)ps;}
   s+=",\"events\":[";
   RouterTrace trace[ROUTER_TRACE_CAP];const uint8_t n=getWifiTrace(trace,nullptr);
@@ -126,7 +128,7 @@ String buildNetworkReport(){
   // Text is easy to select/copy on iPhone and can be sent to support.
   // Never include the saved Wi-Fi password or engine/boat telemetry.
   routerSignalSample();
-  String s;s.reserve(8500);
+  String s;s.reserve(30000);
   s+="ENGINELINK - WI-FI REPORT\n";
   s+="========================\n\n";
   s+="Firmware: ";s+=EL_VERSION;s+=" (built " __DATE__ " " __TIME__ ")";   // tells two bench builds of one version apart
@@ -141,7 +143,7 @@ String buildNetworkReport(){
   s+="Last router signal: ";if(!staAssociatedEvents)s+="Not measured";else{s+=lastRouterRssi;s+=" dBm";}s+="\n";
   s+="Last router channel: ";s+=lastRouterChannel;s+="\n";
   s+="Last negotiated Wi-Fi security: ";s+=stationSecurityName(staNegotiatedAuth);s+="\n";
-  s+="Station: ESP32 driver defaults with power save off (no country, bandwidth, scan or TX-power setting)\n";
+  s+="Station: power save off, 20 MHz, 802.11n or 802.11g by the last link check (no country, scan or TX-power setting)\n";
   s+="Security: ESP32 core WPA2/WPA3 negotiation (no custom SAE handling)\n";
   s+="Transmit power: ";if(WiFi.getMode()&WIFI_MODE_STA)s+="ESP32 driver default";else{s+=elTxName[txLevel<5?txLevel:TX_LEVEL_FIXED];s+=" (fixed)";}
   if(!(WiFi.getMode()&WIFI_MODE_STA)){s+=" · target ";s+=(int)elTxPower[txLevel<5?txLevel:TX_LEVEL_FIXED];s+=" quarter-dBm";}
@@ -224,6 +226,7 @@ String buildNetworkReport(){
   s+="Recent restarts (newest first): ";
   {bool any=false;for(uint8_t i=0;i<RESTART_LOG_N;i++){const RestartRec &x=restartLog[i];if(!x.ver[0])continue;if(any)s+=" | ";any=true;s+="reason ";s+=x.reason;s+=" after ";s+=x.upBefore;s+=" s on ";s+=x.ver;}if(!any)s+="none recorded";}
   s+="\n";
+  appendSystemDiagText(s);
   s+=elCrashSummary();
   s+="\n";
   s+="HTTP / WEB (esp_http_server, port 80)\n";
@@ -236,9 +239,7 @@ String buildNetworkReport(){
    }
    s+="Connections opened: ";s+=h.opens;s+=" · closed: ";s+=h.closes;s+=" · open now: ";s+=h.openNow;s+=" · most at once: ";s+=h.openMax;
    s+=" · successful answers to other devices: ";s+=h.external2xx;s+="\n";
-   s+="Of these through the router since the start (the rest: own Wi-Fi and the self-test): connections ";s+=h.rtrOpens;s+=" · requests ";s+=h.rtrReq;
-   s+=" · answered ";s+=h.rtrOk;s+=" · failed while sending ";s+=h.rtrFail;
-   if(h.rtrReq){s+=" · last at uptime ";s+=h.rtrLastMs/1000UL;s+=" s";}s+="\n";
+   appendHttpDiagText(s);
    s+="Slowest request: ";s+=h.slowMs;s+=" ms (";s+=h.slowPath;s+=") · last transfer waited ";s+=h.xferWaitMs;s+=" ms for the engine lock\n";
    s+="Stack left (bytes): web server ";s+=webStackLeft(false);s+=", transfers ";s+=webStackLeft(true);s+="\n";
    s+="Firmware self-test: ";s+=selfTestText();s+="\n";}
@@ -256,7 +257,7 @@ String buildNetworkReport(){
     s+="\n";
   }
   s+="\nMACHINE-READABLE JSON (copy/send the entire report)\n";
-  s+=makeNetworkHealthJson();s+="\n";
+  s+=makeNetworkJson(true);s+="\n";
   return s;
 }
 // The phone's own download tests (the app posts them) for the report.
@@ -274,6 +275,7 @@ void appendHttpdJson(String &s){
   s+=",\"httpdRejected\":";s+=h.rejected;s+=",\"httpdSendFails\":";s+=h.sendFails;
   s+=",\"httpdOpens\":";s+=h.opens;s+=",\"httpdCloses\":";s+=h.closes;s+=",\"httpdOpenNow\":";s+=h.openNow;s+=",\"httpdOpenMax\":";s+=h.openMax;
   s+=",\"httpdExternalOk\":";s+=h.external2xx;s+=",\"httpdSlowMs\":";s+=h.slowMs;s+=",\"httpdSlowPath\":";jsonString(s,String(h.slowPath));
-  s+=",\"httpdRouterOpens\":";s+=h.rtrOpens;s+=",\"httpdRouterRequests\":";s+=h.rtrReq;s+=",\"httpdRouterOk\":";s+=h.rtrOk;s+=",\"httpdRouterSendFails\":";s+=h.rtrFail;s+=",\"httpdRouterLastMs\":";s+=h.rtrLastMs;
+  {const netstat::HttpNet &r=httpStat.net[netstat::NET_ROUTER];
+   s+=",\"httpdRouterOpens\":";s+=r.conns;s+=",\"httpdRouterRequests\":";s+=r.requests;s+=",\"httpdRouterOk\":";s+=r.byClass[0];s+=",\"httpdRouterSendFails\":";s+=r.failed;s+=",\"httpdRouterLastMs\":";s+=r.lastMs;}
   s+=",\"httpdStackFree\":";s+=webStackLeft(false);s+=",\"xferStackFree\":";s+=webStackLeft(true);
 }

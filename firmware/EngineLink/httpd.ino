@@ -10,7 +10,7 @@ static QueueHandle_t xferQ = nullptr;
 static volatile bool xferBusy = false, xferAbort = false;   // busy: a transfer runs or waits in the queue
 static volatile int xferFd = -1;   // the socket the running long transfer is using
 static volatile uint8_t sendsOffLock = 0;   // replies sending with engineMx let go (an SD file may be open: sdUnmountBlocked)
-struct XferJob { httpd_req_t *r; WebFn fn; uint8_t flags; bool onAp, external; char origin[72]; char query[WEB_QUERY]; };
+struct XferJob { httpd_req_t *r; WebFn fn; uint8_t flags, nth; bool onAp, external; char origin[72]; char query[WEB_QUERY]; };
 static const WebRoute optionsRoute = {"/*", HTTP_OPTIONS, nullptr, R_NOLOCK};
 
 // The request of the task that calls: the server task or the xfer task.
@@ -61,13 +61,16 @@ static esp_err_t io(WebCtx &c, const char *p, size_t n, bool chunk) {
   const bool had = c.locked;
   if (had) sendsOffLock = sendsOffLock + 1;   // changed only while holding engineMx
   ctxUnlock(c);
+  if (!c.sending) { c.sending = true; c.firstMs = millis() - c.t0; }
   const esp_err_t e = chunk ? httpd_resp_send_chunk(c.r, p, n) : httpd_resp_send(c.r, p, n);
+  if (e == ESP_OK) c.bytes += n;
   if (had && xSemaphoreTake(engineMx, portMAX_DELAY) == pdTRUE) { c.locked = true; if (sendsOffLock) sendsOffLock = sendsOffLock - 1; }
   if (e != ESP_OK) { c.failed = true; ++httpdStats.sendFails; }
   return e;
 }
 static void resetCtx(WebCtx &c, httpd_req_t *r) {
-  c.r = r; c.locked = c.chunked = c.started = c.failed = c.ended = c.close = c.onAp = c.external = false;
+  c.r = r; c.locked = c.chunked = c.started = c.failed = c.ended = c.close = c.onAp = c.external = c.sending = false;
+  c.t0 = millis(); c.firstMs = c.bytes = 0; c.nth = 0;
   c.code = 200; strcpy(c.type, "text/plain"); c.origin[0] = 0;
   for (uint8_t i = 0; i < c.nHdr; i++) { c.hName[i] = String(); c.hVal[i] = String(); }
   c.nHdr = 0; c.query[0] = 0; if (c.body) c.body[0] = 0;
@@ -89,11 +92,9 @@ static void whoIsAsking(WebCtx &c) {
 static esp_err_t finish(WebCtx &c, uint32_t t0) {
   if (!c.started && !c.failed) { c.code = 500; prepare(c); io(c, "No reply", 8, false); }
   else if (c.chunked && !c.ended && !c.failed) io(c, nullptr, 0, true);
-  const bool ok = !c.failed && c.code >= 200 && c.code < 300;
-  if (ok && c.external) ++httpdStats.external2xx;
-  if (c.external && !c.onAp) { ++httpdStats.rtrReq; if (ok) ++httpdStats.rtrOk; if (c.failed) ++httpdStats.rtrFail; httpdStats.rtrLastMs = millis(); }
+  if (!c.failed && c.code >= 200 && c.code < 300 && c.external) ++httpdStats.external2xx;
   ctxUnlock(c);
-  const uint32_t ms = millis() - t0;
+  const uint32_t ms = millis() - t0; httpRecord(c, ms);
   if (ms > httpdStats.slowMs) { httpdStats.slowMs = ms; strlcpy(httpdStats.slowPath, c.r->uri, sizeof(httpdStats.slowPath)); }
   return (c.failed || c.close) ? ESP_FAIL : ESP_OK;   // ESP_FAIL: the server closes the socket, nothing is drained
 }
@@ -110,7 +111,7 @@ static void xferWorker(void *) {
     WebCtx &x = xferCtx;
     resetCtx(x, j.r);
     strlcpy(x.query, j.query, WEB_QUERY); strlcpy(x.origin, j.origin, sizeof(x.origin));
-    x.onAp = j.onAp; x.external = j.external;
+    x.onAp = j.onAp; x.external = j.external; x.nth = j.nth;
     xferFd = httpd_req_to_sockfd(j.r);
     const uint32_t t0 = millis();
     if ((j.flags & R_NOLOCK) || ctxLock(x, 10000)) { httpdStats.xferWaitMs = millis() - t0; j.fn(); }
@@ -127,7 +128,7 @@ static esp_err_t webDispatch(httpd_req_t *r) {
   const WebRoute &rt = *(const WebRoute *)r->user_ctx;
   WebCtx &c = srvCtx;
   resetCtx(c, r);
-  ++httpdStats.requests; whoIsAsking(c);
+  ++httpdStats.requests; whoIsAsking(c); c.nth = httpConn(httpd_req_to_sockfd(r), 2);
   const uint32_t t0 = millis();
   char hv[96];
   // Plan 6.9 item 3: only our own names and addresses (defeats DNS rebinding).
@@ -168,7 +169,7 @@ static esp_err_t webDispatch(httpd_req_t *r) {
     httpd_req_t *copy = nullptr;
     if (uxQueueSpacesAvailable(xferQ) == 0 || httpd_req_async_handler_begin(r, &copy) != ESP_OK) { count503(httpdStats.busyXfer, r); return answer(c, 503, "Another download is running; try again when it has finished"); }
     static XferJob j;   // server task only
-    j.r = copy; j.fn = rt.fn; j.flags = rt.flags; j.onAp = c.onAp; j.external = c.external;
+    j.r = copy; j.fn = rt.fn; j.flags = rt.flags; j.nth = c.nth; j.onAp = c.onAp; j.external = c.external;
     strlcpy(j.origin, c.origin, sizeof(j.origin)); strlcpy(j.query, c.query, WEB_QUERY);
     xferBusy = true;
     if (xQueueSend(xferQ, &j, 0) != pdTRUE) { xferBusy = uxQueueMessagesWaiting(xferQ) != 0; httpd_req_async_handler_complete(copy); count503(httpdStats.busyXfer, r); return answer(c, 503, "Busy"); }
@@ -180,19 +181,18 @@ static esp_err_t webDispatch(httpd_req_t *r) {
   return finish(c, t0);
 }
 static esp_err_t web404(httpd_req_t *r, httpd_err_code_t) {
+  resetCtx(srvCtx, r); whoIsAsking(srvCtx); srvCtx.code = 404; srvCtx.nth = httpConn(httpd_req_to_sockfd(r), 2); httpRecord(srvCtx, 0);
   httpd_resp_set_status(r, "404 Not Found");
   httpd_resp_set_type(r, "text/plain");
   return httpd_resp_send(r, "Not found", HTTPD_RESP_USE_STRLEN);
 }
 static esp_err_t webOpen(httpd_handle_t, int fd) {
   int one = 1; setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &one, sizeof(one));
-  ++httpdStats.opens; if (++httpdStats.openNow > httpdStats.openMax) httpdStats.openMax = httpdStats.openNow;
-  struct sockaddr_storage a = {}; socklen_t al = sizeof(a);   // not 192.168.4.1, not loopback: through the router
-  if (getsockname(fd, (struct sockaddr *)&a, &al) == 0 && ip4Of(a) != lwip_htonl(0xC0A80401) && ip4Of(a) != lwip_htonl(0x7F000001)) ++httpdStats.rtrOpens;
+  ++httpdStats.opens; if (++httpdStats.openNow > httpdStats.openMax) httpdStats.openMax = httpdStats.openNow; httpConn(fd, 1);
   return ESP_OK;
 }
 static void webClose(httpd_handle_t, int fd) {
-  ++httpdStats.closes; if (httpdStats.openNow) --httpdStats.openNow;
+  ++httpdStats.closes; if (httpdStats.openNow) --httpdStats.openNow; httpConn(fd, 0);
   close(fd);   // with a close_fn the server leaves the close to it
 }
 

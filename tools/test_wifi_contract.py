@@ -30,19 +30,24 @@ assert "apRadioSetup()" in sa
 # 1b: TX power truth (F7): exact compare, set in router mode too.
 tx = body(w, "void applyTxPower(bool check){")
 assert "abs(" not in tx and "!=ESP_OK" in tx and "==(int8_t)elTxPower[txLevel]" in tx
-# --- The station runs on the driver's defaults with ONE setting, power save
-# off (plan section 8, 2026-11-10): a server must hear unsolicited packets.
-# WiFi.mode(WIFI_STA), WiFi.setSleep(false), the core's reconnect, WiFi.begin().
+# --- The station (plan section 9.4): power save off and 20 MHz, set right
+# after WiFi.mode(WIFI_STA); 802.11n or 802.11g by the last link check.
+# Nothing else: no country, scan method, TX power, security or address call.
 an = body(w, "void applyNetwork(){")
 sta = an[an.index("WiFi.mode(WIFI_STA);"):an.index("connectRouter();")]
-assert "staRadioSetup" not in fw, "no station profile beyond power save off"
 assert sta.count("setSleep") == 1 and "WiFi.setSleep(false);" in sta, "station power save off, set once after WiFi.mode(WIFI_STA)"
+assert "staRadioSetup();" in sta and sta.index("WiFi.setSleep(false);") < sta.index("staRadioSetup();")
 for gone in ("esp_wifi_", "setScanMethod", "setTxPower", "setMinSecurity", "setSortMethod", "WiFi.config("):
-    assert gone not in sta, f"no station setting between WiFi.mode(WIFI_STA) and connectRouter(): {gone}"
-assert "WiFi.setAutoReconnect(true);" in sta, "the core's own reconnect, as Prism"
-for gone in ("esp_wifi_set_bandwidth(WIFI_IF_STA", "esp_wifi_set_inactive_time(WIFI_IF_STA", "esp_wifi_set_protocol(WIFI_IF_STA",
-             "esp_wifi_set_ps(", "WiFi.setSleep(true)", "WiFi.setScanMethod("):
-    assert gone not in fw, f"{gone}: no station radio setting anywhere"
+    assert gone not in sta, f"no other station setting between WiFi.mode(WIFI_STA) and connectRouter(): {gone}"
+assert "WiFi.setAutoReconnect(true);" in sta, "the core's own reconnect"
+srs = body(w, "void staRadioSetup(){")
+assert "esp_wifi_set_bandwidth(WIFI_IF_STA,WIFI_BW_HT20);" in srs, "20 MHz on the station (rc3: 40 MHz negotiated, 2 % of pings)"
+assert "staPlainG?(WIFI_PROTOCOL_11B|WIFI_PROTOCOL_11G):(WIFI_PROTOCOL_11B|WIFI_PROTOCOL_11G|WIFI_PROTOCOL_11N)" in srs
+assert srs.count("esp_wifi_") == 2, "staRadioSetup() sets the protocol and the bandwidth, nothing else"
+for gone in ("esp_wifi_set_inactive_time(WIFI_IF_STA", "WIFI_BW_HT40)", "esp_wifi_set_ps(", "WiFi.setSleep(true)", "WiFi.setScanMethod(",
+             "esp_wifi_set_country(", "WIFI_PROTOCOL_LR)"):
+    assert gone not in fw, f"{gone}: not a station setting of this firmware"
+assert fw.count("esp_wifi_set_protocol(") == 1 and fw.count("esp_wifi_set_bandwidth(WIFI_IF_STA") == 1
 cr = body(w, "void connectRouter(){")
 assert "WiFi.begin(cfg.ssid.c_str()," in cr and "esp_wifi_" not in cr
 assert "WiFi.mode(WIFI_AP_STA)" not in an, "two exclusive modes"
@@ -68,24 +73,47 @@ for need in ("staAssociatedEvents=staAssociatedEvents+1", "staIpEvents=staIpEven
     assert need in cb, f"onWiFi() lacks {need}"
 sn = body(w, "void serviceNetwork(){")
 assert "esp_wifi_sta_get_ap_info" not in sn and "WiFi.RSSI()" not in sn, "nothing polls the driver from the loop (as Prism)"
-# Plan section 8: the link is measured per router session (netdiag.ino), read
-# once after the IP and ended on every network change; diagnostics only.
+# Plan sections 8-9: the link is measured per router session (netdiag.ino),
+# read once after the IP and ended on every network change. It measures; the
+# only driver settings it may touch are the promiscuous sample's.
 nd = (FW / "netdiag.ino").read_text(encoding="utf-8")
-assert "if(online)routerSessionBegin();" in sn and "routerSessionEnd();" in an
-assert an.index("routerSessionEnd();") < an.index("WiFi.mode(WIFI_OFF);"), "the ping session stops before the driver does"
-for banned in ("esp_wifi_set_", "WiFi.begin", "WiFi.mode", "WiFi.disconnect", "WiFi.reconnect", "promiscuous"):
+assert "if(online)routerSessionBegin();" in sn and "routerSessionEnd(netstat::END_OWN);" in an
+assert an.index("routerSessionEnd(") < an.index("WiFi.mode(WIFI_OFF);"), "the ping session and the radio sample stop before the driver does"
+for banned in ("WiFi.begin", "WiFi.mode", "WiFi.disconnect", "WiFi.reconnect", "esp_wifi_connect", "esp_wifi_disconnect", "applyNetwork(",
+               "lwip/priv", "esp_private", "etharp_", "tcp_pcb"):
     assert banned not in nd, f"netdiag.ino only measures: {banned}"
-assert "esp_ping_new_session(" in body(nd, "void routerSessionBegin(){") and "esp_ping_delete_session(" in body(nd, "void routerSessionEnd(){")
+import re as _re
+assert set(_re.findall(r"esp_wifi_set_\w+", nd)) == {"esp_wifi_set_promiscuous", "esp_wifi_set_promiscuous_filter", "esp_wifi_set_promiscuous_rx_cb"}
+rs = body(nd, "static void radioStart(uint32_t now){")
+assert "WIFI_PROMIS_FILTER_MASK_MGMT|WIFI_PROMIS_FILTER_MASK_DATA" in rs and "radioNextAt=now+30000UL" in rs, "a sample every 30 s"
+assert ">=2000UL)radioStop();" in body(nd, "void netdiagService(uint32_t now,bool online){"), "a sample lasts 2 s"
+assert "esp_wifi_set_promiscuous(false)" in body(nd, "static void radioStop(){")
+end = body(nd, "void routerSessionEnd(uint8_t why){")
+assert end.index("radioStop();") < end.index("r.active=false"), "the sample is off before a session ends"
+cb = body(nd, "static void radioCb(void *buf,wifi_promiscuous_pkt_type_t type){")
+assert "sig_len<28" in cb and "esp_wifi_" not in cb and "String" not in cb and "malloc" not in cb, "the sample callback only counts"
+assert "esp_ping_new_session(" in body(nd, "void routerSessionBegin(){") and "esp_ping_delete_session(" in end
 assert fw.count("esp_phy_erase_cal_data_in_nvs") == 1 and 'getUChar("cal",0)<1' in body(nd, "void rfCalibrateOnce(){"), "RF calibration discarded once only"
 st = body(fw, "void setup(){")
 assert st.index("rfCalibrateOnce();") < st.index("applyNetwork();"), "before the Wi-Fi starts"
-assert "surveyAt=millis()+5000UL" in sn and "if(routerHold){surveyPending=true" in sn, "one scan after a fallback, only in recovery"
-# The web server tells router traffic from own-Wi-Fi traffic.
-assert "++httpdStats.rtrOpens" in body(h := (FW / "httpd.ino").read_text(encoding="utf-8"), "static esp_err_t webOpen(httpd_handle_t, int fd) {")
-assert "++httpdStats.rtrReq" in body(h, "static esp_err_t finish(WebCtx &c, uint32_t t0) {")
-nr = (FW / "netreport.ino").read_text(encoding="utf-8")
-assert "WiFi.RSSI()" in body(nr, "void routerSignalSample(){")
-assert "++routerFallbacks;routerHold=true;" in sn, "the report counts every fallback to the own Wi-Fi"
+# rc3's race: the fallback timer compares signed (plan 9.2 item 1).
+assert "(int32_t)(now-staDownSince)>=(int32_t)120000UL" in sn and "(uint32_t)(now-staDownSince)" not in sn
+# The link check's decisions come from the host-tested header and are acted on in wifi.ino only.
+assert "netstat::linkDead(" in body(nd, "bool routerLinkDead(uint32_t now){") and "netstat::linkPoor(" in body(nd, "static void sessionClose(uint8_t reason){")
+assert sn.count("routerLinkDead(now)") == 1 and "routerSessionEnd(netstat::END_REJOIN);applyNetwork();return;" in sn
+assert "if(!linkRejoined){" in sn and "routerSessionEnd(netstat::END_GIVEN_UP);" in sn
+assert "surveyRound=0;surveyAt=millis()+5000UL" in sn and "if(routerHold&&(surveyRound==0||WiFi.softAPgetStationNum()==0)){surveyPending=true" in sn
+# The engine lock is let go around every driver mode change (plan 9.2 item 3).
+for mode in ("WIFI_OFF", "WIFI_STA", "WIFI_AP"):
+    i = an.index(f"WiFi.mode({mode});")
+    assert "netWaitBegin();" in an[i-40:i] and an[i:i+60].count("netWaitEnd();") == 1, f"engine lock held over WiFi.mode({mode})"
+sc = body(w, "void serviceWifiScan(){")
+assert "netWaitBegin();WiFi.mode(WIFI_AP_STA);netWaitEnd();" in sc and "netWaitBegin();WiFi.mode(WIFI_AP);netWaitEnd();" in sc
+# The web server tells the networks apart and logs single requests.
+h = (FW / "httpd.ino").read_text(encoding="utf-8")
+assert "httpConn(fd, 1)" in body(h, "static esp_err_t webOpen(httpd_handle_t, int fd) {") and "httpConn(fd, 0)" in body(h, "static void webClose(httpd_handle_t, int fd) {")
+assert "httpRecord(c, ms)" in body(h, "static esp_err_t finish(WebCtx &c, uint32_t t0) {")
+assert "if (e == ESP_OK) c.bytes += n;" in body(h, "static esp_err_t io(WebCtx &c, const char *p, size_t n, bool chunk) {")
 # The trace folds through the host-tested function.
 assert "tracefold::traceFold(" in body(w, "void traceWifi(uint8_t type,uint8_t reason){")
 
@@ -162,7 +190,7 @@ for wf in ("build-engine.yml", "pages.yml"):
     assert '"Adafruit NeoPixel@' in t, f"{wf}: NeoPixel not pinned (D25)"
 
 # --- Pure headers stay pure ------------------------------------------------
-for h in ("tracefold.h", "httputil.h"):
+for h in ("tracefold.h", "httputil.h", "netstat.h"):
     t = (FW / h).read_text(encoding="utf-8")
     assert "#include <Arduino.h>" not in t and "WiFi" not in t and "millis(" not in t, h
 

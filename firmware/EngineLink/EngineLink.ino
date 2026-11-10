@@ -59,6 +59,7 @@
 #include "model.h"
 #include "tracefold.h"
 #include "httputil.h"
+#include "netstat.h"
 #include "httpd.h"
 // Transmit power step (0 = 8.5 dBm .. 4 = 19.5 dBm). Fixed: the automatic
 // choice (0.12.2-0.14.1) never took effect at start (the country setting
@@ -73,7 +74,7 @@ const wifi_power_t elTxPower[5]={WIFI_POWER_8_5dBm,WIFI_POWER_11dBm,WIFI_POWER_1
 const char *const elTxName[5]={"very low (8.5 dBm)","low (11 dBm)","moderate (13 dBm)","medium (15 dBm)","high (19.5 dBm)"};
 SpeedLogRec speedLog[SPEED_LOG_N];uint8_t speedLogCount=0;
 
-#define EL_VERSION "0.17.0-rc3"
+#define EL_VERSION "0.17.0-rc4"
 // Releases list published by the Pages workflow; firmware files come from
 // GitHub Releases of the same repository. Nothing else is downloaded.
 #define EL_RELEASES_URL "https://kaelor9.github.io/EngineLink/releases.json"
@@ -329,24 +330,30 @@ uint16_t scanRawCount=0;
 ScanEntry scanEntries[WIFI_SCAN_MAX_RESULTS];
 uint8_t scanEntriesCount=0;
 uint32_t scanCompletedMs=0;
-// The router link as EngineLink itself measured it (netdiag.ino). Kept after
-// the session: the report can usually only be fetched later, on the own Wi-Fi.
-struct RouterSession{
-  bool active=false,seen=false,b=false,g=false,n=false;
-  uint32_t startMs=0,endMs=0;
-  int rssiStart=0,rssiMin=0,rssiLast=0;
-  uint8_t ch=0,second=0,phy=255,pair=255,group=255,ps=255,endReason=0;
-  volatile uint32_t pingSent=0,pingOk=0,pingSumMs=0,pingMaxMs=0,pingLostRow=0,pingLostRowMax=0;   // written by the ping task
-  uint32_t opens0=0,req0=0,ok0=0,fail0=0;   // the web server's router counters when the session began
-};
-RouterSession rsess;
-// One scan a few seconds after the router was given up: is the radio deaf,
-// or is only the router missing?
-struct Survey{bool done=false,failed=false,routerSeen=false;uint32_t atMs=0;uint16_t heard=0;int best=-127,routerRssi=0;uint8_t routerCh=0;};
-Survey survey;
+// What EngineLink measures about its networks by itself (netdiag.ino,
+// netstat.h; plan section 9). Kept in RAM over network changes: the report
+// can usually only be fetched later, on the own Wi-Fi.
+netstat::Http httpStat;                                  // the web server by network, with a request log
+portMUX_TYPE httpStatMux=portMUX_INITIALIZER_UNLOCKED;   // two server tasks write it
+netstat::RouterSession rsessHist[netstat::SESSION_CAP];  // router sessions, rsessCur the newest
+uint8_t rsessCur=0,rsessCount=0;
+netstat::Slot slots[netstat::SLOT_CAP];                  // the newest session in 30 s pieces
+uint8_t slotHead=0,slotSize=0;
+netstat::Survey surveys[netstat::SURVEY_CAP];            // scans after the router was given up
+uint8_t surveyHead=0,surveySize=0,surveyRound=0;
 uint32_t surveyAt=0;
 bool surveyPending=false;
-bool rfRecalAtBoot=false;   // the stored RF calibration was discarded at this start (once)
+netstat::Step netSteps[netstat::STEP_CAP];               // slow steps of the network part
+uint8_t netStepHead=0,netStepSize=0;
+bool rfRecalAtBoot=false;      // the stored RF calibration was discarded at this start (once)
+bool staPlainG=false;          // radio profile of the next router session: 802.11g instead of 802.11n 20 MHz
+bool routerAnswersPings=false; // this start: the router answered at least one ping
+bool linkRejoined=false;       // the link check already made EngineLink rejoin once
+uint32_t linkRejoins=0,linkGiveUps=0;
+// From the driver's events (data only, no Wi-Fi calls).
+volatile int8_t staDropRssi=0;
+volatile uint8_t staSessionEndReason=0;
+volatile uint32_t staBeaconTimeouts=0,staChannelChanges=0;
 // Device reports to GitHub: the board files its Wi-Fi report as an issue in
 // the EngineLink repository when it has internet, so nobody has to fetch it
 // by hand. Needs a token that may only create issues; the router name is
@@ -441,6 +448,7 @@ void setup(){
   WiFi.onEvent(onWiFi);
   rfCalibrateOnce();
   applyNetwork();
+  netdiagInit();
   loadTotals();
   // Formatting an existing data partition after a transient mount failure
   // would permanently destroy history. Permit auto-format only before the

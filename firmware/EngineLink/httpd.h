@@ -35,6 +35,11 @@ struct WebCtx {
   uint8_t nHdr = 0;
   char *query = nullptr, *body = nullptr, *val = nullptr;  // PSRAM buffers
   size_t bodyCap = 0;
+  // For the request log (netstat.h): start, time to the first byte, bytes
+  // the server accepted, and which request on its connection this is.
+  uint32_t t0 = 0, firstMs = 0, bytes = 0;
+  uint8_t nth = 0;
+  bool sending = false;
 };
 
 // Counters for the report (plan 6.8 HTTP block).
@@ -45,8 +50,6 @@ struct HttpdStats {
   uint32_t busyLock = 0, busyXfer = 0, busyXferLock = 0, busyAtMs = 0; char busyPath[40] = {};
   uint32_t opens = 0, closes = 0, openNow = 0, openMax = 0, external2xx = 0, xferWaitMs = 0;
   uint32_t slowMs = 0; char slowPath[40] = {};
-  // What came in through the router (not the own Wi-Fi, not the self-test).
-  uint32_t rtrOpens = 0, rtrReq = 0, rtrOk = 0, rtrFail = 0, rtrLastMs = 0;
 };
 
 class Web {

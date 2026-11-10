@@ -179,7 +179,7 @@ stored life story counts only the first 22 event types (`LIFE_EV_N`); newer
 types are counted in `ShiftLife`.
 
 **Wi-Fi** (plan [docs/WIFI_PLAN_2026-11-09.md](docs/WIFI_PLAN_2026-11-09.md),
-implemented 2026-11-09; **section 8 of the plan (2026-11-10, 0.17.0-rc3) is
+implemented 2026-11-09; **section 9 of the plan (2026-11-10, 0.17.0-rc4) is
 the current state**, *built*, bench pending). Two modes, never both:
 - **Standalone:** access point only, `EngineLink` at 192.168.4.1, channel 6
   (saved `apch`), max 6 phones. `apRadioSetup()`: 20 MHz, stations kept 600 s,
@@ -194,19 +194,33 @@ the current state**, *built*, bench pending). Two modes, never both:
   station, and failed on the home router with reasons 2/4/15 = the router's
   answers never arrived). Modem sleep, 40 MHz, fast scan, country "01", PMF
   capable, WPA2 minimum, WPA3-SAE by the driver, 20 dBm, 6 s beacon timeout.
-  **rc3 (plan section 8):** one station setting, `WiFi.setSleep(false)` after
-  `WiFi.mode(WIFI_STA)`. Without it the core applied whatever was stored last:
-  modem sleep on after a start straight into router mode, off after the own
-  Wi-Fi had been up (`apRadioSetup()` stores it, `STA.cpp:122` applies it).
-- **Link measurement (`netdiag.ino`, rc3):** per router session EngineLink
-  pings the router every 2 s (`esp_ping`), records the router as the driver
-  saw it, the signal, and the HTTP connections/requests that came in through
-  the router; 5 s after a fallback one scan records whether anything is heard.
-  Kept after the session, printed in the report ("ROUTER LINK AS ENGINELINK
-  MEASURED IT") and written to `/WIFI.LOG`. It only measures; the contract
-  test forbids any connect/mode/setting call there. `rfCalibrateOnce()`
-  discards the stored RF calibration once (NVS `el_radio/cal`), because it
-  predates the IC5 repair.
+  **rc4 (plan section 9), the station as it is now:** `WiFi.setSleep(false)`
+  and `staRadioSetup()` right after `WiFi.mode(WIFI_STA)`: 20 MHz
+  (`esp_wifi_set_bandwidth`, Espressif's recommendation near other networks;
+  rc3 negotiated 40 MHz and got 3 of 152 pings answered at −47 dBm) and
+  802.11b/g/n, or b/g when the last session's link check was poor
+  (`staPlainG`). Nothing else is set. Without the `setSleep` call the core
+  applies whatever was stored last (`STA.cpp:122`).
+- **Link check and its two decisions (rc4):** per router session EngineLink
+  pings the router every 2 s (`esp_ping`). `netstat::linkPoor` (fewer than
+  half of ≥ 30 answered) switches the next session between 802.11n and
+  802.11g. `netstat::linkDead` (30 lost in a row and no web request through
+  the router for 60 s, only for a router that answered a ping this start)
+  makes EngineLink join again once, then go to its own Wi-Fi with the normal
+  10 min return. The fallback timer compares **signed**: the event task can
+  set `staDownSince` after `now` was read (rc3 fell back at once).
+- **Measurement (`netdiag.ino`, `netstat.h`):** up to 4 router sessions with
+  everything the driver tells, the link check, a 2 s radio sample every 30 s
+  (promiscuous callback that only counts: beacons, repeats, 40 MHz, noise
+  floor), the session in 30 s pieces, scans after a fallback with networks by
+  channel, the web server by network with a 32-entry request log
+  (`httpConn()`/`httpRecord()` from `httpd.ino`), slow network steps by name,
+  tasks' CPU share and stack. Printed in the report, in its JSON and in
+  `/WIFI.LOG`. `netdiag.ino` never connects or changes a station setting
+  (contract test). `WiFi.mode()` calls run with `engineMx` let go
+  (`netWaitBegin/End`): they took 1645 ms in rc3 with the engine task waiting.
+  `rfCalibrateOnce()` discarded the stored RF calibration once (NVS
+  `el_radio/cal`), because it predated the IC5 repair.
 - **Same address in both modes:** `http://enginelink.local` (HTTP only, port
   80; nothing listens on 443). The `Host` check also accepts the bare name and
   `.lan`/`.home`/`.home.arpa`/`.internal` for routers whose DNS registers the

@@ -65,6 +65,10 @@ jobs:
         run: |
           g++ -O2 -std=c++17 -Wall -Wextra -I firmware/EngineLink tools/test_httputil.cpp -o /tmp/test_httputil
           /tmp/test_httputil
+      - name: Test the link check, web counters by network and request log
+        run: |
+          g++ -O2 -std=c++17 -Wall -Wextra -I firmware/EngineLink tools/test_netstat.cpp -o /tmp/test_netstat
+          /tmp/test_netstat
       - name: Host test NMEA 2000 decoding
         run: |
           g++ -O2 -std=c++17 -Wall -Wextra -I firmware/EngineLink tools/test_nmea2k.cpp -o /tmp/test_nmea2k
