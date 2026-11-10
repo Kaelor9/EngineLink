@@ -1,7 +1,6 @@
 // Network statistics without Arduino (docs/WIFI_PLAN_2026-11-09.md section 9):
-// the link check's round-trip figures, the web server's counters by network
-// with a log of single requests, and the two decisions taken from the link
-// check. Pure C++, no clock reads, no radio or socket calls. Host-tested by
+// the link check's round-trip figures and the web server's counters by network
+// with a log of single requests. Pure C++, no clock reads, no radio or socket calls. Host-tested by
 // tools/test_netstat.cpp; netdiag.ino and httpd.ino feed it.
 #pragma once
 #include <stddef.h>
@@ -23,18 +22,6 @@ struct Rtt {
   uint32_t avgMs() const { return ok ? sumMs / ok : 0; }
   uint32_t lossPct() const { return sent ? (uint32_t)(((uint64_t)(sent - ok) * 100 + sent / 2) / sent) : 0; }
 };
-
-// A session whose link check answered less than half of at least 30 pings:
-// the next router session tries the other radio profile (802.11n <-> 802.11g).
-inline bool linkPoor(const Rtt &r) { return r.sent >= 30 && r.ok * 2 < r.sent; }
-
-// "Associated with an IP" but nothing gets through: 30 pings in a row lost
-// (60 s) and no web request through the router for 60 s. Only for a router
-// that answered a ping at least once since the start (some never answer
-// pings; they must not be taken for dead).
-inline bool linkDead(const Rtt &r, bool routerAnswersPings, uint32_t msSinceRouterRequest) {
-  return routerAnswersPings && r.lostRow >= 30 && msSinceRouterRequest >= 60000;
-}
 
 // ---- Web server by network -------------------------------------------------
 enum : uint8_t { NET_OWN = 0, NET_ROUTER = 1, NET_SELF = 2, NET_N = 3 };   // own Wi-Fi, router, the board's own self-test
@@ -127,11 +114,7 @@ struct Slot {
   uint16_t pingSent = 0, pingOk = 0, rttAvg = 0;
   uint16_t requests = 0, failed = 0;
   uint32_t bytes = 0;
-  int8_t rssi = 0, noise = 0;                            // dBm; 0 = not read
-  // Radio sample (2 s of every 30): beacons heard of those expected, frames
-  // from the router to EngineLink, how many of them were repeats / 40 MHz /
-  // 802.11n, the router's broadcasts, and frames of other networks.
-  uint16_t beacons = 0, beaconsExpected = 0, toUs = 0, retries = 0, wide = 0, ht = 0, group = 0, others = 0;
+  int8_t rssi = 0;                                       // dBm; 0 = not read
 };
 constexpr uint8_t SLOT_CAP = 60;   // 30 minutes
 
@@ -144,10 +127,9 @@ inline HttpDelta httpSince(const HttpNet &now, const HttpNet &then) {
   for (int i = 0; i < 4; i++) d.byClass[i] = now.byClass[i] - then.byClass[i];
   return d;
 }
-// End codes of EngineLink's own (the driver's reasons are below 250).
-constexpr uint8_t END_OWN = 0, END_REJOIN = 250, END_GIVEN_UP = 251;
+constexpr uint8_t END_OWN = 0;   // EngineLink changed network itself (the driver's reasons are 1..)
 struct RouterSession {
-  bool active = false, seen = false, b = false, g = false, n = false, plainG = false;
+  bool active = false, seen = false, b = false, g = false, n = false;
   uint32_t startMs = 0, endMs = 0, joinMs = 0, dhcpMs = 0;
   int rssiStart = 0, rssiMin = 0, rssiMax = -127, rssiLast = 0, rssiEnd = 0;
   int32_t rssiSum = 0; uint32_t rssiN = 0;
@@ -157,27 +139,8 @@ struct RouterSession {
   Rtt ping;
   HttpNet http0;    // the web server's router counters when the session began
   HttpDelta http;   // what the session added (set when it ends)
-  // Radio samples, summed.
-  uint32_t rWindows = 0, rBeacons = 0, rBeaconsExp = 0, rToUs = 0, rRetries = 0, rWide = 0, rHt = 0, rAmpdu = 0, rGroup = 0, rOthers = 0, rNoiseN = 0;
-  int32_t rNoiseSum = 0; int rNoiseMax = -127;
 };
 constexpr uint8_t SESSION_CAP = 4;
-
-// ---- One scan after the router was given up ------------------------------
-struct Survey {
-  bool failed = false, routerSeen = false;
-  uint32_t atMs = 0;
-  uint16_t heard = 0;
-  int routerRssi = 0; uint8_t routerCh = 0;
-  uint8_t chCount[15] = {}; int8_t chBest[15] = {};   // other networks by channel 1..14: how many, the strongest
-};
-constexpr uint8_t SURVEY_CAP = 4;
-inline void surveyAdd(Survey &s, bool isRouter, uint8_t ch, int rssi) {
-  if (isRouter) { if (!s.routerSeen || rssi > s.routerRssi) { s.routerSeen = true; s.routerRssi = rssi; s.routerCh = ch; } return; }
-  if (ch < 1 || ch > 14) return;
-  if (!s.chCount[ch] || rssi > s.chBest[ch]) s.chBest[ch] = (int8_t)(rssi < -127 ? -127 : rssi > 0 ? 0 : rssi);
-  if (s.chCount[ch] < 255) ++s.chCount[ch];
-}
 
 // ---- A slow step of the network part of the main loop --------------------
 struct Step { const char *what = nullptr; uint32_t ms = 0, atMs = 0; };

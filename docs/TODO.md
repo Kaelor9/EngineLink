@@ -76,7 +76,7 @@ version instead of one update each. Newest at the bottom of each section.
     log and heading match the ST60; the trip export has the navigation
     columns.
 
-## Wi-Fi (plan revised 2026-11-09, sections 8–9 added 2026-11-10: 0.17.0-rc4)
+## Wi-Fi (plan revised 2026-11-09, section 10 added 2026-11-10: 0.17.0-rc5)
 
 The authoritative plan is [docs/WIFI_PLAN_2026-11-09.md](WIFI_PLAN_2026-11-09.md);
 `docs/WIFI_REWRITE_PLAN.md` is history. Two modes (Standalone, Router) plus
@@ -93,7 +93,13 @@ back, switch now?" (withdrawn with Stage 4: the app's Connect does it).
 
 ## To check on the boat
 
-- **Wi-Fi 0.17.0-rc4 first: the 15-minute router session of plan 9.6** (no
+- **Wi-Fi 0.17.0-rc5 first (plan 10.6):** save Router mode, power off and on,
+  open `/api/health`, `/` and `http://enginelink.local` from the PC, send the
+  Wi-Fi report after 15 minutes. If it fails: plan 10.4 lists what still
+  differs from the owner's working sketch (answer size and duration first;
+  the sketch extended with a 110 KB page and left running with `ping -t`
+  separates them without an EngineLink build). The rc4 item below is history.
+- Wi-Fi 0.17.0-rc4: the 15-minute router session of plan 9.6 (done, failed; no
   PC scripts needed; the report's "ROUTER SESSIONS AS ENGINELINK MEASURED
   THEM" block and the request log are the result). The longer session below (plan section 5) follows
   only if 8.5 passes.

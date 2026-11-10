@@ -74,20 +74,11 @@ void apRadioSetup(){
   WiFi.setSleep(false);
   applyTxPower(false);
 }
-// The station (plan section 9.4): power save off, because a server must hear
-// packets it did not ask for, and 20 MHz, Espressif's recommendation where
-// other networks are near (rc3 measured 40 MHz negotiated and 2 % of pings
-// answered at -47 dBm). After a session whose link check was poor the next
-// one uses 802.11g instead of 802.11n (staPlainG, set in netdiag.ino).
-// Nothing else is set: no country, scan method or TX power.
-void staRadioSetup(){
-  esp_wifi_set_protocol(WIFI_IF_STA,staPlainG?(WIFI_PROTOCOL_11B|WIFI_PROTOCOL_11G):(WIFI_PROTOCOL_11B|WIFI_PROTOCOL_11G|WIFI_PROTOCOL_11N));
-  esp_wifi_set_bandwidth(WIFI_IF_STA,WIFI_BW_HT20);
-}
 // ---- Wi-Fi, kept simple (0.16.2) ---- Standalone: own Wi-Fi at 192.168.4.1.
-// Router: the core's own reconnect; no IP in 2 minutes: own Wi-Fi (recovery,
-// not a mode), and try the router again every 10 minutes while no phone is
-// connected to it, or at once when the app asks.
+// Router: the plain station of the owner's working test sketch
+// (applyNetwork); no IP in 2 minutes: own Wi-Fi (recovery, not a mode), and
+// try the router again every 10 minutes while no phone is connected to it,
+// or at once when the app asks.
 void onWiFi(WiFiEvent_t e,WiFiEventInfo_t info){
   const uint32_t now=millis();
   switch(e){
@@ -128,7 +119,7 @@ void startAP(){
   Serial.printf("EngineLink Wi-Fi %s: %s, channel %u, %s\n",apStarted?"on":"FAILED",cfg.apName.c_str(),(unsigned)apChannelNow,WiFi.softAPIP().toString().c_str());
 }
 void connectRouter(){
-  traceWifi(1);staBeginAt=millis();++routerAttempts;
+  traceWifi(1);staBeginAt=staTryAt=millis();++routerAttempts;
   WiFi.begin(cfg.ssid.c_str(),cfg.wifiPassword.length()?cfg.wifiPassword.c_str():nullptr);
   Serial.printf("Joining router %s\n",cfg.ssid.c_str());
 }
@@ -147,7 +138,7 @@ void startNameService(){
 void applyNetwork(){
   const bool withRouter=routerConfigured()&&!routerHold;
   if(scanInFlight)WiFi.scanDelete();
-  scanBusy=false;scanRequested=false;scanInFlight=false;surveyPending=false;surveyAt=0;
+  scanBusy=false;scanRequested=false;scanInFlight=false;
   routerSessionEnd(netstat::END_OWN);
   if(mdnsReady){MDNS.end();mdnsReady=false;}
   uint32_t t=millis();
@@ -159,17 +150,19 @@ void applyNetwork(){
   t=millis();netWaitBegin();
   WiFi.mode(WIFI_OFF);
   netWaitEnd();netStep("Wi-Fi off",t);
-  WiFi.persistent(false);
-  WiFi.setHostname(cfg.hostName.c_str());
+  WiFi.setHostname(cfg.hostName.c_str());   // the DHCP and mDNS name; the only call the test sketch does not have
   apStarted=false;staAssociated=false;staHadIp=false;ntpStarted=false;
   t=millis();
   if(withRouter){
+    // The station is exactly the owner's test sketch that served a page
+    // through the home router on this board (2026-11-10): WiFi.mode(WIFI_STA),
+    // WiFi.setSleep(false), WiFi.begin(). No radio setting of our own: no
+    // bandwidth, protocol, country, scan method or TX power, and the core's
+    // own reconnect as in the sketch (on by default, never switched off).
     netWaitBegin();
     WiFi.mode(WIFI_STA);
     netWaitEnd();
     WiFi.setSleep(false);
-    staRadioSetup();
-    WiFi.setAutoReconnect(true);
     staDownSince=millis()?millis():1;
     connectRouter();
     netStep("station start",t);
@@ -195,7 +188,6 @@ void serviceWifiScan(){
     scanStartedMs=millis();
     if(WiFi.scanNetworks(true,false)==WIFI_SCAN_FAILED){
       scanCount=WIFI_SCAN_FAILED;scanBusy=false;scanRequested=false;scanCompletedMs=millis()?millis():1;
-      if(surveyPending){surveyPending=false;surveyRecord();}
       if(scanStaTemporary)WiFi.mode(WIFI_AP);
       return;
     }
@@ -218,12 +210,11 @@ void serviceWifiScan(){
   scanCount=r<0?WIFI_SCAN_FAILED:r;
   scanCompletedMs=millis()?millis():1;scanDurationMs=scanCompletedMs-scanStartedMs;
   scanInFlight=false;scanBusy=false;scanRequested=false;
-  if(surveyPending){surveyPending=false;surveyRecord();}
   if(scanStaTemporary){scanStaTemporary=false;const uint32_t t=millis();netWaitBegin();WiFi.mode(WIFI_AP);netWaitEnd();netStep("scan: station off",t);}
 }
 void serviceNetwork(){
   const uint32_t now=millis();
-  if(pendingNetwork&&(int32_t)(now-networkSwitchAt)>=0){pendingNetwork=false;routerHold=false;linkRejoined=false;routerAnswersPings=false;applyNetwork();return;}
+  if(pendingNetwork&&(int32_t)(now-networkSwitchAt)>=0){pendingNetwork=false;routerHold=false;applyNetwork();return;}
   const bool online=routerConfigured()&&!routerHold&&WiFi.status()==WL_CONNECTED;
   if(online)lastRouterIp=WiFi.localIP().toString();
   else routerSessionEnd(255);   // lost: the reason follows from the event
@@ -237,28 +228,19 @@ void serviceNetwork(){
   if(routerConfigured()&&!routerHold&&!online&&staDownSince&&(int32_t)(now-staDownSince)>=(int32_t)120000UL){
     Serial.println("Router not reached in 2 minutes: EngineLink Wi-Fi on");
     wifiLog("Router not reached in 2 minutes: own Wi-Fi on");
-    ++routerFallbacks;routerHold=true;routerRetryAt=now+600000UL;applyNetwork();surveyRound=0;surveyAt=millis()+5000UL;return;
+    ++routerFallbacks;routerHold=true;routerRetryAt=now+600000UL;applyNetwork();return;
   }
-  // "Connected" but nothing gets through for a minute (plan 9.4): join again
-  // once, with the other radio profile; dead again: own Wi-Fi, so EngineLink
-  // can at least be reached there.
-  if(online&&routerLinkDead(now)){
-    if(!linkRejoined){
-      linkRejoined=true;++linkRejoins;wifiLog("Router link dead for a minute: joining again");
-      routerSessionEnd(netstat::END_REJOIN);applyNetwork();return;
-    }
-    ++linkGiveUps;wifiLog("Router link dead again: own Wi-Fi on");
-    routerSessionEnd(netstat::END_GIVEN_UP);
-    ++routerFallbacks;routerHold=true;routerRetryAt=now+600000UL;applyNetwork();surveyRound=0;surveyAt=millis()+5000UL;return;
-  }
+  // The core reconnects by itself after most failures, but not after code
+  // 202 and a few others (STA.cpp): rc4 then stood idle for 90 s. So: 20 s
+  // without a join and without any word from the driver, one plain connect.
+  // Signed: the event task may write its time a tick after `now` was read.
+  if(routerConfigured()&&!routerHold&&!staAssociated&&(int32_t)(now-staTryAt)>=20000&&(int32_t)(now-staLastDropAt)>=20000){staTryAt=now;WiFi.reconnect();}
   if(routerHold&&routerConfigured()&&(int32_t)(now-routerRetryAt)>=0){
     if(WiFi.softAPgetStationNum()==0){routerHold=false;applyNetwork();return;}
     routerRetryAt=now+600000UL;
   }
   if(online&&!ntpStarted&&cfg.ntpOn&&allowTime("ntp")){configTime(0,0,cfg.ntpServer.c_str(),"pool.ntp.org");ntpStarted=true;}
   if(ntpNotification){ntpNotification=false;if(allowTime("ntp")&&validWall()){hasTime=true;timeSource="ntp";backfillTripTime();}}
-  // Scans after a fallback: at 5 s, then twice more while no phone is joined.
-  if(surveyAt&&(int32_t)(now-surveyAt)>=0&&!scanBusy){surveyAt=0;if(routerHold&&(surveyRound==0||WiFi.softAPgetStationNum()==0)){surveyPending=true;scanBusy=true;scanInFlight=false;scanNextAt=now;}}
   serviceWifiScan();
   if(mdnsRefreshPending&&!scanBusy&&(uint32_t)(now-mdnsNetworkChangedAt)>=2000UL)startNameService();
   // Shortly after the own Wi-Fi started or the router gave an IP. The web

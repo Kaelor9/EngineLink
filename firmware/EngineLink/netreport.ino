@@ -143,7 +143,7 @@ String buildNetworkReport(){
   s+="Last router signal: ";if(!staAssociatedEvents)s+="Not measured";else{s+=lastRouterRssi;s+=" dBm";}s+="\n";
   s+="Last router channel: ";s+=lastRouterChannel;s+="\n";
   s+="Last negotiated Wi-Fi security: ";s+=stationSecurityName(staNegotiatedAuth);s+="\n";
-  s+="Station: power save off, 20 MHz, 802.11n or 802.11g by the last link check (no country, scan or TX-power setting)\n";
+  s+="Station: as the working test sketch: power save off, everything else the driver's default (no bandwidth, country, scan, protocol or TX-power setting)\n";
   s+="Security: ESP32 core WPA2/WPA3 negotiation (no custom SAE handling)\n";
   s+="Transmit power: ";if(WiFi.getMode()&WIFI_MODE_STA)s+="ESP32 driver default";else{s+=elTxName[txLevel<5?txLevel:TX_LEVEL_FIXED];s+=" (fixed)";}
   if(!(WiFi.getMode()&WIFI_MODE_STA)){s+=" · target ";s+=(int)elTxPower[txLevel<5?txLevel:TX_LEVEL_FIXED];s+=" quarter-dBm";}
@@ -162,7 +162,7 @@ String buildNetworkReport(){
   s+="Wi-Fi disconnect events: ";s+=(unsigned long)staDisconnects;s+="\n";
   s+="Dropped active router connections: ";s+=(unsigned long)staUnexpectedDisconnects;s+="\n";
   s+="Pre-connection failures: ";s+=(unsigned long)staAssociationFailures;s+="\n";
-  s+="Reconnect: the ESP32 core's own (a new attempt right after every failure)\n";
+  s+="Reconnect: the ESP32 core's own, plus one plain connect after 20 s without any attempt (the core stops after code 202)\n";
   s+="App-initiated router attempts: ";s+=routerAttempts;s+="\n";
   s+="Router recovery fallbacks: ";s+=routerFallbacks;s+="\n";
   s+="Last association time: ";s+=staJoinMs;s+=" ms\n";

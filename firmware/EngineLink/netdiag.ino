@@ -2,16 +2,14 @@
 // (docs/WIFI_PLAN_2026-11-09.md sections 8 and 9). A page that does not open
 // says nothing about where it fails, and the report can only be fetched
 // afterwards on the own Wi-Fi, so every router session leaves a record:
-//   radio:  the router as the driver saw it, the signal over time, and a
-//           2 s sample of received frames every 30 s (beacons, repeats,
-//           40 MHz, noise floor)
+//   radio:  the router as the driver saw it and the signal over time
 //   IP:     one ping to the router every 2 s (esp_ping, lwIP's documented API)
 //   HTTP:   every connection and request by network (httpd.ino, netstat.h)
-// plus scans after the router was given up, slow steps of the network part
-// and the tasks' CPU time and stack. Documented ESP-IDF APIs only; nothing
-// here connects, disconnects or changes a station setting. The two decisions
-// taken from the link check (netstat.h: linkPoor, linkDead) are acted on in
-// wifi.ino.
+// plus slow steps of the network part and the tasks' CPU time and stack.
+// Documented ESP-IDF APIs only. Nothing here connects, disconnects, scans or
+// changes a driver setting, and nothing is decided from the measurements
+// (rc5: the radio sample in promiscuous mode, the 802.11g/n switch, the
+// "dead link" rejoin and the scans after a fallback were removed).
 
 const char* reasonText(uint8_t r){
   switch(r){
@@ -29,8 +27,6 @@ const char* reasonText(uint8_t r){
     case 205:return "Router connection failed";
     case 209:return "WPA3 PMF SA Query timeout (router did not answer)";
     case 210:case 211:return "Incompatible Wi-Fi security";
-    case netstat::END_REJOIN:return "EngineLink's link check: nothing got through for a minute, joined again";
-    case netstat::END_GIVEN_UP:return "EngineLink's link check: dead again after joining again, own Wi-Fi on";
     default:return "Other Wi-Fi disconnect";
   }
 }
@@ -61,17 +57,6 @@ const char* stationSecurityName(uint8_t mode){
   }
 }
 
-// The stored RF calibration is discarded once, so this start calibrates in
-// full (esp_phy_init.h). It was made while the 3.3 V regulator had a cold
-// solder joint (repaired 2026-11-09, docs/HARDWARE.md); the driver otherwise
-// reuses it for ever. Runs before the Wi-Fi starts; settings are untouched.
-void rfCalibrateOnce(){
-  Preferences m;
-  if(!m.begin("el_radio",false))return;
-  if(m.getUChar("cal",0)<1){rfRecalAtBoot=esp_phy_erase_cal_data_in_nvs()==ESP_OK;m.putUChar("cal",1);}
-  m.end();
-}
-
 // ---- Driver events and memory: counters only ---------------------------------
 static volatile uint32_t allocFails=0,allocFailSize=0,allocFailCaps=0;
 static void allocFailed(size_t size,uint32_t caps,const char *){allocFails=allocFails+1;allocFailSize=size;allocFailCaps=caps;}
@@ -93,7 +78,7 @@ void netStep(const char *what,uint32_t startedMs){
 }
 
 // ---- The web server by network (called from httpd.ino) -----------------------
-struct SlotAcc{uint32_t pingSent,pingOk,rttSum,requests,failed,bytes,beacons,beaconsExp,toUs,retries,wide,ht,group,others;int rssi,noise;};
+struct SlotAcc{uint32_t pingSent,pingOk,rttSum,requests,failed,bytes;int rssi;};
 static SlotAcc acc={};
 static uint32_t slotAt=0;
 // what: 0 a connection closed, 1 opened, 2 a request arrived on it (returns
@@ -128,56 +113,6 @@ static netstat::HttpNet routerHttpNow(){
   return h;
 }
 
-// ---- Radio sample: 2 s of every 30 s in a router session ---------------------
-// Promiscuous mode (esp_wifi.h) hands every management and data frame on the
-// channel to this callback, in the Wi-Fi task: it only compares addresses and
-// counts. Beacons need no answer from EngineLink, so "beacons heard" is the
-// router -> EngineLink direction alone; a repeat (retry bit) of a frame for
-// EngineLink means the router did not get the acknowledgement of the first.
-struct RadioAcc{volatile uint32_t beacons,toUs,retries,wide,ht,ampdu,group,others,noiseN;volatile int32_t noiseSum;volatile int noiseMax;};
-static RadioAcc racc={};
-static uint8_t radioBssid[6]={},radioMac[6]={};
-static bool radioOn=false;
-static uint32_t radioStartedAt=0,radioNextAt=0;
-static void radioCb(void *buf,wifi_promiscuous_pkt_type_t type){
-  if(type!=WIFI_PKT_MGMT&&type!=WIFI_PKT_DATA)return;
-  const wifi_promiscuous_pkt_t *p=(const wifi_promiscuous_pkt_t *)buf;
-  if(p->rx_ctrl.sig_len<28)return;   // 24-byte header and the checksum
-  const uint8_t *f=p->payload;
-  if(memcmp(f+10,radioBssid,6)!=0){racc.others=racc.others+1;return;}   // not sent by our router
-  const int nf=p->rx_ctrl.noise_floor;
-  racc.noiseSum=racc.noiseSum+nf;racc.noiseN=racc.noiseN+1;if(nf>racc.noiseMax)racc.noiseMax=nf;
-  if(type==WIFI_PKT_MGMT){if((f[0]&0xFC)==0x80)racc.beacons=racc.beacons+1;return;}
-  if(f[4]&1){racc.group=racc.group+1;return;}   // broadcast or multicast
-  if(memcmp(f+4,radioMac,6)!=0)return;          // for another device
-  racc.toUs=racc.toUs+1;
-  if(f[1]&0x08)racc.retries=racc.retries+1;
-  if(p->rx_ctrl.sig_mode==1){
-    racc.ht=racc.ht+1;
-    if(p->rx_ctrl.cwb)racc.wide=racc.wide+1;
-    if(p->rx_ctrl.aggregation)racc.ampdu=racc.ampdu+1;
-  }
-}
-static void radioStop(){
-  if(!radioOn)return;
-  radioOn=false;
-  esp_wifi_set_promiscuous(false);
-  netstat::RouterSession &r=rsessHist[rsessCur];
-  const uint32_t expected=(millis()-radioStartedAt)*1000UL/102400UL;   // a beacon every 102.4 ms
-  ++r.rWindows;r.rBeacons+=racc.beacons;r.rBeaconsExp+=expected;r.rToUs+=racc.toUs;r.rRetries+=racc.retries;r.rWide+=racc.wide;
-  r.rHt+=racc.ht;r.rAmpdu+=racc.ampdu;r.rGroup+=racc.group;r.rOthers+=racc.others;
-  r.rNoiseSum+=racc.noiseSum;r.rNoiseN+=racc.noiseN;if(racc.noiseN&&racc.noiseMax>r.rNoiseMax)r.rNoiseMax=racc.noiseMax;
-  acc.beacons+=racc.beacons;acc.beaconsExp+=expected;acc.toUs+=racc.toUs;acc.retries+=racc.retries;acc.wide+=racc.wide;acc.ht+=racc.ht;
-  acc.group+=racc.group;acc.others+=racc.others;if(racc.noiseN)acc.noise=racc.noiseSum/(int32_t)racc.noiseN;
-}
-static void radioStart(uint32_t now){
-  racc.beacons=racc.toUs=racc.retries=racc.wide=racc.ht=racc.ampdu=racc.group=racc.others=racc.noiseN=0;racc.noiseSum=0;racc.noiseMax=-127;
-  const wifi_promiscuous_filter_t f={WIFI_PROMIS_FILTER_MASK_MGMT|WIFI_PROMIS_FILTER_MASK_DATA};
-  radioNextAt=now+30000UL;
-  if(esp_wifi_set_promiscuous_filter(&f)!=ESP_OK||esp_wifi_set_promiscuous_rx_cb(radioCb)!=ESP_OK||esp_wifi_set_promiscuous(true)!=ESP_OK)return;
-  radioOn=true;radioStartedAt=now;
-}
-
 // ---- Link check and the session record ---------------------------------------
 static esp_ping_handle_t linkPing=nullptr;
 static bool endPending=false;   // a lost session waits for the driver's reason
@@ -186,7 +121,7 @@ static void linkPingDone(esp_ping_handle_t h,bool ok){
   if(!r.active)return;
   if(ok){
     uint32_t ms=0;esp_ping_get_profile(h,ESP_PING_PROF_TIMEGAP,&ms,sizeof(ms));
-    r.ping.answered(ms);routerAnswersPings=true;++acc.pingOk;acc.rttSum+=ms;
+    r.ping.answered(ms);++acc.pingOk;acc.rttSum+=ms;
   }else r.ping.lost();
   ++acc.pingSent;
   if(r.ping.sent%5==0){   // the signal every 10 s
@@ -199,13 +134,11 @@ static void linkPingDone(esp_ping_handle_t h,bool ok){
 static void linkPingOk(esp_ping_handle_t h,void *){linkPingDone(h,true);}
 static void linkPingLost(esp_ping_handle_t h,void *){linkPingDone(h,false);}
 static void slotRoll(uint32_t now){
-  if(!acc.pingSent&&!acc.requests&&!acc.beaconsExp){slotAt=now;return;}
+  if(!acc.pingSent&&!acc.requests){slotAt=now;return;}
   netstat::Slot s;
   auto u16=[](uint32_t v){return (uint16_t)(v>65535?65535:v);};
   s.startS=slotAt/1000UL;s.pingSent=u16(acc.pingSent);s.pingOk=u16(acc.pingOk);s.rttAvg=u16(acc.pingOk?acc.rttSum/acc.pingOk:0);
-  s.requests=u16(acc.requests);s.failed=u16(acc.failed);s.bytes=acc.bytes;s.rssi=(int8_t)acc.rssi;s.noise=(int8_t)acc.noise;
-  s.beacons=u16(acc.beacons);s.beaconsExpected=u16(acc.beaconsExp);s.toUs=u16(acc.toUs);s.retries=u16(acc.retries);
-  s.wide=u16(acc.wide);s.ht=u16(acc.ht);s.group=u16(acc.group);s.others=u16(acc.others);
+  s.requests=u16(acc.requests);s.failed=u16(acc.failed);s.bytes=acc.bytes;s.rssi=(int8_t)acc.rssi;
   slots[slotHead]=s;slotHead=(slotHead+1)%netstat::SLOT_CAP;if(slotSize<netstat::SLOT_CAP)++slotSize;
   portENTER_CRITICAL(&httpStatMux);acc={};portEXIT_CRITICAL(&httpStatMux);
   slotAt=now;
@@ -219,31 +152,23 @@ static void sessionLine(String &s,const netstat::RouterSession &r){
   const netstat::HttpDelta d=sessionHttp(r);
   s+=" · through the router: ";s+=d.conns;s+=" connections (";s+=d.empty;s+=" without a request), ";s+=d.requests;s+=" requests, ";
   s+=d.failed;s+=" failed while sending, ";s+=(uint32_t)d.bytes;s+=" bytes";
-  if(r.rWindows){s+=" · beacons heard ";s+=r.rBeacons;s+=" of ";s+=r.rBeaconsExp;s+=", frames to EngineLink ";s+=r.rToUs;s+=" (";s+=r.rRetries;s+=" repeats, ";s+=r.rWide;s+=" at 40 MHz)";}
 }
-// The reason is known: finish the record, choose the next radio profile, log.
+// The reason is known: finish the record and log it.
 static void sessionClose(uint8_t reason){
   netstat::RouterSession &r=rsessHist[rsessCur];
   r.endReason=reason;
-  if(reason&&reason<netstat::END_REJOIN)r.rssiEnd=staDropRssi;
-  const bool poor=netstat::linkPoor(r.ping);
-  // The other profile at EngineLink's next join (plan 9.4). The core's own
-  // reconnect keeps the current one; each session records what it really had.
-  if(poor||reason==netstat::END_REJOIN)staPlainG=!r.plainG;
+  if(reason)r.rssiEnd=staDropRssi;
   String s="Router session ended after ";s+=(r.endMs-r.startMs)/1000UL;s+=" s, code ";s+=(unsigned)reason;
-  s+=r.plainG?" (802.11g)":" (802.11n 20 MHz)";
   s+=", signal ";s+=r.rssiStart;s+="/";s+=r.rssiMin;s+="/";s+=r.rssiLast;s+=" dBm (start/lowest/last): ";
   sessionLine(s,r);
-  if(staPlainG!=r.plainG){s+=" · EngineLink's next join offers ";s+=staPlainG?"802.11g":"802.11n 20 MHz";}
   wifiLog(s);
 }
-// why: netstat::END_OWN (EngineLink changed network itself), END_REJOIN,
-// END_GIVEN_UP, or 255 = the link was lost and the driver's reason follows
-// in its event (the event may arrive a moment after the loop saw the loss).
+// why: netstat::END_OWN (EngineLink changed network itself) or 255 = the
+// link was lost and the driver's reason follows in its event (the event may
+// arrive a moment after the loop saw the loss).
 void routerSessionEnd(uint8_t why){
   netstat::RouterSession &r=rsessHist[rsessCur];
   if(!r.active)return;
-  radioStop();
   if(linkPing){esp_ping_stop(linkPing);esp_ping_delete_session(linkPing);linkPing=nullptr;}
   r.http=netstat::httpSince(routerHttpNow(),r.http0);
   r.active=false;r.endMs=millis();
@@ -265,17 +190,15 @@ void routerSessionBegin(){
   if(esp_wifi_sta_get_ap_info(&ap)==ESP_OK){
     r.rssiStart=r.rssiMin=r.rssiMax=r.rssiLast=ap.rssi;r.rssiSum=ap.rssi;r.rssiN=1;r.ch=ap.primary;r.second=(uint8_t)ap.second;
     r.b=ap.phy_11b;r.g=ap.phy_11g;r.n=ap.phy_11n;r.pair=(uint8_t)ap.pairwise_cipher;r.group=(uint8_t)ap.group_cipher;
-    memcpy(radioBssid,ap.bssid,6);
   }
-  esp_wifi_get_mac(WIFI_IF_STA,radioMac);
   wifi_phy_mode_t pm;if(esp_wifi_sta_get_negotiated_phymode(&pm)==ESP_OK)r.phy=(uint8_t)pm;
   wifi_ps_type_t ps;if(esp_wifi_get_ps(&ps)==ESP_OK)r.ps=(uint8_t)ps;
   wifi_bandwidth_t bw;if(esp_wifi_get_bandwidth(WIFI_IF_STA,&bw)==ESP_OK)r.bw=bw==WIFI_BW_HT40?40:20;
-  uint8_t proto=0;if(esp_wifi_get_protocol(WIFI_IF_STA,&proto)==ESP_OK){r.proto=proto;r.plainG=!(proto&WIFI_PROTOCOL_11N);}
+  uint8_t proto=0;if(esp_wifi_get_protocol(WIFI_IF_STA,&proto)==ESP_OK)r.proto=proto;
   int8_t q=0;if(esp_wifi_get_max_tx_power(&q)==ESP_OK)r.txQdbm=q;
   r.ip=(uint32_t)WiFi.localIP();r.mask=(uint32_t)WiFi.subnetMask();r.gw=(uint32_t)WiFi.gatewayIP();r.dns=(uint32_t)WiFi.dnsIP();
   r.http0=routerHttpNow();
-  slotHead=slotSize=0;slotAt=r.startMs;radioNextAt=r.startMs+10000UL;
+  slotHead=slotSize=0;slotAt=r.startMs;
   portENTER_CRITICAL(&httpStatMux);acc={};portEXIT_CRITICAL(&httpStatMux);
   acc.rssi=r.rssiStart;
   esp_ping_config_t c=ESP_PING_DEFAULT_CONFIG();
@@ -285,17 +208,6 @@ void routerSessionBegin(){
   esp_ping_callbacks_t cb={nullptr,linkPingOk,linkPingLost,nullptr};
   if(esp_ping_new_session(&c,&cb,&linkPing)!=ESP_OK||esp_ping_start(linkPing)!=ESP_OK)linkPing=nullptr;
 }
-// "Connected" but nothing gets through (netstat.h: linkDead).
-bool routerLinkDead(uint32_t now){
-  const netstat::RouterSession &r=rsessHist[rsessCur];
-  if(!r.active)return false;
-  const uint32_t last=httpStat.net[netstat::NET_ROUTER].lastMs;
-  // Signed: a request may finish a tick after `now` was read.
-  const int32_t gap=(last&&(int32_t)(last-r.startMs)>=0)?(int32_t)(now-last):(int32_t)(now-r.startMs);
-  const uint32_t since=gap>0?(uint32_t)gap:0;
-  return netstat::linkDead(r.ping,routerAnswersPings,since);
-}
-
 // ---- Tasks: CPU time over the last half minute and stack never used ---------
 struct TaskSnap{UBaseType_t num;uint32_t rt;};
 static TaskSnap taskPrev[40];
@@ -335,37 +247,9 @@ void netdiagService(uint32_t now,bool online){
   if(endPending&&(int32_t)(now-r.endMs)>=300){endPending=false;sessionClose(staSessionEndReason?(uint8_t)staSessionEndReason:(uint8_t)staLastReason);}
   if(r.active&&online){
     r.beaconTimeouts=staBeaconTimeouts;r.channelChanges=staChannelChanges;
-    if(radioOn){if((uint32_t)(now-radioStartedAt)>=2000UL)radioStop();}
-    else if((int32_t)(now-radioNextAt)>=0)radioStart(now);
-    if((uint32_t)(now-slotAt)>=30000UL){
-      slotRoll(now);
-      // Five good minutes after a rejoin: the link check may act again.
-      if(linkRejoined&&r.ping.sent>=150&&r.ping.lossPct()<20)linkRejoined=false;
-    }
+    if((uint32_t)(now-slotAt)>=30000UL)slotRoll(now);
   }
   if((uint32_t)(now-taskSnapAt)>=30000UL){taskSnapAt=now;taskSnapshot();}
-}
-
-// ---- Scans after the router was given up (wifi.ino starts them) -------------
-// Neighbours heard but not the router: the router's 2.4 GHz radio is away.
-// Nothing heard at all: EngineLink's receiver. The channels tell whether the
-// router's own channel is the silent one.
-static void surveyLine(String &s,const netstat::Survey &v){
-  if(v.failed){s+="the scan failed";return;}
-  s+=v.heard;s+=" networks heard, the router ";
-  if(v.routerSeen){s+="heard on channel ";s+=v.routerCh;s+=" at ";s+=v.routerRssi;s+=" dBm";}else s+="NOT heard";
-  s+=" · others by channel (count, strongest dBm):";
-  bool any=false;
-  for(uint8_t c=1;c<15;c++)if(v.chCount[c]){any=true;s+=" ch";s+=c;s+=": ";s+=v.chCount[c];s+=" (";s+=(int)v.chBest[c];s+=")";}
-  if(!any)s+=" none";
-}
-void surveyRecord(){
-  netstat::Survey v;
-  v.atMs=millis();v.failed=scanCount<0;v.heard=scanRawCount;
-  for(uint8_t i=0;i<scanEntriesCount&&!v.failed;i++)netstat::surveyAdd(v,scanEntries[i].ssid==cfg.ssid,scanEntries[i].channel,scanEntries[i].rssi);
-  surveys[surveyHead]=v;surveyHead=(surveyHead+1)%netstat::SURVEY_CAP;if(surveySize<netstat::SURVEY_CAP)++surveySize;
-  if(++surveyRound<3)surveyAt=millis()+(surveyRound==1?55000UL:120000UL);
-  String s="Scan after giving up the router: ";surveyLine(s,v);wifiLog(s);
 }
 
 // ---- Report text and JSON -------------------------------------------------------
@@ -386,7 +270,7 @@ static void sessionText(String &s,const netstat::RouterSession &r,uint8_t nr){
     if(r.rssiEnd){s+=", signal at the loss ";s+=r.rssiEnd;s+=" dBm";}
     s+="\n";
   }
-  s+="   Radio: EngineLink offered ";s+=r.plainG?"802.11g (no 802.11n)":"802.11n";s+=", ";s+=r.bw;s+=" MHz · negotiated ";s+=phyName(r.phy);
+  s+="   Radio: EngineLink offered ";s+=r.bw;s+=" MHz · negotiated ";s+=phyName(r.phy);
   s+=" · router on channel ";s+=r.ch;s+=r.second==WIFI_SECOND_CHAN_NONE?" (20 MHz)":r.second==WIFI_SECOND_CHAN_ABOVE?" (itself 40 MHz, second channel above)":" (itself 40 MHz, second channel below)";
   s+=", supports ";s+=r.b?"b ":"";s+=r.g?"g ":"";s+=r.n?"n ":"";s+="· encryption pairwise ";s+=cipherName(r.pair);s+=", group ";s+=cipherName(r.group);
   s+=" · power save ";s+=r.ps==WIFI_PS_NONE?"off":r.ps==255?"not read":"ON (modem sleep)";s+=" · transmit power ";s+=r.txQdbm/4.0f;s+=" dBm\n";
@@ -402,44 +286,23 @@ static void sessionText(String &s,const netstat::RouterSession &r,uint8_t nr){
   s+="   Web through the router: connections ";s+=d.conns;s+=" (";s+=d.empty;s+=" closed without a request, ";s+=d.reused;s+=" used for more than one) · requests ";s+=d.requests;
   s+=" · status 2xx ";s+=d.byClass[0];s+=", 3xx ";s+=d.byClass[1];s+=", 4xx ";s+=d.byClass[2];s+=", 5xx ";s+=d.byClass[3];
   s+=" · failed while sending ";s+=d.failed;s+=" · bytes sent ";s+=(uint32_t)d.bytes;s+="\n";
-  s+="   Radio samples (2 s of every 30 s, ";s+=r.rWindows;s+=" taken): ";
-  if(!r.rWindows)s+="none\n";
-  else{
-    s+="beacons heard ";s+=r.rBeacons;s+=" of about ";s+=r.rBeaconsExp;s+=" · frames from the router for EngineLink ";s+=r.rToUs;
-    s+=", of them repeats ";s+=r.rRetries;s+=" (";s+=pct(r.rRetries,r.rToUs);s+=" %), 802.11n ";s+=r.rHt;s+=", 40 MHz ";s+=r.rWide;s+=", aggregated ";s+=r.rAmpdu;
-    s+=" · the router's broadcasts ";s+=r.rGroup;s+=" · frames of other senders on the channel ";s+=r.rOthers;
-    s+=" · noise floor average ";s+=r.rNoiseN?(int)(r.rNoiseSum/(int32_t)r.rNoiseN):0;s+=" dBm, highest ";s+=r.rNoiseN?r.rNoiseMax:0;s+="\n";
-  }
 }
 void appendRouterDiagText(String &s){
   s+="ROUTER SESSIONS AS ENGINELINK MEASURED THEM (newest first, up to 4 kept since the start)\n";
   if(!rsessCount)s+="No router session with an IP address since the start.\n";
   for(uint8_t i=0;i<rsessCount;i++)sessionText(s,rsessHist[(rsessCur+netstat::SESSION_CAP-i)%netstat::SESSION_CAP],rsessCount-i);
-  s+="EngineLink's next join offers: ";s+=staPlainG?"802.11g":"802.11n";s+=", 20 MHz · link check made EngineLink join again ";s+=linkRejoins;s+=" time(s), give up to the own Wi-Fi ";s+=linkGiveUps;
-  s+=" · this router answers pings: ";s+=routerAnswersPings?"yes":"not seen yet";s+="\n";
-  s+="RF calibration: ";s+=rfRecalAtBoot?"made in full at this start (once, after the regulator repair)":"stored one used";s+="\n";
-  s+="Reading it: beacons heard but pings lost = the router's data frames do not arrive or EngineLink's are not heard\n"
-     "(repeats tell which: many repeats = the router does not get EngineLink's acknowledgements). Beacons missing =\n"
-     "the router's signal itself. Pings fine but connections without a request, or none = the other device's packets\n"
-     "do not reach EngineLink. Requests answered but connections never reused = the answers do not reach the device.\n\n";
+  s+="Reading it: pings lost = packets between EngineLink and the router do not get through. Pings fine but connections\n"
+     "without a request, or none = the other device's packets do not reach EngineLink. Requests answered but connections\n"
+     "never reused = the answers do not reach the device.\n\n";
   if(slotSize){
-    s+="NEWEST SESSION IN 30 s PIECES (uptime · pings answered/sent, average ms · signal · web requests, failed, bytes · sample: beacons heard/expected, frames for EngineLink, repeats, 40 MHz, 802.11n, broadcasts, other senders, noise)\n";
+    s+="NEWEST SESSION IN 30 s PIECES (uptime · pings answered/sent, average ms · signal · web requests, failed, bytes)\n";
     for(uint8_t i=0;i<slotSize;i++){
       const netstat::Slot &x=slots[(slotHead+netstat::SLOT_CAP-slotSize+i)%netstat::SLOT_CAP];
       s+="  +";s+=x.startS;s+="s · ";s+=x.pingOk;s+="/";s+=x.pingSent;s+=", ";s+=x.rttAvg;s+=" ms · ";s+=(int)x.rssi;s+=" dBm · ";
-      s+=x.requests;s+=", ";s+=x.failed;s+=", ";s+=x.bytes;s+=" B";
-      if(x.beaconsExpected){s+=" · ";s+=x.beacons;s+="/";s+=x.beaconsExpected;s+=", ";s+=x.toUs;s+=", ";s+=x.retries;s+=", ";s+=x.wide;s+=", ";s+=x.ht;s+=", ";s+=x.group;s+=", ";s+=x.others;s+=", ";s+=(int)x.noise;s+=" dBm";}
-      s+="\n";
+      s+=x.requests;s+=", ";s+=x.failed;s+=", ";s+=x.bytes;s+=" B\n";
     }
     s+="\n";
   }
-  s+="SCANS AFTER THE ROUTER WAS GIVEN UP (5 s after, then about 1 and 3 minutes while no phone is joined; newest first)\n";
-  if(!surveySize)s+="None yet.\n";
-  for(uint8_t i=0;i<surveySize;i++){
-    const netstat::Survey &v=surveys[(surveyHead+netstat::SURVEY_CAP-1-i)%netstat::SURVEY_CAP];
-    s+="  at uptime ";s+=v.atMs/1000UL;s+=" s: ";surveyLine(s,v);s+="\n";
-  }
-  s+="\n";
 }
 static const char *netName(uint8_t n){return n==netstat::NET_ROUTER?"router":n==netstat::NET_OWN?"own Wi-Fi":"self-test";}
 void appendHttpDiagText(String &s){
@@ -487,7 +350,7 @@ static void sessionJson(String &s,const netstat::RouterSession &r){
   const netstat::HttpDelta d=sessionHttp(r);
   s+="{\"seen\":";s+=r.seen?"true":"false";s+=",\"active\":";s+=r.active?"true":"false";
   s+=",\"startMs\":";s+=r.startMs;s+=",\"endMs\":";s+=r.endMs;s+=",\"joinMs\":";s+=r.joinMs;s+=",\"dhcpMs\":";s+=r.dhcpMs;s+=",\"endReason\":";s+=(unsigned)r.endReason;s+=",\"rssiEnd\":";s+=r.rssiEnd;
-  s+=",\"plainG\":";s+=r.plainG?1:0;s+=",\"bw\":";s+=r.bw;s+=",\"proto\":";s+=r.proto;s+=",\"txQdbm\":";s+=(int)r.txQdbm;
+  s+=",\"bw\":";s+=r.bw;s+=",\"proto\":";s+=r.proto;s+=",\"txQdbm\":";s+=(int)r.txQdbm;
   s+=",\"ch\":";s+=r.ch;s+=",\"second\":";s+=r.second;s+=",\"b\":";s+=r.b?1:0;s+=",\"g\":";s+=r.g?1:0;s+=",\"n\":";s+=r.n?1:0;
   s+=",\"phy\":";s+=r.phy;s+=",\"pairwise\":";s+=r.pair;s+=",\"group\":";s+=r.group;s+=",\"ps\":";s+=r.ps;
   s+=",\"ip\":\"";s+=IPAddress(r.ip).toString();s+="\",\"mask\":\"";s+=IPAddress(r.mask).toString();s+="\",\"gw\":\"";s+=IPAddress(r.gw).toString();s+="\",\"dns\":\"";s+=IPAddress(r.dns).toString();s+="\"";
@@ -496,17 +359,11 @@ static void sessionJson(String &s,const netstat::RouterSession &r){
   s+=",\"pingBuckets\":[";for(uint8_t i=0;i<5;i++){if(i)s+=',';s+=r.ping.bucket[i];}s+="]";
   s+=",\"beaconTimeouts\":";s+=r.beaconTimeouts;s+=",\"channelChanges\":";s+=r.channelChanges;
   s+=",\"opens\":";s+=d.conns;s+=",\"opensEmpty\":";s+=d.empty;s+=",\"opensReused\":";s+=d.reused;s+=",\"requests\":";s+=d.requests;s+=",\"ok\":";s+=d.byClass[0];
-  s+=",\"status\":[";for(uint8_t i=0;i<4;i++){if(i)s+=',';s+=d.byClass[i];}s+="],\"sendFails\":";s+=d.failed;s+=",\"bytes\":";s+=(uint32_t)d.bytes;
-  s+=",\"radio\":{\"samples\":";s+=r.rWindows;s+=",\"beacons\":";s+=r.rBeacons;s+=",\"beaconsExpected\":";s+=r.rBeaconsExp;s+=",\"toUs\":";s+=r.rToUs;s+=",\"retries\":";s+=r.rRetries;
-  s+=",\"ht\":";s+=r.rHt;s+=",\"wide\":";s+=r.rWide;s+=",\"ampdu\":";s+=r.rAmpdu;s+=",\"group\":";s+=r.rGroup;s+=",\"others\":";s+=r.rOthers;
-  s+=",\"noiseAvg\":";s+=r.rNoiseN?(int)(r.rNoiseSum/(int32_t)r.rNoiseN):0;s+=",\"noiseMax\":";s+=r.rNoiseN?r.rNoiseMax:0;s+="}}";
+  s+=",\"status\":[";for(uint8_t i=0;i<4;i++){if(i)s+=',';s+=d.byClass[i];}s+="],\"sendFails\":";s+=d.failed;s+=",\"bytes\":";s+=(uint32_t)d.bytes;s+='}';
 }
-// `full` (the report): every session, the 30 s pieces, the scans and the
-// request log. Without it (the app's status polls): the newest session only.
+// `full` (the report): every session, the 30 s pieces and the request log. Without it (the app's status polls): the newest session only.
 void appendRouterDiagJson(String &s,bool full){
   s+=",\"routerSession\":";sessionJson(s,rsessHist[rsessCur]);
-  s+=",\"rfRecal\":";s+=rfRecalAtBoot?"true":"false";s+=",\"nextPlainG\":";s+=staPlainG?"true":"false";
-  s+=",\"linkRejoins\":";s+=linkRejoins;s+=",\"linkGiveUps\":";s+=linkGiveUps;s+=",\"routerAnswersPings\":";s+=routerAnswersPings?"true":"false";
   s+=",\"allocFails\":";s+=(uint32_t)allocFails;
   if(!full)return;
   s+=",\"routerSessions\":[";
@@ -515,21 +372,10 @@ void appendRouterDiagJson(String &s,bool full){
   for(uint8_t i=0;i<slotSize;i++){
     const netstat::Slot &x=slots[(slotHead+netstat::SLOT_CAP-slotSize+i)%netstat::SLOT_CAP];
     if(i)s+=',';
-    s+='[';s+=x.startS;s+=',';s+=x.pingSent;s+=',';s+=x.pingOk;s+=',';s+=x.rttAvg;s+=',';s+=(int)x.rssi;s+=',';s+=x.requests;s+=',';s+=x.failed;s+=',';s+=x.bytes;
-    s+=',';s+=x.beacons;s+=',';s+=x.beaconsExpected;s+=',';s+=x.toUs;s+=',';s+=x.retries;s+=',';s+=x.wide;s+=',';s+=x.ht;s+=',';s+=x.group;s+=',';s+=x.others;s+=',';s+=(int)x.noise;s+=']';
+    s+='[';s+=x.startS;s+=',';s+=x.pingSent;s+=',';s+=x.pingOk;s+=',';s+=x.rttAvg;s+=',';s+=(int)x.rssi;s+=',';s+=x.requests;s+=',';s+=x.failed;s+=',';s+=x.bytes;s+=']';
   }
-  s+="],\"slotFields\":\"startS,pingSent,pingOk,rttAvgMs,rssi,requests,failed,bytes,beacons,beaconsExpected,toUs,retries,wide40,ht,group,others,noise\"";
-  s+=",\"surveys\":[";
-  for(uint8_t i=0;i<surveySize;i++){
-    const netstat::Survey &v=surveys[(surveyHead+netstat::SURVEY_CAP-1-i)%netstat::SURVEY_CAP];
-    if(i)s+=',';
-    s+="{\"atMs\":";s+=v.atMs;s+=",\"failed\":";s+=v.failed?"true":"false";s+=",\"heard\":";s+=v.heard;s+=",\"routerSeen\":";s+=v.routerSeen?"true":"false";
-    s+=",\"routerRssi\":";s+=v.routerRssi;s+=",\"routerCh\":";s+=v.routerCh;s+=",\"channels\":[";
-    bool any=false;
-    for(uint8_t c=1;c<15;c++)if(v.chCount[c]){if(any)s+=',';any=true;s+='[';s+=c;s+=',';s+=v.chCount[c];s+=',';s+=(int)v.chBest[c];s+=']';}
-    s+="]}";
-  }
-  s+="],\"http\":[";
+  s+="],\"slotFields\":\"startS,pingSent,pingOk,rttAvgMs,rssi,requests,failed,bytes\"";
+  s+=",\"http\":[";
   for(uint8_t n=0;n<netstat::NET_N;n++){
     portENTER_CRITICAL(&httpStatMux);const netstat::HttpNet h=httpStat.net[n];portEXIT_CRITICAL(&httpStatMux);
     if(n)s+=',';

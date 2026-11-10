@@ -74,7 +74,7 @@ const wifi_power_t elTxPower[5]={WIFI_POWER_8_5dBm,WIFI_POWER_11dBm,WIFI_POWER_1
 const char *const elTxName[5]={"very low (8.5 dBm)","low (11 dBm)","moderate (13 dBm)","medium (15 dBm)","high (19.5 dBm)"};
 SpeedLogRec speedLog[SPEED_LOG_N];uint8_t speedLogCount=0;
 
-#define EL_VERSION "0.17.0-rc4"
+#define EL_VERSION "0.17.0-rc5"
 // Releases list published by the Pages workflow; firmware files come from
 // GitHub Releases of the same repository. Nothing else is downloaded.
 #define EL_RELEASES_URL "https://kaelor9.github.io/EngineLink/releases.json"
@@ -285,7 +285,9 @@ uint8_t apChannelNow=6;          // channel the AP actually uses
 bool routerHold=false;
 uint32_t routerFallbacks=0,routerRetryAt=0;
 // The application never calls begin()/disconnect() while authentication runs;
-// it only starts a new attempt after the driver reported the last one over.
+// it only starts a new attempt after the driver reported the last one over
+// (staTryAt: when the last attempt started; serviceNetwork).
+uint32_t staTryAt=0;
 uint32_t staFails=0,staConnects=0,apRestarts=0;
 uint32_t routerAttempts=0;
 volatile uint8_t staLastReason=0;
@@ -339,17 +341,8 @@ netstat::RouterSession rsessHist[netstat::SESSION_CAP];  // router sessions, rse
 uint8_t rsessCur=0,rsessCount=0;
 netstat::Slot slots[netstat::SLOT_CAP];                  // the newest session in 30 s pieces
 uint8_t slotHead=0,slotSize=0;
-netstat::Survey surveys[netstat::SURVEY_CAP];            // scans after the router was given up
-uint8_t surveyHead=0,surveySize=0,surveyRound=0;
-uint32_t surveyAt=0;
-bool surveyPending=false;
 netstat::Step netSteps[netstat::STEP_CAP];               // slow steps of the network part
 uint8_t netStepHead=0,netStepSize=0;
-bool rfRecalAtBoot=false;      // the stored RF calibration was discarded at this start (once)
-bool staPlainG=false;          // radio profile of the next router session: 802.11g instead of 802.11n 20 MHz
-bool routerAnswersPings=false; // this start: the router answered at least one ping
-bool linkRejoined=false;       // the link check already made EngineLink rejoin once
-uint32_t linkRejoins=0,linkGiveUps=0;
 // From the driver's events (data only, no Wi-Fi calls).
 volatile int8_t staDropRssi=0;
 volatile uint8_t staSessionEndReason=0;
@@ -429,7 +422,10 @@ void setup(){
   // Arduino core's HWCDC.cpp): the main loop, web server and engine reading
   // stood still for up to 9.4 s (#141). Without a reader output is dropped.
   Serial.setTxTimeoutMs(0);
-  delay(120); // launch Wi-Fi promptly; USB serial can attach later
+  // The radio calibrates once per start, when the Wi-Fi first comes up. The
+  // working test sketch waited a second after power-on before that; so does
+  // EngineLink (it started the Wi-Fi 120 ms after power-on until rc4).
+  delay(1000);
   Serial.println("\nEngineLink " EL_VERSION " - engine monitoring, listen-only at boot unless automatic reading is on");
   {
     esp_ota_img_states_t st;
@@ -446,7 +442,6 @@ void setup(){
   // Filesystem recovery and SD mounting can take several seconds; the
   // router association or standalone AP beaconing now proceeds in parallel.
   WiFi.onEvent(onWiFi);
-  rfCalibrateOnce();
   applyNetwork();
   netdiagInit();
   loadTotals();

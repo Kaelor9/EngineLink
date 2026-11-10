@@ -179,8 +179,10 @@ stored life story counts only the first 22 event types (`LIFE_EV_N`); newer
 types are counted in `ShiftLife`.
 
 **Wi-Fi** (plan [docs/WIFI_PLAN_2026-11-09.md](docs/WIFI_PLAN_2026-11-09.md),
-implemented 2026-11-09; **section 9 of the plan (2026-11-10, 0.17.0-rc4) is
-the current state**, *built*, bench pending). Two modes, never both:
+implemented 2026-11-09; **section 10 of the plan (2026-11-10, 0.17.0-rc5) is
+the current state**, *built*, bench pending; read the "rc5" paragraph below
+first: it replaces the rc4 station, link check and measurement bullets).
+Two modes, never both:
 - **Standalone:** access point only, `EngineLink` at 192.168.4.1, channel 6
   (saved `apch`), max 6 phones. `apRadioSetup()`: 20 MHz, stations kept 600 s,
   country DK (802.11d on), no power save, then the fixed 19.5 dBm.
@@ -221,6 +223,22 @@ the current state**, *built*, bench pending). Two modes, never both:
   (`netWaitBegin/End`): they took 1645 ms in rc3 with the engine task waiting.
   `rfCalibrateOnce()` discarded the stored RF calibration once (NVS
   `el_radio/cal`), because it predated the IC5 repair.
+- **rc5 (2026-11-10, plan section 10), the station as it is now.** The owner
+  ran a plain sketch on this board (`WiFi.mode(WIFI_STA)`,
+  `WiFi.setSleep(false)`, `WiFi.begin()`, `MDNS`, Arduino `WebServer`) and
+  the PC opened its page through the home router
+  ([evidence](docs/test-evidence/wifi-sketch-2026-11-10/README.md)). rc5's
+  station is exactly that sequence: **no `esp_wifi_` call on the station**,
+  no `WiFi.persistent()`, the core's reconnect at its default, Wi-Fi started
+  1 s after power-on as in the sketch. Removed from rc4: `staRadioSetup()`
+  (20 MHz, 802.11g/n switch), the promiscuous radio sample, the "dead link"
+  rejoin, the scans after a fallback, the RF calibration erase. Added: one
+  `WiFi.reconnect()` after 20 s without an attempt, because the core stops
+  reconnecting after code 202 (rc4 stood idle 90 s). Kept: recovery (120 s /
+  10 min), the ping every 2 s and the session record (read only),
+  `esp_http_server` (plan 10.5 says why not `WebServer`). What still differs
+  from the sketch is listed in plan 10.4; start there if rc5 fails.
+  `tools/test_wifi_contract.py` refuses the removed mechanisms.
 - **Same address in both modes:** `http://enginelink.local` (HTTP only, port
   80; nothing listens on 443). The `Host` check also accepts the bare name and
   `.lan`/`.home`/`.home.arpa`/`.internal` for routers whose DNS registers the

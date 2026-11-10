@@ -17,20 +17,6 @@ int main() {
   assert(g.bucket[0] == 1 && g.bucket[1] == 1 && g.bucket[2] == 1 && g.bucket[4] == 1 && g.lossPct() == 0);
   assert(Rtt().avgMs() == 0 && Rtt().lossPct() == 0);
 
-  // Poor: fewer than half of at least 30.
-  assert(linkPoor(r));
-  Rtt few; for (int i = 0; i < 29; i++) few.lost();
-  assert(!linkPoor(few));                       // too few pings to judge
-  Rtt half; for (int i = 0; i < 20; i++) { half.answered(4); half.lost(); }
-  assert(!linkPoor(half));                      // exactly half is not "less than half"
-  // Dead: 30 lost in a row, no router request for 60 s, and a router that answers pings at all.
-  assert(linkDead(r, true, 60000));
-  assert(!linkDead(r, false, 600000));          // a router that never answers pings is not dead
-  assert(!linkDead(r, true, 59999));            // a web request just came through
-  Rtt recovering = r; recovering.answered(5);
-  assert(!linkDead(recovering, true, 600000));  // one answer ends the run
-  assert(!linkDead(few, true, 600000));         // 29 in a row is not yet 30
-
   // Endpoints.
   assert(endpointOf("/") == EP_ROOT && endpointOf("/?v=2") == EP_ROOT);
   assert(endpointOf("/api/health") == EP_HEALTH && endpointOf("/api/live?x=1") == EP_LIVE);
@@ -74,13 +60,6 @@ int main() {
   h.opened(5, NET_ROUTER); h.began(5); h.finished(NET_ROUTER, "/api/live", 200, false, 100, 5, 4, 20000, 1); h.closed(5);
   const HttpDelta d = httpSince(h.net[NET_ROUTER], then);
   assert(d.conns == 1 && d.requests == 1 && d.byClass[0] == 1 && d.bytes == 100 && d.failed == 0 && d.empty == 0 && d.reused == 0);
-
-  // Scan summary: the router apart, other networks by channel.
-  Survey s;
-  surveyAdd(s, false, 6, -50); surveyAdd(s, false, 6, -71); surveyAdd(s, false, 11, -80); surveyAdd(s, false, 0, -40); surveyAdd(s, false, 15, -40);
-  assert(!s.routerSeen && s.chCount[6] == 2 && s.chBest[6] == -50 && s.chCount[11] == 1 && s.chBest[11] == -80 && s.chCount[1] == 0);
-  surveyAdd(s, true, 1, -60); surveyAdd(s, true, 1, -47); surveyAdd(s, true, 1, -70);   // a mesh: the strongest counts
-  assert(s.routerSeen && s.routerCh == 1 && s.routerRssi == -47 && s.chCount[1] == 0);
 
   std::puts("netstat: all tests passed");
   return 0;
