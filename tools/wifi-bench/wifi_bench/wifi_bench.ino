@@ -20,7 +20,8 @@ const char *password = "ROUTER-PASSWORD-HERE";
 
 // 0 = exactly the sketch that worked (driver defaults)
 // 1 = the same, but 802.11g only: no 802.11n, no 40 MHz, no frame aggregation
-#define RADIO_PROFILE 0
+// 2 = driver defaults, but low transmit power (8.5 dBm instead of 20 dBm)
+#define RADIO_PROFILE 2
 
 WebServer server(80);
 volatile uint32_t pingSent = 0, pingOk = 0, lostRow = 0, lostRowMax = 0, bucket[5] = {0, 0, 0, 0, 0}, pingMax = 0;
@@ -40,7 +41,9 @@ static void onPingLost(esp_ping_handle_t, void *) {
 }
 
 String numbers() {
-  String s = "profile " + String(RADIO_PROFILE) + (RADIO_PROFILE ? " (802.11g only)" : " (driver defaults)");
+  String s = "profile " + String(RADIO_PROFILE) + (RADIO_PROFILE == 1 ? " (802.11g only)" : RADIO_PROFILE == 2 ? " (low transmit power)" : " (driver defaults)");
+  int8_t q = 0;
+  if (esp_wifi_get_max_tx_power(&q) == ESP_OK) s += " | transmit " + String(q / 4.0f, 1) + " dBm";
   s += " | up " + String(millis() / 1000) + " s | signal " + String(WiFi.RSSI()) + " dBm | channel " + String(WiFi.channel());
   wifi_phy_mode_t pm;
   if (esp_wifi_sta_get_negotiated_phymode(&pm) == ESP_OK)
@@ -63,6 +66,9 @@ void setup() {
   esp_wifi_set_protocol(WIFI_IF_STA, WIFI_PROTOCOL_11B | WIFI_PROTOCOL_11G);
 #endif
   WiFi.begin(ssid, password);
+#if RADIO_PROFILE == 2
+  WiFi.setTxPower(WIFI_POWER_8_5dBm);
+#endif
   Serial.print("Connecting");
   while (WiFi.status() != WL_CONNECTED) { delay(500); Serial.print("."); }
   Serial.println("\nConnected, IP " + WiFi.localIP().toString());
