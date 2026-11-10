@@ -19,6 +19,7 @@ void fwWorker(void *){
   for(;;){
     if(fwJob==FW_IDLE){vTaskDelay(pdMS_TO_TICKS(200));continue;}
     const uint8_t job=fwJob;
+    elPsLend(true);   // HTTPS needs about 40 KB at once: it may use the spare PSRAM for this job
     NetworkClientSecure client;
     useRootCertificates(client);
     HTTPClient http;
@@ -99,6 +100,7 @@ void fwWorker(void *){
         http.end();
       }
     }
+    elPsLend(false);
     fwJob=FW_IDLE;
   }
 }
