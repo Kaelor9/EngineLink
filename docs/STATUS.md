@@ -28,6 +28,8 @@ to engines.
 
 ## Checked on the board
 
+**2026-11-10 (night) — Standalone varies with the time since power-on; 0.17.4:** 0.17.3 (0.17.1's firmware) in Standalone after a cold power-on, no USB: 54–121 kB/s a minute after the start, 195–477 kB/s four minutes later; the same code gave 580–730 kB/s earlier the same day; memory fine. So the board's link changes by itself, also without the router. **0.17.4** adds the chip's temperature to the report (per speed test and per 30 s of a router session) to see whether speed follows it ([plan section 17](WIFI_PLAN_2026-11-09.md)). *Built*, not run on the board.
+
 **2026-11-10 (night) — 0.17.2 on the board, 0.17.3:** 0.17.2 ran out of internal memory on the board (Standalone, 87 s: lowest free 0 KB, 109 failed allocations, 161–462 kB/s instead of about 650). Its PSRAM change is removed; **0.17.3 is 0.17.1's firmware** ([plan section 16](WIFI_PLAN_2026-11-09.md)). Router mode on the home router: joins from a clean start and stays, but slow (0.17.1); not fixed.
 
 **2026-11-10 (night) — 0.17.1 on the board, 0.17.2:** 0.17.1 joined the home router 1.9 s after its start, **showed the app on the PC and was still joined after 654 s** (first time on that router), but answers from the router took 441–770 ms on average and the speed test and report page hung. **0.17.2** keeps the Wi-Fi's packet buffers in internal memory by taking all PSRAM for EngineLink's own pool at start ([plan section 15](WIFI_PLAN_2026-11-09.md)); whether PSRAM is the cause is not proven. ***Built*, not run on the board; internal memory headroom is unmeasured.**

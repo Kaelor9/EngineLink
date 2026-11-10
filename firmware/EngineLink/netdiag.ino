@@ -138,7 +138,7 @@ static void slotRoll(uint32_t now){
   netstat::Slot s;
   auto u16=[](uint32_t v){return (uint16_t)(v>65535?65535:v);};
   s.startS=slotAt/1000UL;s.pingSent=u16(acc.pingSent);s.pingOk=u16(acc.pingOk);s.rttAvg=u16(acc.pingOk?acc.rttSum/acc.pingOk:0);
-  s.requests=u16(acc.requests);s.failed=u16(acc.failed);s.bytes=acc.bytes;s.rssi=(int8_t)acc.rssi;
+  s.requests=u16(acc.requests);s.failed=u16(acc.failed);s.bytes=acc.bytes;s.rssi=(int8_t)acc.rssi;s.tempC=chipTempC;
   slots[slotHead]=s;slotHead=(slotHead+1)%netstat::SLOT_CAP;if(slotSize<netstat::SLOT_CAP)++slotSize;
   portENTER_CRITICAL(&httpStatMux);acc={};portEXIT_CRITICAL(&httpStatMux);
   slotAt=now;
@@ -299,11 +299,11 @@ void appendRouterDiagText(String &s){
      "without a request, or none = the other device's packets do not reach EngineLink. Requests answered but connections\n"
      "never reused = the answers do not reach the device.\n\n";
   if(slotSize){
-    s+="NEWEST SESSION IN 30 s PIECES (uptime · pings answered/sent, average ms · signal · web requests, failed, bytes)\n";
+    s+="NEWEST SESSION IN 30 s PIECES (uptime · pings answered/sent, average ms · signal · web requests, failed, bytes · chip temperature)\n";
     for(uint8_t i=0;i<slotSize;i++){
       const netstat::Slot &x=slots[(slotHead+netstat::SLOT_CAP-slotSize+i)%netstat::SLOT_CAP];
       s+="  +";s+=x.startS;s+="s · ";s+=x.pingOk;s+="/";s+=x.pingSent;s+=", ";s+=x.rttAvg;s+=" ms · ";s+=(int)x.rssi;s+=" dBm · ";
-      s+=x.requests;s+=", ";s+=x.failed;s+=", ";s+=x.bytes;s+=" B\n";
+      s+=x.requests;s+=", ";s+=x.failed;s+=", ";s+=x.bytes;s+=" B · ";s+=(int)x.tempC;s+=" C\n";
     }
     s+="\n";
   }
@@ -377,9 +377,9 @@ void appendRouterDiagJson(String &s,bool full){
   for(uint8_t i=0;i<slotSize;i++){
     const netstat::Slot &x=slots[(slotHead+netstat::SLOT_CAP-slotSize+i)%netstat::SLOT_CAP];
     if(i)s+=',';
-    s+='[';s+=x.startS;s+=',';s+=x.pingSent;s+=',';s+=x.pingOk;s+=',';s+=x.rttAvg;s+=',';s+=(int)x.rssi;s+=',';s+=x.requests;s+=',';s+=x.failed;s+=',';s+=x.bytes;s+=']';
+    s+='[';s+=x.startS;s+=',';s+=x.pingSent;s+=',';s+=x.pingOk;s+=',';s+=x.rttAvg;s+=',';s+=(int)x.rssi;s+=',';s+=x.requests;s+=',';s+=x.failed;s+=',';s+=x.bytes;s+=',';s+=(int)x.tempC;s+=']';
   }
-  s+="],\"slotFields\":\"startS,pingSent,pingOk,rttAvgMs,rssi,requests,failed,bytes\"";
+  s+="],\"slotFields\":\"startS,pingSent,pingOk,rttAvgMs,rssi,requests,failed,bytes,chipTempC\"";
   s+=",\"http\":[";
   for(uint8_t n=0;n<netstat::NET_N;n++){
     portENTER_CRITICAL(&httpStatMux);const netstat::HttpNet h=httpStat.net[n];portEXIT_CRITICAL(&httpStatMux);
