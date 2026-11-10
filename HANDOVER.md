@@ -91,8 +91,11 @@ arduino-cli compile \
   firmware/EngineLink
 ```
 
-ESP32 Arduino core **3.3.12** (pinned in CI, built on ESP-IDF 5.5.5) and
-Adafruit NeoPixel 1.15.5. No linker options: since 2026-11-09 the firmware
+ESP32 Arduino core **3.2.0** (pinned in CI, built on ESP-IDF 5.4; since
+0.17.0-rc6, 2026-11-10: the owner's plain sketch that served a page through
+the home router was built with it, while every EngineLink build on 3.3.12 /
+ESP-IDF 5.5.5 failed there; plan section 11. Do not move the pin before rc6's
+board result is known) and Adafruit NeoPixel 1.15.5. No linker options: since 2026-11-09 the firmware
 uses only documented Arduino ESP32 and ESP-IDF APIs (`tools/test_wifi_contract.py`
 refuses `--wrap`, private lwIP headers and the removed hook files).
 
@@ -239,6 +242,9 @@ Two modes, never both:
   `esp_http_server` (plan 10.5 says why not `WebServer`). What still differs
   from the sketch is listed in plan 10.4; start there if rc5 fails.
   `tools/test_wifi_contract.py` refuses the removed mechanisms.
+- **rc6 (2026-11-10, plan section 11):** rc5 timed out on the board; the
+  sketch also works with OPI PSRAM, so PSRAM is cleared; rc6 is rc5 built
+  with core 3.2.0, the sketch's core. *Built*, bench pending.
 - **Same address in both modes:** `http://enginelink.local` (HTTP only, port
   80; nothing listens on 443). The `Host` check also accepts the bare name and
   `.lan`/`.home`/`.home.arpa`/`.internal` for routers whose DNS registers the

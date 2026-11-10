@@ -55,7 +55,7 @@ jobs:
             ~/.arduino15/staging
             ~/.arduino15/packages
             ~/Arduino/libraries
-          key: arduino-esp32-3.3.12-neopixel-1.15.5
+          key: arduino-esp32-3.2.0-neopixel-1.15.5
       - name: Install ESP32-S3 board and required library
         run: |
           URL=https://espressif.github.io/arduino-esp32/package_esp32_index.json
@@ -65,8 +65,8 @@ jobs:
           # install finds every archive cached. Two tries in all, then fail.
           for i in 1 2; do
             arduino-cli core update-index --additional-urls "$URL" \
-              && python3 tools/prefetch_arduino_tools.py --version 3.3.12 \
-              && arduino-cli core install esp32:esp32@3.3.12 --additional-urls "$URL" \
+              && python3 tools/prefetch_arduino_tools.py --version 3.2.0 \
+              && arduino-cli core install esp32:esp32@3.2.0 --additional-urls "$URL" \
               && arduino-cli lib install "Adafruit NeoPixel@1.15.5" && break
             [ "$i" = 2 ] && exit 1
             echo "Install failed, once more in 30 s"; sleep 30

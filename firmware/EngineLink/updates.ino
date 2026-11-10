@@ -2,6 +2,16 @@
 // with rollback when a new version does not start properly.
 
 // ---------- Firmware from GitHub ----------
+// GitHub's certificates are checked against the certificate bundle built into
+// the ESP32 core. Core 3.3 has one call for it; core 3.2 (the version the
+// owner's working Wi-Fi sketch was built with) takes the same bundle by address.
+#if ESP_ARDUINO_VERSION >= ESP_ARDUINO_VERSION_VAL(3,3,0)
+static void useRootCertificates(NetworkClientSecure &c){c.useBuiltinCACertBundle();}
+#else
+extern const uint8_t rootBundleStart[] asm("_binary_x509_crt_bundle_start");
+extern const uint8_t rootBundleEnd[] asm("_binary_x509_crt_bundle_end");
+static void useRootCertificates(NetworkClientSecure &c){c.setCACertBundle(rootBundleStart,rootBundleEnd-rootBundleStart);}
+#endif
 // The worker task fetches the release list or downloads and installs one
 // update file. The new image must confirm itself after a healthy minute,
 // otherwise the bootloader goes back to the previous version.
@@ -10,7 +20,7 @@ void fwWorker(void *){
     if(fwJob==FW_IDLE){vTaskDelay(pdMS_TO_TICKS(200));continue;}
     const uint8_t job=fwJob;
     NetworkClientSecure client;
-    client.useBuiltinCACertBundle();
+    useRootCertificates(client);
     HTTPClient http;
     http.setTimeout(15000);
     http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
