@@ -1,0 +1,57 @@
+(version 1)
+
+# KiCad 8.0: 0.60 mm copper spacing between galvanically separated domains.
+# Checked against ESP32-S3-WROOM-1-N8R8 version (7), October 2026.
+# These clearances are a routing rule, NOT a certified isolation or surge rating.
+# The rules below cover copper clearance, not creepage, safety or physical faults.
+
+# J1708 ISO1: all isolated nets vs every net outside this group.
+(rule "J1708 ISO1: 0.60 mm to other circuits"
+    (condition "(A.NetName == 'GND_ISO1' || A.NetName == '+5V_ISO1' || A.NetName == 'Net-(U8-A)' || A.NetName == 'Net-(U8-B)' || A.NetName == 'Net-(J6-Pin_1)' || A.NetName == 'Net-(J6-Pin_2)' || A.NetName == 'Net-(SJ2-B)' || A.NetName == 'Net-(U7-VIA)' || A.NetName == 'Net-(U7-VOB)') && !(B.NetName == 'GND_ISO1' || B.NetName == '+5V_ISO1' || B.NetName == 'Net-(U8-A)' || B.NetName == 'Net-(U8-B)' || B.NetName == 'Net-(J6-Pin_1)' || B.NetName == 'Net-(J6-Pin_2)' || B.NetName == 'Net-(SJ2-B)' || B.NetName == 'Net-(U7-VIA)' || B.NetName == 'Net-(U7-VOB)')")
+    (constraint clearance (min 0.60mm)))
+
+# J1708 ISO2: all isolated nets vs every net outside this group.
+(rule "J1708 ISO2: 0.60 mm to other circuits"
+    (condition "(A.NetName == 'GND_ISO2' || A.NetName == '+5V_ISO2' || A.NetName == 'Net-(U5-A)' || A.NetName == 'Net-(U5-B)' || A.NetName == 'Net-(U5-RO)' || A.NetName == 'Net-(U5-TXD)' || A.NetName == 'Net-(J7-Pin_1)' || A.NetName == 'Net-(J7-Pin_2)' || A.NetName == 'Net-(SJ1-B)') && !(B.NetName == 'GND_ISO2' || B.NetName == '+5V_ISO2' || B.NetName == 'Net-(U5-A)' || B.NetName == 'Net-(U5-B)' || B.NetName == 'Net-(U5-RO)' || B.NetName == 'Net-(U5-TXD)' || B.NetName == 'Net-(J7-Pin_1)' || B.NetName == 'Net-(J7-Pin_2)' || B.NetName == 'Net-(SJ1-B)')")
+    (constraint clearance (min 0.60mm)))
+
+# NMEA2000 ISO: all isolated nets vs every net outside this group.
+# Includes IC4 pad 14 (NC) to retain 0.60 mm to MAIN-side copper.
+(rule "NMEA2000 ISO: 0.60 mm to other circuits"
+    (condition "(A.NetName == 'N2K_NET_C' || A.NetName == '+5V_N2K_ISO' || A.NetName == '/ISO1042 CANH' || A.NetName == '/ISO1042 CANL' || A.NetName == '/N2K_CAN_H' || A.NetName == '/N2K_CAN_L' || A.NetName == '/N2K_NET_S' || A.NetName == 'Net-(J9-Pin_2)' || A.NetName == 'unconnected-(IC4-NC_4-Pad14)') && !(B.NetName == 'N2K_NET_C' || B.NetName == '+5V_N2K_ISO' || B.NetName == '/ISO1042 CANH' || B.NetName == '/ISO1042 CANL' || B.NetName == '/N2K_CAN_H' || B.NetName == '/N2K_CAN_L' || B.NetName == '/N2K_NET_S' || B.NetName == 'Net-(J9-Pin_2)' || B.NetName == 'unconnected-(IC4-NC_4-Pad14)')")
+    (constraint clearance (min 0.60mm)))
+
+# LOCAL EXCEPTIONS: last rules are evaluated first in KiCad.
+# PS2 output VOUT+ and VOUT- pads belong to the SAME isolated 5 V domain.
+# Their nominal copper spacing is only ~0.29 mm; do not weaken the 0.6 mm
+# input-to-output isolation rule to accommodate this one pad pair.
+(rule "PS2 5V output pads 8_9 to 10_11"
+    (condition "A.memberOfFootprint('PS2') && B.memberOfFootprint('PS2') && A.Pad_Number == '8_9' && B.Pad_Number == '10_11'")
+    (constraint clearance (min 0.25mm)))
+
+# The following 2-pad junctions are intentionally bridgeable to SELECT supply.
+# Exception applies ONLY between these specific two pads within each jumper.
+# NOTE: the OPEN solder jumper still has a sub-0.6mm external copper gap.
+(rule "SJ_PWR1 NMEA selection pads 2-3"
+    (condition "A.memberOfFootprint('SJ_PWR1') && B.memberOfFootprint('SJ_PWR1') && A.Pad_Number == '2' && B.Pad_Number == '3'")
+    (constraint clearance (min 0.25mm)))
+
+(rule "SJ_GND1 NMEA selection pads 2-3"
+    (condition "A.memberOfFootprint('SJ_GND1') && B.memberOfFootprint('SJ_GND1') && A.Pad_Number == '2' && B.Pad_Number == '3'")
+    (constraint clearance (min 0.25mm)))
+
+# IC4 / ISO1042: pad 14 is a physically isolated-side NC pad.
+# Its unconnected net name is 'unconnected-(IC4-NC_4-Pad14)'.
+# Keep it electrically unconnected, but permit local 0.25 mm clearance
+# specifically to N2K_NET_C; other nets outside NMEA ISO remain at 0.60 mm.
+# IMPORTANT: Keep this local exception LAST for KiCad rule priority.
+(rule "IC4 NC pad 14 to N2K_NET_C: 0.25 mm"
+    (condition "A.memberOfFootprint('IC4') && A.Pad_Number == '14' && B.NetName == 'N2K_NET_C'")
+    (constraint clearance (min 0.25mm)))
+
+
+
+# IC5 TLV767-Q1: local pad-to-exposed-pad clearance
+(rule "IC5 thermal pad clearance"
+    (condition "A.memberOfFootprint('IC5') && B.memberOfFootprint('IC5') && A.Pad_Number == '9' && (B.Pad_Number == '1' || B.Pad_Number == '2' || B.Pad_Number == '3' || B.Pad_Number == '5' || B.Pad_Number == '7' || B.Pad_Number == '8')")
+    (constraint clearance (min 0.20mm)))
