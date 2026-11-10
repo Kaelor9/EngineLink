@@ -195,6 +195,7 @@ void serviceWifiScan(){
     scanStartedMs=millis();
     if(WiFi.scanNetworks(true,false)==WIFI_SCAN_FAILED){
       scanCount=WIFI_SCAN_FAILED;scanBusy=false;scanRequested=false;scanCompletedMs=millis()?millis():1;
+      if(surveyPending){surveyPending=false;surveyRecord();}
       if(scanStaTemporary)WiFi.mode(WIFI_AP);
       return;
     }

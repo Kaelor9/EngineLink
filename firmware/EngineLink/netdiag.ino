@@ -227,12 +227,14 @@ static void sessionClose(uint8_t reason){
   r.endReason=reason;
   if(reason&&reason<netstat::END_REJOIN)r.rssiEnd=staDropRssi;
   const bool poor=netstat::linkPoor(r.ping);
-  if(poor)staPlainG=!r.plainG;   // the other profile for the next session (plan 9.4)
+  // The other profile at EngineLink's next join (plan 9.4). The core's own
+  // reconnect keeps the current one; each session records what it really had.
+  if(poor||reason==netstat::END_REJOIN)staPlainG=!r.plainG;
   String s="Router session ended after ";s+=(r.endMs-r.startMs)/1000UL;s+=" s, code ";s+=(unsigned)reason;
   s+=r.plainG?" (802.11g)":" (802.11n 20 MHz)";
   s+=", signal ";s+=r.rssiStart;s+="/";s+=r.rssiMin;s+="/";s+=r.rssiLast;s+=" dBm (start/lowest/last): ";
   sessionLine(s,r);
-  if(poor){s+=" · link poor: the next session uses ";s+=staPlainG?"802.11g":"802.11n 20 MHz";}
+  if(staPlainG!=r.plainG){s+=" · EngineLink's next join offers ";s+=staPlainG?"802.11g":"802.11n 20 MHz";}
   wifiLog(s);
 }
 // why: netstat::END_OWN (EngineLink changed network itself), END_REJOIN,
@@ -252,7 +254,7 @@ void routerSessionEnd(uint8_t why){
 // Called from the main loop shortly after the router gave an IP (never from
 // the Wi-Fi event callback): one read of the driver, then the link check.
 void routerSessionBegin(){
-  routerSessionEnd(netstat::END_OWN);
+  routerSessionEnd(staSessionEndReason?(uint8_t)staSessionEndReason:netstat::END_OWN);   // lost and back within one loop pass
   if(endPending){endPending=false;sessionClose(staSessionEndReason?(uint8_t)staSessionEndReason:(uint8_t)staLastReason);}
   if(rsessCount)rsessCur=(rsessCur+1)%netstat::SESSION_CAP;
   if(rsessCount<netstat::SESSION_CAP)++rsessCount;
@@ -288,7 +290,9 @@ bool routerLinkDead(uint32_t now){
   const netstat::RouterSession &r=rsessHist[rsessCur];
   if(!r.active)return false;
   const uint32_t last=httpStat.net[netstat::NET_ROUTER].lastMs;
-  const uint32_t since=(last&&(int32_t)(last-r.startMs)>=0)?now-last:now-r.startMs;
+  // Signed: a request may finish a tick after `now` was read.
+  const int32_t gap=(last&&(int32_t)(last-r.startMs)>=0)?(int32_t)(now-last):(int32_t)(now-r.startMs);
+  const uint32_t since=gap>0?(uint32_t)gap:0;
   return netstat::linkDead(r.ping,routerAnswersPings,since);
 }
 
@@ -327,7 +331,8 @@ static void appendTasksText(String &s){
 // Every pass of the main loop (from serviceNetwork).
 void netdiagService(uint32_t now,bool online){
   netstat::RouterSession &r=rsessHist[rsessCur];
-  if(endPending&&(uint32_t)(now-r.endMs)>=300UL){endPending=false;sessionClose(staSessionEndReason?(uint8_t)staSessionEndReason:(uint8_t)staLastReason);}
+  // Signed: endMs may be a tick after `now` was read.
+  if(endPending&&(int32_t)(now-r.endMs)>=300){endPending=false;sessionClose(staSessionEndReason?(uint8_t)staSessionEndReason:(uint8_t)staLastReason);}
   if(r.active&&online){
     r.beaconTimeouts=staBeaconTimeouts;r.channelChanges=staChannelChanges;
     if(radioOn){if((uint32_t)(now-radioStartedAt)>=2000UL)radioStop();}
@@ -357,7 +362,7 @@ static void surveyLine(String &s,const netstat::Survey &v){
 void surveyRecord(){
   netstat::Survey v;
   v.atMs=millis();v.failed=scanCount<0;v.heard=scanRawCount;
-  for(uint8_t i=0;i<scanEntriesCount;i++)netstat::surveyAdd(v,scanEntries[i].ssid==cfg.ssid,scanEntries[i].channel,scanEntries[i].rssi);
+  for(uint8_t i=0;i<scanEntriesCount&&!v.failed;i++)netstat::surveyAdd(v,scanEntries[i].ssid==cfg.ssid,scanEntries[i].channel,scanEntries[i].rssi);
   surveys[surveyHead]=v;surveyHead=(surveyHead+1)%netstat::SURVEY_CAP;if(surveySize<netstat::SURVEY_CAP)++surveySize;
   if(++surveyRound<3)surveyAt=millis()+(surveyRound==1?55000UL:120000UL);
   String s="Scan after giving up the router: ";surveyLine(s,v);wifiLog(s);
@@ -410,7 +415,7 @@ void appendRouterDiagText(String &s){
   s+="ROUTER SESSIONS AS ENGINELINK MEASURED THEM (newest first, up to 4 kept since the start)\n";
   if(!rsessCount)s+="No router session with an IP address since the start.\n";
   for(uint8_t i=0;i<rsessCount;i++)sessionText(s,rsessHist[(rsessCur+netstat::SESSION_CAP-i)%netstat::SESSION_CAP],rsessCount-i);
-  s+="Next router session offers: ";s+=staPlainG?"802.11g":"802.11n";s+=", 20 MHz · link check made EngineLink join again ";s+=linkRejoins;s+=" time(s), give up to the own Wi-Fi ";s+=linkGiveUps;
+  s+="EngineLink's next join offers: ";s+=staPlainG?"802.11g":"802.11n";s+=", 20 MHz · link check made EngineLink join again ";s+=linkRejoins;s+=" time(s), give up to the own Wi-Fi ";s+=linkGiveUps;
   s+=" · this router answers pings: ";s+=routerAnswersPings?"yes":"not seen yet";s+="\n";
   s+="RF calibration: ";s+=rfRecalAtBoot?"made in full at this start (once, after the regulator repair)":"stored one used";s+="\n";
   s+="Reading it: beacons heard but pings lost = the router's data frames do not arrive or EngineLink's are not heard\n"
