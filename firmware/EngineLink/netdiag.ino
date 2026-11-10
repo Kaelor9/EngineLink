@@ -121,7 +121,7 @@ static void linkPingDone(esp_ping_handle_t h,bool ok){
   if(!r.active)return;
   if(ok){
     uint32_t ms=0;esp_ping_get_profile(h,ESP_PING_PROF_TIMEGAP,&ms,sizeof(ms));
-    r.ping.answered(ms);++acc.pingOk;acc.rttSum+=ms;
+    r.ping.answered(ms);++acc.pingOk;acc.rttSum+=ms;if(ms<50)r.fastUntilMs=millis()-r.startMs;
   }else r.ping.lost();
   ++acc.pingSent;
   if(r.ping.sent%5==0){   // the signal every 10 s
@@ -196,6 +196,8 @@ void routerSessionBegin(){
   wifi_bandwidth_t bw;if(esp_wifi_get_bandwidth(WIFI_IF_STA,&bw)==ESP_OK)r.bw=bw==WIFI_BW_HT40?40:20;
   uint8_t proto=0;if(esp_wifi_get_protocol(WIFI_IF_STA,&proto)==ESP_OK)r.proto=proto;
   int8_t q=0;if(esp_wifi_get_max_tx_power(&q)==ESP_OK)r.txQdbm=q;
+  {char cc[4]={};if(esp_wifi_get_country_code(cc)==ESP_OK){r.country[0]=cc[0];r.country[1]=cc[1];}}
+  r.afterOwnWifi=apStarts>0;
   r.ip=(uint32_t)WiFi.localIP();r.mask=(uint32_t)WiFi.subnetMask();r.gw=(uint32_t)WiFi.gatewayIP();r.dns=(uint32_t)WiFi.dnsIP();
   r.http0=routerHttpNow();
   slotHead=slotSize=0;slotAt=r.startMs;
@@ -274,6 +276,8 @@ static void sessionText(String &s,const netstat::RouterSession &r,uint8_t nr){
   s+=" · router on channel ";s+=r.ch;s+=r.second==WIFI_SECOND_CHAN_NONE?" (20 MHz)":r.second==WIFI_SECOND_CHAN_ABOVE?" (itself 40 MHz, second channel above)":" (itself 40 MHz, second channel below)";
   s+=", supports ";s+=r.b?"b ":"";s+=r.g?"g ":"";s+=r.n?"n ":"";s+="· encryption pairwise ";s+=cipherName(r.pair);s+=", group ";s+=cipherName(r.group);
   s+=" · power save ";s+=r.ps==WIFI_PS_NONE?"off":r.ps==255?"not read":"ON (modem sleep)";s+=" · transmit power ";s+=r.txQdbm/4.0f;s+=" dBm\n";
+  s+="   Joined ";s+=r.afterOwnWifi?"by switching from the own Wi-Fi":"straight after the start (as the test sketch)";s+=" · country code in the driver ";s+=r.country[0]?r.country:"?";
+  s+=" · last ping answered in under 50 ms: ";if(r.fastUntilMs){s+=r.fastUntilMs/1000UL;s+=" s after the join";}else s+="never";s+="\n";
   s+="   Addresses: EngineLink ";s+=IPAddress(r.ip).toString();s+=" · mask ";s+=IPAddress(r.mask).toString();s+=" · gateway ";s+=IPAddress(r.gw).toString();s+=" · DNS ";s+=IPAddress(r.dns).toString();s+="\n";
   s+="   Signal (dBm, every 10 s): start ";s+=r.rssiStart;s+=", lowest ";s+=r.rssiMin;s+=", highest ";s+=r.rssiMax;s+=", average ";s+=r.rssiN?(int)(r.rssiSum/(int32_t)r.rssiN):0;s+=", last ";s+=r.rssiLast;s+="\n";
   s+="   Link check (ping to the router every 2 s): ";s+=r.ping.ok;s+=" of ";s+=r.ping.sent;s+=" answered (";s+=r.ping.lossPct();s+=" % lost)";
@@ -350,6 +354,7 @@ static void sessionJson(String &s,const netstat::RouterSession &r){
   const netstat::HttpDelta d=sessionHttp(r);
   s+="{\"seen\":";s+=r.seen?"true":"false";s+=",\"active\":";s+=r.active?"true":"false";
   s+=",\"startMs\":";s+=r.startMs;s+=",\"endMs\":";s+=r.endMs;s+=",\"joinMs\":";s+=r.joinMs;s+=",\"dhcpMs\":";s+=r.dhcpMs;s+=",\"endReason\":";s+=(unsigned)r.endReason;s+=",\"rssiEnd\":";s+=r.rssiEnd;
+  s+=",\"afterOwnWifi\":";s+=r.afterOwnWifi?"true":"false";s+=",\"cc\":\"";s+=r.country;s+="\",\"fastUntilMs\":";s+=r.fastUntilMs;
   s+=",\"bw\":";s+=r.bw;s+=",\"proto\":";s+=r.proto;s+=",\"txQdbm\":";s+=(int)r.txQdbm;
   s+=",\"ch\":";s+=r.ch;s+=",\"second\":";s+=r.second;s+=",\"b\":";s+=r.b?1:0;s+=",\"g\":";s+=r.g?1:0;s+=",\"n\":";s+=r.n?1:0;
   s+=",\"phy\":";s+=r.phy;s+=",\"pairwise\":";s+=r.pair;s+=",\"group\":";s+=r.group;s+=",\"ps\":";s+=r.ps;
