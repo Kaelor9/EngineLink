@@ -28,6 +28,8 @@ to engines.
 
 ## Checked on the board
 
+**2026-11-10 (night) — 0.17.2 on the board, 0.17.3:** 0.17.2 ran out of internal memory on the board (Standalone, 87 s: lowest free 0 KB, 109 failed allocations, 161–462 kB/s instead of about 650). Its PSRAM change is removed; **0.17.3 is 0.17.1's firmware** ([plan section 16](WIFI_PLAN_2026-11-09.md)). Router mode on the home router: joins from a clean start and stays, but slow (0.17.1); not fixed.
+
 **2026-11-10 (night) — 0.17.1 on the board, 0.17.2:** 0.17.1 joined the home router 1.9 s after its start, **showed the app on the PC and was still joined after 654 s** (first time on that router), but answers from the router took 441–770 ms on average and the speed test and report page hung. **0.17.2** keeps the Wi-Fi's packet buffers in internal memory by taking all PSRAM for EngineLink's own pool at start ([plan section 15](WIFI_PLAN_2026-11-09.md)); whether PSRAM is the cause is not proven. ***Built*, not run on the board; internal memory headroom is unmeasured.**
 
 **2026-11-10 (late) — 0.17.0 on the board, 0.17.1:** 0.17.0 on the home router joined in 376 ms at −40 dBm, answered 10 of 15 pings in the first 30 s and almost none after, delivered small answers in 3–6 ms and never the app page, and lost the beacons 305 s after the join (rc3 and rc6: 302 and 306 s). **0.17.1** restarts when the router is chosen, so the join happens straight after a start as in the owner's sketch, and the report says more per session ([plan section 14](WIFI_PLAN_2026-11-09.md)). ***Built*, not run on the board; the router is not fixed.**

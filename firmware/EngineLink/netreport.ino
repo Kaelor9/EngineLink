@@ -214,7 +214,7 @@ String buildNetworkReport(){
   s+="\n";
   s+="SYSTEM\n";
   s+="Chip: ";s+=ESP.getChipModel();s+=" rev ";s+=ESP.getChipRevision();s+=" · ";s+=ESP.getCpuFreqMHz();s+=" MHz · Arduino core ";s+=ESP_ARDUINO_VERSION_MAJOR;s+=".";s+=ESP_ARDUINO_VERSION_MINOR;s+=".";s+=ESP_ARDUINO_VERSION_PATCH;s+=" · IDF ";s+=esp_get_idf_version();s+="\n";
-  s+="Memory: free ";s+=ESP.getFreeHeap()/1024;s+=" KB, lowest ";s+=ESP.getMinFreeHeap()/1024;s+=" KB, largest block ";s+=ESP.getMaxAllocHeap()/1024;s+=" KB · PSRAM: EngineLink's pool free ";s+=elPsPoolFree()/1024;s+=" KB, left for the system (Wi-Fi would use it) ";s+=elPsSystemFree()/1024;s+=" KB · given back for low internal memory ";s+=elPsReliefCount();s+=" time(s)\n";
+  s+="Memory: free ";s+=ESP.getFreeHeap()/1024;s+=" KB, lowest ";s+=ESP.getMinFreeHeap()/1024;s+=" KB, largest block ";s+=ESP.getMaxAllocHeap()/1024;s+=" KB · PSRAM free ";s+=ESP.getFreePsram()/1024;s+=" KB\n";
   s+="Main loop: longest pass ";s+=loopMaxMs;s+=" ms · engine reading in own task: ";s+=engineTaskOn?"yes":"no";
   s+=" · engine task longest wait ";s+=engineMaxWaitMs;s+=" ms";
   if(engineMaxWaitBy[0]){s+=" (lock held by ";s+=engineMaxWaitBy;s+=" when it began)";}

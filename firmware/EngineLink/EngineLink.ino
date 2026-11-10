@@ -61,7 +61,6 @@
 #include "httputil.h"
 #include "netstat.h"
 #include "httpd.h"
-#include "psram.h"
 // Transmit power step (0 = 8.5 dBm .. 4 = 19.5 dBm). Fixed: the automatic
 // choice (0.12.2-0.14.1) never took effect at start (the country setting
 // reset the power to 20 dBm, field reports #95/#125/#130) and its test never
@@ -75,7 +74,7 @@ const wifi_power_t elTxPower[5]={WIFI_POWER_8_5dBm,WIFI_POWER_11dBm,WIFI_POWER_1
 const char *const elTxName[5]={"very low (8.5 dBm)","low (11 dBm)","moderate (13 dBm)","medium (15 dBm)","high (19.5 dBm)"};
 SpeedLogRec speedLog[SPEED_LOG_N];uint8_t speedLogCount=0;
 
-#define EL_VERSION "0.17.2"
+#define EL_VERSION "0.17.3"
 // Releases list published by the Pages workflow; firmware files come from
 // GitHub Releases of the same repository. Nothing else is downloaded.
 #define EL_RELEASES_URL "https://kaelor9.github.io/EngineLink/releases.json"
@@ -416,7 +415,6 @@ void serialStatus(){
 }
 void setup(){
   pinMode(LED_PIN,OUTPUT);digitalWrite(LED_PIN,LOW);
-  elPsBegin();   // all PSRAM is EngineLink's from here on, so the Wi-Fi's buffers stay in internal memory (psram.h)
   led.begin();led.setBrightness(ledBrightness);led.clear();led.show();
   Serial.begin(115200);
   // USB serial must never hold the board up. With a computer attached that
@@ -467,8 +465,8 @@ void setup(){
   loadHealth();
   loadEvents();
   loadLife();
-  ring=(Sample*)elPsAlloc(sizeof(Sample)*RING_N);
-  fastRing=(FastSample*)elPsAlloc(sizeof(FastSample)*FAST_N);
+  ring=(Sample*)ps_malloc(sizeof(Sample)*RING_N);
+  fastRing=(FastSample*)ps_malloc(sizeof(FastSample)*FAST_N);
   loadShiftLife();
   loadShifts();
   loadDiag();
@@ -476,7 +474,7 @@ void setup(){
   // A trip that was still open when power went is closed with its last values.
   if(totals.tripActive&&totals.tripBoot!=bootId)endTrip();
   pref.begin("enginelink",true);calName=pref.getString("testfile","");pref.end();
-  uint8_t *queueStorage=(uint8_t*)elPsAlloc(FRAME_QUEUE_PSRAM*sizeof(Frame));
+  uint8_t *queueStorage=(uint8_t*)heap_caps_malloc(FRAME_QUEUE_PSRAM*sizeof(Frame),MALLOC_CAP_SPIRAM|MALLOC_CAP_8BIT);
   if(queueStorage){
     framesQueue=xQueueCreateStatic(FRAME_QUEUE_PSRAM,sizeof(Frame),queueStorage,&framesQueueState);
     framesQueueLength=FRAME_QUEUE_PSRAM;
@@ -553,7 +551,6 @@ void loop(){
     Serial.println("Engine task stalled: restarting");
     prepareRestart();restartAt=millis()+200;
   }
-  elPsService();
   serviceSelfTest();
   if(fwState==4&&!restartAt){prepareRestart();restartAt=millis()+2000;}
   if(restartAt&&(int32_t)(millis()-restartAt)>=0){delay(100);ESP.restart();}
