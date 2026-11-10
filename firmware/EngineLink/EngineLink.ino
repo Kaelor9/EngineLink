@@ -73,8 +73,13 @@ uint32_t txReapplied=0;   // the driver had another power and it was set again
 const wifi_power_t elTxPower[5]={WIFI_POWER_8_5dBm,WIFI_POWER_11dBm,WIFI_POWER_13dBm,WIFI_POWER_15dBm,WIFI_POWER_19_5dBm};
 const char *const elTxName[5]={"very low (8.5 dBm)","low (11 dBm)","moderate (13 dBm)","medium (15 dBm)","high (19.5 dBm)"};
 SpeedLogRec speedLog[SPEED_LOG_N];uint8_t speedLogCount=0;
+// The chip's own temperature (ESP32-S3 internal sensor), read every 5 s in the
+// main loop (0.17.4): the same firmware served 54-121 kB/s a minute after a
+// cold power-on and 200-480 kB/s four minutes later, so the report now says
+// how warm the chip was at every speed test and in every 30 s of a router session.
+volatile int8_t chipTempC=0,chipTempStartC=0,chipTempMaxC=-128;
 
-#define EL_VERSION "0.17.3"
+#define EL_VERSION "0.17.4"
 // Releases list published by the Pages workflow; firmware files come from
 // GitHub Releases of the same repository. Nothing else is downloaded.
 #define EL_RELEASES_URL "https://kaelor9.github.io/EngineLink/releases.json"
@@ -551,6 +556,7 @@ void loop(){
     Serial.println("Engine task stalled: restarting");
     prepareRestart();restartAt=millis()+200;
   }
+  {static uint32_t tAt=0;if(!tAt||(uint32_t)(millis()-tAt)>=5000UL){tAt=millis()?millis():1;const float t=temperatureRead();if(t>-40&&t<125){const int8_t c=(int8_t)lroundf(t);if(chipTempMaxC==-128)chipTempStartC=c;chipTempC=c;if(c>chipTempMaxC)chipTempMaxC=c;}}}
   serviceSelfTest();
   if(fwState==4&&!restartAt){prepareRestart();restartAt=millis()+2000;}
   if(restartAt&&(int32_t)(millis()-restartAt)>=0){delay(100);ESP.restart();}

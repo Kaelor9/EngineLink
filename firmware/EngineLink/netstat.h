@@ -115,6 +115,7 @@ struct Slot {
   uint16_t requests = 0, failed = 0;
   uint32_t bytes = 0;
   int8_t rssi = 0;                                       // dBm; 0 = not read
+  int8_t tempC = 0;                                      // the chip's temperature at the end of the piece
 };
 constexpr uint8_t SLOT_CAP = 60;   // 30 minutes
 

@@ -243,7 +243,14 @@ Two modes, never both:
 - **rc6 (2026-11-10, plan section 11):** rc5 timed out on the board; the
   sketch also works with OPI PSRAM, so PSRAM is cleared; rc6 is rc5 built
   with core 3.2.0, the sketch's core. *Built*, bench pending.
-- **0.17.3 (2026-11-10, plan section 16), current = 0.17.1's firmware.**
+- **0.17.4 (2026-11-10, plan section 17), current:** network code = 0.17.1.
+  New finding: Standalone's speed also changes with the time since a cold
+  power-on (54–121 kB/s at 1 min, 195–477 at 4 min, 580–730 when it had been
+  running), same firmware, memory fine. The report now carries the chip's
+  temperature (`chipTempC`, read every 5 s in `loop()`) per speed test and
+  per 30 s of a router session. Read plan section 17 before changing any
+  network code: firmware differences have been confused with this drift.
+- **0.17.3 (2026-11-10, plan section 16) = 0.17.1's firmware.**
   0.17.2 took all PSRAM so the Wi-Fi's buffers would use internal memory;
   on the board internal memory ran out (lowest 0 KB, 109 failed
   allocations). **Do not repeat that without first moving about 100 KB of

@@ -545,5 +545,5 @@ struct ShiftLife {
 };
 
 // Download tests measured by the phone (newest last), for the network report.
-struct SpeedLogRec { uint32_t at; uint8_t level; uint16_t kbs10; uint16_t rttMs; };
+struct SpeedLogRec { uint32_t at; uint8_t level; uint16_t kbs10; uint16_t rttMs; int8_t tempC; };   // tempC: the chip's temperature at the test
 constexpr uint8_t SPEED_LOG_N=12;

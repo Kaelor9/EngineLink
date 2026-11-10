@@ -990,7 +990,7 @@ void initializeWeb(){
       SpeedLogRec &x=speedLog[speedLogCount++];
       x.at=millis();x.level=web.hasArg("l")?(uint8_t)web.arg("l").toInt():txLevel;
       x.kbs10=(uint16_t)constrain(web.arg("kbs").toFloat()*10.0f,0.0f,65000.0f);
-      x.rttMs=(uint16_t)constrain(web.arg("rtt").toInt(),0,65000);
+      x.rttMs=(uint16_t)constrain(web.arg("rtt").toInt(),0,65000);x.tempC=chipTempC;
     }
     reply(true,"ok");
   });

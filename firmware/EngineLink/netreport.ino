@@ -177,7 +177,7 @@ String buildNetworkReport(){
    for(uint8_t i=0;i<speedLogCount;i++){const SpeedLogRec &x=speedLog[i];
     s+="  ";s+=(millis()-x.at)/1000UL;s+=" s ago · ";s+=x.level<5?nm[x.level]:"?";s+=" dBm · ";
     if(x.kbs10){s+=x.kbs10/10.0f;s+=" kB/s";}else s+="failed";
-    s+=" · request round trip ";s+=x.rttMs;s+=" ms";s+="\n";}
+    s+=" · request round trip ";s+=x.rttMs;s+=" ms · chip ";s+=(int)x.tempC;s+=" C · at uptime ";s+=x.at/1000UL;s+=" s\n";}
   }
   s+="\n";
   appendRouterDiagText(s);
@@ -213,6 +213,7 @@ String buildNetworkReport(){
    char cc[4]={};if(esp_wifi_get_country_code(cc)==ESP_OK){s+="Wi-Fi country (driver): ";s+=cc[0]?cc:"?";s+="\n";}}
   s+="\n";
   s+="SYSTEM\n";
+  s+="Chip temperature: now ";s+=(int)chipTempC;s+=" C · at the first reading after the start ";s+=(int)chipTempStartC;s+=" C · highest ";s+=(int)chipTempMaxC;s+=" C\n";
   s+="Chip: ";s+=ESP.getChipModel();s+=" rev ";s+=ESP.getChipRevision();s+=" · ";s+=ESP.getCpuFreqMHz();s+=" MHz · Arduino core ";s+=ESP_ARDUINO_VERSION_MAJOR;s+=".";s+=ESP_ARDUINO_VERSION_MINOR;s+=".";s+=ESP_ARDUINO_VERSION_PATCH;s+=" · IDF ";s+=esp_get_idf_version();s+="\n";
   s+="Memory: free ";s+=ESP.getFreeHeap()/1024;s+=" KB, lowest ";s+=ESP.getMinFreeHeap()/1024;s+=" KB, largest block ";s+=ESP.getMaxAllocHeap()/1024;s+=" KB · PSRAM free ";s+=ESP.getFreePsram()/1024;s+=" KB\n";
   s+="Main loop: longest pass ";s+=loopMaxMs;s+=" ms · engine reading in own task: ";s+=engineTaskOn?"yes":"no";
@@ -264,7 +265,7 @@ String buildNetworkReport(){
 void appendSpeedJson(String &s){
   s+=",\"txLevel\":";s+=txLevel;
   s+=",\"phoneTests\":[";
-  for(uint8_t i=0;i<speedLogCount;i++){const SpeedLogRec &x=speedLog[i];if(i)s+=',';s+="{\"agoS\":";s+=(unsigned long)((millis()-x.at)/1000UL);s+=",\"level\":";s+=x.level;s+=",\"kbs\":";s+=x.kbs10/10.0f;s+=",\"rttMs\":";s+=x.rttMs;s+='}';}
+  for(uint8_t i=0;i<speedLogCount;i++){const SpeedLogRec &x=speedLog[i];if(i)s+=',';s+="{\"agoS\":";s+=(unsigned long)((millis()-x.at)/1000UL);s+=",\"level\":";s+=x.level;s+=",\"kbs\":";s+=x.kbs10/10.0f;s+=",\"rttMs\":";s+=x.rttMs;s+=",\"tempC\":";s+=(int)x.tempC;s+=",\"atS\":";s+=x.at/1000UL;s+='}';}
   s+=']';
 }
 void appendHttpdJson(String &s){
