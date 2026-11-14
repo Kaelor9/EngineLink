@@ -28,6 +28,8 @@ to engines.
 
 ## Checked on the board
 
+**2026-11-14 — the slow link was a busy channel; 0.17.5:** two ESP32 modules and three firmwares were slow on channel 6 and fast on channel 1 at −39 dBm (0.45 → 5.58 Mbit/s). **0.17.5** lets the own Wi-Fi pick the quietest of 1/6/11 by measuring other networks' air time, and re-checks with no phone joined ([plan section 19](WIFI_PLAN_2026-11-09.md)). On the board: Standalone chose channel 1 and gave 212 → 562 kB/s in 30 s; router mode on the home router (channel 1) ran 26 min with 784/784 pings and 1173 requests without a failure. *Bench-verified*, not boat-verified.
+
 **2026-11-10 (night) — Standalone varies with the time since power-on; 0.17.4:** 0.17.3 (0.17.1's firmware) in Standalone after a cold power-on, no USB: 54–121 kB/s a minute after the start, 195–477 kB/s four minutes later; the same code gave 580–730 kB/s earlier the same day; memory fine. So the board's link changes by itself, also without the router. **0.17.4** adds the chip's temperature to the report (per speed test and per 30 s of a router session) to see whether speed follows it ([plan section 17](WIFI_PLAN_2026-11-09.md)). *Built*, not run on the board.
 
 **2026-11-10 (night) — 0.17.2 on the board, 0.17.3:** 0.17.2 ran out of internal memory on the board (Standalone, 87 s: lowest free 0 KB, 109 failed allocations, 161–462 kB/s instead of about 650). Its PSRAM change is removed; **0.17.3 is 0.17.1's firmware** ([plan section 16](WIFI_PLAN_2026-11-09.md)). Router mode on the home router: joins from a clean start and stays, but slow (0.17.1); not fixed.

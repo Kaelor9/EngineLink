@@ -1,0 +1,679 @@
+
+### 11:57:29 +3s SENT status
+11:57:29 [32s] J7 0/0  J6 0/0 frames/invalid  drops 0  heap 99996  AP clients 0  SD Logging raw J1708
+
+### 11:57:31 +5s SENT wifi
+11:57:31 ENGINELINK - WI-FI REPORT
+11:57:31 ========================
+11:57:31 
+11:57:31 Firmware: 0.17.4 (built Nov 10 2026 18:47:00)
+11:57:31 Uptime: 34 seconds
+11:57:31 Mode: Standalone (EngineLink Wi-Fi)
+11:57:31 Wi-Fi radio mode: 2 (1=station, 2=access point)
+11:57:31 Router: Not configured
+11:57:31 Currently connected: No
+11:57:31 Router IP now: None
+11:57:31 Last successful router IP: None this boot
+11:57:31 Last router signal: Not measured
+11:57:31 Last router channel: 0
+11:57:31 Last negotiated Wi-Fi security: Not yet negotiated
+11:57:31 Station: as the working test sketch: power save off, everything else the driver's default (no bandwidth, country, scan, protocol or TX-power setting)
+11:57:31 Security: ESP32 core WPA2/WPA3 negotiation (no custom SAE handling)
+11:57:31 Transmit power: high (19.5 dBm) (fixed) · target 78 quarter-dBm · driver reports 19.50 dBm (78 quarter-dBm) · set again after the driver changed it: 0 time(s)
+11:57:31 Power save: not applicable now (access point mode); the router session below has its own line
+11:57:31 CONNECTIVITY (COUNTERS SINCE BOOT)
+11:57:31 Successful Wi-Fi associations: 0
+11:57:31 Successful router IP assignments: 0
+11:57:31 Router IP losses: 0
+11:57:31 Wi-Fi disconnect events: 0
+11:57:31 Dropped active router connections: 0
+11:57:31 Pre-connection failures: 0
+11:57:31 Reconnect: the ESP32 core's own, plus one plain connect after 20 s without any attempt (the core stops after code 202)
+11:57:31 App-initiated router attempts: 0
+11:57:31 Router recovery fallbacks: 0
+11:57:31 Last association time: 0 ms
+11:57:31 Last DHCP time: 0 ms
+11:57:31 Last successful IP at uptime: 0 seconds
+11:57:31 Last Wi-Fi event reason: 0 - No reason reported
+11:57:31 Last unexpected reason: 0 - No reason reported
+11:57:31 Error 202 means authentication failure; it does not prove the password is wrong.
+11:57:31 
+11:57:31 DOWNLOAD TESTS FROM THE PHONE (newest last)
+11:57:31 None yet: tap "Test download speed" in Diagnostics.
+11:57:31 
+11:57:31 ROUTER SESSIONS AS ENGINELINK MEASURED THEM (newest first, up to 4 kept since the start)
+11:57:31 No router session with an IP address since the start.
+11:57:31 Reading it: pings lost = packets between EngineLink and the router do not get through. Pings fine but connections
+11:57:31 without a request, or none = the other device's packets do not reach EngineLink. Requests answered but connections
+11:57:31 never reused = the answers do not reach the device.
+11:57:31 
+11:57:31 ENGINELINK WI-FI (ACCESS POINT, THIS START)
+11:57:31 Phones connected now: 0 · joined 0 · DHCP leases assigned 0 · left 0 · started 1 · restarted by the watchdog 0 · channel 6
+11:57:31 Access point as the driver runs it: channel 6, 20 MHz, PMF capable, stations kept 600 s without traffic, country DK
+11:57:31 Joined phones (maker prefix, signal at EngineLink, Wi-Fi standards): none
+11:57:31 Wi-Fi country (driver): DK
+11:57:31 
+11:57:31 SYSTEM
+11:57:31 Chip temperature: now 28 C · at the first reading after the start 23 C · highest 28 C
+11:57:31 Chip: ESP32-S3 rev 2 · 240 MHz · Arduino core 3.3.12 · IDF v5.5.5
+11:57:31 Memory: free 97 KB, lowest 92 KB, largest block 55 KB · PSRAM free 7679 KB
+11:57:31 Main loop: longest pass 15 ms · engine reading in own task: yes · engine task longest wait 13 ms (lock held by loopTask when it began) · waits over 100 ms: 0 · longest round of its own work 0 ms
+11:57:31 Longest part of the main loop (ms): (web: own task) 0, sd 15, diag 0, sd scan 0, history 0, network 4, led 1, serial 14, other 1
+11:57:31 Reset reason: 1 (1 power on, 3 software/update, 4 crash, 5/6/7 watchdog, 9 brownout, 11 reset over USB)
+11:57:31 Recent restarts (newest first): reason 1 after 0 s on 0.17.4 | reason 11 after 0 s on 0.17.4 | reason 11 after 0 s on 0.17.4
+11:57:31 Internal memory: free 97 KB, lowest 92 KB, largest block 55 KB · failed allocations since the start: 0
+11:57:31 Slow steps of the network part (100 ms or more, newest last): none
+11:57:31 Tasks, CPU share of one core since the last snapshot (at most 30 s ago) / stack never used (bytes):
+11:57:31   loopTask 8%/4724 · IDLE0 98%/232 · IDLE1 91%/352 · J7RX 0%/3172 · J6RX 0%/3176 · fw 0%/9080 · tiT 0%/3140 · engines 0%/15336 · ipc0 0%/1288 · xfer 0%/6776 · httpd 0%/7004 · sys_evt 0%/3216 · mdns 0%/1648 · Tmr Svc 0%/2328 · esp_timer 0%/7732 · wifi 0%/4512 · arduino_events 0%/3056 · ipc1 0%/1280
+11:57:31 Not available in this build of the ESP32 core (not invented here): lwIP's packet and TCP counters (LWIP_STATS off),
+11:57:31 the driver's transmit retry counters (no public API), the ARP table (no thread-safe public read).
+11:57:31 
+11:57:31 HTTP / WEB (esp_http_server, port 80)
+11:57:31 Requests: 0 · long transfers: 0 · answered busy (503): 0 · refused by the security checks: 0 · send failures (timeout or phone gone): 0
+11:57:31 Connections opened: 0 · closed: 0 · open now: 0 · most at once: 0 · successful answers to other devices: 0
+11:57:31 On the own Wi-Fi: connections 0 (0 closed without a request, 0 used for more than one) · requests 0 · 2xx 0, 3xx 0, 4xx 0, 5xx 0 · failed while sending 0 · bytes 0 KB · slowest 0 ms ()
+11:57:31 Through the router: connections 0 (0 closed without a request, 0 used for more than one) · requests 0 · 2xx 0, 3xx 0, 4xx 0, 5xx 0 · failed while sending 0 · bytes 0 KB · slowest 0 ms ()
+11:57:31 Own self-test: connections 0 (0 closed without a request, 0 used for more than one) · requests 0 · 2xx 0, 3xx 0, 4xx 0, 5xx 0 · failed while sending 0 · bytes 0 KB · slowest 0 ms ()
+11:57:31 Request log (every request through the router, and failed or slow ones on the own Wi-Fi; newest 32 of 0):
+11:57:31   none
+11:57:31 A request counts as answered when the server handed the whole answer to TCP. Whether it arrived is seen from the
+11:57:31 next request on the same connection ("used for more than one"); the last 5.7 KB of an answer cannot be confirmed.
+11:57:31 Slowest request: 0 ms () · last transfer waited 0 ms for the engine lock
+11:57:31 Stack left (bytes): web server 7004, transfers 6776
+11:57:31 Firmware self-test: not needed (this firmware was confirmed before)
+11:57:31 Last 32 KiB server write: 0 bytes in 0 ms (0 write calls)
+11:57:31 TCP send window: ESP32 core default (not modified)
+11:57:31 Note: server write time is NOT the same as measured radio throughput.
+11:57:31 
+11:57:31 LATEST WI-FI EVENTS (oldest to newest; uptime seconds)
+11:57:31 No events recorded this boot.
+11:57:31 
+11:57:31 MACHINE-READABLE JSON (copy/send the entire report)
+11:57:31 {"version":"0.17.4","build":"Nov 10 2026 18:47:00","uptimeMs":34453,"mode":"standalone","recovery":false,"wifiMode":2,"ssid":"","status":254,"phase":"standalone","associated":false,"hasRouterIp":false,"ip":"","gateway":"","rssi":null,"associationEvents":0,"dhcpIpEvents":0,"lostIpEvents":0,"associationMs":0,"dhcpMs":0,"driverReason":0,"unexpectedReason":0,"unexpectedDrops":0,"associationFailures":0,"txReapplied":0,"txTargetQdbm":78,"txDriverQdbm":78,"apLink":{"up":true,"ch":6,"bw":20,"pmfCapable":true,"pmfRequired":false,"inactiveS":600,"country":"DK","stations":[]},"loopParts":[0,15,0,0,0,4,1,14,1],"engineMaxWaitMs":13,"engineMaxWaitBy":"loopTask","engineSlowWaits":0,"engineMaxRoundMs":0,"apStations":0,"apJoins":0,"apLeaves":0,"apDhcpLeases":0,"apLeaveReason":0,"apRestarts":0,"speedTxBytes":0,"speedTxMs":0,"speedTxWrites":0,"networkEpoch":1,"httpdRequests":0,"httpdAsync":0,"httpdBusy503":0,"httpdBusyLock":0,"httpdBusyXfer":0,"httpdBusyXferLock":0,"httpdBusyPath":"","httpdBusyAtMs":0,"httpdRejected":0,"httpdSendFails":0,"httpdOpens":0,"httpdCloses":0,"httpdOpenNow":0,"httpdOpenMax":0,"httpdExternalOk":0,"httpdSlowMs":0,"httpdSlowPath":"","httpdRouterOpens":0,"httpdRouterRequests":0,"httpdRouterOk":0,"httpdRouterSendFails":0,"httpdRouterLastMs":0,"httpdStackFree":7004,"xferStackFree":6776,"routerAttempts":0,"routerFallbacks":0,"routerNextTryS":null,"disconnectEvents":0,"lastGotIpUptimeMs":0,"lastRouterIp":"","lastRouterRssi":null,"lastRouterChannel":0,"lastSecurity":"Not yet negotiated","txLevel":4,"phoneTests":[],"routerSession":{"seen":false,"active":false,"startMs":0,"endMs":0,"joinMs":0,"dhcpMs":0,"endReason":0,"rssiEnd":0,"afterOwnWifi":false,"cc":"","fastUntilMs":0,"bw":0,"proto":0,"txQdbm":0,"ch":0,"second":0,"b":0,"g":0,"n":0,"phy":255,"pairwise":255,"group":255,"ps":255,"ip":"0.0.0.0","mask":"0.0.0.0","gw":"0.0.0.0","dns":"0.0.0.0","rssiStart":0,"rssiMin":0,"rssiMax":-127,"rssiAvg":0,"rssiLast":0,"pingSent":0,"pingOk":0,"pingSumMs":0,"pingMaxMs":0,"pingLostRowMax":0,"pingBuckets":[0,0,0,0,0],"beaconTimeouts":0,"channelChanges":0,"opens":0,"opensEmpty":0,"opensReused":0,"requests":0,"ok":0,"status":[0,0,0,0],"sendFails":0,"bytes":0},"allocFails":0,"routerSessions":[],"slots":[],"slotFields":"startS,pingSent,pingOk,rttAvgMs,rssi,requests,failed,bytes,chipTempC","http":[{"net":"own Wi-Fi","conns":0,"connsEmpty":0,"connsReused":0,"requests":0,"status":[0,0,0,0],"failed":0,"bytes":0,"slowMs":0,"slowPath":"","lastMs":0,"endpoints":[[0,0,0],[0,0,0],[0,0,0],[0,0,0]]},{"net":"router","conns":0,"connsEmpty":0,"connsReused":0,"requests":0,"status":[0,0,0,0],"failed":0,"bytes":0,"slowMs":0,"slowPath":"","lastMs":0,"endpoints":[[0,0,0],[0,0,0],[0,0,0],[0,0,0]]},{"net":"self-test","conns":0,"connsEmpty":0,"connsReused":0,"requests":0,"status":[0,0,0,0],"failed":0,"bytes":0,"slowMs":0,"slowPath":"","lastMs":0,"endpoints":[[0,0,0],[0,0,0],[0,0,0],[0,0,0]]}],"requestLog":[],"netSteps":[],"powerSave":1,"events":[]}
+11:57:31 
+
+### 11:58:26 +60s SENT wifi
+11:58:26 ENGINELINK - WI-FI REPORT
+11:58:26 ========================
+11:58:26 
+11:58:26 Firmware: 0.17.4 (built Nov 10 2026 18:47:00)
+11:58:26 Uptime: 89 seconds
+11:58:26 Mode: Standalone (EngineLink Wi-Fi)
+11:58:26 Wi-Fi radio mode: 2 (1=station, 2=access point)
+11:58:26 Router: Not configured
+11:58:26 Currently connected: No
+11:58:26 Router IP now: None
+11:58:26 Last successful router IP: None this boot
+11:58:26 Last router signal: Not measured
+11:58:26 Last router channel: 0
+11:58:26 Last negotiated Wi-Fi security: Not yet negotiated
+11:58:26 Station: as the working test sketch: power save off, everything else the driver's default (no bandwidth, country, scan, protocol or TX-power setting)
+11:58:26 Security: ESP32 core WPA2/WPA3 negotiation (no custom SAE handling)
+11:58:26 Transmit power: high (19.5 dBm) (fixed) · target 78 quarter-dBm · driver reports 19.50 dBm (78 quarter-dBm) · set again after the driver changed it: 0 time(s)
+11:58:26 Power save: not applicable now (access point mode); the router session below has its own line
+11:58:26 CONNECTIVITY (COUNTERS SINCE BOOT)
+11:58:26 Successful Wi-Fi associations: 0
+11:58:26 Successful router IP assignments: 0
+11:58:26 Router IP losses: 0
+11:58:26 Wi-Fi disconnect events: 0
+11:58:26 Dropped active router connections: 0
+11:58:26 Pre-connection failures: 0
+11:58:26 Reconnect: the ESP32 core's own, plus one plain connect after 20 s without any attempt (the core stops after code 202)
+11:58:26 App-initiated router attempts: 0
+11:58:26 Router recovery fallbacks: 0
+11:58:26 Last association time: 0 ms
+11:58:26 Last DHCP time: 0 ms
+11:58:26 Last successful IP at uptime: 0 seconds
+11:58:26 Last Wi-Fi event reason: 0 - No reason reported
+11:58:26 Last unexpected reason: 0 - No reason reported
+11:58:26 Error 202 means authentication failure; it does not prove the password is wrong.
+11:58:26 
+11:58:26 DOWNLOAD TESTS FROM THE PHONE (newest last)
+11:58:26 None yet: tap "Test download speed" in Diagnostics.
+11:58:26 
+11:58:26 ROUTER SESSIONS AS ENGINELINK MEASURED THEM (newest first, up to 4 kept since the start)
+11:58:26 No router session with an IP address since the start.
+11:58:26 Reading it: pings lost = packets between EngineLink and the router do not get through. Pings fine but connections
+11:58:26 without a request, or none = the other device's packets do not reach EngineLink. Requests answered but connections
+11:58:26 never reused = the answers do not reach the device.
+11:58:26 
+11:58:26 ENGINELINK WI-FI (ACCESS POINT, THIS START)
+11:58:26 Phones connected now: 0 · joined 0 · DHCP leases assigned 0 · left 0 · started 1 · restarted by the watchdog 0 · channel 6
+11:58:26 Access point as the driver runs it: channel 6, 20 MHz, PMF capable, stations kept 600 s without traffic, country DK
+11:58:26 Joined phones (maker prefix, signal at EngineLink, Wi-Fi standards): none
+11:58:26 Wi-Fi country (driver): DK
+11:58:26 
+11:58:26 SYSTEM
+11:58:26 Chip temperature: now 32 C · at the first reading after the start 23 C · highest 32 C
+11:58:26 Chip: ESP32-S3 rev 2 · 240 MHz · Arduino core 3.3.12 · IDF v5.5.5
+11:58:26 Memory: free 97 KB, lowest 92 KB, largest block 55 KB · PSRAM free 7679 KB
+11:58:26 Main loop: longest pass 38 ms · engine reading in own task: yes · engine task longest wait 13 ms (lock held by loopTask when it began) · waits over 100 ms: 0 · longest round of its own work 0 ms
+11:58:26 Longest part of the main loop (ms): (web: own task) 0, sd 15, diag 0, sd scan 0, history 0, network 4, led 1, serial 38, other 1
+11:58:26 Reset reason: 1 (1 power on, 3 software/update, 4 crash, 5/6/7 watchdog, 9 brownout, 11 reset over USB)
+11:58:26 Recent restarts (newest first): reason 1 after 0 s on 0.17.4 | reason 11 after 0 s on 0.17.4 | reason 11 after 0 s on 0.17.4
+11:58:26 Internal memory: free 97 KB, lowest 92 KB, largest block 55 KB · failed allocations since the start: 0
+11:58:26 Slow steps of the network part (100 ms or more, newest last): none
+11:58:26 Tasks, CPU share of one core since the last snapshot (at most 30 s ago) / stack never used (bytes):
+11:58:26   loopTask 8%/4688 · IDLE0 98%/232 · IDLE1 91%/352 · tiT 0%/3140 · J7RX 0%/3172 · J6RX 0%/3176 · fw 0%/9080 · arduino_events 0%/3056 · ipc0 0%/1288 · ipc1 0%/1280 · xfer 0%/6776 · httpd 0%/7004 · Tmr Svc 0%/2328 · esp_timer 0%/7732 · engines 0%/15252 · wifi 0%/4512 · sys_evt 0%/3216 · mdns 0%/1648
+11:58:26 Not available in this build of the ESP32 core (not invented here): lwIP's packet and TCP counters (LWIP_STATS off),
+11:58:26 the driver's transmit retry counters (no public API), the ARP table (no thread-safe public read).
+11:58:26 
+11:58:26 HTTP / WEB (esp_http_server, port 80)
+11:58:26 Requests: 0 · long transfers: 0 · answered busy (503): 0 · refused by the security checks: 0 · send failures (timeout or phone gone): 0
+11:58:26 Connections opened: 0 · closed: 0 · open now: 0 · most at once: 0 · successful answers to other devices: 0
+11:58:26 On the own Wi-Fi: connections 0 (0 closed without a request, 0 used for more than one) · requests 0 · 2xx 0, 3xx 0, 4xx 0, 5xx 0 · failed while sending 0 · bytes 0 KB · slowest 0 ms ()
+11:58:26 Through the router: connections 0 (0 closed without a request, 0 used for more than one) · requests 0 · 2xx 0, 3xx 0, 4xx 0, 5xx 0 · failed while sending 0 · bytes 0 KB · slowest 0 ms ()
+11:58:26 Own self-test: connections 0 (0 closed without a request, 0 used for more than one) · requests 0 · 2xx 0, 3xx 0, 4xx 0, 5xx 0 · failed while sending 0 · bytes 0 KB · slowest 0 ms ()
+11:58:26 Request log (every request through the router, and failed or slow ones on the own Wi-Fi; newest 32 of 0):
+11:58:26   none
+11:58:26 A request counts as answered when the server handed the whole answer to TCP. Whether it arrived is seen from the
+11:58:26 next request on the same connection ("used for more than one"); the last 5.7 KB of an answer cannot be confirmed.
+11:58:26 Slowest request: 0 ms () · last transfer waited 0 ms for the engine lock
+11:58:26 Stack left (bytes): web server 7004, transfers 6776
+11:58:26 Firmware self-test: not needed (this firmware was confirmed before)
+11:58:26 Last 32 KiB server write: 0 bytes in 0 ms (0 write calls)
+11:58:26 TCP send window: ESP32 core default (not modified)
+11:58:26 Note: server write time is NOT the same as measured radio throughput.
+11:58:26 
+11:58:26 LATEST WI-FI EVENTS (oldest to newest; uptime seconds)
+11:58:26 No events recorded this boot.
+11:58:26 
+11:58:26 MACHINE-READABLE JSON (copy/send the entire report)
+11:58:27 {"version":"0.17.4","build":"Nov 10 2026 18:47:00","uptimeMs":89525,"mode":"standalone","recovery":false,"wifiMode":2,"ssid":"","status":254,"phase":"standalone","associated":false,"hasRouterIp":false,"ip":"","gateway":"","rssi":null,"associationEvents":0,"dhcpIpEvents":0,"lostIpEvents":0,"associationMs":0,"dhcpMs":0,"driverReason":0,"unexpectedReason":0,"unexpectedDrops":0,"associationFailures":0,"txReapplied":0,"txTargetQdbm":78,"txDriverQdbm":78,"apLink":{"up":true,"ch":6,"bw":20,"pmfCapable":true,"pmfRequired":false,"inactiveS":600,"country":"DK","stations":[]},"loopParts":[0,15,0,0,0,4,1,38,1],"engineMaxWaitMs":13,"engineMaxWaitBy":"loopTask","engineSlowWaits":0,"engineMaxRoundMs":0,"apStations":0,"apJoins":0,"apLeaves":0,"apDhcpLeases":0,"apLeaveReason":0,"apRestarts":0,"speedTxBytes":0,"speedTxMs":0,"speedTxWrites":0,"networkEpoch":1,"httpdRequests":0,"httpdAsync":0,"httpdBusy503":0,"httpdBusyLock":0,"httpdBusyXfer":0,"httpdBusyXferLock":0,"httpdBusyPath":"","httpdBusyAtMs":0,"httpdRejected":0,"httpdSendFails":0,"httpdOpens":0,"httpdCloses":0,"httpdOpenNow":0,"httpdOpenMax":0,"httpdExternalOk":0,"httpdSlowMs":0,"httpdSlowPath":"","httpdRouterOpens":0,"httpdRouterRequests":0,"httpdRouterOk":0,"httpdRouterSendFails":0,"httpdRouterLastMs":0,"httpdStackFree":7004,"xferStackFree":6776,"routerAttempts":0,"routerFallbacks":0,"routerNextTryS":null,"disconnectEvents":0,"lastGotIpUptimeMs":0,"lastRouterIp":"","lastRouterRssi":null,"lastRouterChannel":0,"lastSecurity":"Not yet negotiated","txLevel":4,"phoneTests":[],"routerSession":{"seen":false,"active":false,"startMs":0,"endMs":0,"joinMs":0,"dhcpMs":0,"endReason":0,"rssiEnd":0,"afterOwnWifi":false,"cc":"","fastUntilMs":0,"bw":0,"proto":0,"txQdbm":0,"ch":0,"second":0,"b":0,"g":0,"n":0,"phy":255,"pairwise":255,"group":255,"ps":255,"ip":"0.0.0.0","mask":"0.0.0.0","gw":"0.0.0.0","dns":"0.0.0.0","rssiStart":0,"rssiMin":0,"rssiMax":-127,"rssiAvg":0,"rssiLast":0,"pingSent":0,"pingOk":0,"pingSumMs":0,"pingMaxMs":0,"pingLostRowMax":0,"pingBuckets":[0,0,0,0,0],"beaconTimeouts":0,"channelChanges":0,"opens":0,"opensEmpty":0,"opensReused":0,"requests":0,"ok":0,"status":[0,0,0,0],"sendFails":0,"bytes":0},"allocFails":0,"routerSessions":[],"slots":[],"slotFields":"startS,pingSent,pingOk,rttAvgMs,rssi,requests,failed,bytes,chipTempC","http":[{"net":"own Wi-Fi","conns":0,"connsEmpty":0,"connsReused":0,"requests":0,"status":[0,0,0,0],"failed":0,"bytes":0,"slowMs":0,"slowPath":"","lastMs":0,"endpoints":[[0,0,0],[0,0,0],[0,0,0],[0,0,0]]},{"net":"router","conns":0,"connsEmpty":0,"connsReused":0,"requests":0,"status":[0,0,0,0],"failed":0,"bytes":0,"slowMs":0,"slowPath":"","lastMs":0,"endpoints":[[0,0,0],[0,0,0],[0,0,0],[0,0,0]]},{"net":"self-test","conns":0,"connsEmpty":0,"connsReused":0,"requests":0,"status":[0,0,0,0],"failed":0,"bytes":0,"slowMs":0,"slowPath":"","lastMs":0,"endpoints":[[0,0,0],[0,0,0],[0,0,0],[0,0,0]]}],"requestLog":[],"netSteps":[],"powerSave":1,"events":[]}
+11:58:27 
+11:58:29 [92s] J7 0/0  J6 0/0 frames/invalid  drops 0  heap 98928  AP clients 0  SD Logging raw J1708
+11:59:29 [152s] J7 0/0  J6 0/0 frames/invalid  drops 0  heap 99640  AP clients 0  SD Logging raw J1708
+
+### 12:00:26 +180s SENT wifi
+12:00:26 ENGINELINK - WI-FI REPORT
+12:00:26 ========================
+12:00:26 
+12:00:26 Firmware: 0.17.4 (built Nov 10 2026 18:47:00)
+12:00:26 Uptime: 209 seconds
+12:00:26 Mode: Standalone (EngineLink Wi-Fi)
+12:00:26 Wi-Fi radio mode: 2 (1=station, 2=access point)
+12:00:26 Router: Not configured
+12:00:26 Currently connected: No
+12:00:26 Router IP now: None
+12:00:26 Last successful router IP: None this boot
+12:00:26 Last router signal: Not measured
+12:00:26 Last router channel: 0
+12:00:26 Last negotiated Wi-Fi security: Not yet negotiated
+12:00:26 Station: as the working test sketch: power save off, everything else the driver's default (no bandwidth, country, scan, protocol or TX-power setting)
+12:00:26 Security: ESP32 core WPA2/WPA3 negotiation (no custom SAE handling)
+12:00:26 Transmit power: high (19.5 dBm) (fixed) · target 78 quarter-dBm · driver reports 19.50 dBm (78 quarter-dBm) · set again after the driver changed it: 0 time(s)
+12:00:26 Power save: not applicable now (access point mode); the router session below has its own line
+12:00:26 CONNECTIVITY (COUNTERS SINCE BOOT)
+12:00:26 Successful Wi-Fi associations: 0
+12:00:26 Successful router IP assignments: 0
+12:00:26 Router IP losses: 0
+12:00:26 Wi-Fi disconnect events: 0
+12:00:26 Dropped active router connections: 0
+12:00:26 Pre-connection failures: 0
+12:00:26 Reconnect: the ESP32 core's own, plus one plain connect after 20 s without any attempt (the core stops after code 202)
+12:00:26 App-initiated router attempts: 0
+12:00:26 Router recovery fallbacks: 0
+12:00:26 Last association time: 0 ms
+12:00:26 Last DHCP time: 0 ms
+12:00:26 Last successful IP at uptime: 0 seconds
+12:00:26 Last Wi-Fi event reason: 0 - No reason reported
+12:00:26 Last unexpected reason: 0 - No reason reported
+12:00:26 Error 202 means authentication failure; it does not prove the password is wrong.
+12:00:26 
+12:00:26 DOWNLOAD TESTS FROM THE PHONE (newest last)
+12:00:26 None yet: tap "Test download speed" in Diagnostics.
+12:00:26 
+12:00:26 ROUTER SESSIONS AS ENGINELINK MEASURED THEM (newest first, up to 4 kept since the start)
+12:00:26 No router session with an IP address since the start.
+12:00:26 Reading it: pings lost = packets between EngineLink and the router do not get through. Pings fine but connections
+12:00:26 without a request, or none = the other device's packets do not reach EngineLink. Requests answered but connections
+12:00:26 never reused = the answers do not reach the device.
+12:00:26 
+12:00:26 ENGINELINK WI-FI (ACCESS POINT, THIS START)
+12:00:26 Phones connected now: 0 · joined 0 · DHCP leases assigned 0 · left 0 · started 1 · restarted by the watchdog 0 · channel 6
+12:00:26 Access point as the driver runs it: channel 6, 20 MHz, PMF capable, stations kept 600 s without traffic, country DK
+12:00:26 Joined phones (maker prefix, signal at EngineLink, Wi-Fi standards): none
+12:00:26 Wi-Fi country (driver): DK
+12:00:26 
+12:00:26 SYSTEM
+12:00:26 Chip temperature: now 37 C · at the first reading after the start 23 C · highest 37 C
+12:00:26 Chip: ESP32-S3 rev 2 · 240 MHz · Arduino core 3.3.12 · IDF v5.5.5
+12:00:26 Memory: free 97 KB, lowest 92 KB, largest block 55 KB · PSRAM free 7679 KB
+12:00:26 Main loop: longest pass 51 ms · engine reading in own task: yes · engine task longest wait 13 ms (lock held by loopTask when it began) · waits over 100 ms: 0 · longest round of its own work 0 ms
+12:00:26 Longest part of the main loop (ms): (web: own task) 0, sd 15, diag 0, sd scan 0, history 0, network 4, led 1, serial 47, other 1
+12:00:26 Reset reason: 1 (1 power on, 3 software/update, 4 crash, 5/6/7 watchdog, 9 brownout, 11 reset over USB)
+12:00:26 Recent restarts (newest first): reason 1 after 0 s on 0.17.4 | reason 11 after 0 s on 0.17.4 | reason 11 after 0 s on 0.17.4
+12:00:26 Internal memory: free 97 KB, lowest 92 KB, largest block 55 KB · failed allocations since the start: 0
+12:00:26 Slow steps of the network part (100 ms or more, newest last): none
+12:00:26 Tasks, CPU share of one core since the last snapshot (at most 30 s ago) / stack never used (bytes):
+12:00:26   loopTask 8%/3808 · IDLE0 98%/232 · IDLE1 91%/352 · fw 0%/9080 · J7RX 0%/3172 · J6RX 0%/3176 · tiT 0%/3140 · engines 0%/15252 · arduino_events 0%/3056 · ipc1 0%/1280 · xfer 0%/6776 · httpd 0%/7004 · sys_evt 0%/3216 · Tmr Svc 0%/2328 · esp_timer 0%/7732 · wifi 0%/4512 · ipc0 0%/1288 · mdns 0%/1648
+12:00:26 Not available in this build of the ESP32 core (not invented here): lwIP's packet and TCP counters (LWIP_STATS off),
+12:00:26 the driver's transmit retry counters (no public API), the ARP table (no thread-safe public read).
+12:00:26 
+12:00:26 HTTP / WEB (esp_http_server, port 80)
+12:00:26 Requests: 0 · long transfers: 0 · answered busy (503): 0 · refused by the security checks: 0 · send failures (timeout or phone gone): 0
+12:00:26 Connections opened: 0 · closed: 0 · open now: 0 · most at once: 0 · successful answers to other devices: 0
+12:00:26 On the own Wi-Fi: connections 0 (0 closed without a request, 0 used for more than one) · requests 0 · 2xx 0, 3xx 0, 4xx 0, 5xx 0 · failed while sending 0 · bytes 0 KB · slowest 0 ms ()
+12:00:26 Through the router: connections 0 (0 closed without a request, 0 used for more than one) · requests 0 · 2xx 0, 3xx 0, 4xx 0, 5xx 0 · failed while sending 0 · bytes 0 KB · slowest 0 ms ()
+12:00:26 Own self-test: connections 0 (0 closed without a request, 0 used for more than one) · requests 0 · 2xx 0, 3xx 0, 4xx 0, 5xx 0 · failed while sending 0 · bytes 0 KB · slowest 0 ms ()
+12:00:26 Request log (every request through the router, and failed or slow ones on the own Wi-Fi; newest 32 of 0):
+12:00:26   none
+12:00:26 A request counts as answered when the server handed the whole answer to TCP. Whether it arrived is seen from the
+12:00:26 next request on the same connection ("used for more than one"); the last 5.7 KB of an answer cannot be confirmed.
+12:00:26 Slowest request: 0 ms () · last transfer waited 0 ms for the engine lock
+12:00:26 Stack left (bytes): web server 7004, transfers 6776
+12:00:26 Firmware self-test: not needed (this firmware was confirmed before)
+12:00:26 Last 32 KiB server write: 0 bytes in 0 ms (0 write calls)
+12:00:26 TCP send window: ESP32 core default (not modified)
+12:00:26 Note: server write time is NOT the same as measured radio throughput.
+12:00:26 
+12:00:26 LATEST WI-FI EVENTS (oldest to newest; uptime seconds)
+12:00:26 No events recorded this boot.
+12:00:26 
+12:00:26 MACHINE-READABLE JSON (copy/send the entire report)
+12:00:26 {"version":"0.17.4","build":"Nov 10 2026 18:47:00","uptimeMs":209336,"mode":"standalone","recovery":false,"wifiMode":2,"ssid":"","status":254,"phase":"standalone","associated":false,"hasRouterIp":false,"ip":"","gateway":"","rssi":null,"associationEvents":0,"dhcpIpEvents":0,"lostIpEvents":0,"associationMs":0,"dhcpMs":0,"driverReason":0,"unexpectedReason":0,"unexpectedDrops":0,"associationFailures":0,"txReapplied":0,"txTargetQdbm":78,"txDriverQdbm":78,"apLink":{"up":true,"ch":6,"bw":20,"pmfCapable":true,"pmfRequired":false,"inactiveS":600,"country":"DK","stations":[]},"loopParts":[0,15,0,0,0,4,1,47,1],"engineMaxWaitMs":13,"engineMaxWaitBy":"loopTask","engineSlowWaits":0,"engineMaxRoundMs":0,"apStations":0,"apJoins":0,"apLeaves":0,"apDhcpLeases":0,"apLeaveReason":0,"apRestarts":0,"speedTxBytes":0,"speedTxMs":0,"speedTxWrites":0,"networkEpoch":1,"httpdRequests":0,"httpdAsync":0,"httpdBusy503":0,"httpdBusyLock":0,"httpdBusyXfer":0,"httpdBusyXferLock":0,"httpdBusyPath":"","httpdBusyAtMs":0,"httpdRejected":0,"httpdSendFails":0,"httpdOpens":0,"httpdCloses":0,"httpdOpenNow":0,"httpdOpenMax":0,"httpdExternalOk":0,"httpdSlowMs":0,"httpdSlowPath":"","httpdRouterOpens":0,"httpdRouterRequests":0,"httpdRouterOk":0,"httpdRouterSendFails":0,"httpdRouterLastMs":0,"httpdStackFree":7004,"xferStackFree":6776,"routerAttempts":0,"routerFallbacks":0,"routerNextTryS":null,"disconnectEvents":0,"lastGotIpUptimeMs":0,"lastRouterIp":"","lastRouterRssi":null,"lastRouterChannel":0,"lastSecurity":"Not yet negotiated","txLevel":4,"phoneTests":[],"routerSession":{"seen":false,"active":false,"startMs":0,"endMs":0,"joinMs":0,"dhcpMs":0,"endReason":0,"rssiEnd":0,"afterOwnWifi":false,"cc":"","fastUntilMs":0,"bw":0,"proto":0,"txQdbm":0,"ch":0,"second":0,"b":0,"g":0,"n":0,"phy":255,"pairwise":255,"group":255,"ps":255,"ip":"0.0.0.0","mask":"0.0.0.0","gw":"0.0.0.0","dns":"0.0.0.0","rssiStart":0,"rssiMin":0,"rssiMax":-127,"rssiAvg":0,"rssiLast":0,"pingSent":0,"pingOk":0,"pingSumMs":0,"pingMaxMs":0,"pingLostRowMax":0,"pingBuckets":[0,0,0,0,0],"beaconTimeouts":0,"channelChanges":0,"opens":0,"opensEmpty":0,"opensReused":0,"requests":0,"ok":0,"status":[0,0,0,0],"sendFails":0,"bytes":0},"allocFails":0,"routerSessions":[],"slots":[],"slotFields":"startS,pingSent,pingOk,rttAvgMs,rssi,requests,failed,bytes,chipTempC","http":[{"net":"own Wi-Fi","conns":0,"connsEmpty":0,"connsReused":0,"requests":0,"status":[0,0,0,0],"failed":0,"bytes":0,"slowMs":0,"slowPath":"","lastMs":0,"endpoints":[[0,0,0],[0,0,0],[0,0,0],[0,0,0]]},{"net":"router","conns":0,"connsEmpty":0,"connsReused":0,"requests":0,"status":[0,0,0,0],"failed":0,"bytes":0,"slowMs":0,"slowPath":"","lastMs":0,"endpoints":[[0,0,0],[0,0,0],[0,0,0],[0,0,0]]},{"net":"self-test","conns":0,"connsEmpty":0,"connsReused":0,"requests":0,"status":[0,0,0,0],"failed":0,"bytes":0,"slowMs":0,"slowPath":"","lastMs":0,"endpoints":[[0,0,0],[0,0,0],[0,0,0],[0,0,0]]}],"requestLog":[],"netSteps":[],"powerSave":1,"events":[]}
+12:00:26 
+12:00:29 [212s] J7 0/0  J6 0/0 frames/invalid  drops 0  heap 97860  AP clients 0  SD Logging raw J1708
+12:01:29 [272s] J7 0/0  J6 0/0 frames/invalid  drops 0  heap 98928  AP clients 0  SD Logging raw J1708
+12:02:29 [332s] J7 0/0  J6 0/0 frames/invalid  drops 0  heap 99996  AP clients 0  SD Logging raw J1708
+
+### 12:03:26 +360s SENT wifi
+12:03:26 ENGINELINK - WI-FI REPORT
+12:03:26 ========================
+12:03:26 
+12:03:26 Firmware: 0.17.4 (built Nov 10 2026 18:47:00)
+12:03:26 Uptime: 389 seconds
+12:03:26 Mode: Standalone (EngineLink Wi-Fi)
+12:03:26 Wi-Fi radio mode: 2 (1=station, 2=access point)
+12:03:26 Router: Not configured
+12:03:26 Currently connected: No
+12:03:26 Router IP now: None
+12:03:26 Last successful router IP: None this boot
+12:03:26 Last router signal: Not measured
+12:03:26 Last router channel: 0
+12:03:26 Last negotiated Wi-Fi security: Not yet negotiated
+12:03:26 Station: as the working test sketch: power save off, everything else the driver's default (no bandwidth, country, scan, protocol or TX-power setting)
+12:03:26 Security: ESP32 core WPA2/WPA3 negotiation (no custom SAE handling)
+12:03:26 Transmit power: high (19.5 dBm) (fixed) · target 78 quarter-dBm · driver reports 19.50 dBm (78 quarter-dBm) · set again after the driver changed it: 0 time(s)
+12:03:26 Power save: not applicable now (access point mode); the router session below has its own line
+12:03:26 CONNECTIVITY (COUNTERS SINCE BOOT)
+12:03:26 Successful Wi-Fi associations: 0
+12:03:26 Successful router IP assignments: 0
+12:03:26 Router IP losses: 0
+12:03:26 Wi-Fi disconnect events: 0
+12:03:26 Dropped active router connections: 0
+12:03:26 Pre-connection failures: 0
+12:03:26 Reconnect: the ESP32 core's own, plus one plain connect after 20 s without any attempt (the core stops after code 202)
+12:03:26 App-initiated router attempts: 0
+12:03:26 Router recovery fallbacks: 0
+12:03:26 Last association time: 0 ms
+12:03:26 Last DHCP time: 0 ms
+12:03:26 Last successful IP at uptime: 0 seconds
+12:03:26 Last Wi-Fi event reason: 0 - No reason reported
+12:03:26 Last unexpected reason: 0 - No reason reported
+12:03:26 Error 202 means authentication failure; it does not prove the password is wrong.
+12:03:26 
+12:03:26 DOWNLOAD TESTS FROM THE PHONE (newest last)
+12:03:26 None yet: tap "Test download speed" in Diagnostics.
+12:03:26 
+12:03:26 ROUTER SESSIONS AS ENGINELINK MEASURED THEM (newest first, up to 4 kept since the start)
+12:03:26 No router session with an IP address since the start.
+12:03:26 Reading it: pings lost = packets between EngineLink and the router do not get through. Pings fine but connections
+12:03:26 without a request, or none = the other device's packets do not reach EngineLink. Requests answered but connections
+12:03:26 never reused = the answers do not reach the device.
+12:03:26 
+12:03:26 ENGINELINK WI-FI (ACCESS POINT, THIS START)
+12:03:26 Phones connected now: 1 · joined 1 · DHCP leases assigned 1 · left 0 · started 1 · restarted by the watchdog 0 · channel 6
+12:03:26 Access point as the driver runs it: channel 6, 20 MHz, PMF capable, stations kept 600 s without traffic, country DK
+12:03:26 Joined phones (maker prefix, signal at EngineLink, Wi-Fi standards): B0:DC:EF -46 dBm bgn
+12:03:26 Wi-Fi country (driver): DK
+12:03:26 
+12:03:26 SYSTEM
+12:03:26 Chip temperature: now 41 C · at the first reading after the start 23 C · highest 41 C
+12:03:26 Chip: ESP32-S3 rev 2 · 240 MHz · Arduino core 3.3.12 · IDF v5.5.5
+12:03:26 Memory: free 96 KB, lowest 88 KB, largest block 55 KB · PSRAM free 7678 KB
+12:03:26 Main loop: longest pass 51 ms · engine reading in own task: yes · engine task longest wait 13 ms (lock held by loopTask when it began) · waits over 100 ms: 0 · longest round of its own work 1 ms
+12:03:26 Longest part of the main loop (ms): (web: own task) 0, sd 15, diag 0, sd scan 0, history 0, network 4, led 1, serial 47, other 1
+12:03:26 Reset reason: 1 (1 power on, 3 software/update, 4 crash, 5/6/7 watchdog, 9 brownout, 11 reset over USB)
+12:03:26 Recent restarts (newest first): reason 1 after 0 s on 0.17.4 | reason 11 after 0 s on 0.17.4 | reason 11 after 0 s on 0.17.4
+12:03:26 Internal memory: free 96 KB, lowest 88 KB, largest block 55 KB · failed allocations since the start: 0
+12:03:26 Slow steps of the network part (100 ms or more, newest last): none
+12:03:26 Tasks, CPU share of one core since the last snapshot (at most 30 s ago) / stack never used (bytes):
+12:03:26   loopTask 8%/3808 · IDLE0 97%/232 · IDLE1 91%/352 · J6RX 0%/3176 · J7RX 0%/3172 · fw 0%/9080 · tiT 0%/2836 · engines 0%/15060 · ipc0 0%/1288 · ipc1 0%/1280 · sys_evt 0%/3216 · arduino_events 0%/3056 · mdns 0%/1648 · esp_timer 0%/7732 · Tmr Svc 0%/2328 · wifi 1%/4464 · xfer 0%/6776 · httpd 0%/7004
+12:03:26 Not available in this build of the ESP32 core (not invented here): lwIP's packet and TCP counters (LWIP_STATS off),
+12:03:26 the driver's transmit retry counters (no public API), the ARP table (no thread-safe public read).
+12:03:26 
+12:03:26 HTTP / WEB (esp_http_server, port 80)
+12:03:26 Requests: 0 · long transfers: 0 · answered busy (503): 0 · refused by the security checks: 0 · send failures (timeout or phone gone): 0
+12:03:26 Connections opened: 0 · closed: 0 · open now: 0 · most at once: 0 · successful answers to other devices: 0
+12:03:26 On the own Wi-Fi: connections 0 (0 closed without a request, 0 used for more than one) · requests 0 · 2xx 0, 3xx 0, 4xx 0, 5xx 0 · failed while sending 0 · bytes 0 KB · slowest 0 ms ()
+12:03:26 Through the router: connections 0 (0 closed without a request, 0 used for more than one) · requests 0 · 2xx 0, 3xx 0, 4xx 0, 5xx 0 · failed while sending 0 · bytes 0 KB · slowest 0 ms ()
+12:03:26 Own self-test: connections 0 (0 closed without a request, 0 used for more than one) · requests 0 · 2xx 0, 3xx 0, 4xx 0, 5xx 0 · failed while sending 0 · bytes 0 KB · slowest 0 ms ()
+12:03:26 Request log (every request through the router, and failed or slow ones on the own Wi-Fi; newest 32 of 0):
+12:03:26   none
+12:03:26 A request counts as answered when the server handed the whole answer to TCP. Whether it arrived is seen from the
+12:03:26 next request on the same connection ("used for more than one"); the last 5.7 KB of an answer cannot be confirmed.
+12:03:26 Slowest request: 0 ms () · last transfer waited 0 ms for the engine lock
+12:03:26 Stack left (bytes): web server 7004, transfers 6776
+12:03:26 Firmware self-test: not needed (this firmware was confirmed before)
+12:03:26 Last 32 KiB server write: 0 bytes in 0 ms (0 write calls)
+12:03:26 TCP send window: ESP32 core default (not modified)
+12:03:26 Note: server write time is NOT the same as measured radio throughput.
+12:03:26 
+12:03:26 LATEST WI-FI EVENTS (oldest to newest; uptime seconds)
+12:03:26   +372s  Phone joined EngineLink Wi-Fi
+12:03:26   +373s  Phone received an IP from EngineLink DHCP
+12:03:26 
+12:03:26 MACHINE-READABLE JSON (copy/send the entire report)
+12:03:26 {"version":"0.17.4","build":"Nov 10 2026 18:47:00","uptimeMs":389419,"mode":"standalone","recovery":false,"wifiMode":2,"ssid":"","status":254,"phase":"standalone","associated":false,"hasRouterIp":false,"ip":"","gateway":"","rssi":null,"associationEvents":0,"dhcpIpEvents":0,"lostIpEvents":0,"associationMs":0,"dhcpMs":0,"driverReason":0,"unexpectedReason":0,"unexpectedDrops":0,"associationFailures":0,"txReapplied":0,"txTargetQdbm":78,"txDriverQdbm":78,"apLink":{"up":true,"ch":6,"bw":20,"pmfCapable":true,"pmfRequired":false,"inactiveS":600,"country":"DK","stations":[{"oui":"B0:DC:EF","rssi":-46,"phy":"bgn"}]},"loopParts":[0,15,0,0,0,4,1,47,1],"engineMaxWaitMs":13,"engineMaxWaitBy":"loopTask","engineSlowWaits":0,"engineMaxRoundMs":1,"apStations":1,"apJoins":1,"apLeaves":0,"apDhcpLeases":1,"apLeaveReason":0,"apRestarts":0,"speedTxBytes":0,"speedTxMs":0,"speedTxWrites":0,"networkEpoch":1,"httpdRequests":0,"httpdAsync":0,"httpdBusy503":0,"httpdBusyLock":0,"httpdBusyXfer":0,"httpdBusyXferLock":0,"httpdBusyPath":"","httpdBusyAtMs":0,"httpdRejected":0,"httpdSendFails":0,"httpdOpens":0,"httpdCloses":0,"httpdOpenNow":0,"httpdOpenMax":0,"httpdExternalOk":0,"httpdSlowMs":0,"httpdSlowPath":"","httpdRouterOpens":0,"httpdRouterRequests":0,"httpdRouterOk":0,"httpdRouterSendFails":0,"httpdRouterLastMs":0,"httpdStackFree":7004,"xferStackFree":6776,"routerAttempts":0,"routerFallbacks":0,"routerNextTryS":null,"disconnectEvents":0,"lastGotIpUptimeMs":0,"lastRouterIp":"","lastRouterRssi":null,"lastRouterChannel":0,"lastSecurity":"Not yet negotiated","txLevel":4,"phoneTests":[],"routerSession":{"seen":false,"active":false,"startMs":0,"endMs":0,"joinMs":0,"dhcpMs":0,"endReason":0,"rssiEnd":0,"afterOwnWifi":false,"cc":"","fastUntilMs":0,"bw":0,"proto":0,"txQdbm":0,"ch":0,"second":0,"b":0,"g":0,"n":0,"phy":255,"pairwise":255,"group":255,"ps":255,"ip":"0.0.0.0","mask":"0.0.0.0","gw":"0.0.0.0","dns":"0.0.0.0","rssiStart":0,"rssiMin":0,"rssiMax":-127,"rssiAvg":0,"rssiLast":0,"pingSent":0,"pingOk":0,"pingSumMs":0,"pingMaxMs":0,"pingLostRowMax":0,"pingBuckets":[0,0,0,0,0],"beaconTimeouts":0,"channelChanges":0,"opens":0,"opensEmpty":0,"opensReused":0,"requests":0,"ok":0,"status":[0,0,0,0],"sendFails":0,"bytes":0},"allocFails":0,"routerSessions":[],"slots":[],"slotFields":"startS,pingSent,pingOk,rttAvgMs,rssi,requests,failed,bytes,chipTempC","http":[{"net":"own Wi-Fi","conns":0,"connsEmpty":0,"connsReused":0,"requests":0,"status":[0,0,0,0],"failed":0,"bytes":0,"slowMs":0,"slowPath":"","lastMs":0,"endpoints":[[0,0,0],[0,0,0],[0,0,0],[0,0,0]]},{"net":"router","conns":0,"connsEmpty":0,"connsReused":0,"requests":0,"status":[0,0,0,0],"failed":0,"bytes":0,"slowMs":0,"slowPath":"","lastMs":0,"endpoints":[[0,0,0],[0,0,0],[0,0,0],[0,0,0]]},{"net":"self-test","conns":0,"connsEmpty":0,"connsReused":0,"requests":0,"status":[0,0,0,0],"failed":0,"bytes":0,"slowMs":0,"slowPath":"","lastMs":0,"endpoints":[[0,0,0],[0,0,0],[0,0,0],[0,0,0]]}],"requestLog":[],"netSteps":[],"powerSave":1,"events":[{"uptimeMs":372795,"event":"Phone joined EngineLink Wi-Fi","reason":0,"count":1,"lastUptimeMs":372795},{"uptimeMs":373318,"event":"Phone received an IP from EngineLink DHCP","reason":0,"count":1,"lastUptimeMs":373318}]}
+12:03:26 
+12:03:29 [392s] J7 0/0  J6 0/0 frames/invalid  drops 0  heap 98632  AP clients 1  SD Logging raw J1708
+12:04:29 [452s] J7 0/0  J6 0/0 frames/invalid  drops 0  heap 98476  AP clients 1  SD Logging raw J1708
+12:05:29 [512s] J7 0/0  J6 0/0 frames/invalid  drops 0  heap 98476  AP clients 1  SD Logging raw J1708
+12:06:29 [572s] J7 0/0  J6 0/0 frames/invalid  drops 0  heap 98476  AP clients 1  SD Logging raw J1708
+
+### 12:07:26 +600s SENT wifi
+12:07:26 ENGINELINK - WI-FI REPORT
+12:07:26 ========================
+12:07:26 
+12:07:26 Firmware: 0.17.4 (built Nov 10 2026 18:47:00)
+12:07:26 Uptime: 629 seconds
+12:07:26 Mode: Standalone (EngineLink Wi-Fi)
+12:07:26 Wi-Fi radio mode: 2 (1=station, 2=access point)
+12:07:26 Router: Not configured
+12:07:26 Currently connected: No
+12:07:26 Router IP now: None
+12:07:26 Last successful router IP: None this boot
+12:07:26 Last router signal: Not measured
+12:07:26 Last router channel: 0
+12:07:26 Last negotiated Wi-Fi security: Not yet negotiated
+12:07:26 Station: as the working test sketch: power save off, everything else the driver's default (no bandwidth, country, scan, protocol or TX-power setting)
+12:07:26 Security: ESP32 core WPA2/WPA3 negotiation (no custom SAE handling)
+12:07:26 Transmit power: high (19.5 dBm) (fixed) · target 78 quarter-dBm · driver reports 19.50 dBm (78 quarter-dBm) · set again after the driver changed it: 0 time(s)
+12:07:26 Power save: not applicable now (access point mode); the router session below has its own line
+12:07:26 CONNECTIVITY (COUNTERS SINCE BOOT)
+12:07:26 Successful Wi-Fi associations: 0
+12:07:26 Successful router IP assignments: 0
+12:07:26 Router IP losses: 0
+12:07:26 Wi-Fi disconnect events: 0
+12:07:26 Dropped active router connections: 0
+12:07:26 Pre-connection failures: 0
+12:07:26 Reconnect: the ESP32 core's own, plus one plain connect after 20 s without any attempt (the core stops after code 202)
+12:07:26 App-initiated router attempts: 0
+12:07:26 Router recovery fallbacks: 0
+12:07:26 Last association time: 0 ms
+12:07:26 Last DHCP time: 0 ms
+12:07:26 Last successful IP at uptime: 0 seconds
+12:07:26 Last Wi-Fi event reason: 0 - No reason reported
+12:07:26 Last unexpected reason: 0 - No reason reported
+12:07:26 Error 202 means authentication failure; it does not prove the password is wrong.
+12:07:26 
+12:07:26 DOWNLOAD TESTS FROM THE PHONE (newest last)
+12:07:26   188 s ago · 19.5 dBm · 37.20 kB/s · request round trip 33 ms · chip 41 C · at uptime 440 s
+12:07:26   84 s ago · 19.5 dBm · 89.80 kB/s · request round trip 53 ms · chip 42 C · at uptime 544 s
+12:07:26   3 s ago · 19.5 dBm · 180.10 kB/s · request round trip 100 ms · chip 42 C · at uptime 626 s
+12:07:26 
+12:07:26 ROUTER SESSIONS AS ENGINELINK MEASURED THEM (newest first, up to 4 kept since the start)
+12:07:26 No router session with an IP address since the start.
+12:07:26 Reading it: pings lost = packets between EngineLink and the router do not get through. Pings fine but connections
+12:07:26 without a request, or none = the other device's packets do not reach EngineLink. Requests answered but connections
+12:07:26 never reused = the answers do not reach the device.
+12:07:26 
+12:07:26 ENGINELINK WI-FI (ACCESS POINT, THIS START)
+12:07:26 Phones connected now: 1 · joined 1 · DHCP leases assigned 1 · left 0 · started 1 · restarted by the watchdog 0 · channel 6
+12:07:26 Access point as the driver runs it: channel 6, 20 MHz, PMF capable, stations kept 600 s without traffic, country DK
+12:07:26 Joined phones (maker prefix, signal at EngineLink, Wi-Fi standards): B0:DC:EF -45 dBm bgn
+12:07:26 Wi-Fi country (driver): DK
+12:07:26 
+12:07:26 SYSTEM
+12:07:26 Chip temperature: now 42 C · at the first reading after the start 23 C · highest 43 C
+12:07:26 Chip: ESP32-S3 rev 2 · 240 MHz · Arduino core 3.3.12 · IDF v5.5.5
+12:07:26 Memory: free 96 KB, lowest 86 KB, largest block 53 KB · PSRAM free 7678 KB
+12:07:26 Main loop: longest pass 51 ms · engine reading in own task: yes · engine task longest wait 13 ms (lock held by loopTask when it began) · waits over 100 ms: 0 · longest round of its own work 3 ms
+12:07:26 Longest part of the main loop (ms): (web: own task) 0, sd 15, diag 1, sd scan 2, history 1, network 4, led 2, serial 47, other 1
+12:07:26 Reset reason: 1 (1 power on, 3 software/update, 4 crash, 5/6/7 watchdog, 9 brownout, 11 reset over USB)
+12:07:26 Recent restarts (newest first): reason 1 after 0 s on 0.17.4 | reason 11 after 0 s on 0.17.4 | reason 11 after 0 s on 0.17.4
+12:07:26 Internal memory: free 96 KB, lowest 86 KB, largest block 53 KB · failed allocations since the start: 0
+12:07:26 Slow steps of the network part (100 ms or more, newest last): none
+12:07:26 Tasks, CPU share of one core since the last snapshot (at most 30 s ago) / stack never used (bytes):
+12:07:26   loopTask 8%/3808 · IDLE0 97%/232 · IDLE1 90%/352 · J6RX 0%/3176 · J7RX 0%/3172 · tiT 0%/2788 · fw 0%/9080 · arduino_events 0%/3056 · mdns 0%/1648 · xfer 0%/5340 · sys_evt 0%/3216 · httpd 0%/5136 · esp_timer 0%/7648 · Tmr Svc 0%/2328 · wifi 1%/4464 · engines 0%/15028 · ipc0 0%/1288 · ipc1 0%/1280
+12:07:26 Not available in this build of the ESP32 core (not invented here): lwIP's packet and TCP counters (LWIP_STATS off),
+12:07:26 the driver's transmit retry counters (no public API), the ARP table (no thread-safe public read).
+12:07:26 
+12:07:26 HTTP / WEB (esp_http_server, port 80)
+12:07:26 Requests: 16 · long transfers: 3 · answered busy (503): 0 · refused by the security checks: 0 · send failures (timeout or phone gone): 0
+12:07:26 Connections opened: 16 · closed: 16 · open now: 0 · most at once: 1 · successful answers to other devices: 16
+12:07:26 On the own Wi-Fi: connections 16 (0 closed without a request, 0 used for more than one) · requests 16 · 2xx 16, 3xx 0, 4xx 0, 5xx 0 · failed while sending 0 · bytes 768 KB · slowest 6843 ms (/api/speedtest) · last at uptime 626 s
+12:07:26    by address (requests, failed, slowest ms): / 0/0/0 · /api/health 10/0/2 · /api/live 0/0/0 · other 6/0/6843
+12:07:26 Through the router: connections 0 (0 closed without a request, 0 used for more than one) · requests 0 · 2xx 0, 3xx 0, 4xx 0, 5xx 0 · failed while sending 0 · bytes 0 KB · slowest 0 ms ()
+12:07:26 Own self-test: connections 0 (0 closed without a request, 0 used for more than one) · requests 0 · 2xx 0, 3xx 0, 4xx 0, 5xx 0 · failed while sending 0 · bytes 0 KB · slowest 0 ms ()
+12:07:26 Request log (every request through the router, and failed or slow ones on the own Wi-Fi; newest 32 of 2):
+12:07:26   +440.5s own Wi-Fi /api/speedtest -> 200, 262144 B, first byte after 1 ms, done in 6843 ms (request 1 on its connection)
+12:07:26   +544.2s own Wi-Fi /api/speedtest -> 200, 262144 B, first byte after 1 ms, done in 2768 ms (request 1 on its connection)
+12:07:26 A request counts as answered when the server handed the whole answer to TCP. Whether it arrived is seen from the
+12:07:26 next request on the same connection ("used for more than one"); the last 5.7 KB of an answer cannot be confirmed.
+12:07:26 Slowest request: 6843 ms (/api/speedtest?kb=256) · last transfer waited 0 ms for the engine lock
+12:07:26 Stack left (bytes): web server 5136, transfers 5340
+12:07:26 Firmware self-test: not needed (this firmware was confirmed before)
+12:07:26 Last 32 KiB server write: 262144 bytes in 1431 ms (64 write calls)
+12:07:26 TCP send window: ESP32 core default (not modified)
+12:07:26 Note: server write time is NOT the same as measured radio throughput.
+12:07:26 
+12:07:26 LATEST WI-FI EVENTS (oldest to newest; uptime seconds)
+12:07:26   +372s  Phone joined EngineLink Wi-Fi
+12:07:26   +373s  Phone received an IP from EngineLink DHCP
+12:07:26 
+12:07:26 MACHINE-READABLE JSON (copy/send the entire report)
+12:07:26 {"version":"0.17.4","build":"Nov 10 2026 18:47:00","uptimeMs":629329,"mode":"standalone","recovery":false,"wifiMode":2,"ssid":"","status":254,"phase":"standalone","associated":false,"hasRouterIp":false,"ip":"","gateway":"","rssi":null,"associationEvents":0,"dhcpIpEvents":0,"lostIpEvents":0,"associationMs":0,"dhcpMs":0,"driverReason":0,"unexpectedReason":0,"unexpectedDrops":0,"associationFailures":0,"txReapplied":0,"txTargetQdbm":78,"txDriverQdbm":78,"apLink":{"up":true,"ch":6,"bw":20,"pmfCapable":true,"pmfRequired":false,"inactiveS":600,"country":"DK","stations":[{"oui":"B0:DC:EF","rssi":-45,"phy":"bgn"}]},"loopParts":[0,15,1,2,1,4,2,47,1],"engineMaxWaitMs":13,"engineMaxWaitBy":"loopTask","engineSlowWaits":0,"engineMaxRoundMs":3,"apStations":1,"apJoins":1,"apLeaves":0,"apDhcpLeases":1,"apLeaveReason":0,"apRestarts":0,"speedTxBytes":262144,"speedTxMs":1431,"speedTxWrites":64,"networkEpoch":1,"httpdRequests":16,"httpdAsync":3,"httpdBusy503":0,"httpdBusyLock":0,"httpdBusyXfer":0,"httpdBusyXferLock":0,"httpdBusyPath":"","httpdBusyAtMs":0,"httpdRejected":0,"httpdSendFails":0,"httpdOpens":16,"httpdCloses":16,"httpdOpenNow":0,"httpdOpenMax":1,"httpdExternalOk":16,"httpdSlowMs":6843,"httpdSlowPath":"/api/speedtest?kb=256","httpdRouterOpens":0,"httpdRouterRequests":0,"httpdRouterOk":0,"httpdRouterSendFails":0,"httpdRouterLastMs":0,"httpdStackFree":5136,"xferStackFree":5340,"routerAttempts":0,"routerFallbacks":0,"routerNextTryS":null,"disconnectEvents":0,"lastGotIpUptimeMs":0,"lastRouterIp":"","lastRouterRssi":null,"lastRouterChannel":0,"lastSecurity":"Not yet negotiated","txLevel":4,"phoneTests":[{"agoS":188,"level":4,"kbs":37.20,"rttMs":33,"tempC":41,"atS":440},{"agoS":84,"level":4,"kbs":89.80,"rttMs":53,"tempC":42,"atS":544},{"agoS":3,"level":4,"kbs":180.10,"rttMs":100,"tempC":42,"atS":626}],"routerSession":{"seen":false,"active":false,"startMs":0,"endMs":0,"joinMs":0,"dhcpMs":0,"endReason":0,"rssiEnd":0,"afterOwnWifi":false,"cc":"","fastUntilMs":0,"bw":0,"proto":0,"txQdbm":0,"ch":0,"second":0,"b":0,"g":0,"n":0,"phy":255,"pairwise":255,"group":255,"ps":255,"ip":"0.0.0.0","mask":"0.0.0.0","gw":"0.0.0.0","dns":"0.0.0.0","rssiStart":0,"rssiMin":0,"rssiMax":-127,"rssiAvg":0,"rssiLast":0,"pingSent":0,"pingOk":0,"pingSumMs":0,"pingMaxMs":0,"pingLostRowMax":0,"pingBuckets":[0,0,0,0,0],"beaconTimeouts":0,"channelChanges":0,"opens":0,"opensEmpty":0,"opensReused":0,"requests":0,"ok":0,"status":[0,0,0,0],"sendFails":0,"bytes":0},"allocFails":0,"routerSessions":[],"slots":[],"slotFields":"startS,pingSent,pingOk,rttAvgMs,rssi,requests,failed,bytes,chipTempC","http":[{"net":"own Wi-Fi","conns":16,"connsEmpty":0,"connsReused":0,"requests":16,"status":[16,0,0,0],"failed":0,"bytes":786530,"slowMs":6843,"slowPath":"/api/speedtest","lastMs":626195,"endpoints":[[0,0,0],[10,0,2],[0,0,0],[6,0,6843]]},{"net":"router","conns":0,"connsEmpty":0,"connsReused":0,"requests":0,"status":[0,0,0,0],"failed":0,"bytes":0,"slowMs":0,"slowPath":"","lastMs":0,"endpoints":[[0,0,0],[0,0,0],[0,0,0],[0,0,0]]},{"net":"self-test","conns":0,"connsEmpty":0,"connsReused":0,"requests":0,"status":[0,0,0,0],"failed":0,"bytes":0,"slowMs":0,"slowPath":"","lastMs":0,"endpoints":[[0,0,0],[0,0,0],[0,0,0],[0,0,0]]}],"requestLog":[{"atMs":440537,"net":"own Wi-Fi","path":"/api/speedtest","status":200,"bytes":262144,"firstMs":1,"ms":6843,"failed":false,"nth":1},{"atMs":544217,"net":"own Wi-Fi","path":"/api/speedtest","status":200,"bytes":262144,"firstMs":1,"ms":2768,"failed":false,"nth":1}],"netSteps":[],"powerSave":1,"events":[{"uptimeMs":372795,"event":"Phone joined EngineLink Wi-Fi","reason":0,"count":1,"lastUptimeMs":372795},{"uptimeMs":373318,"event":"Phone received an IP from EngineLink DHCP","reason":0,"count":1,"lastUptimeMs":373318}]}
+12:07:26 
+12:07:29 [632s] J7 0/0  J6 0/0 frames/invalid  drops 0  heap 98476  AP clients 1  SD Logging raw J1708
+12:08:29 [692s] J7 0/0  J6 0/0 frames/invalid  drops 0  heap 98476  AP clients 1  SD Logging raw J1708
+12:09:29 [752s] J7 0/0  J6 0/0 frames/invalid  drops 0  heap 98476  AP clients 1  SD Logging raw J1708
+12:10:29 [812s] J7 0/0  J6 0/0 frames/invalid  drops 0  heap 98476  AP clients 1  SD Logging raw J1708
+12:11:29 [872s] J7 0/0  J6 0/0 frames/invalid  drops 0  heap 98476  AP clients 1  SD Logging raw J1708
+
+### 12:12:26 +900s SENT wifi
+12:12:26 ENGINELINK - WI-FI REPORT
+12:12:26 ========================
+12:12:26 
+12:12:26 Firmware: 0.17.4 (built Nov 10 2026 18:47:00)
+12:12:26 Uptime: 929 seconds
+12:12:26 Mode: Standalone (EngineLink Wi-Fi)
+12:12:26 Wi-Fi radio mode: 2 (1=station, 2=access point)
+12:12:26 Router: Not configured
+12:12:26 Currently connected: No
+12:12:26 Router IP now: None
+12:12:26 Last successful router IP: None this boot
+12:12:26 Last router signal: Not measured
+12:12:26 Last router channel: 0
+12:12:26 Last negotiated Wi-Fi security: Not yet negotiated
+12:12:26 Station: as the working test sketch: power save off, everything else the driver's default (no bandwidth, country, scan, protocol or TX-power setting)
+12:12:26 Security: ESP32 core WPA2/WPA3 negotiation (no custom SAE handling)
+12:12:26 Transmit power: high (19.5 dBm) (fixed) · target 78 quarter-dBm · driver reports 19.50 dBm (78 quarter-dBm) · set again after the driver changed it: 0 time(s)
+12:12:26 Power save: not applicable now (access point mode); the router session below has its own line
+12:12:26 CONNECTIVITY (COUNTERS SINCE BOOT)
+12:12:26 Successful Wi-Fi associations: 0
+12:12:26 Successful router IP assignments: 0
+12:12:26 Router IP losses: 0
+12:12:26 Wi-Fi disconnect events: 0
+12:12:26 Dropped active router connections: 0
+12:12:26 Pre-connection failures: 0
+12:12:26 Reconnect: the ESP32 core's own, plus one plain connect after 20 s without any attempt (the core stops after code 202)
+12:12:26 App-initiated router attempts: 0
+12:12:26 Router recovery fallbacks: 0
+12:12:26 Last association time: 0 ms
+12:12:26 Last DHCP time: 0 ms
+12:12:26 Last successful IP at uptime: 0 seconds
+12:12:26 Last Wi-Fi event reason: 0 - No reason reported
+12:12:26 Last unexpected reason: 0 - No reason reported
+12:12:26 Error 202 means authentication failure; it does not prove the password is wrong.
+12:12:26 
+12:12:26 DOWNLOAD TESTS FROM THE PHONE (newest last)
+12:12:26   488 s ago · 19.5 dBm · 37.20 kB/s · request round trip 33 ms · chip 41 C · at uptime 440 s
+12:12:26   385 s ago · 19.5 dBm · 89.80 kB/s · request round trip 53 ms · chip 42 C · at uptime 544 s
+12:12:26   303 s ago · 19.5 dBm · 180.10 kB/s · request round trip 100 ms · chip 42 C · at uptime 626 s
+12:12:26   222 s ago · 19.5 dBm · 475.90 kB/s · request round trip 18 ms · chip 43 C · at uptime 706 s
+12:12:26   121 s ago · 19.5 dBm · 689.80 kB/s · request round trip 16 ms · chip 43 C · at uptime 807 s
+12:12:26   41 s ago · 19.5 dBm · 718.70 kB/s · request round trip 13 ms · chip 42 C · at uptime 887 s
+12:12:26 
+12:12:26 ROUTER SESSIONS AS ENGINELINK MEASURED THEM (newest first, up to 4 kept since the start)
+12:12:26 No router session with an IP address since the start.
+12:12:26 Reading it: pings lost = packets between EngineLink and the router do not get through. Pings fine but connections
+12:12:26 without a request, or none = the other device's packets do not reach EngineLink. Requests answered but connections
+12:12:26 never reused = the answers do not reach the device.
+12:12:26 
+12:12:26 ENGINELINK WI-FI (ACCESS POINT, THIS START)
+12:12:26 Phones connected now: 1 · joined 1 · DHCP leases assigned 1 · left 0 · started 1 · restarted by the watchdog 0 · channel 6
+12:12:26 Access point as the driver runs it: channel 6, 20 MHz, PMF capable, stations kept 600 s without traffic, country DK
+12:12:26 Joined phones (maker prefix, signal at EngineLink, Wi-Fi standards): B0:DC:EF -45 dBm bgn
+12:12:26 Wi-Fi country (driver): DK
+12:12:26 
+12:12:26 SYSTEM
+12:12:26 Chip temperature: now 43 C · at the first reading after the start 23 C · highest 43 C
+12:12:26 Chip: ESP32-S3 rev 2 · 240 MHz · Arduino core 3.3.12 · IDF v5.5.5
+12:12:26 Memory: free 96 KB, lowest 86 KB, largest block 53 KB · PSRAM free 7678 KB
+12:12:26 Main loop: longest pass 51 ms · engine reading in own task: yes · engine task longest wait 13 ms (lock held by loopTask when it began) · waits over 100 ms: 0 · longest round of its own work 8 ms
+12:12:26 Longest part of the main loop (ms): (web: own task) 0, sd 15, diag 2, sd scan 5, history 1, network 4, led 3, serial 47, other 7
+12:12:26 Reset reason: 1 (1 power on, 3 software/update, 4 crash, 5/6/7 watchdog, 9 brownout, 11 reset over USB)
+12:12:26 Recent restarts (newest first): reason 1 after 0 s on 0.17.4 | reason 11 after 0 s on 0.17.4 | reason 11 after 0 s on 0.17.4
+12:12:26 Internal memory: free 96 KB, lowest 86 KB, largest block 53 KB · failed allocations since the start: 0
+12:12:26 Slow steps of the network part (100 ms or more, newest last): none
+12:12:26 Tasks, CPU share of one core since the last snapshot (at most 30 s ago) / stack never used (bytes):
+12:12:26   loopTask 8%/3808 · IDLE0 98%/232 · IDLE1 91%/352 · fw 0%/9048 · J7RX 0%/3172 · J6RX 0%/3176 · tiT 0%/2676 · engines 0%/15028 · xfer 0%/5340 · ipc1 0%/1280 · mdns 0%/1648 · sys_evt 0%/3216 · httpd 0%/5136 · esp_timer 0%/7648 · Tmr Svc 0%/2328 · wifi 0%/4464 · arduino_events 0%/3056 · ipc0 0%/1288
+12:12:26 Not available in this build of the ESP32 core (not invented here): lwIP's packet and TCP counters (LWIP_STATS off),
+12:12:26 the driver's transmit retry counters (no public API), the ARP table (no thread-safe public read).
+12:12:26 
+12:12:26 HTTP / WEB (esp_http_server, port 80)
+12:12:26 Requests: 37 · long transfers: 6 · answered busy (503): 0 · refused by the security checks: 0 · send failures (timeout or phone gone): 0
+12:12:26 Connections opened: 37 · closed: 37 · open now: 0 · most at once: 1 · successful answers to other devices: 37
+12:12:26 On the own Wi-Fi: connections 37 (0 closed without a request, 0 used for more than one) · requests 37 · 2xx 37, 3xx 0, 4xx 0, 5xx 0 · failed while sending 0 · bytes 1536 KB · slowest 6843 ms (/api/speedtest) · last at uptime 927 s
+12:12:26    by address (requests, failed, slowest ms): / 0/0/0 · /api/health 25/0/2 · /api/live 0/0/0 · other 12/0/6843
+12:12:26 Through the router: connections 0 (0 closed without a request, 0 used for more than one) · requests 0 · 2xx 0, 3xx 0, 4xx 0, 5xx 0 · failed while sending 0 · bytes 0 KB · slowest 0 ms ()
+12:12:26 Own self-test: connections 0 (0 closed without a request, 0 used for more than one) · requests 0 · 2xx 0, 3xx 0, 4xx 0, 5xx 0 · failed while sending 0 · bytes 0 KB · slowest 0 ms ()
+12:12:26 Request log (every request through the router, and failed or slow ones on the own Wi-Fi; newest 32 of 2):
+12:12:26   +440.5s own Wi-Fi /api/speedtest -> 200, 262144 B, first byte after 1 ms, done in 6843 ms (request 1 on its connection)
+12:12:26   +544.2s own Wi-Fi /api/speedtest -> 200, 262144 B, first byte after 1 ms, done in 2768 ms (request 1 on its connection)
+12:12:26 A request counts as answered when the server handed the whole answer to TCP. Whether it arrived is seen from the
+12:12:26 next request on the same connection ("used for more than one"); the last 5.7 KB of an answer cannot be confirmed.
+12:12:26 Slowest request: 6843 ms (/api/speedtest?kb=256) · last transfer waited 0 ms for the engine lock
+12:12:26 Stack left (bytes): web server 5136, transfers 5340
+12:12:26 Firmware self-test: not needed (this firmware was confirmed before)
+12:12:26 Last 32 KiB server write: 262144 bytes in 358 ms (64 write calls)
+12:12:26 TCP send window: ESP32 core default (not modified)
+12:12:26 Note: server write time is NOT the same as measured radio throughput.
+12:12:26 
+12:12:26 LATEST WI-FI EVENTS (oldest to newest; uptime seconds)
+12:12:26   +372s  Phone joined EngineLink Wi-Fi
+12:12:26   +373s  Phone received an IP from EngineLink DHCP
+12:12:26 
+12:12:26 MACHINE-READABLE JSON (copy/send the entire report)
+12:12:26 {"version":"0.17.4","build":"Nov 10 2026 18:47:00","uptimeMs":929361,"mode":"standalone","recovery":false,"wifiMode":2,"ssid":"","status":254,"phase":"standalone","associated":false,"hasRouterIp":false,"ip":"","gateway":"","rssi":null,"associationEvents":0,"dhcpIpEvents":0,"lostIpEvents":0,"associationMs":0,"dhcpMs":0,"driverReason":0,"unexpectedReason":0,"unexpectedDrops":0,"associationFailures":0,"txReapplied":0,"txTargetQdbm":78,"txDriverQdbm":78,"apLink":{"up":true,"ch":6,"bw":20,"pmfCapable":true,"pmfRequired":false,"inactiveS":600,"country":"DK","stations":[{"oui":"B0:DC:EF","rssi":-45,"phy":"bgn"}]},"loopParts":[0,15,2,5,1,4,3,47,7],"engineMaxWaitMs":13,"engineMaxWaitBy":"loopTask","engineSlowWaits":0,"engineMaxRoundMs":8,"apStations":1,"apJoins":1,"apLeaves":0,"apDhcpLeases":1,"apLeaveReason":0,"apRestarts":0,"speedTxBytes":262144,"speedTxMs":358,"speedTxWrites":64,"networkEpoch":1,"httpdRequests":37,"httpdAsync":6,"httpdBusy503":0,"httpdBusyLock":0,"httpdBusyXfer":0,"httpdBusyXferLock":0,"httpdBusyPath":"","httpdBusyAtMs":0,"httpdRejected":0,"httpdSendFails":0,"httpdOpens":37,"httpdCloses":37,"httpdOpenNow":0,"httpdOpenMax":1,"httpdExternalOk":37,"httpdSlowMs":6843,"httpdSlowPath":"/api/speedtest?kb=256","httpdRouterOpens":0,"httpdRouterRequests":0,"httpdRouterOk":0,"httpdRouterSendFails":0,"httpdRouterLastMs":0,"httpdStackFree":5136,"xferStackFree":5340,"routerAttempts":0,"routerFallbacks":0,"routerNextTryS":null,"disconnectEvents":0,"lastGotIpUptimeMs":0,"lastRouterIp":"","lastRouterRssi":null,"lastRouterChannel":0,"lastSecurity":"Not yet negotiated","txLevel":4,"phoneTests":[{"agoS":488,"level":4,"kbs":37.20,"rttMs":33,"tempC":41,"atS":440},{"agoS":385,"level":4,"kbs":89.80,"rttMs":53,"tempC":42,"atS":544},{"agoS":303,"level":4,"kbs":180.10,"rttMs":100,"tempC":42,"atS":626},{"agoS":222,"level":4,"kbs":475.90,"rttMs":18,"tempC":43,"atS":706},{"agoS":121,"level":4,"kbs":689.80,"rttMs":16,"tempC":43,"atS":807},{"agoS":41,"level":4,"kbs":718.70,"rttMs":13,"tempC":42,"atS":887}],"routerSession":{"seen":false,"active":false,"startMs":0,"endMs":0,"joinMs":0,"dhcpMs":0,"endReason":0,"rssiEnd":0,"afterOwnWifi":false,"cc":"","fastUntilMs":0,"bw":0,"proto":0,"txQdbm":0,"ch":0,"second":0,"b":0,"g":0,"n":0,"phy":255,"pairwise":255,"group":255,"ps":255,"ip":"0.0.0.0","mask":"0.0.0.0","gw":"0.0.0.0","dns":"0.0.0.0","rssiStart":0,"rssiMin":0,"rssiMax":-127,"rssiAvg":0,"rssiLast":0,"pingSent":0,"pingOk":0,"pingSumMs":0,"pingMaxMs":0,"pingLostRowMax":0,"pingBuckets":[0,0,0,0,0],"beaconTimeouts":0,"channelChanges":0,"opens":0,"opensEmpty":0,"opensReused":0,"requests":0,"ok":0,"status":[0,0,0,0],"sendFails":0,"bytes":0},"allocFails":0,"routerSessions":[],"slots":[],"slotFields":"startS,pingSent,pingOk,rttAvgMs,rssi,requests,failed,bytes,chipTempC","http":[{"net":"own Wi-Fi","conns":37,"connsEmpty":0,"connsReused":0,"requests":37,"status":[37,0,0,0],"failed":0,"bytes":1573070,"slowMs":6843,"slowPath":"/api/speedtest","lastMs":927965,"endpoints":[[0,0,0],[25,0,2],[0,0,0],[12,0,6843]]},{"net":"router","conns":0,"connsEmpty":0,"connsReused":0,"requests":0,"status":[0,0,0,0],"failed":0,"bytes":0,"slowMs":0,"slowPath":"","lastMs":0,"endpoints":[[0,0,0],[0,0,0],[0,0,0],[0,0,0]]},{"net":"self-test","conns":0,"connsEmpty":0,"connsReused":0,"requests":0,"status":[0,0,0,0],"failed":0,"bytes":0,"slowMs":0,"slowPath":"","lastMs":0,"endpoints":[[0,0,0],[0,0,0],[0,0,0],[0,0,0]]}],"requestLog":[{"atMs":440537,"net":"own Wi-Fi","path":"/api/speedtest","status":200,"bytes":262144,"firstMs":1,"ms":6843,"failed":false,"nth":1},{"atMs":544217,"net":"own Wi-Fi","path":"/api/speedtest","status":200,"bytes":262144,"firstMs":1,"ms":2768,"failed":false,"nth":1}],"netSteps":[],"powerSave":1,"events":[{"uptimeMs":372795,"event":"Phone joined EngineLink Wi-Fi","reason":0,"count":1,"lastUptimeMs":372795},{"uptimeMs":373318,"event":"Phone received an IP from EngineLink DHCP","reason":0,"count":1,"lastUptimeMs":373318}]}
+12:12:26 
+12:12:29 [932s] J7 0/0  J6 0/0 frames/invalid  drops 0  heap 98476  AP clients 1  SD Logging raw J1708
+12:13:29 [992s] J7 0/0  J6 0/0 frames/invalid  drops 0  heap 98476  AP clients 1  SD Logging raw J1708
+12:14:29 [1052s] J7 0/0  J6 0/0 frames/invalid  drops 0  heap 98476  AP clients 1  SD Logging raw J1708
+12:15:29 [1112s] J7 0/0  J6 0/0 frames/invalid  drops 0  heap 98476  AP clients 1  SD Logging raw J1708
+12:16:29 [1172s] J7 0/0  J6 0/0 frames/invalid  drops 0  heap 98476  AP clients 1  SD Logging raw J1708
+
+### 12:17:26 +1200s SENT wifi
+12:17:26 ENGINELINK - WI-FI REPORT
+12:17:26 ========================
+12:17:26 
+12:17:26 Firmware: 0.17.4 (built Nov 10 2026 18:47:00)
+12:17:26 Uptime: 1229 seconds
+12:17:26 Mode: Standalone (EngineLink Wi-Fi)
+12:17:26 Wi-Fi radio mode: 2 (1=station, 2=access point)
+12:17:26 Router: Not configured
+12:17:26 Currently connected: No
+12:17:26 Router IP now: None
+12:17:26 Last successful router IP: None this boot
+12:17:26 Last router signal: Not measured
+12:17:26 Last router channel: 0
+12:17:26 Last negotiated Wi-Fi security: Not yet negotiated
+12:17:26 Station: as the working test sketch: power save off, everything else the driver's default (no bandwidth, country, scan, protocol or TX-power setting)
+12:17:26 Security: ESP32 core WPA2/WPA3 negotiation (no custom SAE handling)
+12:17:26 Transmit power: high (19.5 dBm) (fixed) · target 78 quarter-dBm · driver reports 19.50 dBm (78 quarter-dBm) · set again after the driver changed it: 0 time(s)
+12:17:26 Power save: not applicable now (access point mode); the router session below has its own line
+12:17:26 CONNECTIVITY (COUNTERS SINCE BOOT)
+12:17:26 Successful Wi-Fi associations: 0
+12:17:26 Successful router IP assignments: 0
+12:17:26 Router IP losses: 0
+12:17:26 Wi-Fi disconnect events: 0
+12:17:26 Dropped active router connections: 0
+12:17:26 Pre-connection failures: 0
+12:17:26 Reconnect: the ESP32 core's own, plus one plain connect after 20 s without any attempt (the core stops after code 202)
+12:17:26 App-initiated router attempts: 0
+12:17:26 Router recovery fallbacks: 0
+12:17:26 Last association time: 0 ms
+12:17:26 Last DHCP time: 0 ms
+12:17:26 Last successful IP at uptime: 0 seconds
+12:17:26 Last Wi-Fi event reason: 0 - No reason reported
+12:17:26 Last unexpected reason: 0 - No reason reported
+12:17:26 Error 202 means authentication failure; it does not prove the password is wrong.
+12:17:26 
+12:17:26 DOWNLOAD TESTS FROM THE PHONE (newest last)
+12:17:26   788 s ago · 19.5 dBm · 37.20 kB/s · request round trip 33 ms · chip 41 C · at uptime 440 s
+12:17:26   685 s ago · 19.5 dBm · 89.80 kB/s · request round trip 53 ms · chip 42 C · at uptime 544 s
+12:17:26   603 s ago · 19.5 dBm · 180.10 kB/s · request round trip 100 ms · chip 42 C · at uptime 626 s
+12:17:26   522 s ago · 19.5 dBm · 475.90 kB/s · request round trip 18 ms · chip 43 C · at uptime 706 s
+12:17:26   421 s ago · 19.5 dBm · 689.80 kB/s · request round trip 16 ms · chip 43 C · at uptime 807 s
+12:17:26   341 s ago · 19.5 dBm · 718.70 kB/s · request round trip 13 ms · chip 42 C · at uptime 887 s
+12:17:26   241 s ago · 19.5 dBm · 713.10 kB/s · request round trip 14 ms · chip 43 C · at uptime 988 s
+12:17:26   160 s ago · 19.5 dBm · 760.40 kB/s · request round trip 38 ms · chip 43 C · at uptime 1068 s
+12:17:26   60 s ago · 19.5 dBm · 759.40 kB/s · request round trip 20 ms · chip 43 C · at uptime 1169 s
+12:17:26 
+12:17:26 ROUTER SESSIONS AS ENGINELINK MEASURED THEM (newest first, up to 4 kept since the start)
+12:17:26 No router session with an IP address since the start.
+12:17:26 Reading it: pings lost = packets between EngineLink and the router do not get through. Pings fine but connections
+12:17:26 without a request, or none = the other device's packets do not reach EngineLink. Requests answered but connections
+12:17:26 never reused = the answers do not reach the device.
+12:17:26 
+12:17:26 ENGINELINK WI-FI (ACCESS POINT, THIS START)
+12:17:26 Phones connected now: 1 · joined 1 · DHCP leases assigned 1 · left 0 · started 1 · restarted by the watchdog 0 · channel 6
+12:17:26 Access point as the driver runs it: channel 6, 20 MHz, PMF capable, stations kept 600 s without traffic, country DK
+12:17:26 Joined phones (maker prefix, signal at EngineLink, Wi-Fi standards): B0:DC:EF -45 dBm bgn
+12:17:26 Wi-Fi country (driver): DK
+12:17:26 
+12:17:26 SYSTEM
+12:17:26 Chip temperature: now 43 C · at the first reading after the start 23 C · highest 44 C
+12:17:26 Chip: ESP32-S3 rev 2 · 240 MHz · Arduino core 3.3.12 · IDF v5.5.5
+12:17:26 Memory: free 96 KB, lowest 86 KB, largest block 53 KB · PSRAM free 7677 KB
+12:17:26 Main loop: longest pass 51 ms · engine reading in own task: yes · engine task longest wait 19 ms (lock held by loopTask when it began) · waits over 100 ms: 0 · longest round of its own work 11 ms
+12:17:26 Longest part of the main loop (ms): (web: own task) 0, sd 15, diag 2, sd scan 9, history 1, network 4, led 3, serial 47, other 7
+12:17:26 Reset reason: 1 (1 power on, 3 software/update, 4 crash, 5/6/7 watchdog, 9 brownout, 11 reset over USB)
+12:17:26 Recent restarts (newest first): reason 1 after 0 s on 0.17.4 | reason 11 after 0 s on 0.17.4 | reason 11 after 0 s on 0.17.4
+12:17:26 Internal memory: free 96 KB, lowest 86 KB, largest block 53 KB · failed allocations since the start: 0
+12:17:26 Slow steps of the network part (100 ms or more, newest last): none
+12:17:26 Tasks, CPU share of one core since the last snapshot (at most 30 s ago) / stack never used (bytes):
+12:17:26   loopTask 8%/3808 · IDLE0 98%/232 · IDLE1 91%/352 · J7RX 0%/3172 · J6RX 0%/3176 · fw 0%/9048 · tiT 0%/2676 · engines 0%/15028 · arduino_events 0%/3056 · ipc0 0%/1288 · mdns 0%/1648 · Tmr Svc 0%/2328 · sys_evt 0%/3216 · httpd 0%/5136 · esp_timer 0%/7648 · wifi 0%/4464 · ipc1 0%/1280 · xfer 0%/5340
+12:17:26 Not available in this build of the ESP32 core (not invented here): lwIP's packet and TCP counters (LWIP_STATS off),
+12:17:26 the driver's transmit retry counters (no public API), the ARP table (no thread-safe public read).
+12:17:26 
+12:17:26 HTTP / WEB (esp_http_server, port 80)
+12:17:26 Requests: 57 · long transfers: 9 · answered busy (503): 0 · refused by the security checks: 0 · send failures (timeout or phone gone): 0
+12:17:26 Connections opened: 58 · closed: 57 · open now: 1 · most at once: 1 · successful answers to other devices: 57
+12:17:26 On the own Wi-Fi: connections 58 (0 closed without a request, 0 used for more than one) · requests 57 · 2xx 57, 3xx 0, 4xx 0, 5xx 0 · failed while sending 0 · bytes 2304 KB · slowest 6843 ms (/api/speedtest) · last at uptime 1209 s
+12:17:26    by address (requests, failed, slowest ms): / 0/0/0 · /api/health 39/0/2 · /api/live 0/0/0 · other 18/0/6843
+12:17:26 Through the router: connections 0 (0 closed without a request, 0 used for more than one) · requests 0 · 2xx 0, 3xx 0, 4xx 0, 5xx 0 · failed while sending 0 · bytes 0 KB · slowest 0 ms ()
+12:17:26 Own self-test: connections 0 (0 closed without a request, 0 used for more than one) · requests 0 · 2xx 0, 3xx 0, 4xx 0, 5xx 0 · failed while sending 0 · bytes 0 KB · slowest 0 ms ()
+12:17:26 Request log (every request through the router, and failed or slow ones on the own Wi-Fi; newest 32 of 2):
+12:17:26   +440.5s own Wi-Fi /api/speedtest -> 200, 262144 B, first byte after 1 ms, done in 6843 ms (request 1 on its connection)
+12:17:26   +544.2s own Wi-Fi /api/speedtest -> 200, 262144 B, first byte after 1 ms, done in 2768 ms (request 1 on its connection)
+12:17:26 A request counts as answered when the server handed the whole answer to TCP. Whether it arrived is seen from the
+12:17:26 next request on the same connection ("used for more than one"); the last 5.7 KB of an answer cannot be confirmed.
+12:17:26 Slowest request: 6843 ms (/api/speedtest?kb=256) · last transfer waited 0 ms for the engine lock
+12:17:26 Stack left (bytes): web server 5136, transfers 5340
+12:17:26 Firmware self-test: not needed (this firmware was confirmed before)
+12:17:26 Last 32 KiB server write: 262144 bytes in 340 ms (64 write calls)
+12:17:26 TCP send window: ESP32 core default (not modified)
+12:17:26 Note: server write time is NOT the same as measured radio throughput.
+12:17:26 
+12:17:26 LATEST WI-FI EVENTS (oldest to newest; uptime seconds)
+12:17:26   +372s  Phone joined EngineLink Wi-Fi
+12:17:26   +373s  Phone received an IP from EngineLink DHCP
+12:17:26 
+12:17:26 MACHINE-READABLE JSON (copy/send the entire report)
+12:17:26 {"version":"0.17.4","build":"Nov 10 2026 18:47:00","uptimeMs":1229432,"mode":"standalone","recovery":false,"wifiMode":2,"ssid":"","status":254,"phase":"standalone","associated":false,"hasRouterIp":false,"ip":"","gateway":"","rssi":null,"associationEvents":0,"dhcpIpEvents":0,"lostIpEvents":0,"associationMs":0,"dhcpMs":0,"driverReason":0,"unexpectedReason":0,"unexpectedDrops":0,"associationFailures":0,"txReapplied":0,"txTargetQdbm":78,"txDriverQdbm":78,"apLink":{"up":true,"ch":6,"bw":20,"pmfCapable":true,"pmfRequired":false,"inactiveS":600,"country":"DK","stations":[{"oui":"B0:DC:EF","rssi":-45,"phy":"bgn"}]},"loopParts":[0,15,2,9,1,4,3,47,7],"engineMaxWaitMs":19,"engineMaxWaitBy":"loopTask","engineSlowWaits":0,"engineMaxRoundMs":11,"apStations":1,"apJoins":1,"apLeaves":0,"apDhcpLeases":1,"apLeaveReason":0,"apRestarts":0,"speedTxBytes":262144,"speedTxMs":340,"speedTxWrites":64,"networkEpoch":1,"httpdRequests":57,"httpdAsync":9,"httpdBusy503":0,"httpdBusyLock":0,"httpdBusyXfer":0,"httpdBusyXferLock":0,"httpdBusyPath":"","httpdBusyAtMs":0,"httpdRejected":0,"httpdSendFails":0,"httpdOpens":58,"httpdCloses":57,"httpdOpenNow":1,"httpdOpenMax":1,"httpdExternalOk":57,"httpdSlowMs":6843,"httpdSlowPath":"/api/speedtest?kb=256","httpdRouterOpens":0,"httpdRouterRequests":0,"httpdRouterOk":0,"httpdRouterSendFails":0,"httpdRouterLastMs":0,"httpdStackFree":5136,"xferStackFree":5340,"routerAttempts":0,"routerFallbacks":0,"routerNextTryS":null,"disconnectEvents":0,"lastGotIpUptimeMs":0,"lastRouterIp":"","lastRouterRssi":null,"lastRouterChannel":0,"lastSecurity":"Not yet negotiated","txLevel":4,"phoneTests":[{"agoS":788,"level":4,"kbs":37.20,"rttMs":33,"tempC":41,"atS":440},{"agoS":685,"level":4,"kbs":89.80,"rttMs":53,"tempC":42,"atS":544},{"agoS":603,"level":4,"kbs":180.10,"rttMs":100,"tempC":42,"atS":626},{"agoS":522,"level":4,"kbs":475.90,"rttMs":18,"tempC":43,"atS":706},{"agoS":421,"level":4,"kbs":689.80,"rttMs":16,"tempC":43,"atS":807},{"agoS":341,"level":4,"kbs":718.70,"rttMs":13,"tempC":42,"atS":887},{"agoS":241,"level":4,"kbs":713.10,"rttMs":14,"tempC":43,"atS":988},{"agoS":160,"level":4,"kbs":760.40,"rttMs":38,"tempC":43,"atS":1068},{"agoS":60,"level":4,"kbs":759.40,"rttMs":20,"tempC":43,"atS":1169}],"routerSession":{"seen":false,"active":false,"startMs":0,"endMs":0,"joinMs":0,"dhcpMs":0,"endReason":0,"rssiEnd":0,"afterOwnWifi":false,"cc":"","fastUntilMs":0,"bw":0,"proto":0,"txQdbm":0,"ch":0,"second":0,"b":0,"g":0,"n":0,"phy":255,"pairwise":255,"group":255,"ps":255,"ip":"0.0.0.0","mask":"0.0.0.0","gw":"0.0.0.0","dns":"0.0.0.0","rssiStart":0,"rssiMin":0,"rssiMax":-127,"rssiAvg":0,"rssiLast":0,"pingSent":0,"pingOk":0,"pingSumMs":0,"pingMaxMs":0,"pingLostRowMax":0,"pingBuckets":[0,0,0,0,0],"beaconTimeouts":0,"channelChanges":0,"opens":0,"opensEmpty":0,"opensReused":0,"requests":0,"ok":0,"status":[0,0,0,0],"sendFails":0,"bytes":0},"allocFails":0,"routerSessions":[],"slots":[],"slotFields":"startS,pingSent,pingOk,rttAvgMs,rssi,requests,failed,bytes,chipTempC","http":[{"net":"own Wi-Fi","conns":58,"connsEmpty":0,"connsReused":0,"requests":57,"status":[57,0,0,0],"failed":0,"bytes":2359608,"slowMs":6843,"slowPath":"/api/speedtest","lastMs":1209416,"endpoints":[[0,0,0],[39,0,2],[0,0,0],[18,0,6843]]},{"net":"router","conns":0,"connsEmpty":0,"connsReused":0,"requests":0,"status":[0,0,0,0],"failed":0,"bytes":0,"slowMs":0,"slowPath":"","lastMs":0,"endpoints":[[0,0,0],[0,0,0],[0,0,0],[0,0,0]]},{"net":"self-test","conns":0,"connsEmpty":0,"connsReused":0,"requests":0,"status":[0,0,0,0],"failed":0,"bytes":0,"slowMs":0,"slowPath":"","lastMs":0,"endpoints":[[0,0,0],[0,0,0],[0,0,0],[0,0,0]]}],"requestLog":[{"atMs":440537,"net":"own Wi-Fi","path":"/api/speedtest","status":200,"bytes":262144,"firstMs":1,"ms":6843,"failed":false,"nth":1},{"atMs":544217,"net":"own Wi-Fi","path":"/api/speedtest","status":200,"bytes":262144,"firstMs":1,"ms":2768,"failed":false,"nth":1}],"netSteps":[],"powerSave":1,"events":[{"uptimeMs":372795,"event":"Phone joined EngineLink Wi-Fi","reason":0,"count":1,"lastUptimeMs":372795},{"uptimeMs":373318,"event":"Phone received an IP from EngineLink DHCP","reason":0,"count":1,"lastUptimeMs":373318}]}
+12:17:26 
+12:17:29 [1232s] J7 0/0  J6 0/0 frames/invalid  drops 0  heap 98476  AP clients 1  SD Logging raw J1708
+12:18:29 [1292s] J7 0/0  J6 0/0 frames/invalid  drops 0  heap 98476  AP clients 1  SD Logging raw J1708

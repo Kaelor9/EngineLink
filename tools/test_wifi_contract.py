@@ -41,10 +41,24 @@ assert sta.count("setSleep") == 1 and "WiFi.setSleep(false);" in sta, "station p
 for gone in ("esp_wifi_", "setScanMethod", "setTxPower", "setMinSecurity", "setSortMethod", "WiFi.config(", "setAutoReconnect"):
     assert gone not in sta, f"no station setting between WiFi.mode(WIFI_STA) and connectRouter(): {gone}"
 for gone in ("esp_wifi_set_inactive_time(WIFI_IF_STA", "WIFI_BW_HT40)", "esp_wifi_set_ps(", "WiFi.setSleep(true)", "WiFi.setScanMethod(",
-             "esp_wifi_set_country(", "WIFI_PROTOCOL_LR)", "esp_wifi_set_protocol(", "esp_wifi_set_promiscuous", "esp_phy_erase_cal_data_in_nvs",
+             "esp_wifi_set_country(", "WIFI_PROTOCOL_LR)", "esp_wifi_set_protocol(", "esp_phy_erase_cal_data_in_nvs",
              "esp_wifi_set_bandwidth(WIFI_IF_STA", "setAutoReconnect(", "WiFi.persistent(",
              "staPlainG", "staRadioSetup", "routerLinkDead", "linkRejoin", "surveyRecord", "rfCalibrateOnce"):
     assert gone not in fw, f"{gone}: not in the working sketch, removed in rc5 (plan section 10), must not return"
+# The sniffer was taken out of router sessions in rc5 (it changed the station's
+# receive state mid-session). It returns only for the own Wi-Fi's automatic
+# channel (plan section 19): before the AP starts, and on the AP with no phone
+# joined; never in router mode.
+ca = (FW / "chanauto.ino").read_text(encoding="utf-8")
+for src in (FW.glob("*.ino"), FW.glob("*.h"), FW.glob("*.cpp")):
+    for p in src:
+        if p.name != "chanauto.ino":
+            assert "esp_wifi_set_promiscuous" not in p.read_text(encoding="utf-8"), f"sniffer only in chanauto.ino: {p.name}"
+chk = body(ca, "void serviceChanAuto(uint32_t now) {")
+assert "WiFi.getMode() != WIFI_MODE_AP" in chk and "WiFi.softAPgetStationNum()" in chk
+ab = body(w, "void applyNetwork(){")
+assert ab.index("chanAutoStop();") < ab.index("WiFi.mode(WIFI_OFF);"), "sniffer off before the driver changes mode"
+assert ab.index("if(withRouter){") < ab.index("chanSurveyBegin();"), "survey only in the own Wi-Fi branch"
 # The core stops reconnecting after code 202 (rc4 stood idle for 90 s): one
 # plain connect from the main loop after 20 s without an attempt or a report.
 sn0 = body(w, "void serviceNetwork(){")

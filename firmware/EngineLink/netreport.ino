@@ -205,6 +205,7 @@ String buildNetworkReport(){
   if(apLeaves){s+=" (last code ";s+=(unsigned)apReason;s+=")";}
   s+=" · started ";s+=(unsigned long)apStarts;s+=" · restarted by the watchdog ";s+=apRestarts;
   s+=" · channel ";s+=(unsigned)apChannelNow;s+="\n";
+  if(WiFi.getMode()&WIFI_MODE_AP){s+="Channel: ";s+=chanAutoText();s+="\n";}   // not in router mode
   {const ApLink a=readApLink();
    if(a.up){s+="Access point as the driver runs it: channel ";s+=a.ch;s+=", ";s+=a.bw;s+=" MHz, PMF ";s+=a.pmfRequired?"required":a.pmfCapable?"capable":"off";
      s+=", stations kept ";s+=a.inactiveS;s+=" s without traffic, country ";s+=a.cc[0]?a.cc:"?";s+="\n";
