@@ -1,0 +1,76 @@
+12:04:10 +     0s health 200 63 ms
+12:04:17 +     7s SPEED 200 262144 B in 6.91 s, first byte 33 ms -> 37 kB/s
+12:04:38 +    27s health 200 164 ms
+12:04:58 +    47s health 200 286 ms
+12:05:18 +    68s health 200 69 ms
+12:05:38 +    88s health 200 118 ms
+12:05:58 +   108s health 200 126 ms
+12:06:01 +   111s SPEED 200 262144 B in 2.90 s, first byte 53 ms -> 90 kB/s
+12:06:21 +   131s health 200 88 ms
+12:06:41 +   151s health 200 67 ms
+12:07:01 +   171s health 200 70 ms
+12:07:21 +   191s health 200 28 ms
+12:07:23 +   193s SPEED 200 262144 B in 1.52 s, first byte 100 ms -> 180 kB/s
+12:07:43 +   213s health 200 46 ms
+12:08:03 +   233s health 200 48 ms
+12:08:23 +   253s health 200 11 ms
+12:08:43 +   273s health 200 36 ms
+12:08:44 +   273s SPEED 200 262144 B in 0.56 s, first byte 18 ms -> 476 kB/s
+12:09:04 +   293s health 200 23 ms
+12:09:24 +   313s health 200 24 ms
+12:09:44 +   333s health 200 19 ms
+12:10:04 +   353s health 200 14 ms
+12:10:24 +   373s health 200 13 ms
+12:10:24 +   374s SPEED 200 262144 B in 0.39 s, first byte 16 ms -> 690 kB/s
+12:10:44 +   394s health 200 8 ms
+12:11:04 +   414s health 200 30 ms
+12:11:24 +   434s health 200 12 ms
+12:11:44 +   454s health 200 15 ms
+12:11:45 +   454s SPEED 200 262144 B in 0.37 s, first byte 13 ms -> 719 kB/s
+12:12:05 +   474s health 200 11 ms
+12:12:25 +   494s health 200 30 ms
+12:12:45 +   514s health 200 18 ms
+12:13:05 +   534s health 200 12 ms
+12:13:25 +   554s health 200 13 ms
+12:13:25 +   555s SPEED 200 262144 B in 0.37 s, first byte 14 ms -> 713 kB/s
+12:13:45 +   575s health 200 12 ms
+12:14:05 +   595s health 200 22 ms
+12:14:25 +   615s health 200 11 ms
+12:14:45 +   635s health 200 100 ms
+12:14:46 +   635s SPEED 200 262144 B in 0.37 s, first byte 38 ms -> 760 kB/s
+12:15:06 +   655s health 200 13 ms
+12:15:26 +   675s health 200 8 ms
+12:15:46 +   695s health 200 8 ms
+12:16:06 +   715s health 200 13 ms
+12:16:26 +   735s health 200 14 ms
+12:16:26 +   736s SPEED 200 262144 B in 0.36 s, first byte 20 ms -> 759 kB/s
+12:16:46 +   756s health 200 8 ms
+12:17:06 +   776s health 200 8 ms
+12:17:26 +   796s health 200 27 ms
+12:17:46 +   816s health 200 33 ms
+12:17:47 +   816s SPEED 200 262144 B in 0.36 s, first byte 14 ms -> 751 kB/s
+12:18:07 +   836s health 200 13 ms
+12:18:27 +   856s health 200 13 ms
+12:18:47 +   876s health 200 13 ms
+12:19:07 +   896s health 200 11 ms
+12:19:27 +   916s health 200 15 ms
+12:19:27 +   917s SPEED 200 262144 B in 0.36 s, first byte 11 ms -> 725 kB/s
+12:19:47 +   937s health 200 18 ms
+12:20:07 +   957s health 200 10 ms
+12:20:27 +   977s health 200 15 ms
+12:20:47 +   997s health 200 15 ms
+12:20:48 +   997s SPEED 200 262144 B in 0.41 s, first byte 12 ms -> 640 kB/s
+12:21:08 +  1017s health 200 12 ms
+12:21:28 +  1037s health 200 8 ms
+12:21:48 +  1057s health 200 16 ms
+12:22:08 +  1077s health 200 14 ms
+12:22:28 +  1097s health 200 9 ms
+12:22:28 +  1098s SPEED 200 262144 B in 0.35 s, first byte 12 ms -> 748 kB/s
+12:22:48 +  1118s health 200 8 ms
+12:23:08 +  1138s health 200 12 ms
+12:23:28 +  1158s health 200 12 ms
+12:23:48 +  1178s health 200 8 ms
+12:23:48 +  1178s SPEED 200 262144 B in 0.40 s, first byte 16 ms -> 664 kB/s
+12:24:08 +  1198s health 200 9 ms
+12:24:28 +  1218s saved network-report.txt (11812 B, 0.0 s)
+12:24:28 +  1218s saved network-health.json (3339 B, 0.0 s)

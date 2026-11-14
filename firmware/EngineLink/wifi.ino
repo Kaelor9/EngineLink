@@ -111,7 +111,7 @@ void onWiFi(WiFiEvent_t e,WiFiEventInfo_t info){
 bool routerConfigured(){return cfg.router&&cfg.ssid.length();}
 void startAP(){
   WiFi.softAPConfig(IPAddress(192,168,4,1),IPAddress(192,168,4,1),IPAddress(255,255,255,0));
-  apChannelNow=(cfg.apChannel>=1&&cfg.apChannel<=11)?cfg.apChannel:6;
+  apChannelNow=chanAutoOn()?chanAutoChannel():(cfg.apChannel>=1&&cfg.apChannel<=11)?cfg.apChannel:6;
   apStarted=WiFi.softAP(cfg.apName.c_str(),cfg.apPassword.c_str(),apChannelNow,false,6);
   if(apStarted)apRadioSetup();
   apStartedChannel=apChannelNow;
@@ -137,6 +137,7 @@ void startNameService(){
 }
 void applyNetwork(){
   const bool withRouter=routerConfigured()&&!routerHold;
+  chanAutoStop();   // no sniffer across a mode change (plan 19)
   if(scanInFlight)WiFi.scanDelete();
   scanBusy=false;scanRequested=false;scanInFlight=false;
   routerSessionEnd(netstat::END_OWN);
@@ -166,6 +167,9 @@ void applyNetwork(){
     staDownSince=millis()?millis():1;
     connectRouter();
     netStep("station start",t);
+  }else if(chanAutoOn()){
+    staDownSince=0;
+    chanSurveyBegin();   // listens ~1.5 s, then starts the own Wi-Fi (chanauto.ino)
   }else{
     netWaitBegin();
     WiFi.mode(WIFI_AP);
@@ -178,7 +182,7 @@ void applyNetwork(){
 }
 // Router setup: one asynchronous scan, the loop keeps serving meanwhile.
 void serviceWifiScan(){
-  if(!scanBusy)return;
+  if(!scanBusy||chanSurveying())return;
   if(!scanInFlight){
     if((int32_t)(millis()-scanNextAt)<0)return;
     scanStaTemporary=!(WiFi.getMode()&WIFI_MODE_STA);
@@ -254,6 +258,7 @@ void serviceNetwork(){
   if(online&&!ntpStarted&&cfg.ntpOn&&allowTime("ntp")){configTime(0,0,cfg.ntpServer.c_str(),"pool.ntp.org");ntpStarted=true;}
   if(ntpNotification){ntpNotification=false;if(allowTime("ntp")&&validWall()){hasTime=true;timeSource="ntp";backfillTripTime();}}
   serviceWifiScan();
+  serviceChanAuto(now);
   if(mdnsRefreshPending&&!scanBusy&&(uint32_t)(now-mdnsNetworkChangedAt)>=2000UL)startNameService();
   // Shortly after the own Wi-Fi started or the router gave an IP. The web
   // server binds every interface, so it needs nothing here (plan 6.6).

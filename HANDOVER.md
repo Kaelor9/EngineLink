@@ -184,8 +184,8 @@ implemented 2026-11-09; **section 10 of the plan (2026-11-10, 0.17.0-rc5) is
 the current state**, *built*, bench pending; read the "rc5" paragraph below
 first: it replaces the rc4 station, link check and measurement bullets).
 Two modes, never both:
-- **Standalone:** access point only, `EngineLink` at 192.168.4.1, channel 6
-  (saved `apch`), max 6 phones. `apRadioSetup()`: 20 MHz, stations kept 600 s,
+- **Standalone:** access point only, `EngineLink` at 192.168.4.1, channel 1, 6 or 11 chosen automatically (plan 19; fixed 6 before;
+  `apch=1/6/11` fixes it), max 6 phones. `apRadioSetup()`: 20 MHz, stations kept 600 s,
   country DK (802.11d on), no power save, then the fixed 19.5 dBm.
 - **Router:** station only, at the router's address and `enginelink.local`,
   on the ESP32 driver's defaults exactly as the Prism controller
@@ -243,7 +243,22 @@ Two modes, never both:
 - **rc6 (2026-11-10, plan section 11):** rc5 timed out on the board; the
   sketch also works with OPI PSRAM, so PSRAM is cleared; rc6 is rc5 built
   with core 3.2.0, the sketch's core. *Built*, bench pending.
-- **0.17.4 (2026-11-10, plan section 17), current:** network code = 0.17.1.
+- **2026-11-14 (plan section 19), read first:** the slow own Wi-Fi was a
+  busy channel 6, not the board: two modules and three firmwares were slow on
+  6 and fast on 1 (0.45 → 5.58 Mbit/s at −39 dBm). The own Wi-Fi now picks the
+  channel by itself (`chanauto.ino`, `chanpick.h`): it measures other
+  networks' air time on 1/6/11 before it starts and, with no phone joined,
+  re-checks every 10 minutes. Section 18's crystal conclusion is withdrawn.
+  *Built and bench-checked for the start choice*, not released.
+- **2026-11-11 (plan section 18):** a cold start of 0.17.4
+  measured from the PC: 37 → 720 kB/s over about 6 minutes while the chip
+  sensor moved only 41 → 43 °C; a rejoin and an app restart on the warm board
+  were fast at once. The slow phase belongs to the board's physical warm-up
+  after a cold power-on, not to EngineLink's code, the chip's die temperature
+  or the PC. Also: the owner's PC has Ethernet on another `192.168.0.0/24`
+  network with a lower metric, so PC tests through the home router need the
+  Ethernet unplugged or requests bound to the Wi-Fi address.
+- **0.17.4 (2026-11-10, plan section 17):** network code = 0.17.1.
   New finding: Standalone's speed also changes with the time since a cold
   power-on (54–121 kB/s at 1 min, 195–477 at 4 min, 580–730 when it had been
   running), same firmware, memory fine. The report now carries the chip's

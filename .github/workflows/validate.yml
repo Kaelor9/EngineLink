@@ -69,6 +69,10 @@ jobs:
         run: |
           g++ -O2 -std=c++17 -Wall -Wextra -I firmware/EngineLink tools/test_netstat.cpp -o /tmp/test_netstat
           /tmp/test_netstat
+      - name: Host test the own Wi-Fi's automatic channel
+        run: |
+          g++ -O2 -std=c++17 -Wall -Wextra -I firmware/EngineLink tools/test_chanpick.cpp -o /tmp/test_chanpick
+          /tmp/test_chanpick
       - name: Host test NMEA 2000 decoding
         run: |
           g++ -O2 -std=c++17 -Wall -Wextra -I firmware/EngineLink tools/test_nmea2k.cpp -o /tmp/test_nmea2k

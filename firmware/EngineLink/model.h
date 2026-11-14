@@ -288,7 +288,9 @@ struct Settings {
   bool router=false;
   bool canListen=false;
   uint8_t portChannel=1; // 1=J7 port, 2=J6 port, 0=unassigned
-  uint8_t apChannel=6;
+  uint8_t apChannel=6;       // fixed channel, used when apAuto is off
+  bool apAuto=true;          // own Wi-Fi picks the quietest of 1/6/11 (plan 19)
+  uint8_t apAutoLast=0;      // channel the last survey chose (0 = none yet)
   String apPassword="12345678";
   String ssid="";
   String wifiPassword="";

@@ -1,0 +1,162 @@
+ENGINELINK - WI-FI REPORT
+========================
+
+Firmware: 0.17.4 (built Nov 10 2026 18:47:00)
+Uptime: 544 seconds
+Mode: Standalone (EngineLink Wi-Fi)
+Wi-Fi radio mode: 2 (1=station, 2=access point)
+Router: Not configured
+Currently connected: No
+Router IP now: None
+Last successful router IP: None this boot
+Last router signal: Not measured
+Last router channel: 0
+Last negotiated Wi-Fi security: Not yet negotiated
+Station: as the working test sketch: power save off, everything else the driver's default (no bandwidth, country, scan, protocol or TX-power setting)
+Security: ESP32 core WPA2/WPA3 negotiation (no custom SAE handling)
+Transmit power: high (19.5 dBm) (fixed) · target 78 quarter-dBm · driver reports 19.50 dBm (78 quarter-dBm) · set again after the driver changed it: 0 time(s)
+Power save: not applicable now (access point mode); the router session below has its own line
+CONNECTIVITY (COUNTERS SINCE BOOT)
+Successful Wi-Fi associations: 0
+Successful router IP assignments: 0
+Router IP losses: 0
+Wi-Fi disconnect events: 0
+Dropped active router connections: 0
+Pre-connection failures: 0
+Reconnect: the ESP32 core's own, plus one plain connect after 20 s without any attempt (the core stops after code 202)
+App-initiated router attempts: 0
+Router recovery fallbacks: 0
+Last association time: 0 ms
+Last DHCP time: 0 ms
+Last successful IP at uptime: 0 seconds
+Last Wi-Fi event reason: 0 - No reason reported
+Last unexpected reason: 0 - No reason reported
+Error 202 means authentication failure; it does not prove the password is wrong.
+
+DOWNLOAD TESTS FROM THE PHONE (newest last)
+  364 s ago · 19.5 dBm · 762.20 kB/s · request round trip 12 ms · chip 44 C · at uptime 179 s
+  334 s ago · 19.5 dBm · 726.20 kB/s · request round trip 12 ms · chip 44 C · at uptime 210 s
+  303 s ago · 19.5 dBm · 750.10 kB/s · request round trip 29 ms · chip 44 C · at uptime 240 s
+  273 s ago · 19.5 dBm · 686.50 kB/s · request round trip 11 ms · chip 44 C · at uptime 271 s
+  242 s ago · 19.5 dBm · 585.20 kB/s · request round trip 15 ms · chip 45 C · at uptime 301 s
+  212 s ago · 19.5 dBm · 738.80 kB/s · request round trip 27 ms · chip 44 C · at uptime 332 s
+  182 s ago · 19.5 dBm · 768.50 kB/s · request round trip 12 ms · chip 43 C · at uptime 362 s
+  151 s ago · 19.5 dBm · 773.10 kB/s · request round trip 12 ms · chip 43 C · at uptime 392 s
+  121 s ago · 19.5 dBm · 705.30 kB/s · request round trip 19 ms · chip 43 C · at uptime 423 s
+  90 s ago · 19.5 dBm · 753.90 kB/s · request round trip 19 ms · chip 43 C · at uptime 453 s
+  60 s ago · 19.5 dBm · 737.30 kB/s · request round trip 32 ms · chip 43 C · at uptime 484 s
+  30 s ago · 19.5 dBm · 696.40 kB/s · request round trip 18 ms · chip 43 C · at uptime 514 s
+
+ROUTER SESSIONS AS ENGINELINK MEASURED THEM (newest first, up to 4 kept since the start)
+No router session with an IP address since the start.
+Reading it: pings lost = packets between EngineLink and the router do not get through. Pings fine but connections
+without a request, or none = the other device's packets do not reach EngineLink. Requests answered but connections
+never reused = the answers do not reach the device.
+
+ENGINELINK WI-FI (ACCESS POINT, THIS START)
+Phones connected now: 1 · joined 49 · DHCP leases assigned 49 · left 48 (last code 1) · started 1 · restarted by the watchdog 0 · channel 6
+Access point as the driver runs it: channel 6, 20 MHz, PMF capable, stations kept 600 s without traffic, country DK
+Joined phones (maker prefix, signal at EngineLink, Wi-Fi standards): B0:DC:EF -41 dBm bgn
+Wi-Fi country (driver): DK 
+
+SYSTEM
+Chip temperature: now 44 C · at the first reading after the start 43 C · highest 45 C
+Chip: ESP32-S3 rev 2 · 240 MHz · Arduino core 3.3.12 · IDF v5.5.5
+Memory: free 95 KB, lowest 86 KB, largest block 55 KB · PSRAM free 7678 KB
+Main loop: longest pass 90 ms · engine reading in own task: yes · engine task longest wait 35 ms (lock held by loopTask when it began) · waits over 100 ms: 0 · longest round of its own work 18 ms
+Longest part of the main loop (ms): (web: own task) 0, sd 18, diag 4, sd scan 10, history 5, network 9, led 5, serial 86, other 4
+Reset reason: 3 (1 power on, 3 software/update, 4 crash, 5/6/7 watchdog, 9 brownout, 11 reset over USB)
+Recent restarts (newest first): reason 3 after 2747 s on 0.17.4 | reason 1 after 0 s on 0.17.4 | reason 11 after 0 s on 0.17.4 | reason 11 after 0 s on 0.17.4
+Internal memory: free 95 KB, lowest 86 KB, largest block 55 KB · failed allocations since the start: 0
+Slow steps of the network part (100 ms or more, newest last): none
+Tasks, CPU share of one core since the last snapshot (at most 30 s ago) / stack never used (bytes):
+  httpd 0%/4788 · IDLE0 97%/232 · IDLE1 91%/352 · J7RX 0%/3164 · fw 0%/9004 · tiT 0%/2716 · J6RX 0%/3176 · xfer 0%/5244 · ipc0 0%/1288 · mdns 0%/1652 · Tmr Svc 0%/2328 · esp_timer 0%/7732 · sys_evt 0%/3060 · loopTask 8%/3576 · wifi 0%/4416 · engines 0%/14968 · ipc1 0%/1280 · arduino_events 0%/2916
+Not available in this build of the ESP32 core (not invented here): lwIP's packet and TCP counters (LWIP_STATS off),
+the driver's transmit retry counters (no public API), the ARP table (no thread-safe public read).
+
+HTTP / WEB (esp_http_server, port 80)
+Requests: 43 · long transfers: 14 · answered busy (503): 0 · refused by the security checks: 0 · send failures (timeout or phone gone): 0
+Connections opened: 43 · closed: 42 · open now: 1 · most at once: 1 · successful answers to other devices: 42
+On the own Wi-Fi: connections 43 (0 closed without a request, 0 used for more than one) · requests 42 · 2xx 42, 3xx 0, 4xx 0, 5xx 0 · failed while sending 0 · bytes 3584 KB · slowest 445 ms (/api/speedtest) · last at uptime 514 s
+   by address (requests, failed, slowest ms): / 0/0/0 · /api/health 14/0/2 · /api/live 0/0/0 · other 28/0/445
+Through the router: connections 0 (0 closed without a request, 0 used for more than one) · requests 0 · 2xx 0, 3xx 0, 4xx 0, 5xx 0 · failed while sending 0 · bytes 0 KB · slowest 0 ms ()
+Own self-test: connections 0 (0 closed without a request, 0 used for more than one) · requests 0 · 2xx 0, 3xx 0, 4xx 0, 5xx 0 · failed while sending 0 · bytes 0 KB · slowest 0 ms ()
+Request log (every request through the router, and failed or slow ones on the own Wi-Fi; newest 32 of 0):
+  none
+A request counts as answered when the server handed the whole answer to TCP. Whether it arrived is seen from the
+next request on the same connection ("used for more than one"); the last 5.7 KB of an answer cannot be confirmed.
+Slowest request: 445 ms (/api/speedtest?kb=256) · last transfer waited 0 ms for the engine lock
+Stack left (bytes): web server 4788, transfers 5244
+Firmware self-test: not needed (this firmware was confirmed before)
+Last 32 KiB server write: 262144 bytes in 368 ms (64 write calls)
+TCP send window: ESP32 core default (not modified)
+Note: server write time is NOT the same as measured radio throughput.
+
+LATEST WI-FI EVENTS (oldest to newest; uptime seconds)
+  +67s  Phone received an IP from EngineLink DHCP
+  +69s  Phone left EngineLink Wi-Fi  code 1 (Other Wi-Fi disconnect)
+  +70s  Phone joined EngineLink Wi-Fi
+  +70s  Phone received an IP from EngineLink DHCP
+  +72s  Phone left EngineLink Wi-Fi  code 1 (Other Wi-Fi disconnect)
+  +72s  Phone joined EngineLink Wi-Fi
+  +72s  Phone received an IP from EngineLink DHCP
+  +74s  Phone left EngineLink Wi-Fi  code 1 (Other Wi-Fi disconnect)
+  +74s  Phone joined EngineLink Wi-Fi
+  +74s  Phone received an IP from EngineLink DHCP
+  +76s  Phone left EngineLink Wi-Fi  code 1 (Other Wi-Fi disconnect)
+  +76s  Phone joined EngineLink Wi-Fi
+  +76s  Phone received an IP from EngineLink DHCP
+  +78s  Phone left EngineLink Wi-Fi  code 1 (Other Wi-Fi disconnect)
+  +78s  Phone joined EngineLink Wi-Fi
+  +78s  Phone received an IP from EngineLink DHCP
+  +80s  Phone left EngineLink Wi-Fi  code 1 (Other Wi-Fi disconnect)
+  +81s  Phone joined EngineLink Wi-Fi
+  +81s  Phone received an IP from EngineLink DHCP
+  +82s  Phone left EngineLink Wi-Fi  code 1 (Other Wi-Fi disconnect)
+  +83s  Phone joined EngineLink Wi-Fi
+  +83s  Phone received an IP from EngineLink DHCP
+  +84s  Phone left EngineLink Wi-Fi  code 1 (Other Wi-Fi disconnect)
+  +85s  Phone joined EngineLink Wi-Fi
+  +85s  Phone received an IP from EngineLink DHCP
+  +86s  Phone left EngineLink Wi-Fi  code 1 (Other Wi-Fi disconnect)
+  +87s  Phone joined EngineLink Wi-Fi
+  +87s  Phone received an IP from EngineLink DHCP
+  +89s  Phone left EngineLink Wi-Fi  code 1 (Other Wi-Fi disconnect)
+  +90s  Phone joined EngineLink Wi-Fi
+  +90s  Phone received an IP from EngineLink DHCP
+  +92s  Phone left EngineLink Wi-Fi  code 1 (Other Wi-Fi disconnect)
+  +92s  Phone joined EngineLink Wi-Fi
+  +92s  Phone received an IP from EngineLink DHCP
+  +94s  Phone left EngineLink Wi-Fi  code 1 (Other Wi-Fi disconnect)
+  +95s  Phone joined EngineLink Wi-Fi
+  +95s  Phone received an IP from EngineLink DHCP
+  +96s  Phone left EngineLink Wi-Fi  code 1 (Other Wi-Fi disconnect)
+  +97s  Phone joined EngineLink Wi-Fi
+  +97s  Phone received an IP from EngineLink DHCP
+  +99s  Phone left EngineLink Wi-Fi  code 1 (Other Wi-Fi disconnect)
+  +100s  Phone joined EngineLink Wi-Fi
+  +100s  Phone received an IP from EngineLink DHCP
+  +102s  Phone left EngineLink Wi-Fi  code 1 (Other Wi-Fi disconnect)
+  +102s  Phone joined EngineLink Wi-Fi
+  +102s  Phone received an IP from EngineLink DHCP
+  +104s  Phone left EngineLink Wi-Fi  code 1 (Other Wi-Fi disconnect)
+  +104s  Phone joined EngineLink Wi-Fi
+  +104s  Phone received an IP from EngineLink DHCP
+  +106s  Phone left EngineLink Wi-Fi  code 1 (Other Wi-Fi disconnect)
+  +106s  Phone joined EngineLink Wi-Fi
+  +106s  Phone received an IP from EngineLink DHCP
+  +108s  Phone left EngineLink Wi-Fi  code 1 (Other Wi-Fi disconnect)
+  +108s  Phone joined EngineLink Wi-Fi
+  +108s  Phone received an IP from EngineLink DHCP
+  +110s  Phone left EngineLink Wi-Fi  code 1 (Other Wi-Fi disconnect)
+  +111s  Phone joined EngineLink Wi-Fi
+  +111s  Phone received an IP from EngineLink DHCP
+  +113s  Phone left EngineLink Wi-Fi  code 1 (Other Wi-Fi disconnect)
+  +114s  Phone joined EngineLink Wi-Fi
+  +114s  Phone received an IP from EngineLink DHCP
+  +116s  Phone left EngineLink Wi-Fi  code 1 (Other Wi-Fi disconnect)
+  +116s  Phone joined EngineLink Wi-Fi
+  +116s  Phone received an IP from EngineLink DHCP
+
+MACHINE-READABLE JSON (copy/send the entire report)
+{"version":"0.17.4","build":"Nov 10 2026 18:47:00","uptimeMs":544520,"mode":"standalone","recovery":false,"wifiMode":2,"ssid":"","status":254,"phase":"standalone","associated":false,"hasRouterIp":false,"ip":"","gateway":"","rssi":null,"associationEvents":0,"dhcpIpEvents":0,"lostIpEvents":0,"associationMs":0,"dhcpMs":0,"driverReason":0,"unexpectedReason":0,"unexpectedDrops":0,"associationFailures":0,"txReapplied":0,"txTargetQdbm":78,"txDriverQdbm":78,"apLink":{"up":true,"ch":6,"bw":20,"pmfCapable":true,"pmfRequired":false,"inactiveS":600,"country":"DK","stations":[{"oui":"B0:DC:EF","rssi":-41,"phy":"bgn"}]},"loopParts":[0,18,4,10,5,9,5,86,4],"engineMaxWaitMs":35,"engineMaxWaitBy":"loopTask","engineSlowWaits":0,"engineMaxRoundMs":18,"apStations":1,"apJoins":49,"apLeaves":48,"apDhcpLeases":49,"apLeaveReason":1,"apRestarts":0,"speedTxBytes":262144,"speedTxMs":368,"speedTxWrites":64,"networkEpoch":1,"httpdRequests":43,"httpdAsync":14,"httpdBusy503":0,"httpdBusyLock":0,"httpdBusyXfer":0,"httpdBusyXferLock":0,"httpdBusyPath":"","httpdBusyAtMs":0,"httpdRejected":0,"httpdSendFails":0,"httpdOpens":43,"httpdCloses":42,"httpdOpenNow":1,"httpdOpenMax":1,"httpdExternalOk":42,"httpdSlowMs":445,"httpdSlowPath":"/api/speedtest?kb=256","httpdRouterOpens":0,"httpdRouterRequests":0,"httpdRouterOk":0,"httpdRouterSendFails":0,"httpdRouterLastMs":0,"httpdStackFree":4020,"xferStackFree":5244,"routerAttempts":0,"routerFallbacks":0,"routerNextTryS":null,"disconnectEvents":0,"lastGotIpUptimeMs":0,"lastRouterIp":"","lastRouterRssi":null,"lastRouterChannel":0,"lastSecurity":"Not yet negotiated","txLevel":4,"phoneTests":[{"agoS":364,"level":4,"kbs":762.20,"rttMs":12,"tempC":44,"atS":179},{"agoS":334,"level":4,"kbs":726.20,"rttMs":12,"tempC":44,"atS":210},{"agoS":303,"level":4,"kbs":750.10,"rttMs":29,"tempC":44,"atS":240},{"agoS":273,"level":4,"kbs":686.50,"rttMs":11,"tempC":44,"atS":271},{"agoS":242,"level":4,"kbs":585.20,"rttMs":15,"tempC":45,"atS":301},{"agoS":212,"level":4,"kbs":738.80,"rttMs":27,"tempC":44,"atS":332},{"agoS":182,"level":4,"kbs":768.50,"rttMs":12,"tempC":43,"atS":362},{"agoS":151,"level":4,"kbs":773.10,"rttMs":12,"tempC":43,"atS":392},{"agoS":121,"level":4,"kbs":705.30,"rttMs":19,"tempC":43,"atS":423},{"agoS":90,"level":4,"kbs":753.90,"rttMs":19,"tempC":43,"atS":453},{"agoS":60,"level":4,"kbs":737.30,"rttMs":32,"tempC":43,"atS":484},{"agoS":30,"level":4,"kbs":696.40,"rttMs":18,"tempC":43,"atS":514}],"routerSession":{"seen":false,"active":false,"startMs":0,"endMs":0,"joinMs":0,"dhcpMs":0,"endReason":0,"rssiEnd":0,"afterOwnWifi":false,"cc":"","fastUntilMs":0,"bw":0,"proto":0,"txQdbm":0,"ch":0,"second":0,"b":0,"g":0,"n":0,"phy":255,"pairwise":255,"group":255,"ps":255,"ip":"0.0.0.0","mask":"0.0.0.0","gw":"0.0.0.0","dns":"0.0.0.0","rssiStart":0,"rssiMin":0,"rssiMax":-127,"rssiAvg":0,"rssiLast":0,"pingSent":0,"pingOk":0,"pingSumMs":0,"pingMaxMs":0,"pingLostRowMax":0,"pingBuckets":[0,0,0,0,0],"beaconTimeouts":0,"channelChanges":0,"opens":0,"opensEmpty":0,"opensReused":0,"requests":0,"ok":0,"status":[0,0,0,0],"sendFails":0,"bytes":0},"allocFails":0,"routerSessions":[],"slots":[],"slotFields":"startS,pingSent,pingOk,rttAvgMs,rssi,requests,failed,bytes,chipTempC","http":[{"net":"own Wi-Fi","conns":43,"connsEmpty":0,"connsReused":0,"requests":42,"status":[42,0,0,0],"failed":0,"bytes":3670408,"slowMs":445,"slowPath":"/api/speedtest","lastMs":514494,"endpoints":[[0,0,0],[14,0,2],[0,0,0],[28,0,445]]},{"net":"router","conns":0,"connsEmpty":0,"connsReused":0,"requests":0,"status":[0,0,0,0],"failed":0,"bytes":0,"slowMs":0,"slowPath":"","lastMs":0,"endpoints":[[0,0,0],[0,0,0],[0,0,0],[0,0,0]]},{"net":"self-test","conns":0,"connsEmpty":0,"connsReused":0,"requests":0,"status":[0,0,0,0],"failed":0,"bytes":0,"slowMs":0,"slowPath":"","lastMs":0,"endpoints":[[0,0,0],[0,0,0],[0,0,0],[0,0,0]]}],"requestLog":[],"netSteps":[],"powerSave":1,"events":[{"uptimeMs":67947,"event":"Phone received an IP from EngineLink DHCP","reason":0,"count":1,"lastUptimeMs":67947},{"uptimeMs":69939,"event":"Phone left EngineLink Wi-Fi","reason":1,"count":1,"lastUptimeMs":69939},{"uptimeMs":70521,"event":"Phone joined EngineLink Wi-Fi","reason":0,"count":1,"lastUptimeMs":70521},{"uptimeMs":70524,"event":"Phone received an IP from EngineLink DHCP","reason":0,"count":1,"lastUptimeMs":70524},{"uptimeMs":72000,"event":"Phone left EngineLink Wi-Fi","reason":1,"count":1,"lastUptimeMs":72000},{"uptimeMs":72582,"event":"Phone joined EngineLink Wi-Fi","reason":0,"count":1,"lastUptimeMs":72582},{"uptimeMs":72613,"event":"Phone received an IP from EngineLink DHCP","reason":0,"count":1,"lastUptimeMs":72613},{"uptimeMs":74063,"event":"Phone left EngineLink Wi-Fi","reason":1,"count":1,"lastUptimeMs":74063},{"uptimeMs":74656,"event":"Phone joined EngineLink Wi-Fi","reason":0,"count":1,"lastUptimeMs":74656},{"uptimeMs":74664,"event":"Phone received an IP from EngineLink DHCP","reason":0,"count":1,"lastUptimeMs":74664},{"uptimeMs":76123,"event":"Phone left EngineLink Wi-Fi","reason":1,"count":1,"lastUptimeMs":76123},{"uptimeMs":76711,"event":"Phone joined EngineLink Wi-Fi","reason":0,"count":1,"lastUptimeMs":76711},{"uptimeMs":76718,"event":"Phone received an IP from EngineLink DHCP","reason":0,"count":1,"lastUptimeMs":76718},{"uptimeMs":78198,"event":"Phone left EngineLink Wi-Fi","reason":1,"count":1,"lastUptimeMs":78198},{"uptimeMs":78765,"event":"Phone joined EngineLink Wi-Fi","reason":0,"count":1,"lastUptimeMs":78765},{"uptimeMs":78769,"event":"Phone received an IP from EngineLink DHCP","reason":0,"count":1,"lastUptimeMs":78769},{"uptimeMs":80763,"event":"Phone left EngineLink Wi-Fi","reason":1,"count":1,"lastUptimeMs":80763},{"uptimeMs":81336,"event":"Phone joined EngineLink Wi-Fi","reason":0,"count":1,"lastUptimeMs":81336},{"uptimeMs":81339,"event":"Phone received an IP from EngineLink DHCP","reason":0,"count":1,"lastUptimeMs":81339},{"uptimeMs":82848,"event":"Phone left EngineLink Wi-Fi","reason":1,"count":1,"lastUptimeMs":82848},{"uptimeMs":83425,"event":"Phone joined EngineLink Wi-Fi","reason":0,"count":1,"lastUptimeMs":83425},{"uptimeMs":83446,"event":"Phone received an IP from EngineLink DHCP","reason":0,"count":1,"lastUptimeMs":83446},{"uptimeMs":84910,"event":"Phone left EngineLink Wi-Fi","reason":1,"count":1,"lastUptimeMs":84910},{"uptimeMs":85508,"event":"Phone joined EngineLink Wi-Fi","reason":0,"count":1,"lastUptimeMs":85508},{"uptimeMs":85511,"event":"Phone received an IP from EngineLink DHCP","reason":0,"count":1,"lastUptimeMs":85511},{"uptimeMs":86967,"event":"Phone left EngineLink Wi-Fi","reason":1,"count":1,"lastUptimeMs":86967},{"uptimeMs":87549,"event":"Phone joined EngineLink Wi-Fi","reason":0,"count":1,"lastUptimeMs":87549},{"uptimeMs":87557,"event":"Phone received an IP from EngineLink DHCP","reason":0,"count":1,"lastUptimeMs":87557},{"uptimeMs":89579,"event":"Phone left EngineLink Wi-Fi","reason":1,"count":1,"lastUptimeMs":89579},{"uptimeMs":90173,"event":"Phone joined EngineLink Wi-Fi","reason":0,"count":1,"lastUptimeMs":90173},{"uptimeMs":90185,"event":"Phone received an IP from EngineLink DHCP","reason":0,"count":1,"lastUptimeMs":90185},{"uptimeMs":92157,"event":"Phone left EngineLink Wi-Fi","reason":1,"count":1,"lastUptimeMs":92157},{"uptimeMs":92733,"event":"Phone joined EngineLink Wi-Fi","reason":0,"count":1,"lastUptimeMs":92733},{"uptimeMs":92742,"event":"Phone received an IP from EngineLink DHCP","reason":0,"count":1,"lastUptimeMs":92742},{"uptimeMs":94795,"event":"Phone left EngineLink Wi-Fi","reason":1,"count":1,"lastUptimeMs":94795},{"uptimeMs":95391,"event":"Phone joined EngineLink Wi-Fi","reason":0,"count":1,"lastUptimeMs":95391},{"uptimeMs":95398,"event":"Phone received an IP from EngineLink DHCP","reason":0,"count":1,"lastUptimeMs":95398},{"uptimeMs":96859,"event":"Phone left EngineLink Wi-Fi","reason":1,"count":1,"lastUptimeMs":96859},{"uptimeMs":97449,"event":"Phone joined EngineLink Wi-Fi","reason":0,"count":1,"lastUptimeMs":97449},{"uptimeMs":97453,"event":"Phone received an IP from EngineLink DHCP","reason":0,"count":1,"lastUptimeMs":97453},{"uptimeMs":99445,"event":"Phone left EngineLink Wi-Fi","reason":1,"count":1,"lastUptimeMs":99445},{"uptimeMs":100010,"event":"Phone joined EngineLink Wi-Fi","reason":0,"count":1,"lastUptimeMs":100010},{"uptimeMs":100020,"event":"Phone received an IP from EngineLink DHCP","reason":0,"count":1,"lastUptimeMs":100020},{"uptimeMs":102014,"event":"Phone left EngineLink Wi-Fi","reason":1,"count":1,"lastUptimeMs":102014},{"uptimeMs":102603,"event":"Phone joined EngineLink Wi-Fi","reason":0,"count":1,"lastUptimeMs":102603},{"uptimeMs":102606,"event":"Phone received an IP from EngineLink DHCP","reason":0,"count":1,"lastUptimeMs":102606},{"uptimeMs":104105,"event":"Phone left EngineLink Wi-Fi","reason":1,"count":1,"lastUptimeMs":104105},{"uptimeMs":104687,"event":"Phone joined EngineLink Wi-Fi","reason":0,"count":1,"lastUptimeMs":104687},{"uptimeMs":104700,"event":"Phone received an IP from EngineLink DHCP","reason":0,"count":1,"lastUptimeMs":104700},{"uptimeMs":106163,"event":"Phone left EngineLink Wi-Fi","reason":1,"count":1,"lastUptimeMs":106163},{"uptimeMs":106746,"event":"Phone joined EngineLink Wi-Fi","reason":0,"count":1,"lastUptimeMs":106746},{"uptimeMs":106757,"event":"Phone received an IP from EngineLink DHCP","reason":0,"count":1,"lastUptimeMs":106757},{"uptimeMs":108257,"event":"Phone left EngineLink Wi-Fi","reason":1,"count":1,"lastUptimeMs":108257},{"uptimeMs":108849,"event":"Phone joined EngineLink Wi-Fi","reason":0,"count":1,"lastUptimeMs":108849},{"uptimeMs":108857,"event":"Phone received an IP from EngineLink DHCP","reason":0,"count":1,"lastUptimeMs":108857},{"uptimeMs":110878,"event":"Phone left EngineLink Wi-Fi","reason":1,"count":1,"lastUptimeMs":110878},{"uptimeMs":111460,"event":"Phone joined EngineLink Wi-Fi","reason":0,"count":1,"lastUptimeMs":111460},{"uptimeMs":111483,"event":"Phone received an IP from EngineLink DHCP","reason":0,"count":1,"lastUptimeMs":111483},{"uptimeMs":113461,"event":"Phone left EngineLink Wi-Fi","reason":1,"count":1,"lastUptimeMs":113461},{"uptimeMs":114055,"event":"Phone joined EngineLink Wi-Fi","reason":0,"count":1,"lastUptimeMs":114055},{"uptimeMs":114064,"event":"Phone received an IP from EngineLink DHCP","reason":0,"count":1,"lastUptimeMs":114064},{"uptimeMs":116063,"event":"Phone left EngineLink Wi-Fi","reason":1,"count":1,"lastUptimeMs":116063},{"uptimeMs":116647,"event":"Phone joined EngineLink Wi-Fi","reason":0,"count":1,"lastUptimeMs":116647},{"uptimeMs":116660,"event":"Phone received an IP from EngineLink DHCP","reason":0,"count":1,"lastUptimeMs":116660}]}

@@ -82,7 +82,7 @@ void handleState(){
   s+=",\"utc\":";s+=validWall()?(long long)time(nullptr):0;
   s+=",\"network\":{\"apSsid\":\"EngineLink\",\"apClients\":";
   s+=WiFi.softAPgetStationNum();
-  s+=",\"apIP\":\"192.168.4.1\",\"apChannel\":";s+=cfg.apChannel;
+  s+=",\"apIP\":\"192.168.4.1\",\"apChannel\":";s+=cfg.apChannel;s+=",\"apAuto\":";s+=cfg.apAuto?"true":"false";
   s+=",\"mdns\":";s+=mdnsReady?"true":"false";
   s+=",\"router\":";s+=cfg.router?"true":"false";
   s+=",\"staConnected\":";s+=WiFi.status()==WL_CONNECTED?"true":"false";
@@ -99,7 +99,7 @@ void handleState(){
   s+="},\"config\":{\"router\":";
   s+=cfg.router?"true":"false";
   s+=",\"portChannel\":";s+=cfg.portChannel;
-  s+=",\"apChannel\":";s+=cfg.apChannel;
+  s+=",\"apChannel\":";s+=cfg.apChannel;s+=",\"apAuto\":";s+=cfg.apAuto?"true":"false";
   s+=",\"timePref\":";jsonString(s,cfg.timePreference);
   s+=",\"canListen\":";s+=cfg.canListen?"true":"false";
   s+=",\"defaultPassword\":";s+=cfg.apPassword=="12345678"?"true":"false";
@@ -321,7 +321,8 @@ void handleOptions(){
   int port=web.arg("port").toInt();
   if(port<0||port>2){reply(false,"Invalid engine assignment",400);return;}
   int apch=web.hasArg("apch")?web.arg("apch").toInt():cfg.apChannel;
-  if(apch!=1&&apch!=6&&apch!=11){reply(false,"Wi-Fi channel must be 1, 6 or 11",400);return;}
+  if(!web.hasArg("apch")&&cfg.apAuto)apch=0;   // 0 = automatic (plan 19)
+  if(apch!=0&&apch!=1&&apch!=6&&apch!=11){reply(false,"Wi-Fi channel must be 0 (automatic), 1, 6 or 11",400);return;}
   // Start/stop CAN first: a failure must not leave half-applied settings in RAM.
   bool newCAN=web.arg("can")=="1";
   if(newCAN!=cfg.canListen){
@@ -329,13 +330,14 @@ void handleOptions(){
     else if(!startCAN()){reply(false,"NMEA2000 listen-only interface could not start",409);return;}
     cfg.canListen=newCAN;
   }
-  bool changeNetwork=cfg.router!=(network=="router")||cfg.ssid!=ssid||cfg.apChannel!=(uint8_t)apch;
+  bool changeNetwork=cfg.router!=(network=="router")||cfg.ssid!=ssid||cfg.apAuto!=(apch==0)||(apch&&cfg.apChannel!=(uint8_t)apch);
   String newRouterPass=web.arg("pass");
   if(newRouterPass.length()){cfg.wifiPassword=newRouterPass;changeNetwork=true;}
   if(apPass.length()&&apPass!=cfg.apPassword){cfg.apPassword=apPass;changeNetwork=true;}
   cfg.router=network=="router";
   cfg.ssid=ssid;
-  cfg.apChannel=(uint8_t)apch;
+  cfg.apAuto=apch==0;
+  if(apch)cfg.apChannel=(uint8_t)apch;
   cfg.timePreference=preference;
   cfg.portChannel=(uint8_t)port;
   cfg.completed=true;

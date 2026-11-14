@@ -1,0 +1,36 @@
+12:24:34 disconnect
+12:24:39 connect
+12:24:40 reachable after 1.0 s
+12:24:40 +   0s health 35 ms
+12:24:40 +   0s SPEED 714 kB/s (0.39 s, first byte 32 ms)
+12:25:10 +  30s health 17 ms
+12:25:11 +  31s SPEED 753 kB/s (0.35 s, first byte 12 ms)
+12:25:41 +  61s health 10 ms
+12:25:41 +  61s SPEED 749 kB/s (0.35 s, first byte 12 ms)
+12:26:11 +  91s health 8 ms
+12:26:11 +  92s SPEED 601 kB/s (0.46 s, first byte 32 ms)
+12:26:42 + 122s health 39 ms
+12:26:42 + 122s SPEED 726 kB/s (0.37 s, first byte 20 ms)
+12:27:12 + 152s health 9 ms
+12:27:12 + 153s SPEED 734 kB/s (0.36 s, first byte 13 ms)
+12:27:42 + 183s health 9 ms
+12:27:43 + 183s SPEED 740 kB/s (0.37 s, first byte 25 ms)
+12:28:13 + 213s health 12 ms
+12:28:13 + 213s SPEED 769 kB/s (0.36 s, first byte 25 ms)
+12:28:43 + 243s health 12 ms
+12:28:44 + 244s SPEED 630 kB/s (0.42 s, first byte 13 ms)
+12:29:14 + 274s health 8 ms
+12:29:14 + 274s SPEED 766 kB/s (0.35 s, first byte 13 ms)
+12:29:44 + 304s health 34 ms
+12:29:44 + 305s SPEED 602 kB/s (0.46 s, first byte 33 ms)
+12:30:14 + 335s health 13 ms
+12:30:15 + 335s SPEED 718 kB/s (0.37 s, first byte 15 ms)
+12:30:45 + 365s health 8 ms
+12:30:45 + 365s SPEED 754 kB/s (0.35 s, first byte 13 ms)
+12:31:15 + 395s health 9 ms
+12:31:16 + 396s SPEED 736 kB/s (0.37 s, first byte 23 ms)
+12:31:46 + 426s health 15 ms
+12:31:46 + 426s SPEED 707 kB/s (0.37 s, first byte 12 ms)
+12:32:16 + 456s health 8 ms
+12:32:16 + 457s SPEED 693 kB/s (0.38 s, first byte 12 ms)
+12:32:46 report saved

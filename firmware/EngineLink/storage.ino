@@ -324,6 +324,8 @@ void loadHealth(){
 }
 void saveDiag(){fsWrite("/diag.bin",diagTests,sizeof(diagTests));}
 void loadDiag(){fsRead("/diag.bin",diagTests,sizeof(diagTests),sizeof(diagTests));}
+// The automatic channel's last choice, written only when it changes (plan 19).
+void saveApAutoLast(){pref.begin("enginelink",false);pref.putUChar("apchl",cfg.apAutoLast);pref.end();}
 void saveSettings(){
   pref.begin("enginelink",false);
   pref.putBool("done",cfg.completed);
@@ -331,6 +333,7 @@ void saveSettings(){
   pref.putBool("can",cfg.canListen);
   pref.putUChar("port",cfg.portChannel);
   pref.putUChar("apch",cfg.apChannel);
+  pref.putBool("apauto",cfg.apAuto);
   pref.putString("appass",cfg.apPassword);
   pref.putString("ssid",cfg.ssid);
   pref.putString("wpass",cfg.wifiPassword);
@@ -379,6 +382,8 @@ void loadSettings(){
   cfg.canListen=pref.getBool("can",false);
   cfg.portChannel=pref.getUChar("port",1);
   cfg.apChannel=pref.getUChar("apch",6);
+  cfg.apAuto=pref.getBool("apauto",true);   // new key: every board starts automatic
+  cfg.apAutoLast=pref.getUChar("apchl",0);
   txLevel=TX_LEVEL_FIXED;
   // Settings from earlier Wi-Fi experiments that no longer exist (txal: the
   // automatic transmit power, rhold: the remembered recovery, until 0.14.1;
