@@ -79,7 +79,7 @@ SpeedLogRec speedLog[SPEED_LOG_N];uint8_t speedLogCount=0;
 // how warm the chip was at every speed test and in every 30 s of a router session.
 volatile int8_t chipTempC=0,chipTempStartC=0,chipTempMaxC=-128;
 
-#define EL_VERSION "0.17.4"
+#define EL_VERSION "0.17.5"
 // Releases list published by the Pages workflow; firmware files come from
 // GitHub Releases of the same repository. Nothing else is downloaded.
 #define EL_RELEASES_URL "https://kaelor9.github.io/EngineLink/releases.json"
