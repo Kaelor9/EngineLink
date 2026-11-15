@@ -57,6 +57,7 @@ inline bool isFast(uint32_t pgn) { return pgn == 128275 || pgn == 129029; }
 
 // Decode one complete message (a single frame, or a reassembled fast packet).
 // Returns true when the PGN is one EngineLink understands.
+constexpr uint16_t NO_SEA_TEMP_RAW = 27305;   // 273.05 K in PGN 130311: "no sensor" from a SeaTalk1 converter
 inline bool decode(uint32_t pgn, const uint8_t *d, uint8_t len, uint32_t now, Nav &n) {
   switch (pgn) {
   case 129025:  // position, rapid
@@ -87,7 +88,10 @@ inline bool decode(uint32_t pgn, const uint8_t *d, uint8_t len, uint32_t now, Na
     return true;
   case 130311:  // environmental, with a temperature source
     if (len < 4) return false;
-    if (u16(d + 2) != 0xFFFF) { uint8_t src = d[1] & 0x3F; if (src == 0) put(n.waterC, k2c(u16(d + 2) * 0.01f), now); else if (src == 1) put(n.airC, k2c(u16(d + 2) * 0.01f), now); }
+    // 273.05 K (-0.10 C) as sea temperature is what the Raymarine SeaTalk1
+    // converter sends without a temperature sensor: the same value for a whole
+    // trip on the owner's boat (2026-11-14). Not a reading, so it is not shown.
+    if (u16(d + 2) != 0xFFFF) { uint8_t src = d[1] & 0x3F; if (src == 0) { if (u16(d + 2) != NO_SEA_TEMP_RAW) put(n.waterC, k2c(u16(d + 2) * 0.01f), now); } else if (src == 1) put(n.airC, k2c(u16(d + 2) * 0.01f), now); }
     return true;
   case 130312:  // temperature
     if (len < 5) return false;

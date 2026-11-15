@@ -56,6 +56,7 @@ String makeNetworkJson(bool full){
   s+=",\"uptimeMs\":";s+=(unsigned long)millis();
   s+=",\"mode\":";jsonString(s,routerConfigured()?"router":"standalone");
   s+=",\"recovery\":";s+=routerHold?"true":"false";   // router mode, own Wi-Fi on meanwhile (not a mode)
+  s+=",\"holdWhy\":";s+=routerHold?(unsigned)routerHoldWhy:0U;
   s+=",\"wifiMode\":";s+=(unsigned)WiFi.getMode();
   s+=",\"ssid\":";jsonString(s,cfg.ssid);
   s+=",\"status\":";s+=(int)WiFi.status();
@@ -134,7 +135,7 @@ String buildNetworkReport(){
   s+="Firmware: ";s+=EL_VERSION;s+=" (built " __DATE__ " " __TIME__ ")";   // tells two bench builds of one version apart
   s+="\n";
   s+="Uptime: ";s+=millis()/1000UL;s+=" seconds\n";
-  s+="Mode: ";s+=routerHold?"Router (router not reached; EngineLink Wi-Fi on meanwhile, tried again every 10 minutes)":routerConfigured()?"Router (station)":"Standalone (EngineLink Wi-Fi)";s+="\n";
+  s+="Mode: ";s+=routerHold?(routerHoldWhy==2?"Router (connection lost; on EngineLink Wi-Fi, the router is tried again after 10 minutes without a phone)":"Router (router not reached; on EngineLink Wi-Fi, the router is tried again after 10 minutes without a phone)"):routerConfigured()?"Router (station)":"Standalone (EngineLink Wi-Fi)";s+="\n";
   s+="Wi-Fi radio mode: ";s+=(unsigned)WiFi.getMode();s+=" (1=station, 2=access point)\n";
   s+="Router: ";s+=cfg.ssid.isEmpty()?"Not configured":cfg.ssid;s+="\n";
   s+="Currently connected: ";s+=WiFi.status()==WL_CONNECTED?"Yes":"No";s+="\n";

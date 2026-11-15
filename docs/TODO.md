@@ -93,6 +93,19 @@ back, switch now?" (withdrawn with Stage 4: the app's Connect does it).
 
 ## To check on the boat
 
+- **0.17.6 (router lost: the own Wi-Fi stays), bench then boat.** Bench: the
+  steps under "To check" in [v0.17.6](releases/v0.17.6.md). Boat: one trip
+  in Standalone and one on the boat router (not a phone hotspot), then
+  download the Wi-Fi log and reports in the app (Diagnostics › Wi-Fi ›
+  Advanced).
+- **Open from 2026-11-14** ([evidence](test-evidence/boat-2026-11-14/README.md)):
+  read `/WIFI.OLD` and `/WIFIREP.OLD` from the trip (were answers slow with
+  both engines running?); why the hotspot link lost 34–69 % of the pings;
+  why phones are dropped from the own Wi-Fi on the boat with codes 2/209;
+  the report's "longest … ms" prints a negative ping time as 4294967268.
+- **Sea temperature:** does the boat's instrument show one? 0.17.6 hides
+  273.05 K from PGN 130311 as "no sensor" on the evidence of one trip.
+
 - **Wi-Fi next: the bench sketch `tools/wifi-bench` on the home router, profile
   0 then profile 1, 10 minutes each (plan section 12).** rc5/rc6 below are
   done and failed.

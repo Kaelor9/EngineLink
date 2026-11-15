@@ -74,7 +74,21 @@ assert "EL_STA_DEFAULTS" not in fw and "elAllowSae" not in fw and "staSecMode" n
 assert "elBoostSocket" not in fw and "wifiwpa3" not in fw
 assert "char cc[3]" not in fw, "the country code is 3 bytes without a terminator (F3)"
 # The recovery is a mechanism, not a mode: 120 s fallback, 10 min retries, named so.
-assert "routerRetryAt=now+600000UL" in body(w, "void serviceNetwork(){")
+sn0 = body(w, "void serviceNetwork(){")
+assert "routerRetryAt=now+600000UL" in sn0
+# 0.17.6 (boat, 2026-11-14): the own Wi-Fi stays while a phone uses it. A new
+# try needs 10 minutes without any phone joining or leaving, lasts 20 s, and a
+# lost connection brings the own Wi-Fi after 30 s instead of 2 minutes.
+assert "const int32_t giveUp=routerShortTry?20000:staHadIp?30000:(int32_t)120000UL;" in sn0
+assert "if(WiFi.softAPgetStationNum()>0)routerRetryAt=now+600000UL;" in sn0
+assert "else if((uint32_t)(now-apPhoneAt)<600000UL)routerRetryAt=apPhoneAt+600000UL;" in sn0
+assert "if(WiFi.softAPgetStationNum()==0){routerHold=false;applyNetwork();return;}" not in sn0, "no try the moment the last phone leaves"
+assert "routerHold=false;routerShortTry=true;applyNetwork();return;}" in sn0
+assert "++apJoins;apPhoneAt=now;" in w and "++apLeaves;apPhoneAt=now;" in w
+api = (FW / "webapi.ino").read_text(encoding="utf-8")
+assert 'web.on("/api/wifi/retry",HTTP_POST,handleWifiRetry);' in api
+assert 'web.on("/api/wifi/log",HTTP_GET,handleWifiLogDownload,R_ASYNC);' in api
+assert '"/WIFI.OLD"' in api and '"/WIFIREP.OLD"' in api, "the rotated Wi-Fi files can be downloaded too"
 assert '"rescue"' not in fw and "Recovery (" not in fw, "no third mode in the report (F6)"
 # Wi-Fi 2.0 Stage 4 is not built: no state machine, no looks, no AP+STA idle station.
 for gone in ("wifistate", "RouterGuard", "netpolicy::", "linkTune", "runRadioTest", "routerProbe", "routerKnownChannel"):
@@ -104,7 +118,7 @@ for banned in ("WiFi.begin", "WiFi.mode", "WiFi.disconnect", "WiFi.reconnect", "
 end = body(nd, "void routerSessionEnd(uint8_t why){")
 assert "esp_ping_new_session(" in body(nd, "void routerSessionBegin(){") and "esp_ping_delete_session(" in end
 # rc3's race: the fallback timer compares signed (plan 9.2 item 1).
-assert "(int32_t)(now-staDownSince)>=(int32_t)120000UL" in sn and "(uint32_t)(now-staDownSince)" not in sn
+assert "(int32_t)(now-staDownSince)>=giveUp" in sn and "const int32_t giveUp=" in sn and "(uint32_t)(now-staDownSince)" not in sn
 # The only scan is the one the owner starts in the app.
 assert fw.count("WiFi.scanNetworks(") == 1
 # The engine lock is let go around every driver mode change (plan 9.2 item 3).
