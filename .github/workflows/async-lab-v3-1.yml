@@ -1,7 +1,7 @@
 name: Build EngineLink ASYNC LAB v3.1 (test only)
 on:
   push:
-    branches: [experiment/enginelink-async-v3-1-1-fix]
+    branches: [experiment/enginelink-async-v3-1-fix]
     paths:
       - 'experiments/chatgpt-async-lab-v3-1/**'
       - 'tools/stage_chatgpt_test.py'
