@@ -47,3 +47,11 @@ inferred from a single low-throughput session.
 - [ ] Fast/reliable Wi-Fi confirmed in repeated tests
 
 **Do not remove this report when removing experimental firmware code.**
+
+## CI verification (2026-11-15)
+
+- **Independent build passed:** [run 43750982656](https://github.com/Kaelor9/EngineLink/actions/runs/43750982656), including Arduino ESP32 core 3.3.12 compile, offline UI JavaScript parse, app descriptor / merged-image validation and OTA/USB artifact staging.
+- **Merged separately:** PR [#192](https://github.com/Kaelor9/EngineLink/pull/192), commit `d205b4a992b0469ee44b471c28d4dd61cfa8ce3a`.
+- Source is isolated at `experiments/chatgpt-wifi-lab-v2/`; the normal `firmware/EngineLink/` and default release channel are untouched.
+- Bench and boat tests, OTA after flashing, and automatic rollback remain **unverified on hardware**.
+- The OTA upload endpoint accepts raw app-only images by file selection from `/lab`, not a normal multi-part form upload. The old v1 image remains separately downloadable for recovery.
