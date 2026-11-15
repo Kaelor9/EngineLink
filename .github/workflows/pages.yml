@@ -12,6 +12,7 @@ on:
       - '.github/workflows/pages.yml'
       - 'experiments/chatgpt-independent/**'
       - 'experiments/chatgpt-wifi-lab-v2/**'
+      - 'experiments/chatgpt-async-lab-v3/**'
       - 'tools/stage_chatgpt_test.py'
   workflow_dispatch:
 
@@ -234,6 +235,27 @@ jobs:
             --dest site/chatgpt-wifi-lab/ \
             --version 0.0.2-chatgpt-wifi-lab \
             --ota-name enginelink-update-CHATGPT-WIFI-LAB-V2.bin
+
+      # V3 is a separate hidden async test, never normal EngineLink latest.
+      # Failures here must not prevent standard firmware releases.
+      - name: Stage EngineLink ASYNC LAB v3 test installer
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          arduino-cli lib update-index
+          arduino-cli lib install "Async TCP@3.5.0"
+          arduino-cli lib install "ESP Async WebServer@3.12.1"
+          mkdir -p build-async-lab-v3
+          cp firmware/EngineLink/ui.h experiments/chatgpt-async-lab-v3/EngineLink/ui.h
+          arduino-cli compile \
+            --fqbn "$FQBN" \
+            --output-dir build-async-lab-v3 --export-binaries \
+            experiments/chatgpt-async-lab-v3/EngineLink
+          python3 tools/stage_chatgpt_test.py \
+            --build build-async-lab-v3 \
+            --dest site/chatgpt-async-lab-v3/ \
+            --version 0.0.3-chatgpt-async-lab \
+            --ota-name enginelink-update-CHATGPT-ASYNC-LAB-V3.bin
 
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
