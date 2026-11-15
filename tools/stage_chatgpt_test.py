@@ -20,8 +20,10 @@ def stage(build: Path, dest: Path) -> None:
     header = app.open("rb").read(0x70)
     if header[0] != 0xE9 or header[0x20:0x24] != bytes.fromhex("32 54 cd ab"):
         raise RuntimeError("Missing ESP32 application descriptor")
-    if header[0x50:0x70].split(b"\0", 1)[0] != b"EngineLink":
-        raise RuntimeError("Wrong application identity for normal EngineLink OTA")
+    project = header[0x50:0x70].split(b"\0", 1)[0]
+    if project not in (b"EngineLink", b"EngineLink.ino"):
+        raise RuntimeError(f"Unexpected ESP application name: {project!r}")
+    print(f"ESP32 project_name: {project!r}")
     dest.mkdir(parents=True, exist_ok=True)
     shutil.copyfile(merged[0], dest / "firmware.bin")
     shutil.copyfile(app, dest / "enginelink-update-CHATGPT-TEST.bin")
