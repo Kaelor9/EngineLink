@@ -25,8 +25,8 @@ Do not infer that the root cause is solely the synchronous WebServer, hardware o
 
 ## Verification gates
 
-- [ ] CI builds v3 firmware with pinned upstream async libraries
-- [ ] JavaScript compiles, OTA app descriptor and size verified
+- [x] CI builds v3 firmware with pinned upstream async libraries
+- [x] JavaScript compiles, OTA app descriptor and size verified
 - [ ] Normal firmware and v1/v2 Pages paths unchanged
 - [ ] OTA v1 -> v3 on disconnected bench board
 - [ ] OTA v3 -> v1 and normal EngineLink on disconnected bench board
@@ -36,3 +36,14 @@ Do not infer that the root cause is solely the synchronous WebServer, hardware o
 - [ ] Verified remote connection after reboot
 
 All failures and learning should be appended here; remove experimental code without deleting findings.
+
+## CI findings — 2026-11-15
+
+- Successful isolated async CI build: https://github.com/Kaelor9/EngineLink/actions/runs/43757536536
+- Second isolated run also passed: https://github.com/Kaelor9/EngineLink/actions/runs/43757672621
+- Pinned AsyncTCP 3.5.0 + ESPAsyncWebServer 3.12.1 install and compile for Arduino-ESP32 core 3.3.12 passed.
+- Initial CI library installation failed because the Arduino Library Registry name is "Async TCP", not "AsyncTCP"; fixed by refreshing the index and using "Async TCP@3.5.0".
+- Next compile failed because UpdateClass in core 3.3.12 does not expose Update.runAsync; removed the unsupported call while retaining a guarded async request-body upload and app verification.
+- JavaScript parse, sketch build, ESP32 application descriptor validation, 8MB USB image staging, app-only OTA staging and Actions artifact upload succeeded.
+- Test-only PR #193 merged as main commit 062f35d0f92a704a9733cb5de21baac3f9a414ba.
+- **This is CI-only verification:** no physical Wi-Fi speed, OTA transition or rollback outcome is claimed.
