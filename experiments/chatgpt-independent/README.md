@@ -70,11 +70,22 @@ configured by this firmware; NMEA operates in listen-only mode.
 The experiment is confined to:
 - experiments/chatgpt-independent/
 - .github/workflows/chatgpt-lab.yml
-- docs/test-evidence/chatgpt-independent/
+- site/chatgpt-test/
+- tools/stage_chatgpt_test.py
 
-Delete these paths and the experiment branch to remove the test source.
-The normal firmware and normal web installer remain untouched.
+Delete these experimental files (and the experiment branch) when done.
+**Retain** docs/test-evidence/chatgpt-independent/ and any conclusions in normal
+reports: removing the experiment must not remove what was learned. The
+production firmware and default installer must remain unchanged.
 
 All test sessions should record their commit SHA, firmware version, input
 voltage, router/channel, test device, distance, result and failures in the
 evidence folder. Do not rewrite or erase prior field reports.
+
+## Current web-installer integration
+
+The dedicated source at site/chatgpt-test/index.html is staged with each
+experimental CI build. It is NOT served at the normal Pages URL until the
+corresponding separate test artifacts are published to Pages. Do not mistake a
+successful Actions artifact for a deployed website. The normal installer
+must not point its default "latest" firmware at a ChatGPT test build.
