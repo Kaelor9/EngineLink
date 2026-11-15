@@ -35,3 +35,19 @@ the unchanged normal firmware, not against assumptions.
 
 Record future compiler failures, observations and engineering decisions here.
 Preserve normal docs and previously collected Wi-Fi/boat evidence.
+
+## Finding: OTA identity validation (2026-11-15)
+
+The Arduino-ESP32 3.3.12 application descriptor stores the generic project
+name **arduino-lib-builder** in the experimental image. Production's
+`otaSameProject()` only checks that the uploaded image has the same project
+name. This alone cannot prove that a binary was authored for EngineLink;
+a different Arduino-ESP32 sketch may have the same project_name. The test
+and regular firmware should eventually authenticate the image using an
+explicit application identity/version header and cryptographic digest or
+signature, not solely `esp_app_desc_t.project_name`.
+
+Experimental CI compile succeeded for this baseline; staging initially failed
+due to mistakenly assuming the descriptor would be `EngineLink`. The CI
+validation was updated to accept and explicitly log the actual generic name.
+Hardware update and rollback testing remain **not verified**.
