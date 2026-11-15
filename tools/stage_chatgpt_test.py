@@ -21,8 +21,10 @@ def stage(build: Path, dest: Path) -> None:
     if header[0] != 0xE9 or header[0x20:0x24] != bytes.fromhex("32 54 cd ab"):
         raise RuntimeError("Missing ESP32 application descriptor")
     project = header[0x50:0x70].split(b"\0", 1)[0]
-    if project not in (b"EngineLink", b"EngineLink.ino"):
+    if project not in (b"arduino-lib-builder", b"EngineLink", b"EngineLink.ino"):
         raise RuntimeError(f"Unexpected ESP application name: {project!r}")
+    # Espressif Arduino 3.3.x uses the shared project name arduino-lib-builder.
+    # This verifies compatibility, not that an image is genuinely EngineLink.
     print(f"ESP32 project_name: {project!r}")
     dest.mkdir(parents=True, exist_ok=True)
     shutil.copyfile(merged[0], dest / "firmware.bin")
