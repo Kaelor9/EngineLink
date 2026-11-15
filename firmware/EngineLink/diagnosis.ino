@@ -87,7 +87,8 @@ void tripSeriesReopen(){
 void tripSeriesClose(bool keep){
   tripFastClose(keep);
   tripNavClose();
-  if(!keep&&tripSeriesId&&sdReady&&cardInserted()){char nn[32];snprintf(nn,sizeof(nn),"/TRIPS/T%06lu.NAV",(unsigned long)tripSeriesId);SD.remove(nn);}
+  if(!keep&&tripSeriesId&&sdReady&&cardInserted()){char nn[32];snprintf(nn,sizeof(nn),"/TRIPS/T%06lu.NAV",(unsigned long)tripSeriesId);SD.remove(nn);
+    snprintf(nn,sizeof(nn),"/TRIPS/T%06lu.WIF",(unsigned long)tripSeriesId);SD.remove(nn);}
   if(!tripSeries)return;
   tripSeries.close();
   if(keep&&sdReady&&cardInserted()){

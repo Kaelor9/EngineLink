@@ -79,7 +79,7 @@ SpeedLogRec speedLog[SPEED_LOG_N];uint8_t speedLogCount=0;
 // how warm the chip was at every speed test and in every 30 s of a router session.
 volatile int8_t chipTempC=0,chipTempStartC=0,chipTempMaxC=-128;
 
-#define EL_VERSION "0.17.6"
+#define EL_VERSION "0.17.7"
 // Releases list published by the Pages workflow; firmware files come from
 // GitHub Releases of the same repository. Nothing else is downloaded.
 #define EL_RELEASES_URL "https://kaelor9.github.io/EngineLink/releases.json"
@@ -246,6 +246,7 @@ uint32_t navCapUntil=0,navCapFrames=0,navCapBytes=0,navCapStart=0;
 uint32_t tripNavId=0,tripNavFlush=0,navFrames=0,navErrFrames=0;
 const char *const NAV_COLS="lat,lon,sog_kn,cog_deg,heading_deg,stw_kn,depth_m,water_c,rudder_deg,battery_v,wind_kn,wind_deg,tank1_pct,tank2_pct,satellites";
 uint32_t tripSeriesId=0,tripSeriesFlush=0;
+uint32_t tripWifiEnded=0;       // a trip just ended: the main loop saves its last Wi-Fi report (serialcmd.ino)
 uint32_t markLedUntil=0;
 uint32_t pendingBox[8];
 uint8_t pendingBoxN=0;

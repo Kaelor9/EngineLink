@@ -2,6 +2,7 @@
 // The SD card survives a USB reinstall, so the Wi-Fi history is kept there:
 //   /WIFI.LOG      one line per Wi-Fi event (start, own Wi-Fi, router, drops)
 //   /WIFIREP.TXT   the full Wi-Fi report, saved every 30 minutes and on request
+//   /TRIPS/Tnnnnnn.WIF  the same report every 10 minutes of a trip and at its end
 // Both are capped (older text moves to .OLD) so the card never fills up.
 // Only the main loop writes; the Wi-Fi callback only adds to the RAM trace.
 static const uint32_t WIFI_LOG_MAX=256UL*1024;
@@ -52,6 +53,28 @@ void saveWifiReport(){
   sdGapEnd(gap2);
   if(saved)wifiReportSavedAt=millis()?millis():1;
 }
+// The Wi-Fi report of a trip (0.17.7): appended every 10 minutes while the trip
+// runs and once when it ends, beside the trip's other files. /WIFIREP.TXT keeps
+// about 13 hours: the reports of the boat trip of 2026-11-14 were gone the next
+// morning. At most 1 MB per trip; kept until the card is wiped, as the trip.
+static const uint32_t TRIP_WIFI_MAX=1024UL*1024;
+static uint32_t tripWifiAt=0;
+static void saveTripWifi(uint32_t id){
+  if(!id||!sdReady||!cardInserted())return;
+  char name[32];snprintf(name,sizeof(name),"/TRIPS/T%06lu.WIF",(unsigned long)id);
+  String s="\n\n######## ";wifiStamp(s);s+=" ########\n";
+  String r=buildNetworkReport();if(cfg.ssid.length()>=3)r.replace(cfg.ssid,"<router name hidden>");
+  const bool gap=sdGapBegin();
+  if(ensureDir("/TRIPS")){File f=SD.open(name,FILE_APPEND);if(f){if(f.size()<TRIP_WIFI_MAX){f.print(s);f.print(r);}f.close();}}
+  sdGapEnd(gap);
+}
+static void serviceTripWifi(){
+  const uint32_t now=millis()?millis():1;
+  if(tripWifiEnded){const uint32_t id=tripWifiEnded;tripWifiEnded=0;tripWifiAt=0;saveTripWifi(id);return;}
+  if(!totals.tripActive||!tripSeriesId){tripWifiAt=0;return;}
+  if(!tripWifiAt)tripWifiAt=now;
+  else if((uint32_t)(now-tripWifiAt)>=600000UL){tripWifiAt=now;saveTripWifi(tripSeriesId);}
+}
 // New Wi-Fi events from the RAM trace go to /WIFI.LOG.
 void serviceWifiLog(){
   if(!sdReady||!cardInserted())return;
@@ -75,6 +98,7 @@ void serviceWifiLog(){
     wifiLogged=total;
   }
   wifiFlush();
+  serviceTripWifi();
   if((uint32_t)(millis()-wifiReportSavedAt)>=1800000UL||(!wifiReportSavedAt&&millis()>120000UL))saveWifiReport();
 }
 // Writes everything while a serial monitor reads. False once it was stuck

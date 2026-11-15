@@ -1947,7 +1947,8 @@ function renderSheet(){
       files=rowF('/api/export/trips.csv?ids='+ids,'Trip summary','One row per trip · about '+kb(0.4*ts.length+0.5))
         +rowF('/api/export/series.csv?ids='+ids,'Second by second','Every value of both engines, one row per second · about '+kb(sec*0.11))
         +rowF('/api/export/fast.csv?ids='+ids,'Four times a second','Rpm, fuel, lever, boost, gear and clutch, from version 0.14.0 · about '+kb(sec*0.45))
-        +rowF('/api/export/raw.csv?ids='+ids,'Raw engine messages','Every message from both engines, for analysis · about '+kb(sec/60*430));
+        +rowF('/api/export/raw.csv?ids='+ids,'Raw engine messages','Every message from both engines, for analysis · about '+kb(sec/60*430))
+        +(ts.length===1?rowF('/api/wifi/log?f=4&id='+ts[0].id,'Wi-Fi during this trip','EngineLink\'s Wi-Fi report every 10 minutes and at the end, from version 0.17.7'):'');
     }else{
       const st=S.state,tst=st&&st.test;
       what='Engines, events and EngineLink itself';

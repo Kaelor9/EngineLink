@@ -841,16 +841,23 @@ void handleWifiRetry(){
   pendingNetwork=true;
 }
 // The Wi-Fi event log and the saved Wi-Fi reports on the SD card (0.17.6);
-// before, they could only be read over USB. f = 0..3.
+// before, they could only be read over USB. f = 0..3; f = 4 with id = a trip:
+// that trip's Wi-Fi reports (0.17.7).
 void handleWifiLogDownload(){
   static const char *const F[4][2]={{"/WIFI.LOG","EngineLink-wifi-log.txt"},{"/WIFI.OLD","EngineLink-wifi-log-older.txt"},
     {"/WIFIREP.TXT","EngineLink-wifi-reports.txt"},{"/WIFIREP.OLD","EngineLink-wifi-reports-older.txt"}};
   const int i=web.arg("f").toInt();
-  if(i<0||i>3){web.send(400,"text/plain","Unknown file");return;}
-  if(!sdReady||!cardInserted()||!SD.exists(F[i][0])){web.send(404,"text/plain","Not on the SD card (yet)");return;}
-  File f=SD.open(F[i][0],FILE_READ);
+  if(i<0||i>4){web.send(400,"text/plain","Unknown file");return;}
+  char path[32],save[48];
+  if(i==4){
+    const unsigned long id=strtoul(web.arg("id").c_str(),nullptr,10);
+    if(!id||id>999999UL){web.send(400,"text/plain","Unknown trip");return;}
+    snprintf(path,sizeof(path),"/TRIPS/T%06lu.WIF",id);snprintf(save,sizeof(save),"EngineLink-trip-%lu-wifi.txt",id);
+  }else{strlcpy(path,F[i][0],sizeof(path));strlcpy(save,F[i][1],sizeof(save));}
+  if(!sdReady||!cardInserted()||!SD.exists(path)){web.send(404,"text/plain","Not on the SD card (yet)");return;}
+  File f=SD.open(path,FILE_READ);
   if(!f){web.send(500,"text/plain","Cannot open the file");return;}
-  streamFileOut(f,"Wi-Fi log",F[i][1]);
+  streamFileOut(f,"Wi-Fi log",save);
   f.close();
 }
 void handleWifiForget(){
