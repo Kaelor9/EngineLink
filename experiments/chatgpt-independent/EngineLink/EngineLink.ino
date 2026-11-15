@@ -351,7 +351,8 @@ static void webSetup(){
   });
   server.on("/lab/speedtest",HTTP_GET,[](){
     int kb=constrain(server.arg("kb").toInt(),16,1024);
-    static const String data(4096,'X');
+    static String data;
+    if(data.length()!=4096){data.reserve(4096);for(int k=0;k<4096;++k)data+='X';}
     server.setContentLength(CONTENT_LENGTH_UNKNOWN);
     server.send(200,"application/octet-stream","");
     for(int i=0;i<kb/4&&server.client().connected();++i)server.sendContent(data);
