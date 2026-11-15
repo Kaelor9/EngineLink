@@ -337,7 +337,8 @@ void loop(){
     resetOta();
   }
   if(!bootVerified&&(uint32_t)(now-startMs)>60000 &&
-     httpStarted&&apStarted&&successfulStatus>=2){
+     httpStarted&&apStarted&&(successfulStatus>=2 ||
+        (successfulStatus>=1&&wsJoins>0&&telemetryFrames>=30))){
     if(needsRollback())esp_ota_mark_app_valid_cancel_rollback();
     bootVerified=true;
   }
