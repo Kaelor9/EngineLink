@@ -51,3 +51,25 @@ Experimental CI compile succeeded for this baseline; staging initially failed
 due to mistakenly assuming the descriptor would be `EngineLink`. The CI
 validation was updated to accept and explicitly log the actual generic name.
 Hardware update and rollback testing remain **not verified**.
+
+## Initial CI results (2026-11-15)
+
+- Source merged as test-only PR #191, main commit `d4720ae258ce672f0cfd2213577eaf86457c25d3`.
+- Verified independent build: GitHub Actions run [43732333214](https://github.com/Kaelor9/EngineLink/actions/runs/43732333214) with ESP32 core 3.3.12, target ESP32-S3 8MB / OPI PSRAM.
+- Arduino compilation succeeded: 1,092,199 bytes program (32% of app allowance), 50,508 bytes global RAM (15%).
+- The separate OTA and 8 MiB USB image staging steps, and test-artifact upload, passed. This is a **build/packaging verification only**.
+- First staging attempts failed because the checker incorrectly expected ESP application project name `EngineLink`; actual core compiled `arduino-lib-builder`. Checker and documentation were corrected.
+- No hardware run, AP/STA benchmark, NMEA/J1708 verification, or bidirectional OTA/rollback has been recorded yet.
+- Production UI and runtime sources were not changed; the hidden test-only Pages publishing step is isolated and optional.
+
+### Readiness labels
+
+| Component | Current status |
+|---|---|
+| Compiles on GitHub | Confirmed |
+| Valid OTA app-only binary generated | Header/size validated, not flashed |
+| 8 MiB USB image generated | Image size validated, not flashed |
+| Dedicated Pages installer deployed | Awaiting Pages publishing verification |
+| Wi-Fi association/HTTP speed on board | Not tested |
+| Normal ↔ experimental OTA transition | Not tested |
+| Engine/CAN safe operation | Not hardware validated |
