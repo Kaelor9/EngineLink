@@ -37,7 +37,8 @@ jobs:
           arduino-cli core install esp32:esp32@3.3.12 --additional-urls "$URL"
       - name: Install pinned AsyncTCP and ESPAsyncWebServer
         run: |
-          arduino-cli lib install "AsyncTCP@3.5.0"
+          arduino-cli lib update-index
+          arduino-cli lib install "Async TCP@3.5.0"
           arduino-cli lib install "ESP Async WebServer@3.12.1"
       - name: Use original cosmetic UI for comparison only
         run: cp firmware/EngineLink/ui.h experiments/chatgpt-async-lab-v3/EngineLink/ui.h
