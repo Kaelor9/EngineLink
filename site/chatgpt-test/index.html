@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>EngineLink — ChatGPT TEST ONLY</title>
+<style>
+:root{color-scheme:dark;font:16px system-ui;background:#081621;color:#eff8f8}
+*{box-sizing:border-box}main{max-width:760px;margin:45px auto;padding:24px}
+h1{font-size:30px;margin-bottom:6px}h2{font-size:18px}
+p{line-height:1.55;color:#c2d6dd}
+.box{background:#132b3b;border:1px solid #33546a;border-radius:12px;padding:20px;margin:18px 0}
+.warning{border-color:#bd8a44;background:#342519;color:#ffdab1}
+.warning p{color:#ffdab1}label{display:flex;gap:12px;align-items:flex-start}
+input{width:20px;height:20px;flex-shrink:0}a{color:#8de9e5}
+button{border:0;border-radius:9px;padding:13px 18px;background:#67dbd1;color:#073e48;font:600 15px system-ui}
+</style>
+</head>
+<body><main>
+<small>ENGINE LINK / ISOLATED FIRMWARE EXPERIMENT</small>
+<h1>ChatGPT test firmware</h1>
+<p>This is a separate, unvalidated firmware experiment. It does not replace the normal EngineLink release.</p>
+<div class="box warning">
+<h2>USB full flash erases internal data</h2>
+<p>The ESP32-S3 merged 8 MiB image overwrites NVS and LittleFS including Wi-Fi settings, calibration and trip history.
+Disconnect J1708 and NMEA 2000 before first testing. The diagnostic baseline is NOT feature-complete.</p>
+<label><input type="checkbox" id="ack"><span>I have backed up my data, disconnected the engine networks, and accept that this full USB image erases internal data.</span></label>
+</div>
+<div class="box"><h2>Install experimental firmware via USB</h2>
+<p>Use Chrome or Edge on a computer, with an ESP32-S3 USB data cable.</p>
+<div id="state">Checking whether a test image was compiled and published…</div>
+<div id="control"></div>
+</div>
+<p>For configured boards, prefer the smaller app-only OTA binary through EngineLink Settings → Firmware. It is safer for preserving stored data. <a href="../">Return to normal EngineLink installer</a>.</p>
+</main>
+<script type="module">
+const state=document.querySelector('#state'),control=document.querySelector('#control'),ack=document.querySelector('#ack');
+let loaded=false;
+ack.addEventListener('change',()=>{control.hidden=!ack.checked||!loaded});
+control.hidden=true;
+try{
+  const path=new URL('./manifest.json',location.href);
+  if(path.origin!==location.origin)throw Error('Unexpected manifest origin');
+  let response=await fetch(path,{cache:'no-store'});
+  if(!response.ok)throw Error('Experimental image has not been published');
+  let manifest=await response.json();
+  if(manifest.version!=='0.0.1-chatgpt-test'||manifest.name!=='EngineLink ChatGPT TEST (UNVALIDATED)'||
+     !manifest.builds?.[0]?.parts?.some(p=>p.offset===0&&p.path==='firmware.bin'))
+    throw Error('The experimental image manifest does not match this test');
+  let head=await fetch(new URL('./firmware.bin',location.href),{method:'HEAD',cache:'no-store'});
+  if(!head.ok)throw Error('Experimental USB image was not found');
+  await import('https://unpkg.com/esp-web-tools@10/dist/web/install-button.js?module');
+  let button=document.createElement('esp-web-install-button');
+  button.setAttribute('manifest',path.toString());
+  button.innerHTML='<button slot="activate">Install ChatGPT TEST firmware</button><span slot="unsupported">Chrome or Edge with Web Serial required.</span>';
+  control.appendChild(button);
+  loaded=true;control.hidden=!ack.checked;
+  state.textContent='Test image '+manifest.version+' is ready. Tick the acknowledgment to enable USB flashing.';
+}catch(e){state.textContent=String(e.message||e)}
+</script>
+</body></html>

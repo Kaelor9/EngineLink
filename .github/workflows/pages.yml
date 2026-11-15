@@ -10,6 +10,8 @@ on:
       - 'tools/demo/**'
       - 'tools/build_demo.py'
       - '.github/workflows/pages.yml'
+      - 'experiments/chatgpt-independent/**'
+      - 'tools/stage_chatgpt_test.py'
   workflow_dispatch:
 
 permissions:
@@ -197,6 +199,22 @@ jobs:
       - name: Build the app demo
         # site/demo: the phone app against a simulated boat, in the browser.
         run: python3 tools/build_demo.py
+
+      # Optional, deliberately independent from the normal firmware release.
+      # Never changes site/firmware.bin, site/manifest.json or the default
+      # firmware selector. If the experiment fails, production still deploys.
+      - name: Compile separate ChatGPT firmware TEST for hidden installer
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          mkdir -p build-chatgpt
+          cp firmware/EngineLink/ui.h experiments/chatgpt-independent/EngineLink/ui.h
+          arduino-cli compile \
+            --fqbn "$FQBN" \
+            --output-dir build-chatgpt --export-binaries \
+            experiments/chatgpt-independent/EngineLink
+          python3 tools/stage_chatgpt_test.py \
+            --build build-chatgpt --dest site/chatgpt-test/
 
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5

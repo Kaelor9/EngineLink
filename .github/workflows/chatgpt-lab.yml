@@ -1,0 +1,59 @@
+name: Build ChatGPT independent EngineLink TEST (never production)
+
+on:
+  push:
+    branches:
+      - experiment/chatgpt-independent-firmware
+    paths:
+      - 'experiments/chatgpt-independent/**'
+      - '.github/workflows/chatgpt-lab.yml'
+      - 'firmware/EngineLink/ui.h'
+  workflow_dispatch:
+
+concurrency:
+  group: chatgpt-lab-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  independent-lab:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: arduino/setup-arduino-cli@v2
+        with:
+          version: "1.x"
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.arduino15/staging
+            ~/.arduino15/packages
+          key: esp32-3.3.12-chatgpt-lab
+      - name: Install pinned Arduino ESP32 core
+        run: |
+          URL=https://espressif.github.io/arduino-esp32/package_esp32_index.json
+          arduino-cli core update-index --additional-urls "$URL"
+          python3 tools/prefetch_arduino_tools.py --version 3.3.12
+          arduino-cli core install esp32:esp32@3.3.12 --additional-urls "$URL"
+      - name: Copy approved visual UI into experiment (build only)
+        run: cp firmware/EngineLink/ui.h experiments/chatgpt-independent/EngineLink/ui.h
+      - name: Compile independent firmware
+        run: |
+          mkdir -p build-chatgpt
+          arduino-cli compile \
+            --fqbn "esp32:esp32:esp32s3:FlashSize=8M,PartitionScheme=default_8MB,PSRAM=opi,USBMode=hwcdc,CDCOnBoot=cdc" \
+            --output-dir build-chatgpt --export-binaries \
+            experiments/chatgpt-independent/EngineLink
+      - name: Validate and stage separate test OTA and USB images
+        run: |
+          python3 tools/stage_chatgpt_test.py --build build-chatgpt --dest build-chatgpt/installer
+          cp site/chatgpt-test/index.html build-chatgpt/installer/index.html
+      - name: Publish CI artifact only (do not touch release or web installer)
+        uses: actions/upload-artifact@v4
+        with:
+          name: EngineLink-CHATGPT-EXPERIMENT
+          path: build-chatgpt/installer/*
+          if-no-files-found: error
