@@ -14,6 +14,7 @@
 #include <driver/uart.h>
 #include <driver/twai.h>
 #include <esp_ota_ops.h>
+#include <esp_app_desc.h>
 #include "ui.h"
 
 #define EXP_VERSION "0.0.1-chatgpt-test"
@@ -282,7 +283,7 @@ static void updateUpload(){
     while(i<u.currentSize&&headerLen<sizeof(header))header[headerLen++]=u.buf[i++];
     if(headerLen==sizeof(header)&&flashBytes==0){
       if(header[0]!=0xE9||memcmp(header+0x20,"\x32\x54\xCD\xAB",4)!=0||
-        strncmp((const char*)header+0x50,"EngineLink",32)!=0){
+        strncmp((const char*)header+0x50,esp_app_get_description()->project_name,32)!=0){
         updateError=true;updateMessage="Not an EngineLink app-only image";return;
       }
       if(!Update.begin(UPDATE_SIZE_UNKNOWN,U_FLASH)){
