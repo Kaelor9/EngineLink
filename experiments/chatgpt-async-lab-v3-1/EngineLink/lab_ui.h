@@ -62,7 +62,7 @@ a{color:#71e0d9}footer{color:var(--muted);font-size:12px;margin-top:22px}
 <section class="panel"><h2>Export evidence</h2><button onclick="saveReport()">Download full JSON report</button><p>Export includes software version, Wi-Fi statistics and hardware status, but not Wi-Fi password.</p></section>
 <section class="panel"><h2>Firmware update — app-only OTA</h2>
 <p>This updater is essential for remote recovery. Install only a trustworthy EngineLink app-only .bin (not the 8 MiB USB firmware image).</p>
-<input id="fw" type="file" accept=".bin"><label><input id="agree" type="checkbox"> I have a valid recovery plan and accept the OTA risk</label>
+<input id="fw" type="file" accept=".bin"><p>The selected file must be an app-only OTA image. A confirmation dialog is shown before writing.</p>
 <button id="flash" onclick="flashFirmware()">Flash application image</button>
 <pre id="ota">No update in progress</pre></section>
 </div><footer>ASYNC LAB 0.0.3.1 • Offline interface • ESPAsyncWebServer + WebSocket • <a href="/lab/status">Raw status</a> • <a href="/lab/report">Report</a></footer>
@@ -155,9 +155,9 @@ await post('/lab/router','ssid='+encodeURIComponent(s)+'&password='+encodeURICom
 async function forgetRouter(){if(confirm('Forget saved lab router settings?'))await post('/lab/forget','')}
 function saveReport(){window.location='/lab/report?t='+Date.now()}
 async function flashFirmware(){
-let file=$('fw').files[0],out=$('ota');if(!file||!$('agree').checked)return alert('Choose an app-only .bin and confirm');
+let file=$('fw').files[0],out=$('ota');if(!file)return alert('Choose an app-only .bin');
 if(file.size<100000||file.size>3200000)return alert('Invalid app image size');
-if(!confirm('Flash '+file.name+'? Your Wi-Fi connection will drop during reboot.'))return;
+if(!confirm('Flash app-only image '+file.name+' ('+file.size+' bytes)? Wi-Fi will disconnect on restart. Do not proceed without a recovery path.'))return;
 out.textContent='Uploading '+file.name+' ('+file.size+' bytes). DO NOT DISCONNECT.';
 try{let b=await file.arrayBuffer();if(new Uint8Array(b)[0]!==0xE9)throw Error('Not an ESP32 app image');
 let r=await fetch('/lab/ota',{method:'POST',headers:{'Content-Type':'application/octet-stream','X-EngineLink-Test':'CONFIRM-OTA'},body:b});
