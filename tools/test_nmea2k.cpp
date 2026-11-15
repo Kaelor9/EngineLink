@@ -30,6 +30,10 @@ int main() {
   { uint8_t d[8] = {0}; le16(d + 1, 300); assert(decode(128259, d, 8, T, n)); assert(near(n.stw.v, 5.83f, .01f)); }
   // 130310 water 288.15 K = 15 °C
   { uint8_t d[8] = {0}; le16(d + 1, 28815); le16(d + 3, 0xFFFF); assert(decode(130310, d, 8, T, n)); assert(near(n.waterC.v, 15, .01f)); }
+  // 130311 sea temperature 12.00 C is taken; 273.05 K (a SeaTalk1 converter without a sensor) is not a reading
+  { Nav m; uint8_t d[8] = {0}; d[1] = 0; le16(d + 2, 28515); assert(decode(130311, d, 8, T, m)); assert(near(m.waterC.v, 12, .01f));
+    Nav q; le16(d + 2, 27305); assert(decode(130311, d, 8, T, q)); assert(!fresh(q.waterC, T) && isnan(q.waterC.v));
+    le16(d + 2, 27306); assert(decode(130311, d, 8, T, q)); assert(near(q.waterC.v, -0.09f, .005f)); }
   // 130312 air temperature (source 1) 293.15 K
   { uint8_t d[8] = {0, 0, 1}; le16(d + 3, 29315); assert(decode(130312, d, 8, T, n)); assert(near(n.airC.v, 20, .01f)); }
   // 127508 battery 0: 12.8 V, -3.5 A

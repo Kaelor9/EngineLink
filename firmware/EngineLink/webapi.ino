@@ -501,6 +501,9 @@ String makeLiveJson(){
   s+=",\"ip\":";if(WiFi.status()==WL_CONNECTED)jsonString(s,WiFi.localIP().toString());else s+="null";
   s+=",\"mode\":";jsonString(s,(WiFi.getMode()&WIFI_MODE_AP)?"ap":"sta");
   s+=",\"recovery\":";s+=routerHold?"true":"false";
+  // Why the own Wi-Fi is on in router mode (1 not found after the start,
+  // 2 connection lost) and for how many seconds (0.17.6).
+  if(routerHold){s+=",\"why\":";s+=(unsigned)routerHoldWhy;s+=",\"holdS\":";s+=(unsigned long)((uint32_t)(millis()-routerHoldAt)/1000UL);}
   s+="},\"sd\":{\"ok\":";s+=sdReady?"true":"false";
   s+=",\"log\":";s+=sdLogging?"true":"false";
   s+="},\"test\":";s+=calActive?"true":"false";
@@ -827,6 +830,29 @@ void handleWifiConnect(){
   networkSwitchAt=millis()+1200UL;
   pendingNetwork=true;
 }
+// "Try the router now" while the own Wi-Fi is on in router mode (0.17.6): the
+// saved router, the same way as Connect (serviceNetwork).
+void handleWifiRetry(){
+  if(!routerConfigured()||!routerHold){reply(false,"EngineLink is not waiting for a router",409);return;}
+  if(scanBusy){reply(false,"Wait for the network scan to finish",409);return;}
+  routerShortTry=true;
+  reply(true,"Trying "+cfg.ssid+" now. EngineLink's own Wi-Fi is off meanwhile and comes back by itself if the router does not answer.");
+  networkSwitchAt=millis()+1200UL;
+  pendingNetwork=true;
+}
+// The Wi-Fi event log and the saved Wi-Fi reports on the SD card (0.17.6);
+// before, they could only be read over USB. f = 0..3.
+void handleWifiLogDownload(){
+  static const char *const F[4][2]={{"/WIFI.LOG","EngineLink-wifi-log.txt"},{"/WIFI.OLD","EngineLink-wifi-log-older.txt"},
+    {"/WIFIREP.TXT","EngineLink-wifi-reports.txt"},{"/WIFIREP.OLD","EngineLink-wifi-reports-older.txt"}};
+  const int i=web.arg("f").toInt();
+  if(i<0||i>3){web.send(400,"text/plain","Unknown file");return;}
+  if(!sdReady||!cardInserted()||!SD.exists(F[i][0])){web.send(404,"text/plain","Not on the SD card (yet)");return;}
+  File f=SD.open(F[i][0],FILE_READ);
+  if(!f){web.send(500,"text/plain","Cannot open the file");return;}
+  streamFileOut(f,"Wi-Fi log",F[i][1]);
+  f.close();
+}
 void handleWifiForget(){
   routerHold=false;
   cfg.router=false;cfg.ssid="";cfg.wifiPassword="";saveSettings();
@@ -1023,6 +1049,8 @@ void initializeWeb(){
   web.on("/api/wifi/scan",HTTP_GET,handleWifiScan);
   web.on("/api/wifi/connect",HTTP_POST,handleWifiConnect);
   web.on("/api/wifi/forget",HTTP_POST,handleWifiForget);
+  web.on("/api/wifi/retry",HTTP_POST,handleWifiRetry);
+  web.on("/api/wifi/log",HTTP_GET,handleWifiLogDownload,R_ASYNC);
   web.on("/api/diag",HTTP_GET,handleDiag);
   web.on("/api/nmea",HTTP_GET,handleNmea);
   web.on("/api/nmea/rec",HTTP_POST,handleNmeaRec);

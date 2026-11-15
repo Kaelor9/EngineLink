@@ -57,7 +57,7 @@ program, so they share the globals in `EngineLink.ino`.
 | `diagnosis.ino` | Sample ring, rules, events and black boxes, engine life story, series downloads |
 | `gearbox.ino` | Gear and clutch: four readings a second (ring, trip and event files), shift timing per engine, compressor, warm-up and charging, `/api/shifts` and `/api/fast` |
 | `storage.ino` | SD card, LittleFS, NVS settings and totals, restart log, raw logging |
-| `wifi.ino` | Own access point or router, never both (kept under 300 lines by `tools/test_wifi_simple.py`): the AP and station radio profiles, the 2 min recovery fallback and 10 min retry, scans, mDNS, the Wi-Fi event trace |
+| `wifi.ino` | Own access point or router, never both (kept under 300 lines by `tools/test_wifi_simple.py`): the AP and station radio profiles, the fallback to the own Wi-Fi when the router is not reached and the return after 10 min without a phone, scans, mDNS, the Wi-Fi event trace |
 | `serialcmd.ino` | USB serial commands and the Wi-Fi log/reports on the SD card (0.16.3) |
 | `httpd.h`, `httpd.ino` | The web server since 0.16.6: ESP-IDF `esp_http_server` on port 80 in its own task, the adapter that keeps the handlers' `web.arg()`/`web.send()` calls, the own-origin security checks, and the task for long transfers |
 | `httputil.h` | URL decoding and the own-address allow-list (host-tested, `tools/test_httputil.cpp`) |
@@ -292,12 +292,22 @@ Two modes, never both:
   80; nothing listens on 443). The `Host` check also accepts the bare name and
   `.lan`/`.home`/`.home.arpa`/`.internal` for routers whose DNS registers the
   DHCP host name. Why a browser may show `https://`: plan 8.3.
-- **Recovery (a mechanism, not a mode):** no router IP for 120 s → the own
-  Wi-Fi comes up; the router is tried again every 10 min while no phone is
-  joined, or at once when the app's Connect is used. Not saved: every start
-  in router mode tries the router first. The report says
-  "Router (router not reached; EngineLink Wi-Fi on meanwhile …)" and the JSON
-  `recovery:true`.
+- **Router not reached (a mechanism, not a mode; 0.17.6):** no router IP
+  for 120 s after a start, 30 s after a lost connection, or 20 s into a new
+  try → the own Wi-Fi comes up **and stays while a phone uses it**. A new
+  try starts only after 10 min without any phone joining or leaving
+  (`apPhoneAt`), or when the app asks (Connect, or "Try the router now" =
+  `POST /api/wifi/retry`). Not saved: every start in router mode tries the
+  router first. The app and the report say why (`net.why`: 1 not found,
+  2 connection lost; `net.holdS` seconds since), the JSON `recovery:true`.
+  Up to 0.17.5 the own Wi-Fi went off for 2 min every 12 min, and the moment
+  the last phone left: that was the "Reconnecting" on the boat on 2026-11-14
+  ([evidence](docs/test-evidence/boat-2026-11-14/README.md)). *Built*, not
+  run on the board.
+- **Wi-Fi files on the SD card:** `/WIFI.LOG` (events) and `/WIFIREP.TXT`
+  (the report 2 min after a start, then every 30 min), rotated to `.OLD`.
+  Download: `GET /api/wifi/log?f=0..3` (0.17.6; Diagnostics › Wi-Fi ›
+  Advanced), or the USB commands `wifi log` / `wifi reports`.
 - All Wi-Fi calls run in `serviceNetwork()` (main loop); the event callback
   only records counters (`tools/test_wifi_contract.py`). The web server
   (`esp_http_server`) binds every interface and is never restarted; a mode

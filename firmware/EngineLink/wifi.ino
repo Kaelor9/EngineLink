@@ -76,16 +76,16 @@ void apRadioSetup(){
 }
 // ---- Wi-Fi, kept simple (0.16.2) ---- Standalone: own Wi-Fi at 192.168.4.1.
 // Router: the plain station of the owner's working test sketch
-// (applyNetwork); no IP in 2 minutes: own Wi-Fi (recovery, not a mode), and
-// try the router again every 10 minutes while no phone is connected to it,
-// or at once when the app asks.
+// (applyNetwork); router not reached: own Wi-Fi, which stays while a phone
+// uses it; a new 20 s try after 10 minutes without a phone, or when the app
+// asks (serviceNetwork).
 void onWiFi(WiFiEvent_t e,WiFiEventInfo_t info){
   const uint32_t now=millis();
   switch(e){
     case ARDUINO_EVENT_WIFI_AP_START:apStarted=true;apLastEvent=1;apLastEventMs=now;++apStarts;++networkIpEpoch;networkIpEventAt=now;mdnsRefreshPending=true;mdnsNetworkChangedAt=now;break;
-    case ARDUINO_EVENT_WIFI_AP_STACONNECTED:++apJoins;traceWifi(7);break;
+    case ARDUINO_EVENT_WIFI_AP_STACONNECTED:++apJoins;apPhoneAt=now;traceWifi(7);break;
     case ARDUINO_EVENT_WIFI_AP_STAIPASSIGNED:++apDhcpLeases;traceWifi(9);break;
-    case ARDUINO_EVENT_WIFI_AP_STADISCONNECTED:++apLeaves;apReason=info.wifi_ap_stadisconnected.reason;traceWifi(8,apReason);break;
+    case ARDUINO_EVENT_WIFI_AP_STADISCONNECTED:++apLeaves;apPhoneAt=now;apReason=info.wifi_ap_stadisconnected.reason;traceWifi(8,apReason);break;
     case ARDUINO_EVENT_WIFI_AP_STOP:apLastEvent=2;apLastEventMs=now;break;
     // Router counters, channel and security from the event data only (D14; the
     // loop samples the signal). Printed since 0.16.2, written again (I15).
@@ -237,23 +237,33 @@ void serviceNetwork(){
   netdiagService(now,online);
   // The router's signal is read only when a report or the app asks for it
   // (routerSignalSample); the channel comes from the connected event.
-  // Router not reached in 2 minutes: own Wi-Fi, and try again later.
-  // Signed: the event task may set staDownSince a millisecond after `now` was
-  // read. Unsigned, that gap counted as 49 days and the own Wi-Fi came on at
-  // once instead of after 2 minutes (rc3, plan 9.2 item 1).
-  if(routerConfigured()&&!routerHold&&!online&&staDownSince&&(int32_t)(now-staDownSince)>=(int32_t)120000UL){
-    Serial.println("Router not reached in 2 minutes: EngineLink Wi-Fi on");
-    wifiLog("Router not reached in 2 minutes: own Wi-Fi on");
-    ++routerFallbacks;routerHold=true;routerRetryAt=now+600000UL;applyNetwork();return;
+  // Router not reached: the own Wi-Fi comes on and stays (0.17.6). 2 minutes
+  // after a start, 30 s after a lost connection (the core's own reconnects
+  // come first), 20 s on a new try from the own Wi-Fi. Signed: the event task
+  // may set staDownSince a millisecond after `now` was read; unsigned, the own
+  // Wi-Fi came on at once instead of after 2 minutes (rc3, plan 9.2 item 1).
+  if(online){routerShortTry=false;routerHoldWhy=0;}
+  const int32_t giveUp=routerShortTry?20000:staHadIp?30000:(int32_t)120000UL;
+  if(routerConfigured()&&!routerHold&&!online&&staDownSince&&(int32_t)(now-staDownSince)>=giveUp){
+    const char *why=routerShortTry?"Router still not reached after 20 s":staHadIp?"Router connection lost for 30 s":"Router not reached in 2 minutes";
+    Serial.printf("%s: EngineLink Wi-Fi on\n",why);
+    wifiLog(String(why)+": own Wi-Fi on, and it stays while a phone uses it");
+    if(!routerShortTry||!routerHoldWhy){routerHoldWhy=staHadIp?2:1;routerHoldAt=now?now:1;}
+    ++routerFallbacks;routerHold=true;routerShortTry=false;routerRetryAt=now+600000UL;applyNetwork();return;
   }
   // The core reconnects by itself after most failures, but not after code
   // 202 and a few others (STA.cpp): rc4 then stood idle for 90 s. So: 20 s
   // without a join and without any word from the driver, one plain connect.
   // Signed: the event task may write its time a tick after `now` was read.
   if(routerConfigured()&&!routerHold&&!staAssociated&&(int32_t)(now-staTryAt)>=20000&&(int32_t)(now-staLastDropAt)>=20000){staTryAt=now;WiFi.reconnect();}
+  // A new try only after 10 minutes without any phone on the own Wi-Fi: a
+  // phone that left for a moment must find EngineLink again (boat, 2026-11-14).
   if(routerHold&&routerConfigured()&&(int32_t)(now-routerRetryAt)>=0){
-    if(WiFi.softAPgetStationNum()==0){routerHold=false;applyNetwork();return;}
-    routerRetryAt=now+600000UL;
+    if(WiFi.softAPgetStationNum()>0)routerRetryAt=now+600000UL;
+    else if((uint32_t)(now-apPhoneAt)<600000UL)routerRetryAt=apPhoneAt+600000UL;
+    else{
+      wifiLog("No phone on the own Wi-Fi for 10 minutes: trying the router for 20 s");
+      routerHold=false;routerShortTry=true;applyNetwork();return;}
   }
   if(online&&!ntpStarted&&cfg.ntpOn&&allowTime("ntp")){configTime(0,0,cfg.ntpServer.c_str(),"pool.ntp.org");ntpStarted=true;}
   if(ntpNotification){ntpNotification=false;if(allowTime("ntp")&&validWall()){hasTime=true;timeSource="ntp";backfillTripTime();}}

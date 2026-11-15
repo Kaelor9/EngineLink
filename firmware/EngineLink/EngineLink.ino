@@ -79,7 +79,7 @@ SpeedLogRec speedLog[SPEED_LOG_N];uint8_t speedLogCount=0;
 // how warm the chip was at every speed test and in every 30 s of a router session.
 volatile int8_t chipTempC=0,chipTempStartC=0,chipTempMaxC=-128;
 
-#define EL_VERSION "0.17.5"
+#define EL_VERSION "0.17.6"
 // Releases list published by the Pages workflow; firmware files come from
 // GitHub Releases of the same repository. Nothing else is downloaded.
 #define EL_RELEASES_URL "https://kaelor9.github.io/EngineLink/releases.json"
@@ -283,11 +283,17 @@ bool ecuHoursChecked[2]={false,false};
 int64_t lastMissedUtc=0; float lastMissedL=0;
 // Wi-Fi: own access point or router, never both (wifi.ino).
 uint8_t apChannelNow=6;          // channel the AP actually uses
-// Recovery, not a mode: the router was not reached for 2 minutes, so
-// EngineLink's own Wi-Fi is on until the router is tried again, every
-// 10 minutes while no phone is joined or at once when the app asks. Not kept
-// over a restart: each start in router mode tries the router first.
+// Router mode without the router (0.17.6): EngineLink's own Wi-Fi is on and
+// stays on while a phone uses it. The router is not reached 2 minutes after a
+// start, 30 s after a lost connection, or 20 s into a new try; a new try
+// starts only after 10 minutes without a phone on the own Wi-Fi, or when the
+// app asks. Not kept over a restart: each start in router mode tries the
+// router first.
 bool routerHold=false;
+bool routerShortTry=false;          // a new try from the own Wi-Fi: 20 s, not 2 minutes
+uint8_t routerHoldWhy=0;         // why the own Wi-Fi is on: 1 router not found after the start, 2 router connection lost
+uint32_t routerHoldAt=0;         // millis() when it came on for that reason
+volatile uint32_t apPhoneAt=0;   // millis() of the last phone joining or leaving the own Wi-Fi (event task)
 uint32_t routerFallbacks=0,routerRetryAt=0;
 // The application never calls begin()/disconnect() while authentication runs;
 // it only starts a new attempt after the driver reported the last one over
