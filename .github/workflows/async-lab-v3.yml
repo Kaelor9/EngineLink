@@ -1,0 +1,76 @@
+name: Build EngineLink ASYNC LAB v3 (test only)
+on:
+  push:
+    branches: [experiment/enginelink-async-lab-v3]
+    paths:
+      - 'experiments/chatgpt-async-lab-v3/**'
+      - 'tools/stage_chatgpt_test.py'
+      - 'site/chatgpt-async-lab-v3/**'
+      - '.github/workflows/async-lab-v3.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+concurrency:
+  group: enginelink-async-v3-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: arduino/setup-arduino-cli@v2
+        with:
+          version: '1.x'
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.arduino15/staging
+            ~/.arduino15/packages
+          key: esp32-3.3.12-async-v3-libs-3.12.1
+      - name: Install Arduino ESP32-S3 core
+        run: |
+          URL=https://espressif.github.io/arduino-esp32/package_esp32_index.json
+          arduino-cli core update-index --additional-urls "$URL"
+          python3 tools/prefetch_arduino_tools.py --version 3.3.12
+          arduino-cli core install esp32:esp32@3.3.12 --additional-urls "$URL"
+      - name: Install pinned AsyncTCP and ESPAsyncWebServer
+        run: |
+          arduino-cli lib install "AsyncTCP@3.5.0"
+          arduino-cli lib install "ESP Async WebServer@3.12.1"
+      - name: Use original cosmetic UI for comparison only
+        run: cp firmware/EngineLink/ui.h experiments/chatgpt-async-lab-v3/EngineLink/ui.h
+      - name: Validate embedded UI JavaScript
+        run: |
+          python3 - <<'PY'
+          import re
+          from pathlib import Path
+          s=Path('experiments/chatgpt-async-lab-v3/EngineLink/lab_ui.h').read_text()
+          script=re.search(r'<script>(.*?)</script>',s,re.S)
+          assert script, "JavaScript not found"
+          assert "WebSocket" in script.group(1)
+          Path('/tmp/async-lab-v3.js').write_text(script.group(1))
+          PY
+          node --check /tmp/async-lab-v3.js
+      - name: Compile real async firmware
+        run: |
+          mkdir -p build-async-v3
+          arduino-cli compile \
+            --fqbn "esp32:esp32:esp32s3:FlashSize=8M,PartitionScheme=default_8MB,PSRAM=opi,USBMode=hwcdc,CDCOnBoot=cdc" \
+            --output-dir build-async-v3 --export-binaries \
+            experiments/chatgpt-async-lab-v3/EngineLink
+      - name: Stage clearly labelled isolated OTA and USB packages
+        run: |
+          python3 tools/stage_chatgpt_test.py \
+            --build build-async-v3 \
+            --dest build-async-v3/installer \
+            --version 0.0.3-chatgpt-async-lab \
+            --ota-name enginelink-update-CHATGPT-ASYNC-LAB-V3.bin
+          cp site/chatgpt-async-lab-v3/index.html build-async-v3/installer/index.html
+      - name: Save test-only artifacts (not a normal EngineLink release)
+        uses: actions/upload-artifact@v4
+        with:
+          name: ENG-LINK-ASYNC-LAB-V3-TEST-${{ github.sha }}
+          path: build-async-v3/installer/*
+          if-no-files-found: error
