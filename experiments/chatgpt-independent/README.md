@@ -41,10 +41,14 @@ the absent business-logic features.
 Arduino sketch path:
 experiments/chatgpt-independent/EngineLink/EngineLink.ino
 
-The directory is intentionally named EngineLink, so that the ESP-IDF app
-descriptor's project_name matches the normal EngineLink sketch. The original
-app's OTA endpoint checks that value and should accept this test app image.
-This expectation must be checked on a bench PCB before relying on it.
+The lab sketch directory is named EngineLink to match the original Arduino
+sketch structure. **CI revealed that Arduino-ESP32 core 3.3.12 actually
+compiles the application descriptor project_name as arduino-lib-builder**,
+not EngineLink. The original OTA validation compares this generic
+project_name, so it is *not* a strong EngineLink identity check and could
+accept unrelated Arduino images. The test source now checks the running
+project name dynamically. Always obtain restore images from an authentic
+normal EngineLink release; test the transition on a bench board first.
 
 Arduino FQBN:
 esp32:esp32:esp32s3:FlashSize=8M,PartitionScheme=default_8MB,PSRAM=opi,USBMode=hwcdc,CDCOnBoot=cdc
