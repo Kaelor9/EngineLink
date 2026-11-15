@@ -25,10 +25,10 @@ bytes if a request returns HTML unexpectedly.
 
 ## Gates
 
-- [ ] Arduino-ESP32 3.3.12 + pinned ESP32Async libraries build
-- [ ] Test UI JavaScript parse
-- [ ] ESP32-S3 8 MiB merged USB image and app-only OTA image generated
-- [ ] OTA image descriptor compatibility check and 3.2 MB size limit
+- [x] Arduino-ESP32 3.3.12 + pinned ESP32Async libraries build
+- [x] Test UI JavaScript parse
+- [x] ESP32-S3 8 MiB merged USB image and app-only OTA image generated
+- [x] OTA image descriptor compatibility check and 3.2 MB size limit
 - [ ] Normal EngineLink and earlier test installers unaffected
 - [ ] Physical v2 -> v3.1 OTA boot and client health response verified
 - [ ] Physical v3.1 -> v2 rollback/update independently verified
@@ -36,3 +36,11 @@ bytes if a request returns HTML unexpectedly.
 - [ ] Recovery after intentional Wi-Fi failure verified via USB/serial
 
 Do NOT mark hardware and rollback tests complete based on CI alone.
+
+## Software validation
+
+- GitHub isolated build: https://github.com/Kaelor9/EngineLink/actions/runs/43765191001
+- JavaScript syntax check: passed.
+- ESP32-S3 firmware compiled with pinned Arduino-ESP32 3.3.12, Async TCP 3.5.0 and ESP Async WebServer 3.12.1.
+- Stage script validated OTA app descriptor and staged a merged USB image and app-only OTA image.
+- Physical OTA boot, rollback and throughput have NOT been tested.
