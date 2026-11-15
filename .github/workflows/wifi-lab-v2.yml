@@ -1,0 +1,75 @@
+name: Build independent EngineLink Wi-Fi LAB v2 (non-production)
+
+on:
+  push:
+    branches:
+      - experiment/enginelink-wifi-lab-v2
+    paths:
+      - 'experiments/chatgpt-wifi-lab-v2/**'
+      - 'tools/stage_chatgpt_test.py'
+      - 'site/chatgpt-wifi-lab/**'
+      - '.github/workflows/wifi-lab-v2.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: wifi-lab-v2-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-independent-lab:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: arduino/setup-arduino-cli@v2
+        with:
+          version: '1.x'
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.arduino15/staging
+            ~/.arduino15/packages
+          key: arduino-esp32-3.3.12-wifi-lab-v2
+      - name: Install pinned ESP32-S3 core
+        run: |
+          URL=https://espressif.github.io/arduino-esp32/package_esp32_index.json
+          arduino-cli core update-index --additional-urls "$URL"
+          python3 tools/prefetch_arduino_tools.py --version 3.3.12
+          arduino-cli core install esp32:esp32@3.3.12 --additional-urls "$URL"
+      - name: Use normal UI as visual reference at /original only
+        run: cp firmware/EngineLink/ui.h experiments/chatgpt-wifi-lab-v2/EngineLink/ui.h
+      - name: Check standalone lab UI JavaScript
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          text=Path('experiments/chatgpt-wifi-lab-v2/EngineLink/lab_ui.h').read_text()
+          src=re.search(r'<script>(.*?)</script>',text,re.S)
+          assert src, 'Missing lab JavaScript'
+          Path('/tmp/wifi-lab.js').write_text(src.group(1))
+          assert '/lab/ota' in text and 'X-EngineLink-Test' in text
+          PY
+          node --check /tmp/wifi-lab.js
+      - name: Compile test firmware for ESP32-S3 N8R8
+        run: |
+          mkdir -p build-lab-v2
+          arduino-cli compile \
+            --fqbn "esp32:esp32:esp32s3:FlashSize=8M,PartitionScheme=default_8MB,PSRAM=opi,USBMode=hwcdc,CDCOnBoot=cdc" \
+            --output-dir build-lab-v2 --export-binaries \
+            experiments/chatgpt-wifi-lab-v2/EngineLink
+      - name: Verify OTA descriptor and stage separate binaries
+        run: |
+          python3 tools/stage_chatgpt_test.py \
+            --build build-lab-v2 \
+            --dest build-lab-v2/installer \
+            --version 0.0.2-chatgpt-wifi-lab \
+            --ota-name enginelink-update-CHATGPT-WIFI-LAB-V2.bin
+          cp site/chatgpt-wifi-lab/index.html build-lab-v2/installer/index.html
+      - uses: actions/upload-artifact@v4
+        with:
+          name: EngineLink-WIFI-LAB-V2-TEST-ONLY-${{ github.sha }}
+          path: build-lab-v2/installer/*
+          if-no-files-found: error

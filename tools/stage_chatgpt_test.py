@@ -10,7 +10,7 @@ TEST_VERSION = "0.0.1-chatgpt-test"
 TEST_NAME = "EngineLink ChatGPT TEST (UNVALIDATED)"
 
 
-def stage(build: Path, dest: Path) -> None:
+def stage(build: Path, dest: Path, version: str = TEST_VERSION, ota_name: str = 'enginelink-update-CHATGPT-TEST.bin') -> None:
     merged = list(build.glob("*.merged.bin"))
     app = build / "EngineLink.ino.bin"
     if len(merged) != 1 or merged[0].stat().st_size != 8 * 1024 * 1024:
@@ -28,10 +28,10 @@ def stage(build: Path, dest: Path) -> None:
     print(f"ESP32 project_name: {project!r}")
     dest.mkdir(parents=True, exist_ok=True)
     shutil.copyfile(merged[0], dest / "firmware.bin")
-    shutil.copyfile(app, dest / "enginelink-update-CHATGPT-TEST.bin")
+    shutil.copyfile(app, dest / ota_name)
     manifest = {
         "name": TEST_NAME,
-        "version": TEST_VERSION,
+        "version": version,
         "new_install_prompt_erase": True,
         "builds": [{"chipFamily": "ESP32-S3",
                     "parts": [{"path": "firmware.bin", "offset": 0}]}],
@@ -39,14 +39,16 @@ def stage(build: Path, dest: Path) -> None:
     (dest / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
     digest = hashlib.sha256(app.read_bytes()).hexdigest()
     (dest / "sha256.txt").write_text(
-        digest + "  enginelink-update-CHATGPT-TEST.bin\n"
+        digest + "  " + ota_name + "\n"
     )
-    print(f"Staged TEST ONLY {TEST_VERSION} from {app}; SHA256={digest}")
+    print(f"Staged TEST ONLY {version} from {app}; SHA256={digest}")
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--build", type=Path, required=True)
     parser.add_argument("--dest", type=Path, required=True)
+    parser.add_argument("--version", default=TEST_VERSION)
+    parser.add_argument("--ota-name", default="enginelink-update-CHATGPT-TEST.bin")
     args = parser.parse_args()
-    stage(args.build, args.dest)
+    stage(args.build, args.dest, args.version, args.ota_name)

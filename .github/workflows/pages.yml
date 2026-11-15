@@ -11,6 +11,7 @@ on:
       - 'tools/build_demo.py'
       - '.github/workflows/pages.yml'
       - 'experiments/chatgpt-independent/**'
+      - 'experiments/chatgpt-wifi-lab-v2/**'
       - 'tools/stage_chatgpt_test.py'
   workflow_dispatch:
 
@@ -215,6 +216,24 @@ jobs:
             experiments/chatgpt-independent/EngineLink
           python3 tools/stage_chatgpt_test.py \
             --build build-chatgpt --dest site/chatgpt-test/
+
+      # Wi-Fi LAB v2 is an optional, version-labelled hidden test site.
+      # This never replaces the normal latest EngineLink build or v1 test.
+      - name: Stage independent ESP32-S3 Wi-Fi LAB v2 (test only)
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          mkdir -p build-wifi-lab-v2
+          cp firmware/EngineLink/ui.h experiments/chatgpt-wifi-lab-v2/EngineLink/ui.h
+          arduino-cli compile \
+            --fqbn "$FQBN" \
+            --output-dir build-wifi-lab-v2 --export-binaries \
+            experiments/chatgpt-wifi-lab-v2/EngineLink
+          python3 tools/stage_chatgpt_test.py \
+            --build build-wifi-lab-v2 \
+            --dest site/chatgpt-wifi-lab/ \
+            --version 0.0.2-chatgpt-wifi-lab \
+            --ota-name enginelink-update-CHATGPT-WIFI-LAB-V2.bin
 
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
