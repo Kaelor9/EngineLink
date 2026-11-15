@@ -180,7 +180,6 @@ static void otaBody(AsyncWebServerRequest *req,uint8_t *data,size_t len,size_t i
       failOta("Missing explicit OTA confirmation");return;
     }
     if(total<OTA_MIN||total>OTA_MAX){failOta("Firmware app size invalid");return;}
-    Update.runAsync(true);
   }
   if(req!=ota.owner)return;
   lastOtaActivity=millis();
