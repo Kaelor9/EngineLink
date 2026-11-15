@@ -1,0 +1,77 @@
+name: Build ChatGPT independent EngineLink TEST (never production)
+
+on:
+  push:
+    branches:
+      - experiment/chatgpt-independent-firmware
+    paths:
+      - 'experiments/chatgpt-independent/**'
+      - '.github/workflows/chatgpt-lab.yml'
+      - 'firmware/EngineLink/ui.h'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  independent-lab:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: arduino/setup-arduino-cli@v2
+        with:
+          version: "1.x"
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.arduino15/staging
+            ~/.arduino15/packages
+          key: esp32-3.3.12-chatgpt-lab
+      - name: Install pinned Arduino ESP32 core
+        run: |
+          URL=https://espressif.github.io/arduino-esp32/package_esp32_index.json
+          arduino-cli core update-index --additional-urls "$URL"
+          python3 tools/prefetch_arduino_tools.py --version 3.3.12
+          arduino-cli core install esp32:esp32@3.3.12 --additional-urls "$URL"
+      - name: Copy approved visual UI into experiment (build only)
+        run: cp firmware/EngineLink/ui.h experiments/chatgpt-independent/EngineLink/ui.h
+      - name: Compile independent firmware
+        run: |
+          mkdir -p build-chatgpt
+          arduino-cli compile \
+            --fqbn "esp32:esp32:esp32s3:FlashSize=8M,PartitionScheme=default_8MB,PSRAM=opi,USBMode=hwcdc,CDCOnBoot=cdc" \
+            --output-dir build-chatgpt --export-binaries \
+            experiments/chatgpt-independent/EngineLink
+      - name: Stage separately labelled test USB and OTA images
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib, json, shutil
+          build=Path('build-chatgpt')
+          merged=list(build.glob('*.merged.bin'))
+          app=build/'EngineLink.ino.bin'
+          assert len(merged)==1 and merged[0].stat().st_size==8*1024*1024
+          assert app.is_file() and 100000 < app.stat().st_size < 3*1024*1024
+          data=app.read_bytes()
+          assert data[0]==0xE9 and data[0x20:0x24]==bytes([0x32,0x54,0xCD,0xAB])
+          assert data[0x50:0x5A].rstrip(b'\x00')==b'EngineLink'
+          out=build/'installer'
+          out.mkdir()
+          shutil.copy(merged[0],out/'firmware.bin')
+          shutil.copy(app,out/'enginelink-update-CHATGPT-TEST.bin')
+          manifest={'name':'EngineLink ChatGPT TEST (UNVALIDATED)',
+            'version':'0.0.1-chatgpt-test',
+            'new_install_prompt_erase':True,
+            'builds':[{'chipFamily':'ESP32-S3','parts':[{'path':'firmware.bin','offset':0}]}]}
+          (out/'manifest.json').write_text(json.dumps(manifest,indent=2)+'\n')
+          (out/'sha256.txt').write_text(hashlib.sha256(data).hexdigest()+
+            '  enginelink-update-CHATGPT-TEST.bin\n')
+          print('Experimental OTA image:',app.stat().st_size,'bytes')
+          PY
+      - name: Publish CI artifact only (do not touch release or web installer)
+        uses: actions/upload-artifact@v4
+        with:
+          name: EngineLink-CHATGPT-EXPERIMENT
+          path: build-chatgpt/installer/*
+          if-no-files-found: error
