@@ -89,6 +89,18 @@ api = (FW / "webapi.ino").read_text(encoding="utf-8")
 assert 'web.on("/api/wifi/retry",HTTP_POST,handleWifiRetry);' in api
 assert 'web.on("/api/wifi/log",HTTP_GET,handleWifiLogDownload,R_ASYNC);' in api
 assert '"/WIFI.OLD"' in api and '"/WIFIREP.OLD"' in api, "the rotated Wi-Fi files can be downloaded too"
+# 0.17.7: a trip keeps its own Wi-Fi reports (/TRIPS/Tnnnnnn.WIF): every 10
+# minutes and at its end, written by the main loop only, at most 1 MB.
+sc = (FW / "serialcmd.ino").read_text(encoding="utf-8")
+tw = body(sc, "static void saveTripWifi(uint32_t id){")
+assert '"/TRIPS/T%06lu.WIF"' in tw and "f.size()<TRIP_WIFI_MAX" in tw and "sdGapBegin()" in tw
+assert '"<router name hidden>"' in tw, "the router's name is not written to the card's reports"
+st = body(sc, "static void serviceTripWifi(){")
+assert "600000UL" in st and "tripWifiEnded" in st
+assert "serviceTripWifi();" in body(sc, "void serviceWifiLog(){")
+assert "if(totals.tripBoot==bootId)tripWifiEnded=r.id;" in (FW / "trips.ino").read_text(encoding="utf-8")
+assert "saveTripWifi(" not in (FW / "trips.ino").read_text(encoding="utf-8"), "endTrip() only asks; the loop writes"
+assert '"/TRIPS/T%06lu.WIF",id' in api
 assert '"rescue"' not in fw and "Recovery (" not in fw, "no third mode in the report (F6)"
 # Wi-Fi 2.0 Stage 4 is not built: no state machine, no looks, no AP+STA idle station.
 for gone in ("wifistate", "RouterGuard", "netpolicy::", "linkTune", "runRadioTest", "routerProbe", "routerKnownChannel"):

@@ -174,6 +174,7 @@ void endTrip(){
       engineReportTrip=r.id;
       Preferences p;if(p.begin("enginelink",false)){p.putUInt("erpend",r.id);p.end();}
     }
+    if(totals.tripBoot==bootId)tripWifiEnded=r.id;   // its files are named by this id; not for a trip a restart ended
     tripSeriesClose(true);
     for(uint8_t c=0;c<2;c++)if(lifeTripMax[c]>0){life.wotRpm[c]=lifeTripMax[c];if(lifeTripMax[c]>life.wotRpmBest[c])life.wotRpmBest[c]=lifeTripMax[c];}
     lifeDirty=true;

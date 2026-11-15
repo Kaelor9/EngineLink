@@ -41,12 +41,13 @@ internet path through the router).
    0 % lost (below). A phone hotspot is not a good router for EngineLink.
 3. **Own Wi-Fi on the boat: phones dropped with codes 2 and 209** in the
    5 minutes the log covers, the same signature as on the boat on 2026-11-05
-   (STATUS). Open. The older part of the log (`/WIFI.OLD`) and the saved
-   reports (`/WIFIREP.OLD`) from the trip are still on the card; 0.17.6 makes
-   them downloadable.
+   (STATUS). Open.
 4. Not measured: whether answers were slow because of the board's own work
-   with both engines running (SD log about 10 MB in 30 minutes). The saved
-   reports hold every request's times; read them before concluding.
+   with both engines running (SD log about 10 MB in 30 minutes). **The
+   trip's saved reports are gone** (corrected 2026-11-15: read with 0.17.6,
+   `/WIFIREP.OLD` begins at 23:14 UTC; the two files hold about 13 hours and
+   the board stood on all night; there is no `/WIFI.OLD`). From 0.17.7 every
+   trip keeps its own reports (`/TRIPS/Tnnnnnn.WIF`); the next trip decides.
 5. Report bug seen: "longest … ms" printed 4294967268 for a session (a
    negative ping time from the driver, shown unsigned). Not fixed here.
 

@@ -307,7 +307,11 @@ Two modes, never both:
 - **Wi-Fi files on the SD card:** `/WIFI.LOG` (events) and `/WIFIREP.TXT`
   (the report 2 min after a start, then every 30 min), rotated to `.OLD`.
   Download: `GET /api/wifi/log?f=0..3` (0.17.6; Diagnostics › Wi-Fi ›
-  Advanced), or the USB commands `wifi log` / `wifi reports`.
+  Advanced), or the USB commands `wifi log` / `wifi reports`. The two
+  report files hold only about 13 hours, so from 0.17.7 a running trip also
+  appends the report to `/TRIPS/Tnnnnnn.WIF` every 10 min and at its end
+  (`serviceTripWifi()` in `serialcmd.ino`, main loop only, 1 MB at most;
+  `f=4&id=<trip>`; History › trip › Export).
 - All Wi-Fi calls run in `serviceNetwork()` (main loop); the event callback
   only records counters (`tools/test_wifi_contract.py`). The web server
   (`esp_http_server`) binds every interface and is never restarted; a mode

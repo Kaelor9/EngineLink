@@ -98,9 +98,13 @@ back, switch now?" (withdrawn with Stage 4: the app's Connect does it).
   in Standalone and one on the boat router (not a phone hotspot), then
   download the Wi-Fi log and reports in the app (Diagnostics › Wi-Fi ›
   Advanced).
+- **0.17.7 (a trip keeps its Wi-Fi reports):** after a trip of 12 minutes
+  or more, History › the trip › Export › Wi-Fi during this trip has at
+  least two reports. Read them for the question below.
 - **Open from 2026-11-14** ([evidence](test-evidence/boat-2026-11-14/README.md)):
-  read `/WIFI.OLD` and `/WIFIREP.OLD` from the trip (were answers slow with
-  both engines running?); why the hotspot link lost 34–69 % of the pings;
+  were answers slow with both engines running? (the trip's reports were
+  rotated away before they were read; 0.17.7 keeps them per trip); why the
+  hotspot link lost 34–69 % of the pings;
   why phones are dropped from the own Wi-Fi on the boat with codes 2/209;
   the report's "longest … ms" prints a negative ping time as 4294967268.
 - **Sea temperature:** does the boat's instrument show one? 0.17.6 hides
