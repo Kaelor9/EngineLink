@@ -1,0 +1,784 @@
+2026-11-14 <mac> UTC  Phone left EngineLink Wi-Fi (2 Router did not answer the authentication) · phones now: <mac> -51 dBm bgn, <mac> -47 dBm bgn
+2026-11-14 <mac> UTC  Phone left EngineLink Wi-Fi (209 WPA3 PMF SA Query timeout (router did not answer)) · phones now: <mac> -47 dBm bgn
+2026-11-14 <mac> UTC  Phone joined EngineLink Wi-Fi · phones now: <mac> -42 dBm bgn, <mac> -47 dBm bgn
+2026-11-14 <mac> UTC  Phone received an IP from EngineLink DHCP
+2026-11-14 <mac> UTC  Phone left EngineLink Wi-Fi (8 Station deliberately left) · phones now: <mac> -43 dBm bgn
+2026-11-14 <mac> UTC  Phone joined EngineLink Wi-Fi · phones now: <mac> -40 dBm bgn, <mac> -43 dBm bgn
+2026-11-14 <mac> UTC  Phone received an IP from EngineLink DHCP
+2026-11-14 <mac> UTC  Phone left EngineLink Wi-Fi (3 Other Wi-Fi disconnect) · phones now: <mac> -37 dBm bgn
+2026-11-14 <mac> UTC  Phone joined EngineLink Wi-Fi · phones now: <mac> -36 dBm bgn, <mac> -43 dBm bgn
+2026-11-14 <mac> UTC  Phone received an IP from EngineLink DHCP
+2026-11-14 <mac> UTC  Phone left EngineLink Wi-Fi (8 Station deliberately left) · phones now: <mac> -41 dBm bgn
+2026-11-14 <mac> UTC  Phone joined EngineLink Wi-Fi · phones now: <mac> -46 dBm bgn, <mac> -43 dBm bgn
+2026-11-14 <mac> UTC  Phone received an IP from EngineLink DHCP
+2026-11-14 <mac> UTC  Phone left EngineLink Wi-Fi (2 Router did not answer the authentication) · phones now: none
+2026-11-14 <mac> UTC  Connect started
+2026-11-14 <mac> UTC  Associated with router · router channel 6, last signal 0 dBm
+2026-11-14 <mac> UTC  Received router IP · router channel 6, last signal 0 dBm
+2026-11-14 <mac> UTC  Network ready
+2026-11-14 <mac> UTC  Disconnected (200 Router beacons lost) · router channel 6, last signal -69 dBm
+2026-11-14 <mac> UTC  Router session ended after 806 s, code 200, signal -37/-71/-61 dBm (start/lowest/last): pings 266 of 403 answered, average 300 ms, longest 4294967268 ms, most lost in a row 43 · through the router: 22 connections (1 without a request), 270 requests, 2 failed while sending, 735182 bytes
+2026-11-14 <mac> UTC  Disconnected (201 Router not found) · router channel 6, last signal -69 dBm
+2026-11-14 <mac> UTC  Associated with router · router channel 6, last signal -69 dBm
+2026-11-14 <mac> UTC  Received router IP · router channel 6, last signal -69 dBm
+2026-11-14 <mac> UTC  Network ready
+2026-11-14 <mac> UTC  Disconnected (2 Router did not answer the authentication) · router channel 6, last signal -69 dBm
+2026-11-14 <mac> UTC  Disconnected (201 Router not found) · router channel 6, last signal -69 dBm
+2026-11-14 <mac> UTC  Router session ended after 675 s, code 2, signal -72/-72/-30 dBm (start/lowest/last): pings 104 of 337 answered, average 594 ms, longest 4294967250 ms, most lost in a row 23 · through the router: 48 connections (0 without a request), 100 requests, 11 failed while sending, 195979 bytes
+2026-11-14 <mac> UTC  Disconnected (4 Router dropped EngineLink for inactivity) · router channel 6, last signal -69 dBm
+2026-11-14 <mac> UTC  Disconnected (2 Router did not answer the authentication) · router channel 6, last signal -69 dBm
+2026-11-14 <mac> UTC  Associated with router · router channel 6, last signal -69 dBm
+2026-11-14 <mac> UTC  Received router IP · router channel 6, last signal -69 dBm
+2026-11-14 <mac> UTC  Network ready
+up 1s  EngineLink 0.17.5 started, router mode, own Wi-Fi off (EngineLink, channel 6)
+up 1s  Connect started
+up 2s  Disconnected (2 Router did not answer the authentication)
+2026-11-14 <mac> UTC  Disconnected (4 Router dropped EngineLink for inactivity)
+2026-11-14 <mac> UTC  Disconnected (2 Router did not answer the authentication)
+2026-11-14 <mac> UTC  Disconnected (201 Router not found)
+2026-11-14 <mac> UTC  Disconnected (2 Router did not answer the authentication)
+2026-11-14 <mac> UTC  Associated with router · router channel 6, last signal 0 dBm
+up 1s  EngineLink 0.17.5 started, router mode, own Wi-Fi off (EngineLink, channel 6)
+up 1s  Connect started
+2026-11-14 <mac> UTC  Associated with router · router channel 6, last signal 0 dBm
+2026-11-14 <mac> UTC  Received router IP · router channel 6, last signal 0 dBm
+2026-11-14 <mac> UTC  Network ready
+2026-11-14 <mac> UTC  Disconnected (2 Router did not answer the authentication) · router channel 6, last signal -40 dBm
+2026-11-14 <mac> UTC  Disconnected (201 Router not found) · router channel 6, last signal -40 dBm
+2026-11-14 <mac> UTC  Router session ended after 149 s, code 2, signal -31/-50/-50 dBm (start/lowest/last): pings 31 of 74 answered, average 597 ms, longest 4294967265 ms, most lost in a row 10 · through the router: 5 connections (0 without a request), 5 requests, 4 failed while sending, 310 bytes
+2026-11-14 <mac> UTC  Disconnected (2 Router did not answer the authentication) · router channel 6, last signal -40 dBm
+2026-11-14 <mac> UTC  Disconnected (201 Router not found) · router channel 6, last signal -40 dBm
+2026-11-14 <mac> UTC  Associated with router · router channel 6, last signal -40 dBm
+2026-11-14 <mac> UTC  Received router IP · router channel 6, last signal -40 dBm
+2026-11-14 <mac> UTC  Network ready
+up 1s  EngineLink 0.17.5 started, router mode, own Wi-Fi off (EngineLink, channel 6)
+up 1s  Connect started
+up 3s  Disconnected (201 Router not found)
+up 121s  Router not reached in 2 minutes: own Wi-Fi on
+up 122s  Channel survey: air busy 5% on 1, 3% on 6, 6% on 11: channel 6
+up 122s  Own Wi-Fi on: EngineLink, channel 6
+up 122s  Network ready
+up 134s  Phone joined EngineLink Wi-Fi · phones now: <mac> -50 dBm bgn
+up 134s  Phone received an IP from EngineLink DHCP
+up 174s  Phone joined EngineLink Wi-Fi · phones now: <mac> -42 dBm bgn, <mac> -43 dBm bgn
+up 178s  Phone received an IP from EngineLink DHCP
+2026-11-14 <mac> UTC  Phone left EngineLink Wi-Fi (1 Other Wi-Fi disconnect) · phones now: <mac> -42 dBm bgn
+2026-11-14 <mac> UTC  Phone joined EngineLink Wi-Fi · phones now: <mac> -42 dBm bgn, <mac> -42 dBm bgn
+2026-11-14 <mac> UTC  Phone received an IP from EngineLink DHCP
+2026-11-14 <mac> UTC  Phone left EngineLink Wi-Fi (1 Other Wi-Fi disconnect) · phones now: <mac> -41 dBm bgn
+2026-11-14 <mac> UTC  Phone joined EngineLink Wi-Fi · phones now: <mac> -44 dBm bgn, <mac> -42 dBm bgn
+2026-11-14 <mac> UTC  Phone received an IP from EngineLink DHCP
+2026-11-14 <mac> UTC  Phone left EngineLink Wi-Fi (1 Other Wi-Fi disconnect) · phones now: <mac> -41 dBm bgn
+2026-11-14 <mac> UTC  Phone joined EngineLink Wi-Fi · phones now: <mac> -42 dBm bgn, <mac> -40 dBm bgn
+2026-11-14 <mac> UTC  Phone received an IP from EngineLink DHCP
+2026-11-14 <mac> UTC  Phone left EngineLink Wi-Fi (8 Station deliberately left) · phones now: <mac> -39 dBm bgn
+2026-11-14 <mac> UTC  Phone left EngineLink Wi-Fi (1 Other Wi-Fi disconnect) · phones now: none
+2026-11-14 <mac> UTC  Phone joined EngineLink Wi-Fi · phones now: <mac> -42 dBm bgn
+2026-11-14 <mac> UTC  Phone received an IP from EngineLink DHCP
+2026-11-14 <mac> UTC  Phone left EngineLink Wi-Fi (1 Other Wi-Fi disconnect) · phones now: none
+2026-11-14 <mac> UTC  Connect started
+2026-11-14 <mac> UTC  Disconnected (201 Router not found)
+2026-11-14 <mac> UTC  Router not reached in 2 minutes: own Wi-Fi on
+2026-11-14 <mac> UTC  Channel survey: air busy 5% on 1, 4% on 6, 3% on 11: channel 6
+2026-11-14 <mac> UTC  Own Wi-Fi on: EngineLink, channel 6
+2026-11-14 <mac> UTC  Network ready
+2026-11-14 <mac> UTC  Connect started
+2026-11-14 <mac> UTC  Disconnected (201 Router not found)
+2026-11-14 <mac> UTC  Router not reached in 2 minutes: own Wi-Fi on
+2026-11-14 <mac> UTC  Channel survey: air busy 5% on 1, 3% on 6, 3% on 11: channel 6
+2026-11-14 <mac> UTC  Own Wi-Fi on: EngineLink, channel 6
+2026-11-14 <mac> UTC  Network ready
+2026-11-14 <mac> UTC  Connect started
+2026-11-14 <mac> UTC  Disconnected (201 Router not found)
+2026-11-14 <mac> UTC  Router not reached in 2 minutes: own Wi-Fi on
+2026-11-14 <mac> UTC  Channel survey: air busy 4% on 1, 5% on 6, 4% on 11: channel 6
+2026-11-14 <mac> UTC  Own Wi-Fi on: EngineLink, channel 6
+2026-11-14 <mac> UTC  Network ready
+2026-11-14 <mac> UTC  Connect started
+2026-11-14 <mac> UTC  Disconnected (201 Router not found)
+2026-11-14 <mac> UTC  Router not reached in 2 minutes: own Wi-Fi on
+2026-11-14 <mac> UTC  Channel survey: air busy 4% on 1, 2% on 6, 3% on 11: channel 6
+2026-11-14 <mac> UTC  Own Wi-Fi on: EngineLink, channel 6
+2026-11-14 <mac> UTC  Network ready
+2026-11-14 <mac> UTC  Connect started
+2026-11-14 <mac> UTC  Disconnected (201 Router not found)
+2026-11-14 <mac> UTC  Router not reached in 2 minutes: own Wi-Fi on
+2026-11-14 <mac> UTC  Channel survey: air busy 5% on 1, 2% on 6, 4% on 11: channel 6
+2026-11-14 <mac> UTC  Own Wi-Fi on: EngineLink, channel 6
+2026-11-14 <mac> UTC  Network ready
+2026-11-14 <mac> UTC  Connect started
+2026-11-14 <mac> UTC  Disconnected (201 Router not found)
+2026-11-14 <mac> UTC  Router not reached in 2 minutes: own Wi-Fi on
+2026-11-14 <mac> UTC  Channel survey: air busy 5% on 1, 3% on 6, 3% on 11: channel 6
+2026-11-14 <mac> UTC  Own Wi-Fi on: EngineLink, channel 6
+2026-11-14 <mac> UTC  Network ready
+2026-11-14 <mac> UTC  Connect started
+2026-11-14 <mac> UTC  Disconnected (201 Router not found)
+2026-11-14 <mac> UTC  Router not reached in 2 minutes: own Wi-Fi on
+2026-11-14 <mac> UTC  Channel survey: air busy 4% on 1, 3% on 6, 3% on 11: channel 6
+2026-11-14 <mac> UTC  Own Wi-Fi on: EngineLink, channel 6
+2026-11-14 <mac> UTC  Network ready
+2026-11-14 <mac> UTC  Connect started
+2026-11-14 <mac> UTC  Disconnected (201 Router not found)
+2026-11-14 <mac> UTC  Router not reached in 2 minutes: own Wi-Fi on
+2026-11-14 <mac> UTC  Channel survey: air busy 5% on 1, 4% on 6, 4% on 11: channel 6
+2026-11-14 <mac> UTC  Own Wi-Fi on: EngineLink, channel 6
+2026-11-14 <mac> UTC  Network ready
+2026-11-14 <mac> UTC  Connect started
+2026-11-14 <mac> UTC  Disconnected (201 Router not found)
+2026-11-14 <mac> UTC  Router not reached in 2 minutes: own Wi-Fi on
+2026-11-14 <mac> UTC  Channel survey: air busy 5% on 1, 4% on 6, 12% on 11: channel 6
+2026-11-14 <mac> UTC  Own Wi-Fi on: EngineLink, channel 6
+2026-11-14 <mac> UTC  Network ready
+2026-11-14 <mac> UTC  Connect started
+2026-11-14 <mac> UTC  Disconnected (201 Router not found)
+2026-11-14 <mac> UTC  Router not reached in 2 minutes: own Wi-Fi on
+2026-11-14 <mac> UTC  Channel survey: air busy 10% on 1, 4% on 6, 3% on 11: channel 6
+2026-11-14 <mac> UTC  Own Wi-Fi on: EngineLink, channel 6
+2026-11-14 <mac> UTC  Network ready
+2026-11-14 <mac> UTC  Connect started
+2026-11-14 <mac> UTC  Disconnected (201 Router not found)
+2026-11-14 <mac> UTC  Router not reached in 2 minutes: own Wi-Fi on
+2026-11-14 <mac> UTC  Channel survey: air busy 7% on 1, 4% on 6, 3% on 11: channel 6
+2026-11-14 <mac> UTC  Own Wi-Fi on: EngineLink, channel 6
+2026-11-14 <mac> UTC  Network ready
+2026-11-14 <mac> UTC  Connect started
+2026-11-14 <mac> UTC  Disconnected (201 Router not found)
+2026-11-14 <mac> UTC  Router not reached in 2 minutes: own Wi-Fi on
+2026-11-14 <mac> UTC  Channel survey: air busy 7% on 1, 8% on 6, 6% on 11: channel 6
+2026-11-14 <mac> UTC  Own Wi-Fi on: EngineLink, channel 6
+2026-11-14 <mac> UTC  Network ready
+2026-11-14 <mac> UTC  Connect started
+2026-11-14 <mac> UTC  Disconnected (201 Router not found)
+2026-11-14 <mac> UTC  Router not reached in 2 minutes: own Wi-Fi on
+2026-11-14 <mac> UTC  Channel survey: air busy 5% on 1, 1% on 6, 3% on 11: channel 6
+2026-11-14 <mac> UTC  Own Wi-Fi on: EngineLink, channel 6
+2026-11-14 <mac> UTC  Network ready
+2026-11-14 <mac> UTC  Connect started
+2026-11-14 <mac> UTC  Disconnected (201 Router not found)
+2026-11-14 <mac> UTC  Router not reached in 2 minutes: own Wi-Fi on
+2026-11-14 <mac> UTC  Channel survey: air busy 5% on 1, 2% on 6, 2% on 11: channel 6
+2026-11-14 <mac> UTC  Own Wi-Fi on: EngineLink, channel 6
+2026-11-14 <mac> UTC  Network ready
+2026-11-14 <mac> UTC  Connect started
+2026-11-14 <mac> UTC  Disconnected (201 Router not found)
+2026-11-14 <mac> UTC  Router not reached in 2 minutes: own Wi-Fi on
+2026-11-14 <mac> UTC  Channel survey: air busy 6% on 1, 4% on 6, 3% on 11: channel 6
+2026-11-14 <mac> UTC  Own Wi-Fi on: EngineLink, channel 6
+2026-11-14 <mac> UTC  Network ready
+2026-11-14 <mac> UTC  Connect started
+2026-11-14 <mac> UTC  Disconnected (201 Router not found)
+2026-11-14 <mac> UTC  Router not reached in 2 minutes: own Wi-Fi on
+2026-11-14 <mac> UTC  Channel survey: air busy 5% on 1, 2% on 6, 3% on 11: channel 6
+2026-11-14 <mac> UTC  Own Wi-Fi on: EngineLink, channel 6
+2026-11-14 <mac> UTC  Network ready
+2026-11-14 <mac> UTC  Connect started
+2026-11-14 <mac> UTC  Disconnected (201 Router not found)
+2026-11-14 <mac> UTC  Router not reached in 2 minutes: own Wi-Fi on
+2026-11-14 <mac> UTC  Channel survey: air busy 5% on 1, 2% on 6, 3% on 11: channel 6
+2026-11-14 <mac> UTC  Own Wi-Fi on: EngineLink, channel 6
+2026-11-14 <mac> UTC  Network ready
+2026-11-14 <mac> UTC  Connect started
+2026-11-14 <mac> UTC  Disconnected (201 Router not found)
+2026-11-14 <mac> UTC  Router not reached in 2 minutes: own Wi-Fi on
+2026-11-14 <mac> UTC  Channel survey: air busy 4% on 1, 4% on 6, 7% on 11: channel 6
+2026-11-14 <mac> UTC  Own Wi-Fi on: EngineLink, channel 6
+2026-11-14 <mac> UTC  Network ready
+2026-11-14 <mac> UTC  Connect started
+2026-11-14 <mac> UTC  Disconnected (201 Router not found)
+2026-11-14 <mac> UTC  Router not reached in 2 minutes: own Wi-Fi on
+2026-11-14 <mac> UTC  Channel survey: air busy 9% on 1, 0% on 6, 3% on 11: channel 6
+2026-11-14 <mac> UTC  Own Wi-Fi on: EngineLink, channel 6
+2026-11-14 <mac> UTC  Network ready
+2026-11-14 <mac> UTC  Connect started
+2026-11-14 <mac> UTC  Disconnected (201 Router not found)
+2026-11-14 <mac> UTC  Router not reached in 2 minutes: own Wi-Fi on
+2026-11-14 <mac> UTC  Channel survey: air busy 5% on 1, 2% on 6, 5% on 11: channel 6
+2026-11-14 <mac> UTC  Own Wi-Fi on: EngineLink, channel 6
+2026-11-14 <mac> UTC  Network ready
+2026-11-14 <mac> UTC  Connect started
+2026-11-14 <mac> UTC  Disconnected (201 Router not found)
+2026-11-14 <mac> UTC  Router not reached in 2 minutes: own Wi-Fi on
+2026-11-14 <mac> UTC  Channel survey: air busy 4% on 1, 4% on 6, 6% on 11: channel 6
+2026-11-14 <mac> UTC  Own Wi-Fi on: EngineLink, channel 6
+2026-11-14 <mac> UTC  Network ready
+2026-11-14 <mac> UTC  Connect started
+2026-11-14 <mac> UTC  Disconnected (201 Router not found)
+2026-11-14 <mac> UTC  Router not reached in 2 minutes: own Wi-Fi on
+2026-11-14 <mac> UTC  Channel survey: air busy 5% on 1, 3% on 6, 6% on 11: channel 6
+2026-11-14 <mac> UTC  Own Wi-Fi on: EngineLink, channel 6
+2026-11-14 <mac> UTC  Network ready
+2026-11-14 <mac> UTC  Connect started
+2026-11-14 <mac> UTC  Disconnected (201 Router not found)
+2026-11-14 <mac> UTC  Router not reached in 2 minutes: own Wi-Fi on
+2026-11-14 <mac> UTC  Channel survey: air busy 7% on 1, 5% on 6, 5% on 11: channel 6
+2026-11-14 <mac> UTC  Own Wi-Fi on: EngineLink, channel 6
+2026-11-14 <mac> UTC  Network ready
+2026-11-14 <mac> UTC  Connect started
+2026-11-14 <mac> UTC  Disconnected (201 Router not found)
+2026-11-14 <mac> UTC  Router not reached in 2 minutes: own Wi-Fi on
+2026-11-14 <mac> UTC  Channel survey: air busy 6% on 1, 5% on 6, 7% on 11: channel 6
+2026-11-14 <mac> UTC  Own Wi-Fi on: EngineLink, channel 6
+2026-11-14 <mac> UTC  Network ready
+2026-11-14 <mac> UTC  Connect started
+2026-11-14 <mac> UTC  Disconnected (201 Router not found)
+2026-11-14 <mac> UTC  Router not reached in 2 minutes: own Wi-Fi on
+2026-11-14 <mac> UTC  Channel survey: air busy 5% on 1, 3% on 6, 3% on 11: channel 6
+2026-11-14 <mac> UTC  Own Wi-Fi on: EngineLink, channel 6
+2026-11-14 <mac> UTC  Network ready
+2026-11-14 <mac> UTC  Connect started
+2026-11-14 <mac> UTC  Disconnected (201 Router not found)
+2026-11-14 <mac> UTC  Router not reached in 2 minutes: own Wi-Fi on
+2026-11-14 <mac> UTC  Channel survey: air busy 8% on 1, 8% on 6, 3% on 11: channel 6
+2026-11-14 <mac> UTC  Own Wi-Fi on: EngineLink, channel 6
+2026-11-14 <mac> UTC  Network ready
+2026-11-14 <mac> UTC  Connect started
+2026-11-14 <mac> UTC  Disconnected (201 Router not found)
+2026-11-14 <mac> UTC  Router not reached in 2 minutes: own Wi-Fi on
+2026-11-14 <mac> UTC  Channel survey: air busy 5% on 1, 3% on 6, 2% on 11: channel 6
+2026-11-14 <mac> UTC  Own Wi-Fi on: EngineLink, channel 6
+2026-11-14 <mac> UTC  Network ready
+2026-11-14 <mac> UTC  Connect started
+2026-11-14 <mac> UTC  Disconnected (201 Router not found)
+2026-11-14 <mac> UTC  Router not reached in 2 minutes: own Wi-Fi on
+2026-11-14 <mac> UTC  Channel survey: air busy 5% on 1, 3% on 6, 3% on 11: channel 6
+2026-11-14 <mac> UTC  Own Wi-Fi on: EngineLink, channel 6
+2026-11-14 <mac> UTC  Network ready
+2026-11-14 <mac> UTC  Connect started
+2026-11-14 <mac> UTC  Disconnected (201 Router not found)
+2026-11-14 <mac> UTC  Router not reached in 2 minutes: own Wi-Fi on
+2026-11-14 <mac> UTC  Channel survey: air busy 5% on 1, 4% on 6, 6% on 11: channel 6
+2026-11-14 <mac> UTC  Own Wi-Fi on: EngineLink, channel 6
+2026-11-14 <mac> UTC  Network ready
+2026-11-14 <mac> UTC  Connect started
+2026-11-14 <mac> UTC  Disconnected (201 Router not found)
+2026-11-14 <mac> UTC  Router not reached in 2 minutes: own Wi-Fi on
+2026-11-14 <mac> UTC  Channel survey: air busy 5% on 1, 4% on 6, 3% on 11: channel 6
+2026-11-14 <mac> UTC  Own Wi-Fi on: EngineLink, channel 6
+2026-11-14 <mac> UTC  Network ready
+2026-11-14 <mac> UTC  Connect started
+2026-11-14 <mac> UTC  Disconnected (201 Router not found)
+2026-11-14 <mac> UTC  Router not reached in 2 minutes: own Wi-Fi on
+2026-11-14 <mac> UTC  Channel survey: air busy 5% on 1, 6% on 6, 11% on 11: channel 6
+2026-11-14 <mac> UTC  Own Wi-Fi on: EngineLink, channel 6
+2026-11-14 <mac> UTC  Network ready
+2026-11-14 <mac> UTC  Connect started
+2026-11-14 <mac> UTC  Disconnected (201 Router not found)
+2026-11-14 <mac> UTC  Router not reached in 2 minutes: own Wi-Fi on
+2026-11-14 <mac> UTC  Channel survey: air busy 5% on 1, 4% on 6, 2% on 11: channel 6
+2026-11-14 <mac> UTC  Own Wi-Fi on: EngineLink, channel 6
+2026-11-14 <mac> UTC  Network ready
+2026-11-14 <mac> UTC  Connect started
+2026-11-14 <mac> UTC  Disconnected (201 Router not found)
+2026-11-14 <mac> UTC  Router not reached in 2 minutes: own Wi-Fi on
+2026-11-14 <mac> UTC  Channel survey: air busy 6% on 1, 4% on 6, 3% on 11: channel 6
+2026-11-14 <mac> UTC  Own Wi-Fi on: EngineLink, channel 6
+2026-11-14 <mac> UTC  Network ready
+2026-11-15 <mac> UTC  Connect started
+2026-11-15 <mac> UTC  Disconnected (201 Router not found)
+2026-11-15 <mac> UTC  Router not reached in 2 minutes: own Wi-Fi on
+2026-11-15 <mac> UTC  Channel survey: air busy 5% on 1, 6% on 6, 4% on 11: channel 6
+2026-11-15 <mac> UTC  Own Wi-Fi on: EngineLink, channel 6
+2026-11-15 <mac> UTC  Network ready
+2026-11-15 <mac> UTC  Connect started
+2026-11-15 <mac> UTC  Disconnected (201 Router not found)
+2026-11-15 <mac> UTC  Router not reached in 2 minutes: own Wi-Fi on
+2026-11-15 <mac> UTC  Channel survey: air busy 5% on 1, 4% on 6, 5% on 11: channel 6
+2026-11-15 <mac> UTC  Own Wi-Fi on: EngineLink, channel 6
+2026-11-15 <mac> UTC  Network ready
+2026-11-15 <mac> UTC  Connect started
+2026-11-15 <mac> UTC  Disconnected (201 Router not found)
+2026-11-15 <mac> UTC  Router not reached in 2 minutes: own Wi-Fi on
+2026-11-15 <mac> UTC  Channel survey: air busy 5% on 1, 3% on 6, 3% on 11: channel 6
+2026-11-15 <mac> UTC  Own Wi-Fi on: EngineLink, channel 6
+2026-11-15 <mac> UTC  Network ready
+2026-11-15 <mac> UTC  Connect started
+2026-11-15 <mac> UTC  Disconnected (201 Router not found)
+2026-11-15 <mac> UTC  Router not reached in 2 minutes: own Wi-Fi on
+2026-11-15 <mac> UTC  Channel survey: air busy 5% on 1, 4% on 6, 9% on 11: channel 6
+2026-11-15 <mac> UTC  Own Wi-Fi on: EngineLink, channel 6
+2026-11-15 <mac> UTC  Network ready
+2026-11-15 <mac> UTC  Connect started
+2026-11-15 <mac> UTC  Disconnected (201 Router not found)
+2026-11-15 <mac> UTC  Router not reached in 2 minutes: own Wi-Fi on
+2026-11-15 <mac> UTC  Channel survey: air busy 5% on 1, 3% on 6, 2% on 11: channel 6
+2026-11-15 <mac> UTC  Own Wi-Fi on: EngineLink, channel 6
+2026-11-15 <mac> UTC  Network ready
+2026-11-15 <mac> UTC  Connect started
+2026-11-15 <mac> UTC  Disconnected (201 Router not found)
+2026-11-15 <mac> UTC  Router not reached in 2 minutes: own Wi-Fi on
+2026-11-15 <mac> UTC  Channel survey: air busy 5% on 1, 4% on 6, 3% on 11: channel 6
+2026-11-15 <mac> UTC  Own Wi-Fi on: EngineLink, channel 6
+2026-11-15 <mac> UTC  Network ready
+2026-11-15 <mac> UTC  Connect started
+2026-11-15 <mac> UTC  Disconnected (201 Router not found)
+2026-11-15 <mac> UTC  Router not reached in 2 minutes: own Wi-Fi on
+2026-11-15 <mac> UTC  Channel survey: air busy 6% on 1, 5% on 6, 3% on 11: channel 6
+2026-11-15 <mac> UTC  Own Wi-Fi on: EngineLink, channel 6
+2026-11-15 <mac> UTC  Network ready
+2026-11-15 <mac> UTC  Connect started
+2026-11-15 <mac> UTC  Disconnected (201 Router not found)
+2026-11-15 <mac> UTC  Router not reached in 2 minutes: own Wi-Fi on
+2026-11-15 <mac> UTC  Channel survey: air busy 5% on 1, 3% on 6, 3% on 11: channel 6
+2026-11-15 <mac> UTC  Own Wi-Fi on: EngineLink, channel 6
+2026-11-15 <mac> UTC  Network ready
+2026-11-15 <mac> UTC  Connect started
+2026-11-15 <mac> UTC  Disconnected (201 Router not found)
+2026-11-15 <mac> UTC  Router not reached in 2 minutes: own Wi-Fi on
+2026-11-15 <mac> UTC  Channel survey: air busy 4% on 1, 4% on 6, 11% on 11: channel 6
+2026-11-15 <mac> UTC  Own Wi-Fi on: EngineLink, channel 6
+2026-11-15 <mac> UTC  Network ready
+2026-11-15 <mac> UTC  Connect started
+2026-11-15 <mac> UTC  Disconnected (201 Router not found)
+2026-11-15 <mac> UTC  Router not reached in 2 minutes: own Wi-Fi on
+2026-11-15 <mac> UTC  Channel survey: air busy 4% on 1, 3% on 6, 3% on 11: channel 6
+2026-11-15 <mac> UTC  Own Wi-Fi on: EngineLink, channel 6
+2026-11-15 <mac> UTC  Network ready
+2026-11-15 <mac> UTC  Connect started
+2026-11-15 <mac> UTC  Disconnected (201 Router not found)
+2026-11-15 <mac> UTC  Router not reached in 2 minutes: own Wi-Fi on
+2026-11-15 <mac> UTC  Channel survey: air busy 5% on 1, 5% on 6, 5% on 11: channel 6
+2026-11-15 <mac> UTC  Own Wi-Fi on: EngineLink, channel 6
+2026-11-15 <mac> UTC  Network ready
+2026-11-15 <mac> UTC  Connect started
+2026-11-15 <mac> UTC  Disconnected (201 Router not found)
+2026-11-15 <mac> UTC  Router not reached in 2 minutes: own Wi-Fi on
+2026-11-15 <mac> UTC  Channel survey: air busy 5% on 1, 2% on 6, 3% on 11: channel 6
+2026-11-15 <mac> UTC  Own Wi-Fi on: EngineLink, channel 6
+2026-11-15 <mac> UTC  Network ready
+2026-11-15 <mac> UTC  Connect started
+2026-11-15 <mac> UTC  Disconnected (201 Router not found)
+2026-11-15 <mac> UTC  Router not reached in 2 minutes: own Wi-Fi on
+2026-11-15 <mac> UTC  Channel survey: air busy 5% on 1, 5% on 6, 5% on 11: channel 6
+2026-11-15 <mac> UTC  Own Wi-Fi on: EngineLink, channel 6
+2026-11-15 <mac> UTC  Network ready
+2026-11-15 <mac> UTC  Connect started
+2026-11-15 <mac> UTC  Disconnected (201 Router not found)
+2026-11-15 <mac> UTC  Router not reached in 2 minutes: own Wi-Fi on
+2026-11-15 <mac> UTC  Channel survey: air busy 10% on 1, 8% on 6, 2% on 11: channel 11
+2026-11-15 <mac> UTC  Own Wi-Fi on: EngineLink, channel 11
+2026-11-15 <mac> UTC  Network ready
+2026-11-15 <mac> UTC  Connect started
+2026-11-15 <mac> UTC  Disconnected (201 Router not found)
+2026-11-15 <mac> UTC  Router not reached in 2 minutes: own Wi-Fi on
+2026-11-15 <mac> UTC  Channel survey: air busy 5% on 1, 3% on 6, 4% on 11: channel 11
+2026-11-15 <mac> UTC  Own Wi-Fi on: EngineLink, channel 11
+2026-11-15 <mac> UTC  Network ready
+2026-11-15 <mac> UTC  Connect started
+2026-11-15 <mac> UTC  Disconnected (201 Router not found)
+2026-11-15 <mac> UTC  Router not reached in 2 minutes: own Wi-Fi on
+2026-11-15 <mac> UTC  Channel survey: air busy 4% on 1, 3% on 6, 4% on 11: channel 11
+2026-11-15 <mac> UTC  Own Wi-Fi on: EngineLink, channel 11
+2026-11-15 <mac> UTC  Network ready
+2026-11-15 <mac> UTC  Connect started
+2026-11-15 <mac> UTC  Disconnected (201 Router not found)
+2026-11-15 <mac> UTC  Router not reached in 2 minutes: own Wi-Fi on
+2026-11-15 <mac> UTC  Channel survey: air busy 5% on 1, 3% on 6, 3% on 11: channel 11
+2026-11-15 <mac> UTC  Own Wi-Fi on: EngineLink, channel 11
+2026-11-15 <mac> UTC  Network ready
+2026-11-15 <mac> UTC  Connect started
+2026-11-15 <mac> UTC  Disconnected (201 Router not found)
+2026-11-15 <mac> UTC  Router not reached in 2 minutes: own Wi-Fi on
+2026-11-15 <mac> UTC  Channel survey: air busy 5% on 1, 3% on 6, 3% on 11: channel 11
+2026-11-15 <mac> UTC  Own Wi-Fi on: EngineLink, channel 11
+2026-11-15 <mac> UTC  Network ready
+2026-11-15 <mac> UTC  Connect started
+2026-11-15 <mac> UTC  Disconnected (201 Router not found)
+2026-11-15 <mac> UTC  Router not reached in 2 minutes: own Wi-Fi on
+2026-11-15 <mac> UTC  Channel survey: air busy 4% on 1, 3% on 6, 10% on 11: channel 6
+2026-11-15 <mac> UTC  Own Wi-Fi on: EngineLink, channel 6
+2026-11-15 <mac> UTC  Network ready
+2026-11-15 <mac> UTC  Connect started
+2026-11-15 <mac> UTC  Disconnected (201 Router not found)
+2026-11-15 <mac> UTC  Router not reached in 2 minutes: own Wi-Fi on
+2026-11-15 <mac> UTC  Channel survey: air busy 7% on 1, 6% on 6, 2% on 11: channel 6
+2026-11-15 <mac> UTC  Own Wi-Fi on: EngineLink, channel 6
+2026-11-15 <mac> UTC  Network ready
+2026-11-15 <mac> UTC  Connect started
+2026-11-15 <mac> UTC  Disconnected (201 Router not found)
+2026-11-15 <mac> UTC  Router not reached in 2 minutes: own Wi-Fi on
+2026-11-15 <mac> UTC  Channel survey: air busy 5% on 1, 3% on 6, 5% on 11: channel 6
+2026-11-15 <mac> UTC  Own Wi-Fi on: EngineLink, channel 6
+2026-11-15 <mac> UTC  Network ready
+2026-11-15 <mac> UTC  Connect started
+2026-11-15 <mac> UTC  Disconnected (201 Router not found)
+2026-11-15 <mac> UTC  Router not reached in 2 minutes: own Wi-Fi on
+2026-11-15 <mac> UTC  Channel survey: air busy 5% on 1, 5% on 6, 6% on 11: channel 6
+2026-11-15 <mac> UTC  Own Wi-Fi on: EngineLink, channel 6
+2026-11-15 <mac> UTC  Network ready
+2026-11-15 <mac> UTC  Connect started
+2026-11-15 <mac> UTC  Disconnected (201 Router not found)
+2026-11-15 <mac> UTC  Router not reached in 2 minutes: own Wi-Fi on
+2026-11-15 <mac> UTC  Channel survey: air busy 5% on 1, 3% on 6, 3% on 11: channel 6
+2026-11-15 <mac> UTC  Own Wi-Fi on: EngineLink, channel 6
+2026-11-15 <mac> UTC  Network ready
+2026-11-15 <mac> UTC  Connect started
+2026-11-15 <mac> UTC  Disconnected (201 Router not found)
+2026-11-15 <mac> UTC  Router not reached in 2 minutes: own Wi-Fi on
+2026-11-15 <mac> UTC  Channel survey: air busy 5% on 1, 3% on 6, 3% on 11: channel 6
+2026-11-15 <mac> UTC  Own Wi-Fi on: EngineLink, channel 6
+2026-11-15 <mac> UTC  Network ready
+2026-11-15 <mac> UTC  Connect started
+2026-11-15 <mac> UTC  Disconnected (201 Router not found)
+2026-11-15 <mac> UTC  Router not reached in 2 minutes: own Wi-Fi on
+2026-11-15 <mac> UTC  Channel survey: air busy 7% on 1, 10% on 6, 5% on 11: channel 6
+2026-11-15 <mac> UTC  Own Wi-Fi on: EngineLink, channel 6
+2026-11-15 <mac> UTC  Network ready
+2026-11-15 <mac> UTC  Connect started
+2026-11-15 <mac> UTC  Disconnected (201 Router not found)
+2026-11-15 <mac> UTC  Router not reached in 2 minutes: own Wi-Fi on
+2026-11-15 <mac> UTC  Channel survey: air busy 5% on 1, 2% on 6, 2% on 11: channel 6
+2026-11-15 <mac> UTC  Own Wi-Fi on: EngineLink, channel 6
+2026-11-15 <mac> UTC  Network ready
+2026-11-15 <mac> UTC  Connect started
+2026-11-15 <mac> UTC  Disconnected (201 Router not found)
+2026-11-15 <mac> UTC  Router not reached in 2 minutes: own Wi-Fi on
+2026-11-15 <mac> UTC  Channel survey: air busy 5% on 1, 3% on 6, 3% on 11: channel 6
+2026-11-15 <mac> UTC  Own Wi-Fi on: EngineLink, channel 6
+2026-11-15 <mac> UTC  Network ready
+2026-11-15 <mac> UTC  Connect started
+2026-11-15 <mac> UTC  Disconnected (201 Router not found)
+2026-11-15 <mac> UTC  Router not reached in 2 minutes: own Wi-Fi on
+2026-11-15 <mac> UTC  Channel survey: air busy 5% on 1, 5% on 6, 4% on 11: channel 6
+2026-11-15 <mac> UTC  Own Wi-Fi on: EngineLink, channel 6
+2026-11-15 <mac> UTC  Network ready
+2026-11-15 <mac> UTC  Connect started
+2026-11-15 <mac> UTC  Disconnected (201 Router not found)
+2026-11-15 <mac> UTC  Router not reached in 2 minutes: own Wi-Fi on
+2026-11-15 <mac> UTC  Channel survey: air busy 5% on 1, 2% on 6, 6% on 11: channel 6
+2026-11-15 <mac> UTC  Own Wi-Fi on: EngineLink, channel 6
+2026-11-15 <mac> UTC  Network ready
+2026-11-15 <mac> UTC  Connect started
+2026-11-15 <mac> UTC  Disconnected (201 Router not found)
+2026-11-15 <mac> UTC  Router not reached in 2 minutes: own Wi-Fi on
+2026-11-15 <mac> UTC  Channel survey: air busy 5% on 1, 2% on 6, 2% on 11: channel 6
+2026-11-15 <mac> UTC  Own Wi-Fi on: EngineLink, channel 6
+2026-11-15 <mac> UTC  Network ready
+2026-11-15 <mac> UTC  Connect started
+2026-11-15 <mac> UTC  Disconnected (201 Router not found)
+2026-11-15 <mac> UTC  Router not reached in 2 minutes: own Wi-Fi on
+2026-11-15 <mac> UTC  Channel survey: air busy 4% on 1, 3% on 6, 3% on 11: channel 6
+2026-11-15 <mac> UTC  Own Wi-Fi on: EngineLink, channel 6
+2026-11-15 <mac> UTC  Network ready
+2026-11-15 <mac> UTC  Connect started
+2026-11-15 <mac> UTC  Disconnected (201 Router not found)
+2026-11-15 <mac> UTC  Router not reached in 2 minutes: own Wi-Fi on
+2026-11-15 <mac> UTC  Channel survey: air busy 5% on 1, 3% on 6, 5% on 11: channel 6
+2026-11-15 <mac> UTC  Own Wi-Fi on: EngineLink, channel 6
+2026-11-15 <mac> UTC  Network ready
+2026-11-15 <mac> UTC  Connect started
+2026-11-15 <mac> UTC  Disconnected (201 Router not found)
+2026-11-15 <mac> UTC  Router not reached in 2 minutes: own Wi-Fi on
+2026-11-15 <mac> UTC  Channel survey: air busy 5% on 1, 5% on 6, 3% on 11: channel 6
+2026-11-15 <mac> UTC  Own Wi-Fi on: EngineLink, channel 6
+2026-11-15 <mac> UTC  Network ready
+2026-11-15 <mac> UTC  Connect started
+2026-11-15 <mac> UTC  Disconnected (201 Router not found)
+2026-11-15 <mac> UTC  Router not reached in 2 minutes: own Wi-Fi on
+2026-11-15 <mac> UTC  Channel survey: air busy 5% on 1, 4% on 6, 3% on 11: channel 6
+2026-11-15 <mac> UTC  Own Wi-Fi on: EngineLink, channel 6
+2026-11-15 <mac> UTC  Network ready
+2026-11-15 <mac> UTC  Connect started
+2026-11-15 <mac> UTC  Disconnected (201 Router not found)
+2026-11-15 <mac> UTC  Router not reached in 2 minutes: own Wi-Fi on
+2026-11-15 <mac> UTC  Channel survey: air busy 4% on 1, 3% on 6, 4% on 11: channel 6
+2026-11-15 <mac> UTC  Own Wi-Fi on: EngineLink, channel 6
+2026-11-15 <mac> UTC  Network ready
+2026-11-15 <mac> UTC  Connect started
+2026-11-15 <mac> UTC  Disconnected (201 Router not found)
+2026-11-15 <mac> UTC  Router not reached in 2 minutes: own Wi-Fi on
+2026-11-15 <mac> UTC  Channel survey: air busy 5% on 1, 2% on 6, 4% on 11: channel 6
+2026-11-15 <mac> UTC  Own Wi-Fi on: EngineLink, channel 6
+2026-11-15 <mac> UTC  Network ready
+2026-11-15 <mac> UTC  Connect started
+2026-11-15 <mac> UTC  Disconnected (201 Router not found)
+2026-11-15 <mac> UTC  Router not reached in 2 minutes: own Wi-Fi on
+2026-11-15 <mac> UTC  Channel survey: air busy 7% on 1, 11% on 6, 7% on 11: channel 6
+2026-11-15 <mac> UTC  Own Wi-Fi on: EngineLink, channel 6
+2026-11-15 <mac> UTC  Network ready
+2026-11-15 <mac> UTC  Connect started
+2026-11-15 <mac> UTC  Disconnected (201 Router not found)
+up 1s  EngineLink 0.17.5 started, router mode, own Wi-Fi off (EngineLink, channel 6)
+up 1s  Connect started
+up 3s  Disconnected (201 Router not found)
+up 121s  Router not reached in 2 minutes: own Wi-Fi on
+up 122s  Channel survey: air busy 5% on 1, 4% on 6, 4% on 11: channel 6
+up 122s  Own Wi-Fi on: EngineLink, channel 6
+up 122s  Network ready
+up 1s  EngineLink 0.17.5 started, router mode, own Wi-Fi off (EngineLink, channel 6)
+up 1s  Connect started
+up 3s  Disconnected (201 Router not found)
+up 1s  EngineLink 0.17.5 started, router mode, own Wi-Fi off (EngineLink, channel 6)
+up 1s  Connect started
+up 3s  Disconnected (201 Router not found)
+up 1s  EngineLink 0.17.5 started, router mode, own Wi-Fi off (EngineLink, channel 6)
+up 1s  Connect started
+up 3s  Disconnected (201 Router not found)
+up 1s  EngineLink 0.17.5 started, router mode, own Wi-Fi off (EngineLink, channel 6)
+up 1s  Connect started
+up 3s  Disconnected (201 Router not found)
+up 121s  Router not reached in 2 minutes: own Wi-Fi on
+up 122s  Channel survey: air busy 5% on 1, 3% on 6, 3% on 11: channel 6
+up 122s  Own Wi-Fi on: EngineLink, channel 6
+up 122s  Network ready
+up 721s  Connect started
+up 723s  Disconnected (201 Router not found)
+up 841s  Router not reached in 2 minutes: own Wi-Fi on
+up 842s  Channel survey: air busy 4% on 1, 3% on 6, 2% on 11: channel 6
+up 842s  Own Wi-Fi on: EngineLink, channel 6
+up 842s  Network ready
+up 1013s  Phone joined EngineLink Wi-Fi · phones now: <mac> -69 dBm bgn
+up 1014s  Phone received an IP from EngineLink DHCP
+2026-11-15 <mac> UTC  Phone left EngineLink Wi-Fi (1 Other Wi-Fi disconnect) · phones now: none
+2026-11-15 <mac> UTC  Phone joined EngineLink Wi-Fi · phones now: <mac> -56 dBm bgn
+2026-11-15 <mac> UTC  Phone received an IP from EngineLink DHCP
+2026-11-15 <mac> UTC  Phone left EngineLink Wi-Fi (2 Router did not answer the authentication) · phones now: none
+2026-11-15 <mac> UTC  Channel survey: air busy 5% on 1, 5% on 6, 7% on 11: channel 6
+2026-11-15 <mac> UTC  Own Wi-Fi on: EngineLink, channel 6
+2026-11-15 <mac> UTC  Network ready
+2026-11-15 <mac> UTC  Phone joined EngineLink Wi-Fi · phones now: <mac> -55 dBm bgn
+2026-11-15 <mac> UTC  Phone received an IP from EngineLink DHCP
+2026-11-15 <mac> UTC  Phone left EngineLink Wi-Fi (1 Other Wi-Fi disconnect) · phones now: none
+2026-11-15 <mac> UTC  Phone joined EngineLink Wi-Fi · phones now: <mac> -56 dBm bgn
+2026-11-15 <mac> UTC  Phone received an IP from EngineLink DHCP
+2026-11-15 <mac> UTC  Phone left EngineLink Wi-Fi (1 Other Wi-Fi disconnect) · phones now: none
+2026-11-15 <mac> UTC  Phone joined EngineLink Wi-Fi · phones now: <mac> -58 dBm bgn
+2026-11-15 <mac> UTC  Phone received an IP from EngineLink DHCP
+2026-11-15 <mac> UTC  Phone left EngineLink Wi-Fi (1 Other Wi-Fi disconnect) · phones now: none
+2026-11-15 <mac> UTC  Phone joined EngineLink Wi-Fi · phones now: <mac> -53 dBm bgn
+2026-11-15 <mac> UTC  Phone received an IP from EngineLink DHCP
+2026-11-15 <mac> UTC  Router chosen: restarting to join from a clean start
+2026-11-15 <mac> UTC  EngineLink 0.17.5 started, router mode, own Wi-Fi off (EngineLink, channel 6)
+2026-11-15 <mac> UTC  Connect started
+2026-11-15 <mac> UTC  Associated with router · router channel 1, last signal 0 dBm
+2026-11-15 <mac> UTC  Received router IP · router channel 1, last signal 0 dBm
+2026-11-15 <mac> UTC  Network ready
+up 1s  EngineLink 0.17.5 started, router mode, own Wi-Fi off (EngineLink, channel 6)
+up 1s  Connect started
+up 1s  Associated with router · router channel 1, last signal 0 dBm
+up 3s  Received router IP · router channel 1, last signal 0 dBm
+2026-11-15 <mac> UTC  Network ready
+up 1s  EngineLink 0.17.5 started, router mode, own Wi-Fi off (EngineLink, channel 6)
+up 1s  Connect started
+up 1s  Associated with router · router channel 1, last signal 0 dBm
+up 3s  Received router IP · router channel 1, last signal 0 dBm
+up 3s  Network ready
+2026-11-15 <mac> UTC  EngineLink 0.17.5 started, router mode, own Wi-Fi off (EngineLink, channel 6)
+2026-11-15 <mac> UTC  Connect started
+2026-11-15 <mac> UTC  Associated with router · router channel 1, last signal 0 dBm
+2026-11-15 <mac> UTC  Received router IP · router channel 1, last signal 0 dBm
+2026-11-15 <mac> UTC  Network ready
+up 1s  EngineLink 0.17.5 started, router mode, own Wi-Fi off (EngineLink, channel 6)
+up 1s  Connect started
+up 1s  Associated with router · router channel 1, last signal 0 dBm
+up 3s  Received router IP · router channel 1, last signal 0 dBm
+up 3s  Network ready
+up 1s  EngineLink 0.17.6 started, router mode, own Wi-Fi off (EngineLink, channel 6)
+up 1s  Connect started
+up 1s  Associated with router · router channel 1, last signal 0 dBm
+up 3s  Received router IP · router channel 1, last signal 0 dBm
+up 3s  Network ready
+2026-11-15 <mac> UTC  EngineLink 0.17.7 started, router mode, own Wi-Fi off (EngineLink, channel 6)
+2026-11-15 <mac> UTC  Connect started
+2026-11-15 <mac> UTC  Associated with router · router channel 1, last signal 0 dBm
+2026-11-15 <mac> UTC  Received router IP · router channel 1, last signal 0 dBm
+2026-11-15 <mac> UTC  Network ready
+2026-11-15 <mac> UTC  Firmware confirmed: client response
+2026-11-15 <mac> UTC  EngineLink 0.17.7 started, router mode, own Wi-Fi off (EngineLink, channel 6)
+2026-11-15 <mac> UTC  Connect started
+2026-11-15 <mac> UTC  Associated with router · router channel 1, last signal 0 dBm
+2026-11-15 <mac> UTC  Received router IP · router channel 1, last signal 0 dBm
+2026-11-15 <mac> UTC  Network ready
+up 1s  EngineLink 0.17.7 started, router mode, own Wi-Fi off (EngineLink, channel 6)
+up 1s  Connect started
+up 1s  Associated with router · router channel 1, last signal 0 dBm
+up 3s  Received router IP · router channel 1, last signal 0 dBm
+2026-11-15 <mac> UTC  Network ready
+up 1s  EngineLink 0.17.7 started, router mode, own Wi-Fi off (EngineLink, channel 6)
+up 1s  Connect started
+up 1s  Associated with router · router channel 1, last signal 0 dBm
+up 3s  Received router IP · router channel 1, last signal 0 dBm
+up 3s  Network ready
+2026-11-15 <mac> UTC  EngineLink 0.17.7-diag1 started, router mode, own Wi-Fi off (EngineLink, channel 6)
+2026-11-15 <mac> UTC  Connect started
+2026-11-15 <mac> UTC  Associated with router · router channel 1, last signal 0 dBm
+2026-11-15 <mac> UTC  Received router IP · router channel 1, last signal 0 dBm
+2026-11-15 <mac> UTC  Network ready
+2026-11-15 <mac> UTC  Firmware confirmed: client response
+2026-11-15 <mac> UTC  EngineLink 0.17.7-diag2 started, router mode, own Wi-Fi off (EngineLink, channel 6)
+2026-11-15 <mac> UTC  Connect started
+2026-11-15 <mac> UTC  Associated with router · router channel 1, last signal 0 dBm
+2026-11-15 <mac> UTC  Received router IP · router channel 1, last signal 0 dBm
+2026-11-15 <mac> UTC  Network ready
+2026-11-15 <mac> UTC  Firmware confirmed: client response
+2026-11-15 <mac> UTC  EngineLink 0.17.7-diag3 started, router mode, own Wi-Fi off (EngineLink, channel 6)
+2026-11-15 <mac> UTC  Connect started
+2026-11-15 <mac> UTC  Associated with router · router channel 1, last signal 0 dBm
+2026-11-15 <mac> UTC  Received router IP · router channel 1, last signal 0 dBm
+2026-11-15 <mac> UTC  Network ready
+2026-11-15 <mac> UTC  Firmware confirmed: client response
+2026-11-15 <mac> UTC  EngineLink 0.17.7-diag4 started, router mode, own Wi-Fi off (EngineLink, channel 6)
+2026-11-15 <mac> UTC  Connect started
+2026-11-15 <mac> UTC  Associated with router · router channel 1, last signal 0 dBm
+2026-11-15 <mac> UTC  Received router IP · router channel 1, last signal 0 dBm
+2026-11-15 <mac> UTC  Network ready
+2026-11-15 <mac> UTC  Firmware confirmed: client response
+2026-11-15 <mac> UTC  EngineLink 0.17.7-diag5 started, router mode, own Wi-Fi off (EngineLink, channel 6)
+2026-11-15 <mac> UTC  Connect started
+2026-11-15 <mac> UTC  Associated with router · router channel 1, last signal 0 dBm
+2026-11-15 <mac> UTC  Received router IP · router channel 1, last signal 0 dBm
+2026-11-15 <mac> UTC  Network ready
+2026-11-15 <mac> UTC  Disconnected (8 Station deliberately left) · router channel 1, last signal -42 dBm
+2026-11-15 <mac> UTC  Router session ended after 34 s, code 8, signal -39/-41/-41 dBm (start/lowest/last): pings 18 of 18 answered, average 111 ms, longest 417 ms, most lost in a row 0 · through the router: 7 connections (0 without a request), 7 requests, 1 failed while sending, 27307 bytes
+2026-11-15 <mac> UTC  Associated with router · router channel 1, last signal -42 dBm
+2026-11-15 <mac> UTC  Received router IP · router channel 1, last signal -42 dBm
+2026-11-15 <mac> UTC  Network ready
+2026-11-15 <mac> UTC  Firmware confirmed: client response
+2026-11-15 <mac> UTC  Disconnected (8 Station deliberately left) · router channel 1, last signal -43 dBm
+2026-11-15 <mac> UTC  Router session ended after 87 s, code 8, signal -43/-45/-41 dBm (start/lowest/last): pings 41 of 44 answered, average 155 ms, longest 1348 ms, most lost in a row 2 · through the router: 4 connections (0 without a request), 4 requests, 1 failed while sending, 4718 bytes
+2026-11-15 <mac> UTC  Associated with router · router channel 1, last signal -43 dBm
+2026-11-15 <mac> UTC  Received router IP · router channel 1, last signal -43 dBm
+2026-11-15 <mac> UTC  Network ready
+2026-11-15 <mac> UTC  Disconnected (8 Station deliberately left) · router channel 1, last signal -43 dBm
+2026-11-15 <mac> UTC  Router session ended after 51 s, code 8, signal -41/-41/-39 dBm (start/lowest/last): pings 26 of 26 answered, average 196 ms, longest 1489 ms, most lost in a row 0 · through the router: 4 connections (0 without a request), 4 requests, 1 failed while sending, 4719 bytes
+2026-11-15 <mac> UTC  Associated with router · router channel 1, last signal -43 dBm
+2026-11-15 <mac> UTC  Received router IP · router channel 1, last signal -43 dBm
+2026-11-15 <mac> UTC  Network ready
+2026-11-15 <mac> UTC  EngineLink 0.17.7-diag6 started, router mode, own Wi-Fi off (EngineLink, channel 6)
+2026-11-15 <mac> UTC  Connect started
+2026-11-15 <mac> UTC  Associated with router · router channel 1, last signal 0 dBm
+2026-11-15 <mac> UTC  Received router IP · router channel 1, last signal 0 dBm
+2026-11-15 <mac> UTC  Network ready
+2026-11-15 <mac> UTC  Firmware confirmed: client response
+2026-11-15 <mac> UTC  EngineLink 0.17.7-diag7 started, router mode, own Wi-Fi off (EngineLink, channel 6)
+2026-11-15 <mac> UTC  Connect started
+2026-11-15 <mac> UTC  Associated with router · router channel 1, last signal 0 dBm
+2026-11-15 <mac> UTC  Received router IP · router channel 1, last signal 0 dBm
+2026-11-15 <mac> UTC  Network ready
+2026-11-15 <mac> UTC  Firmware confirmed: client response
+2026-11-15 <mac> UTC  EngineLink 0.17.7-diag8 started, router mode, own Wi-Fi off (EngineLink, channel 6)
+2026-11-15 <mac> UTC  Connect started
+2026-11-15 <mac> UTC  Associated with router · router channel 1, last signal 0 dBm
+2026-11-15 <mac> UTC  Received router IP · router channel 1, last signal 0 dBm
+2026-11-15 <mac> UTC  Network ready
+2026-11-15 <mac> UTC  Firmware confirmed: client response
+2026-11-15 <mac> UTC  EngineLink 0.17.7-diag9 started, router mode, own Wi-Fi off (EngineLink, channel 6)
+2026-11-15 <mac> UTC  Connect started
+2026-11-15 <mac> UTC  Associated with router · router channel 1, last signal 0 dBm
+2026-11-15 <mac> UTC  Received router IP · router channel 1, last signal 0 dBm
+2026-11-15 <mac> UTC  Network ready
+2026-11-15 <mac> UTC  Firmware confirmed: client response
+2026-11-15 <mac> UTC  EngineLink 0.17.7-diag10 started, router mode, own Wi-Fi off (EngineLink, channel 6)
+2026-11-15 <mac> UTC  Connect started
+2026-11-15 <mac> UTC  Associated with router · router channel 1, last signal 0 dBm
+2026-11-15 <mac> UTC  Received router IP · router channel 1, last signal 0 dBm
+2026-11-15 <mac> UTC  Network ready
+2026-11-15 <mac> UTC  EngineLink 0.17.7-diag9 started, router mode, own Wi-Fi off (EngineLink, channel 6)
+2026-11-15 <mac> UTC  Connect started
+2026-11-15 <mac> UTC  Associated with router · router channel 1, last signal 0 dBm
+2026-11-15 <mac> UTC  Received router IP · router channel 1, last signal 0 dBm
+2026-11-15 <mac> UTC  Network ready
+2026-11-15 <mac> UTC  EngineLink 0.17.7-diag9 started, router mode, own Wi-Fi off (EngineLink, channel 6)
+2026-11-15 <mac> UTC  Connect started
+2026-11-15 <mac> UTC  Associated with router · router channel 1, last signal 0 dBm
+2026-11-15 <mac> UTC  Received router IP · router channel 1, last signal 0 dBm
+2026-11-15 <mac> UTC  Network ready
+up 1s  EngineLink 0.17.7 started, own Wi-Fi, own Wi-Fi off (EngineLink, channel 6)
+up 2s  Channel survey: air busy 7% on 1, 2% on 6, 5% on 11: channel 6
+up 2s  Own Wi-Fi on: EngineLink, channel 6
+up 2s  Network ready
+up 1s  EngineLink 0.17.7 started, own Wi-Fi, own Wi-Fi off (EngineLink, channel 6)
+up 2s  Channel survey: air busy 5% on 1, 2% on 6, 3% on 11: channel 6
+up 2s  Own Wi-Fi on: EngineLink, channel 6
+up 2s  Network ready
+up 92s  Phone joined EngineLink Wi-Fi · phones now: <mac> -46 dBm bgn
+up 92s  Phone received an IP from EngineLink DHCP
+up 1s  EngineLink 0.17.7 started, own Wi-Fi, own Wi-Fi off (EngineLink, channel 6)
+up 2s  Channel survey: air busy 6% on 1, 3% on 6, 3% on 11: channel 6
+up 2s  Own Wi-Fi on: EngineLink, channel 6
+up 2s  Network ready
+up 1s  EngineLink 0.17.7 started, own Wi-Fi, own Wi-Fi off (EngineLink, channel 6)
+up 2s  Channel survey: air busy 5% on 1, 5% on 6, 4% on 11: channel 6
+up 2s  Own Wi-Fi on: EngineLink, channel 6
+up 2s  Network ready
+up 49s  Phone joined EngineLink Wi-Fi · phones now: <mac> -44 dBm bgn
+up 54s  Phone received an IP from EngineLink DHCP
+2026-11-16 <mac> UTC  Router chosen: restarting to join from a clean start
+2026-11-16 <mac> UTC  EngineLink 0.17.7 started, router mode, own Wi-Fi off (EngineLink, channel 6)
+2026-11-16 <mac> UTC  Connect started
+2026-11-16 <mac> UTC  Associated with router · router channel 1, last signal 0 dBm
+2026-11-16 <mac> UTC  Received router IP · router channel 1, last signal 0 dBm
+2026-11-16 <mac> UTC  Network ready
+up 1s  EngineLink 0.17.7 started, router mode, own Wi-Fi off (EngineLink, channel 6)
+up 1s  Connect started
+up 1s  Associated with router · router channel 1, last signal 0 dBm
+up 3s  Received router IP · router channel 1, last signal 0 dBm
+up 3s  Network ready
+up 1s  EngineLink 0.17.7 started, router mode, own Wi-Fi off (EngineLink, channel 6)
+up 1s  Connect started
+up 1s  Associated with router · router channel 1, last signal 0 dBm
+up 1s  EngineLink 0.17.7 started, router mode, own Wi-Fi off (EngineLink, channel 6)
+up 1s  Connect started
+up 1s  Associated with router · router channel 1, last signal 0 dBm
+up 3s  Received router IP · router channel 1, last signal 0 dBm
+2026-11-16 <mac> UTC  Network ready
+2026-11-16 <mac> UTC  EngineLink 0.17.7 started, router mode, own Wi-Fi off (EngineLink, channel 6)
+2026-11-16 <mac> UTC  Connect started
+2026-11-16 <mac> UTC  Disconnected (2 Router did not answer the authentication)
+2026-11-16 <mac> UTC  Disconnected (4 Router dropped EngineLink for inactivity)
+2026-11-16 <mac> UTC  Disconnected (2 Router did not answer the authentication)
+2026-11-16 <mac> UTC  Associated with router · router channel 1, last signal 0 dBm
+2026-11-16 <mac> UTC  Received router IP · router channel 1, last signal 0 dBm
+2026-11-16 <mac> UTC  Network ready
+2026-11-16 <mac> UTC  EngineLink 0.17.7 started, router mode, own Wi-Fi off (EngineLink, channel 6)
+2026-11-16 <mac> UTC  Connect started
+2026-11-16 <mac> UTC  Disconnected (2 Router did not answer the authentication)
+2026-11-16 <mac> UTC  Associated with router · router channel 1, last signal 0 dBm
+2026-11-16 <mac> UTC  Received router IP · router channel 1, last signal 0 dBm
+2026-11-16 <mac> UTC  Network ready
+2026-11-16 <mac> UTC  EngineLink 0.17.7 started, router mode, own Wi-Fi off (EngineLink, channel 6)
+2026-11-16 <mac> UTC  Connect started
+2026-11-16 <mac> UTC  Associated with router · router channel 1, last signal 0 dBm
+2026-11-16 <mac> UTC  Received router IP · router channel 1, last signal 0 dBm
+2026-11-16 <mac> UTC  Network ready
+2026-11-16 <mac> UTC  EngineLink 0.17.7 started, router mode, own Wi-Fi off (EngineLink, channel 6)
+2026-11-16 <mac> UTC  Connect started
+2026-11-16 <mac> UTC  Associated with router · router channel 1, last signal 0 dBm
+2026-11-16 <mac> UTC  Received router IP · router channel 1, last signal 0 dBm
+2026-11-16 <mac> UTC  Network ready
+2026-11-16 <mac> UTC  EngineLink 0.17.7 started, router mode, own Wi-Fi off (EngineLink, channel 6)
+2026-11-16 <mac> UTC  Connect started
+2026-11-16 <mac> UTC  Disconnected (2 Router did not answer the authentication)
+2026-11-16 <mac> UTC  Associated with router · router channel 1, last signal 0 dBm
+2026-11-16 <mac> UTC  Received router IP · router channel 1, last signal 0 dBm
+2026-11-16 <mac> UTC  Network ready
+2026-11-16 <mac> UTC  EngineLink 0.17.7 started, router mode, own Wi-Fi off (EngineLink, channel 6)
+2026-11-16 <mac> UTC  Connect started
+2026-11-16 <mac> UTC  Associated with router · router channel 1, last signal 0 dBm
+2026-11-16 <mac> UTC  Received router IP · router channel 1, last signal 0 dBm
+2026-11-16 <mac> UTC  Network ready
+up 1s  EngineLink 0.17.7 started, router mode, own Wi-Fi off (EngineLink, channel 6)
+up 1s  Connect started
+up 1s  Associated with router · router channel 1, last signal 0 dBm
+up 3s  Received router IP · router channel 1, last signal 0 dBm
+up 3s  Network ready
+up 1s  EngineLink 0.17.7 started, router mode, own Wi-Fi off (EngineLink, channel 6)
+up 1s  Connect started
+up 1s  Associated with router · router channel 1, last signal 0 dBm
+up 3s  Received router IP · router channel 1, last signal 0 dBm
+up 3s  Network ready
+up 1s  EngineLink 0.17.7 started, router mode, own Wi-Fi off (EngineLink, channel 6)
+up 1s  Connect started
+up 1s  Associated with router · router channel 1, last signal 0 dBm
+up 3s  Received router IP · router channel 1, last signal 0 dBm
+up 3s  Network ready
+up 1s  EngineLink 0.17.7 started, router mode, own Wi-Fi off (EngineLink, channel 6)
+up 1s  Connect started
+up 1s  Associated with router · router channel 1, last signal 0 dBm
+up 3s  Received router IP · router channel 1, last signal 0 dBm
+up 3s  Network ready
+up 1s  EngineLink 0.17.7 started, router mode, own Wi-Fi off (EngineLink, channel 6)
+up 1s  Connect started
+up 1s  Associated with router · router channel 1, last signal 0 dBm
+up 3s  Received router IP · router channel 1, last signal 0 dBm
+up 3s  Network ready

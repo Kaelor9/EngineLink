@@ -5,10 +5,25 @@ The microSD card that sat in the revision 1 board during the boat test of
 project. Before that, on 2026-11-27, every file on it was copied and compared
 with the card by SHA-256 (76 files, 35,153,366 bytes, no difference).
 
-**This page is the public summary of that copy. The data itself is kept by the
-owner outside this repository:** it holds the trip's navigation track, network
-addresses and device details. Router names, addresses, phone identifiers and
-positions are left out here. Nothing newer exists from that card.
+**The card was then formatted for its new use. Nothing newer exists from it.**
+A sanitised copy of its data is in [`data/`](data/), in the card's own file and
+folder names; the owner keeps the unsanitised copy outside this repository.
+
+## What the copy in `data/` is
+
+[`data/MANIFEST.csv`](data/MANIFEST.csv) lists all 76 files of the card with
+their size and SHA-256 on the card, the SHA-256 of the file here, and what was
+done to it. `data/.gitattributes` keeps every file byte for byte (no line-ending
+conversion), so the hashes can be checked, and `data/.gitignore` lets the
+`.BIN` data files in despite the repository's rule against build output.
+
+| Files | Here |
+|---|---|
+| 13 `EL*.CSV` with rows, `TRIPS.CSV`, `SEGMENTS.CSV`, `TRIPS/T000001.BIN/.FST/.COV`, `EVENTS/*` | Unchanged, byte for byte as on the card. The J1708 logs hold only the KAD read requests (MID 1) and the ECU replies (MID 131); no VIN, unit or software identification |
+| `TRIPS/T000001.NAV` | Latitude and longitude of all 1,834 one-second records set to the firmware's not-available value (INT32_MIN). Speed, course, heading, depth and the other fields are unchanged |
+| `NMEA/BUS.CSV` | Only these PGNs kept: 59904, 126208, 126464, 126992, 126993, 127245, 127250, 128259, 128267, 128275, 129026, 129033, 129283, 129291, 130311, 130577. Kept 12,414 of 33,774 rows. Removed: own position (129025, 129029), magnetic variation and datum (127258, 129044), AIS of other vessels (129038, 129039, 129794, 129809, 129810), device identity and product information (60928, 126996), proprietary messages (61184, 65288–65535, 126720, 130919, 130934, 130935). A comment line at the top says so |
+| `WIFI.LOG`, `WIFIREP.OLD`, `WIFIREP.TXT` | Every IPv4 address replaced by `<ip>` and every MAC prefix by `<mac>`. The router's name was already hidden by the firmware. No password or key is in them |
+| 36 `EL*.CSV` of 108 bytes and 1 of 0 bytes | Left out: header only, no rows. Listed in the manifest |
 
 ## What was on the card
 

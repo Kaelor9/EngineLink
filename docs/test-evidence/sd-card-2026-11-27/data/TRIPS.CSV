@@ -1,0 +1,2 @@
+trip_id,start_utc,end_utc,running_s,j7_l,j6_l,total_l,max_rpm,boot_id,start_uptime_s,end_uptime_s
+1,1794666465,1794668185,1715,0.97,1.16,2.13,804,0F7B250D,239,1958
