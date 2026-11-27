@@ -1,0 +1,3 @@
+boot_id,channel,engine,start_uptime_ms,end_uptime_ms,start_utc,duration_s,observed_fuel_l,max_rpm
+0F7B250D,J6,port,239744,1947945,1794666465,1708,1.159,804
+0F7B250D,J7,starboard,243754,1949949,1794666469,1706,0.966,762

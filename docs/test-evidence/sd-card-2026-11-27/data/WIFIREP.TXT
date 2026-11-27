@@ -1,0 +1,1075 @@
+
+
+######## 2026-11-26 <mac> UTC ########
+ENGINELINK - WI-FI REPORT
+========================
+
+Firmware: 0.17.7 (built Nov 15 2026 <mac>)
+Uptime: 752573 seconds
+Mode: Router (station)
+Wi-Fi radio mode: 1 (1=station, 2=access point)
+Router: <router name hidden>
+Currently connected: Yes
+Router IP now: <ip>
+Last successful router IP: <ip>
+Last router signal: -43 dBm
+Last router channel: 1
+Last negotiated Wi-Fi security: WPA2-Personal
+Station: as the working test sketch: power save off, everything else the driver's default (no bandwidth, country, scan, protocol or TX-power setting)
+Security: ESP32 core WPA2/WPA3 negotiation (no custom SAE handling)
+Transmit power: ESP32 driver default · driver reports 20.00 dBm (80 quarter-dBm) · set again after the driver changed it: 0 time(s)
+Power save: off
+Negotiated Wi-Fi standard: 802.11n 20 MHz
+CONNECTIVITY (COUNTERS SINCE BOOT)
+Successful Wi-Fi associations: 1
+Successful router IP assignments: 1
+Router IP losses: 0
+Wi-Fi disconnect events: 0
+Dropped active router connections: 0
+Pre-connection failures: 0
+Reconnect: the ESP32 core's own, plus one plain connect after 20 s without any attempt (the core stops after code 202)
+App-initiated router attempts: 1
+Router recovery fallbacks: 0
+Last association time: 175 ms
+Last DHCP time: 1615 ms
+Last successful IP at uptime: 3 seconds
+Last Wi-Fi event reason: 0 - No reason reported
+Last unexpected reason: 0 - No reason reported
+Error 202 means authentication failure; it does not prove the password is wrong.
+
+DOWNLOAD TESTS FROM THE PHONE (newest last)
+  510017 s ago · 19.5 dBm · 249.60 kB/s · request round trip 23 ms · chip 42 C · at uptime 242555 s
+  510016 s ago · 19.5 dBm · 216.70 kB/s · request round trip 37 ms · chip 42 C · at uptime 242556 s
+  510015 s ago · 19.5 dBm · 197.70 kB/s · request round trip 31 ms · chip 42 C · at uptime 242557 s
+  228815 s ago · 19.5 dBm · 249.40 kB/s · request round trip 47 ms · chip 44 C · at uptime 523757 s
+  228782 s ago · 19.5 dBm · 234.80 kB/s · request round trip 21 ms · chip 44 C · at uptime 523790 s
+  228780 s ago · 19.5 dBm · 198.00 kB/s · request round trip 28 ms · chip 44 C · at uptime 523792 s
+  228779 s ago · 19.5 dBm · 249.30 kB/s · request round trip 15 ms · chip 44 C · at uptime 523793 s
+  228778 s ago · 19.5 dBm · 194.10 kB/s · request round trip 32 ms · chip 44 C · at uptime 523794 s
+  228777 s ago · 19.5 dBm · 277.80 kB/s · request round trip 15 ms · chip 44 C · at uptime 523795 s
+  228776 s ago · 19.5 dBm · 335.30 kB/s · request round trip 27 ms · chip 44 C · at uptime 523796 s
+  228775 s ago · 19.5 dBm · 247.30 kB/s · request round trip 20 ms · chip 45 C · at uptime 523797 s
+  228774 s ago · 19.5 dBm · 275.90 kB/s · request round trip 22 ms · chip 45 C · at uptime 523798 s
+
+ROUTER SESSIONS AS ENGINELINK MEASURED THEM (newest first, up to 4 kept since the start)
+#1 RUNNING: started at uptime 3 s (joined in 175 ms, address after 1615 ms), running for 752569 s
+   Radio: EngineLink offered 40 MHz · negotiated 802.11n 20 MHz · router on channel 1 (20 MHz), supports b g n · encryption pairwise CCMP (AES), group TKIP · power save off · transmit power 20.00 dBm
+   Joined straight after the start (as the test sketch) · country code in the driver DK · last ping answered in under 50 ms: 752568 s after the join
+   Addresses: EngineLink <ip> · mask <ip> · gateway <ip> · DNS <ip>
+   Signal (dBm, every 10 s): start -43, lowest -79, highest -30, average -46, last -47
+   Link check (ping to the router every 2 s): 376285 of 376285 answered (0 % lost), average 2 ms, longest 309 ms, most lost in a row 0 (0 s) · answered in <10/<50/<200/<1000/1000+ ms: 363662/12431/184/8/0
+   Driver: beacon-timeout warnings 0 · channel or width changes 0
+   Web through the router: connections 208 (4 closed without a request, 46 used for more than one) · requests 4795 · status 2xx 4794, 3xx 0, 4xx 1, 5xx 0 · failed while sending 0 · bytes sent 24169117
+Reading it: pings lost = packets between EngineLink and the router do not get through. Pings fine but connections
+without a request, or none = the other device's packets do not reach EngineLink. Requests answered but connections
+never reused = the answers do not reach the device.
+
+NEWEST SESSION IN 30 s PIECES (uptime · pings answered/sent, average ms · signal · web requests, failed, bytes · chip temperature)
+  +750742s · 15/15, 2 ms · -48 dBm · 0, 0, 0 B · 43 C
+  +750773s · 15/15, 3 ms · -46 dBm · 0, 0, 0 B · 43 C
+  +750803s · 15/15, 2 ms · -46 dBm · 0, 0, 0 B · 43 C
+  +750833s · 15/15, 3 ms · -45 dBm · 0, 0, 0 B · 43 C
+  +750863s · 15/15, 3 ms · -47 dBm · 0, 0, 0 B · 43 C
+  +750893s · 15/15, 2 ms · -45 dBm · 0, 0, 0 B · 43 C
+  +750923s · 15/15, 3 ms · -49 dBm · 0, 0, 0 B · 43 C
+  +750953s · 15/15, 3 ms · -46 dBm · 0, 0, 0 B · 43 C
+  +750983s · 15/15, 2 ms · -48 dBm · 0, 0, 0 B · 43 C
+  +751013s · 15/15, 2 ms · -49 dBm · 0, 0, 0 B · 43 C
+  +751043s · 15/15, 2 ms · -45 dBm · 0, 0, 0 B · 43 C
+  +751073s · 15/15, 4 ms · -47 dBm · 0, 0, 0 B · 43 C
+  +751103s · 15/15, 3 ms · -44 dBm · 0, 0, 0 B · 43 C
+  +751133s · 15/15, 3 ms · -49 dBm · 0, 0, 0 B · 43 C
+  +751163s · 15/15, 3 ms · -46 dBm · 0, 0, 0 B · 43 C
+  +751193s · 15/15, 3 ms · -47 dBm · 0, 0, 0 B · 43 C
+  +751223s · 15/15, 3 ms · -52 dBm · 0, 0, 0 B · 43 C
+  +751253s · 15/15, 3 ms · -51 dBm · 0, 0, 0 B · 43 C
+  +751283s · 15/15, 4 ms · -50 dBm · 0, 0, 0 B · 43 C
+  +751313s · 15/15, 2 ms · -46 dBm · 0, 0, 0 B · 43 C
+  +751343s · 15/15, 3 ms · -49 dBm · 0, 0, 0 B · 43 C
+  +751373s · 15/15, 3 ms · -49 dBm · 0, 0, 0 B · 43 C
+  +751403s · 15/15, 3 ms · -43 dBm · 0, 0, 0 B · 43 C
+  +751433s · 15/15, 2 ms · -45 dBm · 0, 0, 0 B · 43 C
+  +751463s · 15/15, 2 ms · -46 dBm · 0, 0, 0 B · 43 C
+  +751493s · 15/15, 3 ms · -49 dBm · 0, 0, 0 B · 43 C
+  +751523s · 15/15, 2 ms · -53 dBm · 0, 0, 0 B · 43 C
+  +751553s · 15/15, 3 ms · -48 dBm · 0, 0, 0 B · 43 C
+  +751583s · 15/15, 3 ms · -48 dBm · 0, 0, 0 B · 43 C
+  +751613s · 15/15, 3 ms · -47 dBm · 0, 0, 0 B · 43 C
+  +751643s · 15/15, 3 ms · -50 dBm · 0, 0, 0 B · 43 C
+  +751673s · 15/15, 3 ms · -49 dBm · 0, 0, 0 B · 43 C
+  +751703s · 15/15, 3 ms · -48 dBm · 0, 0, 0 B · 43 C
+  +751733s · 15/15, 3 ms · -53 dBm · 0, 0, 0 B · 43 C
+  +751763s · 15/15, 4 ms · -50 dBm · 0, 0, 0 B · 43 C
+  +751793s · 15/15, 3 ms · -46 dBm · 0, 0, 0 B · 43 C
+  +751823s · 15/15, 3 ms · -50 dBm · 0, 0, 0 B · 43 C
+  +751853s · 15/15, 3 ms · -55 dBm · 0, 0, 0 B · 43 C
+  +751883s · 15/15, 3 ms · -51 dBm · 0, 0, 0 B · 43 C
+  +751913s · 15/15, 3 ms · -50 dBm · 0, 0, 0 B · 43 C
+  +751943s · 15/15, 3 ms · -50 dBm · 0, 0, 0 B · 43 C
+  +751973s · 15/15, 2 ms · -51 dBm · 0, 0, 0 B · 43 C
+  +752003s · 15/15, 2 ms · -52 dBm · 0, 0, 0 B · 43 C
+  +752033s · 15/15, 3 ms · -51 dBm · 0, 0, 0 B · 43 C
+  +752063s · 15/15, 3 ms · -49 dBm · 0, 0, 0 B · 43 C
+  +752093s · 15/15, 4 ms · -51 dBm · 0, 0, 0 B · 43 C
+  +752123s · 15/15, 3 ms · -49 dBm · 0, 0, 0 B · 43 C
+  +752153s · 15/15, 3 ms · -49 dBm · 0, 0, 0 B · 43 C
+  +752183s · 15/15, 2 ms · -51 dBm · 0, 0, 0 B · 43 C
+  +752213s · 15/15, 3 ms · -54 dBm · 0, 0, 0 B · 43 C
+  +752243s · 15/15, 3 ms · -52 dBm · 0, 0, 0 B · 43 C
+  +752273s · 15/15, 2 ms · -50 dBm · 0, 0, 0 B · 43 C
+  +752303s · 15/15, 4 ms · -51 dBm · 0, 0, 0 B · 43 C
+  +752333s · 15/15, 3 ms · -48 dBm · 0, 0, 0 B · 43 C
+  +752363s · 15/15, 3 ms · -48 dBm · 0, 0, 0 B · 43 C
+  +752393s · 15/15, 3 ms · -44 dBm · 0, 0, 0 B · 43 C
+  +752423s · 15/15, 3 ms · -44 dBm · 0, 0, 0 B · 43 C
+  +752453s · 15/15, 3 ms · -48 dBm · 0, 0, 0 B · 43 C
+  +752483s · 15/15, 3 ms · -44 dBm · 0, 0, 0 B · 43 C
+  +752513s · 15/15, 3 ms · -43 dBm · 0, 0, 0 B · 43 C
+
+ROUTER (AS SEEN BY ENGINELINK)
+Maker prefix (first half of the router's MAC address): <mac>
+Router supports: b g n 
+Router channel: 1 (20 MHz)
+Router country:  (channels 0--1)
+Encryption: pairwise CCMP (AES), group TKIP (slow, limits Wi-Fi to 54 Mbit/s)
+Signal now: -43 dBm
+EngineLink allows: b g n 
+EngineLink bandwidth: 40 MHz
+Beacon timeout (driver): 6 s
+
+ENGINELINK WI-FI (ACCESS POINT, THIS START)
+Phones connected now: 0 · joined 0 · DHCP leases assigned 0 · left 0 · started 0 · restarted by the watchdog 0 · channel 6
+Access point: off (router mode)
+Wi-Fi country (driver): DK 
+
+SYSTEM
+Chip temperature: now 43 C · at the first reading after the start 32 C · highest 45 C
+Chip: ESP32-S3 rev 2 · 240 MHz · Arduino core 3.3.12 · IDF v5.5.5
+Memory: free 93 KB, lowest 71 KB, largest block 51 KB · PSRAM free 7678 KB
+Main loop: longest pass 1125 ms · engine reading in own task: yes · engine task longest wait 180 ms (lock held by xfer when it began) · waits over 100 ms: 1 · longest round of its own work 41 ms
+Longest part of the main loop (ms): (web: own task) 0, sd 15, diag 9, sd scan 123, history 8, network 11, led 9, serial 1125, other 10
+Reset reason: 1 (1 power on, 3 software/update, 4 crash, 5/6/7 watchdog, 9 brownout, 11 reset over USB)
+Recent restarts (newest first): reason 1 after 0 s on 0.17.7 | reason 9 after 0 s on 0.17.7 | reason 1 after 0 s on 0.17.7 | reason 1 after 0 s on 0.17.7 | reason 1 after 0 s on 0.17.7 | reason 3 after 19 s on 0.17.7 | reason 3 after 19 s on 0.17.7 | reason 3 after 20 s on 0.17.7
+Internal memory: free 93 KB, lowest 71 KB, largest block 51 KB · failed allocations since the start: 0
+Slow steps of the network part (100 ms or more, newest last): none
+Tasks, CPU share of one core since the last snapshot (at most 30 s ago) / stack never used (bytes):
+  engines 0%/14912 · loopTask 11%/3964 · IDLE0 98%/240 · IDLE1 88%/344 · tiT 0%/2732 · J7RX 0%/3172 · J6RX 0%/3176 · ping 0%/1928 · fw 0%/8932 · xfer 0%/5000 · sys_evt 0%/2696 · httpd 0%/4436 · Tmr Svc 0%/2320 · arduino_events 0%/2936 · ipc1 0%/1288 · esp_timer 0%/7736 · wifi 0%/4092 · ipc0 0%/1280 · mdns 0%/1588
+Not available in this build of the ESP32 core (not invented here): lwIP's packet and TCP counters (LWIP_STATS off),
+the driver's transmit retry counters (no public API), the ARP table (no thread-safe public read).
+
+HTTP / WEB (esp_http_server, port 80)
+Requests: 4795 · long transfers: 302 · answered busy (503): 0 · refused by the security checks: 0 · send failures (timeout or phone gone): 0
+Connections opened: 208 · closed: 208 · open now: 0 · most at once: 7 · successful answers to other devices: 4794
+On the own Wi-Fi: connections 0 (0 closed without a request, 0 used for more than one) · requests 0 · 2xx 0, 3xx 0, 4xx 0, 5xx 0 · failed while sending 0 · bytes 0 KB · slowest 0 ms ()
+Through the router: connections 208 (4 closed without a request, 46 used for more than one) · requests 4795 · 2xx 4794, 3xx 0, 4xx 1, 5xx 0 · failed while sending 0 · bytes 23602 KB · slowest 1052 ms (/api/wifi/log) · last at uptime 523924 s
+   by address (requests, failed, slowest ms): / 2/0/254 · /api/health 0/0/0 · /api/live 2899/0/15 · other 1894/0/1052
+Own self-test: connections 0 (0 closed without a request, 0 used for more than one) · requests 0 · 2xx 0, 3xx 0, 4xx 0, 5xx 0 · failed while sending 0 · bytes 0 KB · slowest 0 ms ()
+Request log (every request through the router, and failed or slow ones on the own Wi-Fi; newest 32 of 4795):
+  +523908.0s router /api/live -> 200, 744 B, first byte after 2 ms, done in 6 ms (request 255 on its connection)
+  +523908.5s router /api/live -> 200, 744 B, first byte after 2 ms, done in 7 ms (request 255 on its connection)
+  +523909.0s router /api/live -> 200, 744 B, first byte after 2 ms, done in 6 ms (request 255 on its connection)
+  +523909.5s router /api/live -> 200, 744 B, first byte after 2 ms, done in 6 ms (request 255 on its connection)
+  +523910.1s router /api/live -> 200, 744 B, first byte after 2 ms, done in 7 ms (request 255 on its connection)
+  +523910.6s router /api/live -> 200, 744 B, first byte after 2 ms, done in 6 ms (request 255 on its connection)
+  +523911.1s router /api/live -> 200, 744 B, first byte after 2 ms, done in 7 ms (request 255 on its connection)
+  +523911.7s router /api/live -> 200, 744 B, first byte after 2 ms, done in 7 ms (request 255 on its connection)
+  +523912.2s router /api/live -> 200, 744 B, first byte after 1 ms, done in 8 ms (request 255 on its connection)
+  +523912.7s router /api/live -> 200, 744 B, first byte after 2 ms, done in 6 ms (request 255 on its connection)
+  +523913.3s router /api/live -> 200, 744 B, first byte after 2 ms, done in 6 ms (request 255 on its connection)
+  +523913.8s router /api/live -> 200, 744 B, first byte after 1 ms, done in 6 ms (request 255 on its connection)
+  +523914.3s router /api/live -> 200, 744 B, first byte after 2 ms, done in 7 ms (request 255 on its connection)
+  +523914.8s router /api/live -> 200, 744 B, first byte after 2 ms, done in 7 ms (request 255 on its connection)
+  +523915.4s router /api/live -> 200, 744 B, first byte after 2 ms, done in 6 ms (request 255 on its connection)
+  +523915.9s router /api/live -> 200, 744 B, first byte after 2 ms, done in 7 ms (request 255 on its connection)
+  +523916.4s router /api/live -> 200, 744 B, first byte after 1 ms, done in 6 ms (request 255 on its connection)
+  +523917.0s router /api/live -> 200, 744 B, first byte after 1 ms, done in 7 ms (request 255 on its connection)
+  +523917.5s router /api/live -> 200, 744 B, first byte after 2 ms, done in 6 ms (request 255 on its connection)
+  +523918.0s router /api/live -> 200, 744 B, first byte after 2 ms, done in 9 ms (request 255 on its connection)
+  +523918.6s router /api/live -> 200, 744 B, first byte after 2 ms, done in 6 ms (request 255 on its connection)
+  +523919.1s router /api/live -> 200, 744 B, first byte after 2 ms, done in 6 ms (request 255 on its connection)
+  +523919.6s router /api/live -> 200, 744 B, first byte after 2 ms, done in 7 ms (request 255 on its connection)
+  +523920.1s router /api/live -> 200, 744 B, first byte after 2 ms, done in 7 ms (request 255 on its connection)
+  +523920.7s router /api/live -> 200, 744 B, first byte after 2 ms, done in 6 ms (request 255 on its connection)
+  +523921.2s router /api/live -> 200, 744 B, first byte after 2 ms, done in 6 ms (request 255 on its connection)
+  +523921.7s router /api/live -> 200, 744 B, first byte after 2 ms, done in 6 ms (request 255 on its connection)
+  +523922.3s router /api/live -> 200, 744 B, first byte after 2 ms, done in 6 ms (request 255 on its connection)
+  +523922.8s router /api/live -> 200, 744 B, first byte after 2 ms, done in 7 ms (request 255 on its connection)
+  +523923.4s router /api/live -> 200, 744 B, first byte after 2 ms, done in 6 ms (request 255 on its connection)
+  +523923.9s router /api/live -> 200, 744 B, first byte after 1 ms, done in 6 ms (request 255 on its connection)
+  +523924.4s router /api/live -> 200, 744 B, first byte after 1 ms, done in 6 ms (request 255 on its connection)
+A request counts as answered when the server handed the whole answer to TCP. Whether it arrived is seen from the
+next request on the same connection ("used for more than one"); the last 5.7 KB of an answer cannot be confirmed.
+Slowest request: 1052 ms (/api/wifi/log?f=3) · last transfer waited 0 ms for the engine lock
+Stack left (bytes): web server 4436, transfers 5000
+Firmware self-test: not needed (this firmware was confirmed before)
+Last 32 KiB server write: 65536 bytes in 222 ms (16 write calls)
+TCP send window: ESP32 core default (not modified)
+Note: server write time is NOT the same as measured radio throughput.
+
+LATEST WI-FI EVENTS (oldest to newest; uptime seconds)
+  +1s  Connect started
+  +1s  Associated with router
+  +3s  Received router IP
+
+MACHINE-READABLE JSON (copy/send the entire report)
+{"version":"0.17.7","build":"Nov 15 2026 <mac>","uptimeMs":752573089,"mode":"router","recovery":false,"holdWhy":0,"wifiMode":1,"ssid":"<router name hidden>","status":3,"phase":"online","associated":true,"hasRouterIp":true,"ip":"<ip>","gateway":"<ip>","rssi":-43,"associationEvents":1,"dhcpIpEvents":1,"lostIpEvents":0,"associationMs":175,"dhcpMs":1615,"driverReason":0,"unexpectedReason":0,"unexpectedDrops":0,"associationFailures":0,"txReapplied":0,"txTargetQdbm":78,"txDriverQdbm":80,"apLink":{"up":false,"ch":0,"bw":0,"pmfCapable":false,"pmfRequired":false,"inactiveS":0,"country":"","stations":[]},"loopParts":[0,15,9,123,8,11,9,1125,10],"engineMaxWaitMs":180,"engineMaxWaitBy":"xfer","engineSlowWaits":1,"engineMaxRoundMs":41,"apStations":0,"apJoins":0,"apLeaves":0,"apDhcpLeases":0,"apLeaveReason":0,"apRestarts":0,"speedTxBytes":65536,"speedTxMs":222,"speedTxWrites":16,"networkEpoch":1,"httpdRequests":4795,"httpdAsync":302,"httpdBusy503":0,"httpdBusyLock":0,"httpdBusyXfer":0,"httpdBusyXferLock":0,"httpdBusyPath":"","httpdBusyAtMs":0,"httpdRejected":0,"httpdSendFails":0,"httpdOpens":208,"httpdCloses":208,"httpdOpenNow":0,"httpdOpenMax":7,"httpdExternalOk":4794,"httpdSlowMs":1052,"httpdSlowPath":"/api/wifi/log?f=3","httpdRouterOpens":208,"httpdRouterRequests":4795,"httpdRouterOk":4794,"httpdRouterSendFails":0,"httpdRouterLastMs":523924469,"httpdStackFree":4436,"xferStackFree":5000,"routerAttempts":1,"routerFallbacks":0,"routerNextTryS":null,"disconnectEvents":0,"lastGotIpUptimeMs":3029,"lastRouterIp":"<ip>","lastRouterRssi":-43,"lastRouterChannel":1,"lastSecurity":"WPA2-Personal","txLevel":4,"phoneTests":[{"agoS":510017,"level":4,"kbs":249.60,"rttMs":23,"tempC":42,"atS":242555},{"agoS":510016,"level":4,"kbs":216.70,"rttMs":37,"tempC":42,"atS":242556},{"agoS":510015,"level":4,"kbs":197.70,"rttMs":31,"tempC":42,"atS":242557},{"agoS":228815,"level":4,"kbs":249.40,"rttMs":47,"tempC":44,"atS":523757},{"agoS":228782,"level":4,"kbs":234.80,"rttMs":21,"tempC":44,"atS":523790},{"agoS":228780,"level":4,"kbs":198.00,"rttMs":28,"tempC":44,"atS":523792},{"agoS":228779,"level":4,"kbs":249.30,"rttMs":15,"tempC":44,"atS":523793},{"agoS":228778,"level":4,"kbs":194.10,"rttMs":32,"tempC":44,"atS":523794},{"agoS":228777,"level":4,"kbs":277.80,"rttMs":15,"tempC":44,"atS":523795},{"agoS":228776,"level":4,"kbs":335.30,"rttMs":27,"tempC":44,"atS":523796},{"agoS":228775,"level":4,"kbs":247.30,"rttMs":20,"tempC":45,"atS":523797},{"agoS":228774,"level":4,"kbs":275.90,"rttMs":22,"tempC":45,"atS":523798}],"routerSession":{"seen":true,"active":true,"startMs":3629,"endMs":0,"joinMs":175,"dhcpMs":1615,"endReason":0,"rssiEnd":0,"afterOwnWifi":false,"cc":"DK","fastUntilMs":752568004,"bw":40,"proto":7,"txQdbm":80,"ch":1,"second":0,"b":1,"g":1,"n":1,"phy":4,"pairwise":4,"group":3,"ps":0,"ip":"<ip>","mask":"<ip>","gw":"<ip>","dns":"<ip>","rssiStart":-43,"rssiMin":-79,"rssiMax":-30,"rssiAvg":-46,"rssiLast":-47,"pingSent":376285,"pingOk":376285,"pingSumMs":1128810,"pingMaxMs":309,"pingLostRowMax":0,"pingBuckets":[363662,12431,184,8,0],"beaconTimeouts":0,"channelChanges":0,"opens":208,"opensEmpty":4,"opensReused":46,"requests":4795,"ok":4794,"status":[4794,0,1,0],"sendFails":0,"bytes":24169117},"allocFails":0,"routerSessions":[{"seen":true,"active":true,"startMs":3629,"endMs":0,"joinMs":175,"dhcpMs":1615,"endReason":0,"rssiEnd":0,"afterOwnWifi":false,"cc":"DK","fastUntilMs":752568004,"bw":40,"proto":7,"txQdbm":80,"ch":1,"second":0,"b":1,"g":1,"n":1,"phy":4,"pairwise":4,"group":3,"ps":0,"ip":"<ip>","mask":"<ip>","gw":"<ip>","dns":"<ip>","rssiStart":-43,"rssiMin":-79,"rssiMax":-30,"rssiAvg":-46,"rssiLast":-47,"pingSent":376285,"pingOk":376285,"pingSumMs":1128810,"pingMaxMs":309,"pingLostRowMax":0,"pingBuckets":[363662,12431,184,8,0],"beaconTimeouts":0,"channelChanges":0,"opens":208,"opensEmpty":4,"opensReused":46,"requests":4795,"ok":4794,"status":[4794,0,1,0],"sendFails":0,"bytes":24169117}],"slots":[[750742,15,15,2,-48,0,0,0,43],[750773,15,15,3,-46,0,0,0,43],[750803,15,15,2,-46,0,0,0,43],[750833,15,15,3,-45,0,0,0,43],[750863,15,15,3,-47,0,0,0,43],[750893,15,15,2,-45,0,0,0,43],[750923,15,15,3,-49,0,0,0,43],[750953,15,15,3,-46,0,0,0,43],[750983,15,15,2,-48,0,0,0,43],[751013,15,15,2,-49,0,0,0,43],[751043,15,15,2,-45,0,0,0,43],[751073,15,15,4,-47,0,0,0,43],[751103,15,15,3,-44,0,0,0,43],[751133,15,15,3,-49,0,0,0,43],[751163,15,15,3,-46,0,0,0,43],[751193,15,15,3,-47,0,0,0,43],[751223,15,15,3,-52,0,0,0,43],[751253,15,15,3,-51,0,0,0,43],[751283,15,15,4,-50,0,0,0,43],[751313,15,15,2,-46,0,0,0,43],[751343,15,15,3,-49,0,0,0,43],[751373,15,15,3,-49,0,0,0,43],[751403,15,15,3,-43,0,0,0,43],[751433,15,15,2,-45,0,0,0,43],[751463,15,15,2,-46,0,0,0,43],[751493,15,15,3,-49,0,0,0,43],[751523,15,15,2,-53,0,0,0,43],[751553,15,15,3,-48,0,0,0,43],[751583,15,15,3,-48,0,0,0,43],[751613,15,15,3,-47,0,0,0,43],[751643,15,15,3,-50,0,0,0,43],[751673,15,15,3,-49,0,0,0,43],[751703,15,15,3,-48,0,0,0,43],[751733,15,15,3,-53,0,0,0,43],[751763,15,15,4,-50,0,0,0,43],[751793,15,15,3,-46,0,0,0,43],[751823,15,15,3,-50,0,0,0,43],[751853,15,15,3,-55,0,0,0,43],[751883,15,15,3,-51,0,0,0,43],[751913,15,15,3,-50,0,0,0,43],[751943,15,15,3,-50,0,0,0,43],[751973,15,15,2,-51,0,0,0,43],[752003,15,15,2,-52,0,0,0,43],[752033,15,15,3,-51,0,0,0,43],[752063,15,15,3,-49,0,0,0,43],[752093,15,15,4,-51,0,0,0,43],[752123,15,15,3,-49,0,0,0,43],[752153,15,15,3,-49,0,0,0,43],[752183,15,15,2,-51,0,0,0,43],[752213,15,15,3,-54,0,0,0,43],[752243,15,15,3,-52,0,0,0,43],[752273,15,15,2,-50,0,0,0,43],[752303,15,15,4,-51,0,0,0,43],[752333,15,15,3,-48,0,0,0,43],[752363,15,15,3,-48,0,0,0,43],[752393,15,15,3,-44,0,0,0,43],[752423,15,15,3,-44,0,0,0,43],[752453,15,15,3,-48,0,0,0,43],[752483,15,15,3,-44,0,0,0,43],[752513,15,15,3,-43,0,0,0,43]],"slotFields":"startS,pingSent,pingOk,rttAvgMs,rssi,requests,failed,bytes,chipTempC","http":[{"net":"own Wi-Fi","conns":0,"connsEmpty":0,"connsReused":0,"requests":0,"status":[0,0,0,0],"failed":0,"bytes":0,"slowMs":0,"slowPath":"","lastMs":0,"endpoints":[[0,0,0],[0,0,0],[0,0,0],[0,0,0]]},{"net":"router","conns":208,"connsEmpty":4,"connsReused":46,"requests":4795,"status":[4794,0,1,0],"failed":0,"bytes":24169117,"slowMs":1052,"slowPath":"/api/wifi/log","lastMs":523924469,"endpoints":[[2,0,254],[0,0,0],[2899,0,15],[1894,0,1052]]},{"net":"self-test","conns":0,"connsEmpty":0,"connsReused":0,"requests":0,"status":[0,0,0,0],"failed":0,"bytes":0,"slowMs":0,"slowPath":"","lastMs":0,"endpoints":[[0,0,0],[0,0,0],[0,0,0],[0,0,0]]}],"requestLog":[{"atMs":523908001,"net":"router","path":"/api/live","status":200,"bytes":744,"firstMs":2,"ms":6,"failed":false,"nth":255},{"atMs":523908527,"net":"router","path":"/api/live","status":200,"bytes":744,"firstMs":2,"ms":7,"failed":false,"nth":255},{"atMs":523909065,"net":"router","path":"/api/live","status":200,"bytes":744,"firstMs":2,"ms":6,"failed":false,"nth":255},{"atMs":523909586,"net":"router","path":"/api/live","status":200,"bytes":744,"firstMs":2,"ms":6,"failed":false,"nth":255},{"atMs":523910112,"net":"router","path":"/api/live","status":200,"bytes":744,"firstMs":2,"ms":7,"failed":false,"nth":255},{"atMs":523910655,"net":"router","path":"/api/live","status":200,"bytes":744,"firstMs":2,"ms":6,"failed":false,"nth":255},{"atMs":523911179,"net":"router","path":"/api/live","status":200,"bytes":744,"firstMs":2,"ms":7,"failed":false,"nth":255},{"atMs":523911705,"net":"router","path":"/api/live","status":200,"bytes":744,"firstMs":2,"ms":7,"failed":false,"nth":255},{"atMs":523912233,"net":"router","path":"/api/live","status":200,"bytes":744,"firstMs":1,"ms":8,"failed":false,"nth":255},{"atMs":523912773,"net":"router","path":"/api/live","status":200,"bytes":744,"firstMs":2,"ms":6,"failed":false,"nth":255},{"atMs":523913303,"net":"router","path":"/api/live","status":200,"bytes":744,"firstMs":2,"ms":6,"failed":false,"nth":255},{"atMs":523913828,"net":"router","path":"/api/live","status":200,"bytes":744,"firstMs":1,"ms":6,"failed":false,"nth":255},{"atMs":523914351,"net":"router","path":"/api/live","status":200,"bytes":744,"firstMs":2,"ms":7,"failed":false,"nth":255},{"atMs":523914878,"net":"router","path":"/api/live","status":200,"bytes":744,"firstMs":2,"ms":7,"failed":false,"nth":255},{"atMs":523915406,"net":"router","path":"/api/live","status":200,"bytes":744,"firstMs":2,"ms":6,"failed":false,"nth":255},{"atMs":523915963,"net":"router","path":"/api/live","status":200,"bytes":744,"firstMs":2,"ms":7,"failed":false,"nth":255},{"atMs":523916490,"net":"router","path":"/api/live","status":200,"bytes":744,"firstMs":1,"ms":6,"failed":false,"nth":255},{"atMs":523917023,"net":"router","path":"/api/live","status":200,"bytes":744,"firstMs":1,"ms":7,"failed":false,"nth":255},{"atMs":523917549,"net":"router","path":"/api/live","status":200,"bytes":744,"firstMs":2,"ms":6,"failed":false,"nth":255},{"atMs":523918085,"net":"router","path":"/api/live","status":200,"bytes":744,"firstMs":2,"ms":9,"failed":false,"nth":255},{"atMs":523918606,"net":"router","path":"/api/live","status":200,"bytes":744,"firstMs":2,"ms":6,"failed":false,"nth":255},{"atMs":523919136,"net":"router","path":"/api/live","status":200,"bytes":744,"firstMs":2,"ms":6,"failed":false,"nth":255},{"atMs":523919651,"net":"router","path":"/api/live","status":200,"bytes":744,"firstMs":2,"ms":7,"failed":false,"nth":255},{"atMs":523920192,"net":"router","path":"/api/live","status":200,"bytes":744,"firstMs":2,"ms":7,"failed":false,"nth":255},{"atMs":523920737,"net":"router","path":"/api/live","status":200,"bytes":744,"firstMs":2,"ms":6,"failed":false,"nth":255},{"atMs":523921268,"net":"router","path":"/api/live","status":200,"bytes":744,"firstMs":2,"ms":6,"failed":false,"nth":255},{"atMs":523921796,"net":"router","path":"/api/live","status":200,"bytes":744,"firstMs":2,"ms":6,"failed":false,"nth":255},{"atMs":523922332,"net":"router","path":"/api/live","status":200,"bytes":744,"firstMs":2,"ms":6,"failed":false,"nth":255},{"atMs":523922877,"net":"router","path":"/api/live","status":200,"bytes":744,"firstMs":2,"ms":7,"failed":false,"nth":255},{"atMs":523923420,"net":"router","path":"/api/live","status":200,"bytes":744,"firstMs":2,"ms":6,"failed":false,"nth":255},{"atMs":523923934,"net":"router","path":"/api/live","status":200,"bytes":744,"firstMs":1,"ms":6,"failed":false,"nth":255},{"atMs":523924469,"net":"router","path":"/api/live","status":200,"bytes":744,"firstMs":1,"ms":6,"failed":false,"nth":255}],"netSteps":[],"powerSave":0,"events":[{"uptimeMs":1239,"event":"Connect started","reason":0,"count":1,"lastUptimeMs":1239},{"uptimeMs":1414,"event":"Associated with router","reason":0,"count":1,"lastUptimeMs":1414},{"uptimeMs":3029,"event":"Received router IP","reason":0,"count":1,"lastUptimeMs":3029}]}
+
+
+######## 2026-11-26 <mac> UTC ########
+ENGINELINK - WI-FI REPORT
+========================
+
+Firmware: 0.17.7 (built Nov 15 2026 <mac>)
+Uptime: 754373 seconds
+Mode: Router (station)
+Wi-Fi radio mode: 1 (1=station, 2=access point)
+Router: <router name hidden>
+Currently connected: Yes
+Router IP now: <ip>
+Last successful router IP: <ip>
+Last router signal: -47 dBm
+Last router channel: 1
+Last negotiated Wi-Fi security: WPA2-Personal
+Station: as the working test sketch: power save off, everything else the driver's default (no bandwidth, country, scan, protocol or TX-power setting)
+Security: ESP32 core WPA2/WPA3 negotiation (no custom SAE handling)
+Transmit power: ESP32 driver default · driver reports 20.00 dBm (80 quarter-dBm) · set again after the driver changed it: 0 time(s)
+Power save: off
+Negotiated Wi-Fi standard: 802.11n 20 MHz
+CONNECTIVITY (COUNTERS SINCE BOOT)
+Successful Wi-Fi associations: 1
+Successful router IP assignments: 1
+Router IP losses: 0
+Wi-Fi disconnect events: 0
+Dropped active router connections: 0
+Pre-connection failures: 0
+Reconnect: the ESP32 core's own, plus one plain connect after 20 s without any attempt (the core stops after code 202)
+App-initiated router attempts: 1
+Router recovery fallbacks: 0
+Last association time: 175 ms
+Last DHCP time: 1615 ms
+Last successful IP at uptime: 3 seconds
+Last Wi-Fi event reason: 0 - No reason reported
+Last unexpected reason: 0 - No reason reported
+Error 202 means authentication failure; it does not prove the password is wrong.
+
+DOWNLOAD TESTS FROM THE PHONE (newest last)
+  511818 s ago · 19.5 dBm · 249.60 kB/s · request round trip 23 ms · chip 42 C · at uptime 242555 s
+  511816 s ago · 19.5 dBm · 216.70 kB/s · request round trip 37 ms · chip 42 C · at uptime 242556 s
+  511815 s ago · 19.5 dBm · 197.70 kB/s · request round trip 31 ms · chip 42 C · at uptime 242557 s
+  230615 s ago · 19.5 dBm · 249.40 kB/s · request round trip 47 ms · chip 44 C · at uptime 523757 s
+  230582 s ago · 19.5 dBm · 234.80 kB/s · request round trip 21 ms · chip 44 C · at uptime 523790 s
+  230580 s ago · 19.5 dBm · 198.00 kB/s · request round trip 28 ms · chip 44 C · at uptime 523792 s
+  230579 s ago · 19.5 dBm · 249.30 kB/s · request round trip 15 ms · chip 44 C · at uptime 523793 s
+  230578 s ago · 19.5 dBm · 194.10 kB/s · request round trip 32 ms · chip 44 C · at uptime 523794 s
+  230577 s ago · 19.5 dBm · 277.80 kB/s · request round trip 15 ms · chip 44 C · at uptime 523795 s
+  230576 s ago · 19.5 dBm · 335.30 kB/s · request round trip 27 ms · chip 44 C · at uptime 523796 s
+  230575 s ago · 19.5 dBm · 247.30 kB/s · request round trip 20 ms · chip 45 C · at uptime 523797 s
+  230574 s ago · 19.5 dBm · 275.90 kB/s · request round trip 22 ms · chip 45 C · at uptime 523798 s
+
+ROUTER SESSIONS AS ENGINELINK MEASURED THEM (newest first, up to 4 kept since the start)
+#1 RUNNING: started at uptime 3 s (joined in 175 ms, address after 1615 ms), running for 754369 s
+   Radio: EngineLink offered 40 MHz · negotiated 802.11n 20 MHz · router on channel 1 (20 MHz), supports b g n · encryption pairwise CCMP (AES), group TKIP · power save off · transmit power 20.00 dBm
+   Joined straight after the start (as the test sketch) · country code in the driver DK · last ping answered in under 50 ms: 754368 s after the join
+   Addresses: EngineLink <ip> · mask <ip> · gateway <ip> · DNS <ip>
+   Signal (dBm, every 10 s): start -43, lowest -79, highest -30, average -46, last -46
+   Link check (ping to the router every 2 s): 377185 of 377185 answered (0 % lost), average 3 ms, longest 309 ms, most lost in a row 0 (0 s) · answered in <10/<50/<200/<1000/1000+ ms: 364543/12450/184/8/0
+   Driver: beacon-timeout warnings 0 · channel or width changes 0
+   Web through the router: connections 208 (4 closed without a request, 46 used for more than one) · requests 4795 · status 2xx 4794, 3xx 0, 4xx 1, 5xx 0 · failed while sending 0 · bytes sent 24169117
+Reading it: pings lost = packets between EngineLink and the router do not get through. Pings fine but connections
+without a request, or none = the other device's packets do not reach EngineLink. Requests answered but connections
+never reused = the answers do not reach the device.
+
+NEWEST SESSION IN 30 s PIECES (uptime · pings answered/sent, average ms · signal · web requests, failed, bytes · chip temperature)
+  +752543s · 15/15, 2 ms · -47 dBm · 0, 0, 0 B · 43 C
+  +752573s · 15/15, 4 ms · -44 dBm · 0, 0, 0 B · 43 C
+  +752603s · 15/15, 3 ms · -44 dBm · 0, 0, 0 B · 43 C
+  +752633s · 15/15, 3 ms · -45 dBm · 0, 0, 0 B · 43 C
+  +752663s · 15/15, 4 ms · -43 dBm · 0, 0, 0 B · 43 C
+  +752693s · 15/15, 4 ms · -46 dBm · 0, 0, 0 B · 43 C
+  +752723s · 15/15, 3 ms · -43 dBm · 0, 0, 0 B · 43 C
+  +752753s · 15/15, 3 ms · -44 dBm · 0, 0, 0 B · 43 C
+  +752783s · 15/15, 4 ms · -44 dBm · 0, 0, 0 B · 44 C
+  +752813s · 15/15, 3 ms · -44 dBm · 0, 0, 0 B · 43 C
+  +752843s · 15/15, 2 ms · -47 dBm · 0, 0, 0 B · 43 C
+  +752873s · 15/15, 3 ms · -47 dBm · 0, 0, 0 B · 43 C
+  +752903s · 15/15, 3 ms · -47 dBm · 0, 0, 0 B · 43 C
+  +752933s · 15/15, 4 ms · -48 dBm · 0, 0, 0 B · 44 C
+  +752963s · 15/15, 2 ms · -46 dBm · 0, 0, 0 B · 43 C
+  +752993s · 15/15, 3 ms · -49 dBm · 0, 0, 0 B · 43 C
+  +753023s · 15/15, 3 ms · -51 dBm · 0, 0, 0 B · 44 C
+  +753053s · 15/15, 3 ms · -46 dBm · 0, 0, 0 B · 43 C
+  +753083s · 15/15, 3 ms · -46 dBm · 0, 0, 0 B · 43 C
+  +753113s · 15/15, 3 ms · -41 dBm · 0, 0, 0 B · 44 C
+  +753143s · 15/15, 2 ms · -47 dBm · 0, 0, 0 B · 44 C
+  +753173s · 15/15, 3 ms · -46 dBm · 0, 0, 0 B · 43 C
+  +753203s · 15/15, 3 ms · -46 dBm · 0, 0, 0 B · 44 C
+  +753233s · 15/15, 3 ms · -46 dBm · 0, 0, 0 B · 43 C
+  +753263s · 15/15, 4 ms · -44 dBm · 0, 0, 0 B · 44 C
+  +753293s · 15/15, 2 ms · -49 dBm · 0, 0, 0 B · 43 C
+  +753323s · 15/15, 4 ms · -51 dBm · 0, 0, 0 B · 43 C
+  +753353s · 15/15, 2 ms · -54 dBm · 0, 0, 0 B · 44 C
+  +753383s · 15/15, 3 ms · -49 dBm · 0, 0, 0 B · 43 C
+  +753413s · 15/15, 4 ms · -45 dBm · 0, 0, 0 B · 44 C
+  +753443s · 15/15, 4 ms · -45 dBm · 0, 0, 0 B · 43 C
+  +753473s · 15/15, 4 ms · -47 dBm · 0, 0, 0 B · 43 C
+  +753503s · 15/15, 2 ms · -45 dBm · 0, 0, 0 B · 44 C
+  +753533s · 15/15, 3 ms · -45 dBm · 0, 0, 0 B · 44 C
+  +753563s · 15/15, 3 ms · -46 dBm · 0, 0, 0 B · 44 C
+  +753593s · 15/15, 3 ms · -44 dBm · 0, 0, 0 B · 44 C
+  +753623s · 15/15, 3 ms · -46 dBm · 0, 0, 0 B · 44 C
+  +753653s · 15/15, 3 ms · -45 dBm · 0, 0, 0 B · 44 C
+  +753683s · 15/15, 4 ms · -44 dBm · 0, 0, 0 B · 43 C
+  +753713s · 15/15, 3 ms · -45 dBm · 0, 0, 0 B · 43 C
+  +753743s · 15/15, 4 ms · -45 dBm · 0, 0, 0 B · 44 C
+  +753773s · 15/15, 3 ms · -48 dBm · 0, 0, 0 B · 43 C
+  +753803s · 15/15, 3 ms · -49 dBm · 0, 0, 0 B · 43 C
+  +753833s · 15/15, 3 ms · -48 dBm · 0, 0, 0 B · 44 C
+  +753863s · 15/15, 4 ms · -45 dBm · 0, 0, 0 B · 44 C
+  +753893s · 15/15, 3 ms · -48 dBm · 0, 0, 0 B · 44 C
+  +753923s · 15/15, 4 ms · -49 dBm · 0, 0, 0 B · 44 C
+  +753953s · 15/15, 3 ms · -47 dBm · 0, 0, 0 B · 44 C
+  +753983s · 15/15, 3 ms · -51 dBm · 0, 0, 0 B · 44 C
+  +754013s · 15/15, 3 ms · -51 dBm · 0, 0, 0 B · 44 C
+  +754043s · 15/15, 3 ms · -51 dBm · 0, 0, 0 B · 44 C
+  +754073s · 15/15, 4 ms · -50 dBm · 0, 0, 0 B · 44 C
+  +754103s · 15/15, 3 ms · -52 dBm · 0, 0, 0 B · 44 C
+  +754133s · 15/15, 3 ms · -50 dBm · 0, 0, 0 B · 44 C
+  +754163s · 15/15, 2 ms · -44 dBm · 0, 0, 0 B · 44 C
+  +754193s · 15/15, 3 ms · -46 dBm · 0, 0, 0 B · 44 C
+  +754223s · 15/15, 3 ms · -44 dBm · 0, 0, 0 B · 44 C
+  +754253s · 15/15, 2 ms · -44 dBm · 0, 0, 0 B · 44 C
+  +754283s · 15/15, 2 ms · -46 dBm · 0, 0, 0 B · 44 C
+  +754313s · 15/15, 3 ms · -44 dBm · 0, 0, 0 B · 44 C
+
+ROUTER (AS SEEN BY ENGINELINK)
+Maker prefix (first half of the router's MAC address): <mac>
+Router supports: b g n 
+Router channel: 1 (20 MHz)
+Router country:  (channels 0--1)
+Encryption: pairwise CCMP (AES), group TKIP (slow, limits Wi-Fi to 54 Mbit/s)
+Signal now: -47 dBm
+EngineLink allows: b g n 
+EngineLink bandwidth: 40 MHz
+Beacon timeout (driver): 6 s
+
+ENGINELINK WI-FI (ACCESS POINT, THIS START)
+Phones connected now: 0 · joined 0 · DHCP leases assigned 0 · left 0 · started 0 · restarted by the watchdog 0 · channel 6
+Access point: off (router mode)
+Wi-Fi country (driver): DK 
+
+SYSTEM
+Chip temperature: now 44 C · at the first reading after the start 32 C · highest 45 C
+Chip: ESP32-S3 rev 2 · 240 MHz · Arduino core 3.3.12 · IDF v5.5.5
+Memory: free 93 KB, lowest 71 KB, largest block 51 KB · PSRAM free 7678 KB
+Main loop: longest pass 1125 ms · engine reading in own task: yes · engine task longest wait 180 ms (lock held by xfer when it began) · waits over 100 ms: 1 · longest round of its own work 41 ms
+Longest part of the main loop (ms): (web: own task) 0, sd 15, diag 9, sd scan 123, history 8, network 11, led 9, serial 1125, other 10
+Reset reason: 1 (1 power on, 3 software/update, 4 crash, 5/6/7 watchdog, 9 brownout, 11 reset over USB)
+Recent restarts (newest first): reason 1 after 0 s on 0.17.7 | reason 9 after 0 s on 0.17.7 | reason 1 after 0 s on 0.17.7 | reason 1 after 0 s on 0.17.7 | reason 1 after 0 s on 0.17.7 | reason 3 after 19 s on 0.17.7 | reason 3 after 19 s on 0.17.7 | reason 3 after 20 s on 0.17.7
+Internal memory: free 93 KB, lowest 71 KB, largest block 51 KB · failed allocations since the start: 0
+Slow steps of the network part (100 ms or more, newest last): none
+Tasks, CPU share of one core since the last snapshot (at most 30 s ago) / stack never used (bytes):
+  loopTask 11%/3964 · IDLE0 98%/240 · IDLE1 88%/344 · J6RX 0%/3176 · J7RX 0%/3172 · ping 0%/1928 · tiT 0%/2732 · fw 0%/8932 · xfer 0%/5000 · sys_evt 0%/2696 · httpd 0%/4436 · Tmr Svc 0%/2320 · arduino_events 0%/2936 · ipc1 0%/1288 · esp_timer 0%/7736 · engines 0%/14912 · wifi 0%/4092 · ipc0 0%/1280 · mdns 0%/1588
+Not available in this build of the ESP32 core (not invented here): lwIP's packet and TCP counters (LWIP_STATS off),
+the driver's transmit retry counters (no public API), the ARP table (no thread-safe public read).
+
+HTTP / WEB (esp_http_server, port 80)
+Requests: 4795 · long transfers: 302 · answered busy (503): 0 · refused by the security checks: 0 · send failures (timeout or phone gone): 0
+Connections opened: 208 · closed: 208 · open now: 0 · most at once: 7 · successful answers to other devices: 4794
+On the own Wi-Fi: connections 0 (0 closed without a request, 0 used for more than one) · requests 0 · 2xx 0, 3xx 0, 4xx 0, 5xx 0 · failed while sending 0 · bytes 0 KB · slowest 0 ms ()
+Through the router: connections 208 (4 closed without a request, 46 used for more than one) · requests 4795 · 2xx 4794, 3xx 0, 4xx 1, 5xx 0 · failed while sending 0 · bytes 23602 KB · slowest 1052 ms (/api/wifi/log) · last at uptime 523924 s
+   by address (requests, failed, slowest ms): / 2/0/254 · /api/health 0/0/0 · /api/live 2899/0/15 · other 1894/0/1052
+Own self-test: connections 0 (0 closed without a request, 0 used for more than one) · requests 0 · 2xx 0, 3xx 0, 4xx 0, 5xx 0 · failed while sending 0 · bytes 0 KB · slowest 0 ms ()
+Request log (every request through the router, and failed or slow ones on the own Wi-Fi; newest 32 of 4795):
+  +523908.0s router /api/live -> 200, 744 B, first byte after 2 ms, done in 6 ms (request 255 on its connection)
+  +523908.5s router /api/live -> 200, 744 B, first byte after 2 ms, done in 7 ms (request 255 on its connection)
+  +523909.0s router /api/live -> 200, 744 B, first byte after 2 ms, done in 6 ms (request 255 on its connection)
+  +523909.5s router /api/live -> 200, 744 B, first byte after 2 ms, done in 6 ms (request 255 on its connection)
+  +523910.1s router /api/live -> 200, 744 B, first byte after 2 ms, done in 7 ms (request 255 on its connection)
+  +523910.6s router /api/live -> 200, 744 B, first byte after 2 ms, done in 6 ms (request 255 on its connection)
+  +523911.1s router /api/live -> 200, 744 B, first byte after 2 ms, done in 7 ms (request 255 on its connection)
+  +523911.7s router /api/live -> 200, 744 B, first byte after 2 ms, done in 7 ms (request 255 on its connection)
+  +523912.2s router /api/live -> 200, 744 B, first byte after 1 ms, done in 8 ms (request 255 on its connection)
+  +523912.7s router /api/live -> 200, 744 B, first byte after 2 ms, done in 6 ms (request 255 on its connection)
+  +523913.3s router /api/live -> 200, 744 B, first byte after 2 ms, done in 6 ms (request 255 on its connection)
+  +523913.8s router /api/live -> 200, 744 B, first byte after 1 ms, done in 6 ms (request 255 on its connection)
+  +523914.3s router /api/live -> 200, 744 B, first byte after 2 ms, done in 7 ms (request 255 on its connection)
+  +523914.8s router /api/live -> 200, 744 B, first byte after 2 ms, done in 7 ms (request 255 on its connection)
+  +523915.4s router /api/live -> 200, 744 B, first byte after 2 ms, done in 6 ms (request 255 on its connection)
+  +523915.9s router /api/live -> 200, 744 B, first byte after 2 ms, done in 7 ms (request 255 on its connection)
+  +523916.4s router /api/live -> 200, 744 B, first byte after 1 ms, done in 6 ms (request 255 on its connection)
+  +523917.0s router /api/live -> 200, 744 B, first byte after 1 ms, done in 7 ms (request 255 on its connection)
+  +523917.5s router /api/live -> 200, 744 B, first byte after 2 ms, done in 6 ms (request 255 on its connection)
+  +523918.0s router /api/live -> 200, 744 B, first byte after 2 ms, done in 9 ms (request 255 on its connection)
+  +523918.6s router /api/live -> 200, 744 B, first byte after 2 ms, done in 6 ms (request 255 on its connection)
+  +523919.1s router /api/live -> 200, 744 B, first byte after 2 ms, done in 6 ms (request 255 on its connection)
+  +523919.6s router /api/live -> 200, 744 B, first byte after 2 ms, done in 7 ms (request 255 on its connection)
+  +523920.1s router /api/live -> 200, 744 B, first byte after 2 ms, done in 7 ms (request 255 on its connection)
+  +523920.7s router /api/live -> 200, 744 B, first byte after 2 ms, done in 6 ms (request 255 on its connection)
+  +523921.2s router /api/live -> 200, 744 B, first byte after 2 ms, done in 6 ms (request 255 on its connection)
+  +523921.7s router /api/live -> 200, 744 B, first byte after 2 ms, done in 6 ms (request 255 on its connection)
+  +523922.3s router /api/live -> 200, 744 B, first byte after 2 ms, done in 6 ms (request 255 on its connection)
+  +523922.8s router /api/live -> 200, 744 B, first byte after 2 ms, done in 7 ms (request 255 on its connection)
+  +523923.4s router /api/live -> 200, 744 B, first byte after 2 ms, done in 6 ms (request 255 on its connection)
+  +523923.9s router /api/live -> 200, 744 B, first byte after 1 ms, done in 6 ms (request 255 on its connection)
+  +523924.4s router /api/live -> 200, 744 B, first byte after 1 ms, done in 6 ms (request 255 on its connection)
+A request counts as answered when the server handed the whole answer to TCP. Whether it arrived is seen from the
+next request on the same connection ("used for more than one"); the last 5.7 KB of an answer cannot be confirmed.
+Slowest request: 1052 ms (/api/wifi/log?f=3) · last transfer waited 0 ms for the engine lock
+Stack left (bytes): web server 4436, transfers 5000
+Firmware self-test: not needed (this firmware was confirmed before)
+Last 32 KiB server write: 65536 bytes in 222 ms (16 write calls)
+TCP send window: ESP32 core default (not modified)
+Note: server write time is NOT the same as measured radio throughput.
+
+LATEST WI-FI EVENTS (oldest to newest; uptime seconds)
+  +1s  Connect started
+  +1s  Associated with router
+  +3s  Received router IP
+
+MACHINE-READABLE JSON (copy/send the entire report)
+{"version":"0.17.7","build":"Nov 15 2026 <mac>","uptimeMs":754373331,"mode":"router","recovery":false,"holdWhy":0,"wifiMode":1,"ssid":"<router name hidden>","status":3,"phase":"online","associated":true,"hasRouterIp":true,"ip":"<ip>","gateway":"<ip>","rssi":-47,"associationEvents":1,"dhcpIpEvents":1,"lostIpEvents":0,"associationMs":175,"dhcpMs":1615,"driverReason":0,"unexpectedReason":0,"unexpectedDrops":0,"associationFailures":0,"txReapplied":0,"txTargetQdbm":78,"txDriverQdbm":80,"apLink":{"up":false,"ch":0,"bw":0,"pmfCapable":false,"pmfRequired":false,"inactiveS":0,"country":"","stations":[]},"loopParts":[0,15,9,123,8,11,9,1125,10],"engineMaxWaitMs":180,"engineMaxWaitBy":"xfer","engineSlowWaits":1,"engineMaxRoundMs":41,"apStations":0,"apJoins":0,"apLeaves":0,"apDhcpLeases":0,"apLeaveReason":0,"apRestarts":0,"speedTxBytes":65536,"speedTxMs":222,"speedTxWrites":16,"networkEpoch":1,"httpdRequests":4795,"httpdAsync":302,"httpdBusy503":0,"httpdBusyLock":0,"httpdBusyXfer":0,"httpdBusyXferLock":0,"httpdBusyPath":"","httpdBusyAtMs":0,"httpdRejected":0,"httpdSendFails":0,"httpdOpens":208,"httpdCloses":208,"httpdOpenNow":0,"httpdOpenMax":7,"httpdExternalOk":4794,"httpdSlowMs":1052,"httpdSlowPath":"/api/wifi/log?f=3","httpdRouterOpens":208,"httpdRouterRequests":4795,"httpdRouterOk":4794,"httpdRouterSendFails":0,"httpdRouterLastMs":523924469,"httpdStackFree":4436,"xferStackFree":5000,"routerAttempts":1,"routerFallbacks":0,"routerNextTryS":null,"disconnectEvents":0,"lastGotIpUptimeMs":3029,"lastRouterIp":"<ip>","lastRouterRssi":-47,"lastRouterChannel":1,"lastSecurity":"WPA2-Personal","txLevel":4,"phoneTests":[{"agoS":511818,"level":4,"kbs":249.60,"rttMs":23,"tempC":42,"atS":242555},{"agoS":511816,"level":4,"kbs":216.70,"rttMs":37,"tempC":42,"atS":242556},{"agoS":511815,"level":4,"kbs":197.70,"rttMs":31,"tempC":42,"atS":242557},{"agoS":230615,"level":4,"kbs":249.40,"rttMs":47,"tempC":44,"atS":523757},{"agoS":230582,"level":4,"kbs":234.80,"rttMs":21,"tempC":44,"atS":523790},{"agoS":230580,"level":4,"kbs":198.00,"rttMs":28,"tempC":44,"atS":523792},{"agoS":230579,"level":4,"kbs":249.30,"rttMs":15,"tempC":44,"atS":523793},{"agoS":230578,"level":4,"kbs":194.10,"rttMs":32,"tempC":44,"atS":523794},{"agoS":230577,"level":4,"kbs":277.80,"rttMs":15,"tempC":44,"atS":523795},{"agoS":230576,"level":4,"kbs":335.30,"rttMs":27,"tempC":44,"atS":523796},{"agoS":230575,"level":4,"kbs":247.30,"rttMs":20,"tempC":45,"atS":523797},{"agoS":230574,"level":4,"kbs":275.90,"rttMs":22,"tempC":45,"atS":523798}],"routerSession":{"seen":true,"active":true,"startMs":3629,"endMs":0,"joinMs":175,"dhcpMs":1615,"endReason":0,"rssiEnd":0,"afterOwnWifi":false,"cc":"DK","fastUntilMs":754368005,"bw":40,"proto":7,"txQdbm":80,"ch":1,"second":0,"b":1,"g":1,"n":1,"phy":4,"pairwise":4,"group":3,"ps":0,"ip":"<ip>","mask":"<ip>","gw":"<ip>","dns":"<ip>","rssiStart":-43,"rssiMin":-79,"rssiMax":-30,"rssiAvg":-46,"rssiLast":-46,"pingSent":377185,"pingOk":377185,"pingSumMs":1132027,"pingMaxMs":309,"pingLostRowMax":0,"pingBuckets":[364543,12450,184,8,0],"beaconTimeouts":0,"channelChanges":0,"opens":208,"opensEmpty":4,"opensReused":46,"requests":4795,"ok":4794,"status":[4794,0,1,0],"sendFails":0,"bytes":24169117},"allocFails":0,"routerSessions":[{"seen":true,"active":true,"startMs":3629,"endMs":0,"joinMs":175,"dhcpMs":1615,"endReason":0,"rssiEnd":0,"afterOwnWifi":false,"cc":"DK","fastUntilMs":754368005,"bw":40,"proto":7,"txQdbm":80,"ch":1,"second":0,"b":1,"g":1,"n":1,"phy":4,"pairwise":4,"group":3,"ps":0,"ip":"<ip>","mask":"<ip>","gw":"<ip>","dns":"<ip>","rssiStart":-43,"rssiMin":-79,"rssiMax":-30,"rssiAvg":-46,"rssiLast":-46,"pingSent":377185,"pingOk":377185,"pingSumMs":1132027,"pingMaxMs":309,"pingLostRowMax":0,"pingBuckets":[364543,12450,184,8,0],"beaconTimeouts":0,"channelChanges":0,"opens":208,"opensEmpty":4,"opensReused":46,"requests":4795,"ok":4794,"status":[4794,0,1,0],"sendFails":0,"bytes":24169117}],"slots":[[752543,15,15,2,-47,0,0,0,43],[752573,15,15,4,-44,0,0,0,43],[752603,15,15,3,-44,0,0,0,43],[752633,15,15,3,-45,0,0,0,43],[752663,15,15,4,-43,0,0,0,43],[752693,15,15,4,-46,0,0,0,43],[752723,15,15,3,-43,0,0,0,43],[752753,15,15,3,-44,0,0,0,43],[752783,15,15,4,-44,0,0,0,44],[752813,15,15,3,-44,0,0,0,43],[752843,15,15,2,-47,0,0,0,43],[752873,15,15,3,-47,0,0,0,43],[752903,15,15,3,-47,0,0,0,43],[752933,15,15,4,-48,0,0,0,44],[752963,15,15,2,-46,0,0,0,43],[752993,15,15,3,-49,0,0,0,43],[753023,15,15,3,-51,0,0,0,44],[753053,15,15,3,-46,0,0,0,43],[753083,15,15,3,-46,0,0,0,43],[753113,15,15,3,-41,0,0,0,44],[753143,15,15,2,-47,0,0,0,44],[753173,15,15,3,-46,0,0,0,43],[753203,15,15,3,-46,0,0,0,44],[753233,15,15,3,-46,0,0,0,43],[753263,15,15,4,-44,0,0,0,44],[753293,15,15,2,-49,0,0,0,43],[753323,15,15,4,-51,0,0,0,43],[753353,15,15,2,-54,0,0,0,44],[753383,15,15,3,-49,0,0,0,43],[753413,15,15,4,-45,0,0,0,44],[753443,15,15,4,-45,0,0,0,43],[753473,15,15,4,-47,0,0,0,43],[753503,15,15,2,-45,0,0,0,44],[753533,15,15,3,-45,0,0,0,44],[753563,15,15,3,-46,0,0,0,44],[753593,15,15,3,-44,0,0,0,44],[753623,15,15,3,-46,0,0,0,44],[753653,15,15,3,-45,0,0,0,44],[753683,15,15,4,-44,0,0,0,43],[753713,15,15,3,-45,0,0,0,43],[753743,15,15,4,-45,0,0,0,44],[753773,15,15,3,-48,0,0,0,43],[753803,15,15,3,-49,0,0,0,43],[753833,15,15,3,-48,0,0,0,44],[753863,15,15,4,-45,0,0,0,44],[753893,15,15,3,-48,0,0,0,44],[753923,15,15,4,-49,0,0,0,44],[753953,15,15,3,-47,0,0,0,44],[753983,15,15,3,-51,0,0,0,44],[754013,15,15,3,-51,0,0,0,44],[754043,15,15,3,-51,0,0,0,44],[754073,15,15,4,-50,0,0,0,44],[754103,15,15,3,-52,0,0,0,44],[754133,15,15,3,-50,0,0,0,44],[754163,15,15,2,-44,0,0,0,44],[754193,15,15,3,-46,0,0,0,44],[754223,15,15,3,-44,0,0,0,44],[754253,15,15,2,-44,0,0,0,44],[754283,15,15,2,-46,0,0,0,44],[754313,15,15,3,-44,0,0,0,44]],"slotFields":"startS,pingSent,pingOk,rttAvgMs,rssi,requests,failed,bytes,chipTempC","http":[{"net":"own Wi-Fi","conns":0,"connsEmpty":0,"connsReused":0,"requests":0,"status":[0,0,0,0],"failed":0,"bytes":0,"slowMs":0,"slowPath":"","lastMs":0,"endpoints":[[0,0,0],[0,0,0],[0,0,0],[0,0,0]]},{"net":"router","conns":208,"connsEmpty":4,"connsReused":46,"requests":4795,"status":[4794,0,1,0],"failed":0,"bytes":24169117,"slowMs":1052,"slowPath":"/api/wifi/log","lastMs":523924469,"endpoints":[[2,0,254],[0,0,0],[2899,0,15],[1894,0,1052]]},{"net":"self-test","conns":0,"connsEmpty":0,"connsReused":0,"requests":0,"status":[0,0,0,0],"failed":0,"bytes":0,"slowMs":0,"slowPath":"","lastMs":0,"endpoints":[[0,0,0],[0,0,0],[0,0,0],[0,0,0]]}],"requestLog":[{"atMs":523908001,"net":"router","path":"/api/live","status":200,"bytes":744,"firstMs":2,"ms":6,"failed":false,"nth":255},{"atMs":523908527,"net":"router","path":"/api/live","status":200,"bytes":744,"firstMs":2,"ms":7,"failed":false,"nth":255},{"atMs":523909065,"net":"router","path":"/api/live","status":200,"bytes":744,"firstMs":2,"ms":6,"failed":false,"nth":255},{"atMs":523909586,"net":"router","path":"/api/live","status":200,"bytes":744,"firstMs":2,"ms":6,"failed":false,"nth":255},{"atMs":523910112,"net":"router","path":"/api/live","status":200,"bytes":744,"firstMs":2,"ms":7,"failed":false,"nth":255},{"atMs":523910655,"net":"router","path":"/api/live","status":200,"bytes":744,"firstMs":2,"ms":6,"failed":false,"nth":255},{"atMs":523911179,"net":"router","path":"/api/live","status":200,"bytes":744,"firstMs":2,"ms":7,"failed":false,"nth":255},{"atMs":523911705,"net":"router","path":"/api/live","status":200,"bytes":744,"firstMs":2,"ms":7,"failed":false,"nth":255},{"atMs":523912233,"net":"router","path":"/api/live","status":200,"bytes":744,"firstMs":1,"ms":8,"failed":false,"nth":255},{"atMs":523912773,"net":"router","path":"/api/live","status":200,"bytes":744,"firstMs":2,"ms":6,"failed":false,"nth":255},{"atMs":523913303,"net":"router","path":"/api/live","status":200,"bytes":744,"firstMs":2,"ms":6,"failed":false,"nth":255},{"atMs":523913828,"net":"router","path":"/api/live","status":200,"bytes":744,"firstMs":1,"ms":6,"failed":false,"nth":255},{"atMs":523914351,"net":"router","path":"/api/live","status":200,"bytes":744,"firstMs":2,"ms":7,"failed":false,"nth":255},{"atMs":523914878,"net":"router","path":"/api/live","status":200,"bytes":744,"firstMs":2,"ms":7,"failed":false,"nth":255},{"atMs":523915406,"net":"router","path":"/api/live","status":200,"bytes":744,"firstMs":2,"ms":6,"failed":false,"nth":255},{"atMs":523915963,"net":"router","path":"/api/live","status":200,"bytes":744,"firstMs":2,"ms":7,"failed":false,"nth":255},{"atMs":523916490,"net":"router","path":"/api/live","status":200,"bytes":744,"firstMs":1,"ms":6,"failed":false,"nth":255},{"atMs":523917023,"net":"router","path":"/api/live","status":200,"bytes":744,"firstMs":1,"ms":7,"failed":false,"nth":255},{"atMs":523917549,"net":"router","path":"/api/live","status":200,"bytes":744,"firstMs":2,"ms":6,"failed":false,"nth":255},{"atMs":523918085,"net":"router","path":"/api/live","status":200,"bytes":744,"firstMs":2,"ms":9,"failed":false,"nth":255},{"atMs":523918606,"net":"router","path":"/api/live","status":200,"bytes":744,"firstMs":2,"ms":6,"failed":false,"nth":255},{"atMs":523919136,"net":"router","path":"/api/live","status":200,"bytes":744,"firstMs":2,"ms":6,"failed":false,"nth":255},{"atMs":523919651,"net":"router","path":"/api/live","status":200,"bytes":744,"firstMs":2,"ms":7,"failed":false,"nth":255},{"atMs":523920192,"net":"router","path":"/api/live","status":200,"bytes":744,"firstMs":2,"ms":7,"failed":false,"nth":255},{"atMs":523920737,"net":"router","path":"/api/live","status":200,"bytes":744,"firstMs":2,"ms":6,"failed":false,"nth":255},{"atMs":523921268,"net":"router","path":"/api/live","status":200,"bytes":744,"firstMs":2,"ms":6,"failed":false,"nth":255},{"atMs":523921796,"net":"router","path":"/api/live","status":200,"bytes":744,"firstMs":2,"ms":6,"failed":false,"nth":255},{"atMs":523922332,"net":"router","path":"/api/live","status":200,"bytes":744,"firstMs":2,"ms":6,"failed":false,"nth":255},{"atMs":523922877,"net":"router","path":"/api/live","status":200,"bytes":744,"firstMs":2,"ms":7,"failed":false,"nth":255},{"atMs":523923420,"net":"router","path":"/api/live","status":200,"bytes":744,"firstMs":2,"ms":6,"failed":false,"nth":255},{"atMs":523923934,"net":"router","path":"/api/live","status":200,"bytes":744,"firstMs":1,"ms":6,"failed":false,"nth":255},{"atMs":523924469,"net":"router","path":"/api/live","status":200,"bytes":744,"firstMs":1,"ms":6,"failed":false,"nth":255}],"netSteps":[],"powerSave":0,"events":[{"uptimeMs":1239,"event":"Connect started","reason":0,"count":1,"lastUptimeMs":1239},{"uptimeMs":1414,"event":"Associated with router","reason":0,"count":1,"lastUptimeMs":1414},{"uptimeMs":3029,"event":"Received router IP","reason":0,"count":1,"lastUptimeMs":3029}]}
+
+
+######## 2026-11-26 <mac> UTC ########
+ENGINELINK - WI-FI REPORT
+========================
+
+Firmware: 0.17.7 (built Nov 15 2026 <mac>)
+Uptime: 756173 seconds
+Mode: Router (station)
+Wi-Fi radio mode: 1 (1=station, 2=access point)
+Router: <router name hidden>
+Currently connected: Yes
+Router IP now: <ip>
+Last successful router IP: <ip>
+Last router signal: -46 dBm
+Last router channel: 1
+Last negotiated Wi-Fi security: WPA2-Personal
+Station: as the working test sketch: power save off, everything else the driver's default (no bandwidth, country, scan, protocol or TX-power setting)
+Security: ESP32 core WPA2/WPA3 negotiation (no custom SAE handling)
+Transmit power: ESP32 driver default · driver reports 20.00 dBm (80 quarter-dBm) · set again after the driver changed it: 0 time(s)
+Power save: off
+Negotiated Wi-Fi standard: 802.11n 20 MHz
+CONNECTIVITY (COUNTERS SINCE BOOT)
+Successful Wi-Fi associations: 1
+Successful router IP assignments: 1
+Router IP losses: 0
+Wi-Fi disconnect events: 0
+Dropped active router connections: 0
+Pre-connection failures: 0
+Reconnect: the ESP32 core's own, plus one plain connect after 20 s without any attempt (the core stops after code 202)
+App-initiated router attempts: 1
+Router recovery fallbacks: 0
+Last association time: 175 ms
+Last DHCP time: 1615 ms
+Last successful IP at uptime: 3 seconds
+Last Wi-Fi event reason: 0 - No reason reported
+Last unexpected reason: 0 - No reason reported
+Error 202 means authentication failure; it does not prove the password is wrong.
+
+DOWNLOAD TESTS FROM THE PHONE (newest last)
+  513618 s ago · 19.5 dBm · 249.60 kB/s · request round trip 23 ms · chip 42 C · at uptime 242555 s
+  513617 s ago · 19.5 dBm · 216.70 kB/s · request round trip 37 ms · chip 42 C · at uptime 242556 s
+  513615 s ago · 19.5 dBm · 197.70 kB/s · request round trip 31 ms · chip 42 C · at uptime 242557 s
+  232415 s ago · 19.5 dBm · 249.40 kB/s · request round trip 47 ms · chip 44 C · at uptime 523757 s
+  232382 s ago · 19.5 dBm · 234.80 kB/s · request round trip 21 ms · chip 44 C · at uptime 523790 s
+  232380 s ago · 19.5 dBm · 198.00 kB/s · request round trip 28 ms · chip 44 C · at uptime 523792 s
+  232379 s ago · 19.5 dBm · 249.30 kB/s · request round trip 15 ms · chip 44 C · at uptime 523793 s
+  232378 s ago · 19.5 dBm · 194.10 kB/s · request round trip 32 ms · chip 44 C · at uptime 523794 s
+  232377 s ago · 19.5 dBm · 277.80 kB/s · request round trip 15 ms · chip 44 C · at uptime 523795 s
+  232376 s ago · 19.5 dBm · 335.30 kB/s · request round trip 27 ms · chip 44 C · at uptime 523796 s
+  232375 s ago · 19.5 dBm · 247.30 kB/s · request round trip 20 ms · chip 45 C · at uptime 523797 s
+  232374 s ago · 19.5 dBm · 275.90 kB/s · request round trip 22 ms · chip 45 C · at uptime 523798 s
+
+ROUTER SESSIONS AS ENGINELINK MEASURED THEM (newest first, up to 4 kept since the start)
+#1 RUNNING: started at uptime 3 s (joined in 175 ms, address after 1615 ms), running for 756169 s
+   Radio: EngineLink offered 40 MHz · negotiated 802.11n 20 MHz · router on channel 1 (20 MHz), supports b g n · encryption pairwise CCMP (AES), group TKIP · power save off · transmit power 20.00 dBm
+   Joined straight after the start (as the test sketch) · country code in the driver DK · last ping answered in under 50 ms: 756168 s after the join
+   Addresses: EngineLink <ip> · mask <ip> · gateway <ip> · DNS <ip>
+   Signal (dBm, every 10 s): start -43, lowest -79, highest -30, average -46, last -46
+   Link check (ping to the router every 2 s): 378085 of 378085 answered (0 % lost), average 3 ms, longest 309 ms, most lost in a row 0 (0 s) · answered in <10/<50/<200/<1000/1000+ ms: 365422/12471/184/8/0
+   Driver: beacon-timeout warnings 0 · channel or width changes 0
+   Web through the router: connections 208 (4 closed without a request, 46 used for more than one) · requests 4795 · status 2xx 4794, 3xx 0, 4xx 1, 5xx 0 · failed while sending 0 · bytes sent 24169117
+Reading it: pings lost = packets between EngineLink and the router do not get through. Pings fine but connections
+without a request, or none = the other device's packets do not reach EngineLink. Requests answered but connections
+never reused = the answers do not reach the device.
+
+NEWEST SESSION IN 30 s PIECES (uptime · pings answered/sent, average ms · signal · web requests, failed, bytes · chip temperature)
+  +754343s · 15/15, 3 ms · -46 dBm · 0, 0, 0 B · 44 C
+  +754373s · 15/15, 2 ms · -47 dBm · 0, 0, 0 B · 44 C
+  +754403s · 15/15, 2 ms · -47 dBm · 0, 0, 0 B · 44 C
+  +754433s · 15/15, 3 ms · -43 dBm · 0, 0, 0 B · 44 C
+  +754463s · 15/15, 3 ms · -44 dBm · 0, 0, 0 B · 44 C
+  +754493s · 15/15, 3 ms · -46 dBm · 0, 0, 0 B · 44 C
+  +754523s · 15/15, 4 ms · -47 dBm · 0, 0, 0 B · 44 C
+  +754553s · 15/15, 4 ms · -45 dBm · 0, 0, 0 B · 44 C
+  +754583s · 15/15, 3 ms · -48 dBm · 0, 0, 0 B · 44 C
+  +754613s · 15/15, 3 ms · -43 dBm · 0, 0, 0 B · 44 C
+  +754643s · 15/15, 2 ms · -47 dBm · 0, 0, 0 B · 44 C
+  +754673s · 15/15, 3 ms · -42 dBm · 0, 0, 0 B · 44 C
+  +754703s · 15/15, 4 ms · -46 dBm · 0, 0, 0 B · 44 C
+  +754733s · 15/15, 4 ms · -41 dBm · 0, 0, 0 B · 44 C
+  +754763s · 15/15, 4 ms · -50 dBm · 0, 0, 0 B · 44 C
+  +754793s · 15/15, 2 ms · -42 dBm · 0, 0, 0 B · 44 C
+  +754823s · 15/15, 4 ms · -48 dBm · 0, 0, 0 B · 44 C
+  +754853s · 15/15, 3 ms · -50 dBm · 0, 0, 0 B · 44 C
+  +754883s · 15/15, 4 ms · -44 dBm · 0, 0, 0 B · 44 C
+  +754913s · 15/15, 2 ms · -45 dBm · 0, 0, 0 B · 44 C
+  +754943s · 15/15, 2 ms · -46 dBm · 0, 0, 0 B · 44 C
+  +754973s · 15/15, 2 ms · -45 dBm · 0, 0, 0 B · 44 C
+  +755003s · 15/15, 3 ms · -47 dBm · 0, 0, 0 B · 44 C
+  +755033s · 15/15, 4 ms · -49 dBm · 0, 0, 0 B · 44 C
+  +755063s · 15/15, 3 ms · -44 dBm · 0, 0, 0 B · 44 C
+  +755093s · 15/15, 3 ms · -44 dBm · 0, 0, 0 B · 44 C
+  +755123s · 15/15, 3 ms · -44 dBm · 0, 0, 0 B · 44 C
+  +755153s · 15/15, 3 ms · -42 dBm · 0, 0, 0 B · 44 C
+  +755183s · 15/15, 2 ms · -44 dBm · 0, 0, 0 B · 44 C
+  +755213s · 15/15, 3 ms · -43 dBm · 0, 0, 0 B · 44 C
+  +755243s · 15/15, 3 ms · -44 dBm · 0, 0, 0 B · 44 C
+  +755273s · 15/15, 3 ms · -42 dBm · 0, 0, 0 B · 44 C
+  +755303s · 15/15, 3 ms · -46 dBm · 0, 0, 0 B · 44 C
+  +755333s · 15/15, 4 ms · -45 dBm · 0, 0, 0 B · 44 C
+  +755363s · 15/15, 3 ms · -45 dBm · 0, 0, 0 B · 44 C
+  +755393s · 15/15, 3 ms · -41 dBm · 0, 0, 0 B · 44 C
+  +755423s · 15/15, 3 ms · -42 dBm · 0, 0, 0 B · 44 C
+  +755453s · 15/15, 3 ms · -44 dBm · 0, 0, 0 B · 44 C
+  +755483s · 15/15, 3 ms · -42 dBm · 0, 0, 0 B · 44 C
+  +755513s · 15/15, 2 ms · -41 dBm · 0, 0, 0 B · 44 C
+  +755543s · 15/15, 3 ms · -44 dBm · 0, 0, 0 B · 44 C
+  +755573s · 15/15, 3 ms · -45 dBm · 0, 0, 0 B · 44 C
+  +755603s · 15/15, 3 ms · -43 dBm · 0, 0, 0 B · 44 C
+  +755633s · 15/15, 4 ms · -49 dBm · 0, 0, 0 B · 44 C
+  +755663s · 15/15, 2 ms · -46 dBm · 0, 0, 0 B · 44 C
+  +755693s · 15/15, 3 ms · -44 dBm · 0, 0, 0 B · 44 C
+  +755723s · 15/15, 3 ms · -43 dBm · 0, 0, 0 B · 44 C
+  +755753s · 15/15, 4 ms · -45 dBm · 0, 0, 0 B · 44 C
+  +755783s · 15/15, 3 ms · -46 dBm · 0, 0, 0 B · 44 C
+  +755813s · 15/15, 2 ms · -47 dBm · 0, 0, 0 B · 44 C
+  +755843s · 15/15, 2 ms · -47 dBm · 0, 0, 0 B · 44 C
+  +755873s · 15/15, 3 ms · -41 dBm · 0, 0, 0 B · 44 C
+  +755903s · 15/15, 2 ms · -44 dBm · 0, 0, 0 B · 44 C
+  +755933s · 15/15, 2 ms · -44 dBm · 0, 0, 0 B · 44 C
+  +755963s · 15/15, 2 ms · -46 dBm · 0, 0, 0 B · 44 C
+  +755993s · 15/15, 3 ms · -45 dBm · 0, 0, 0 B · 44 C
+  +756023s · 15/15, 3 ms · -46 dBm · 0, 0, 0 B · 44 C
+  +756053s · 15/15, 3 ms · -45 dBm · 0, 0, 0 B · 44 C
+  +756083s · 15/15, 3 ms · -43 dBm · 0, 0, 0 B · 44 C
+  +756113s · 15/15, 4 ms · -46 dBm · 0, 0, 0 B · 44 C
+
+ROUTER (AS SEEN BY ENGINELINK)
+Maker prefix (first half of the router's MAC address): <mac>
+Router supports: b g n 
+Router channel: 1 (20 MHz)
+Router country:  (channels 0--1)
+Encryption: pairwise CCMP (AES), group TKIP (slow, limits Wi-Fi to 54 Mbit/s)
+Signal now: -46 dBm
+EngineLink allows: b g n 
+EngineLink bandwidth: 40 MHz
+Beacon timeout (driver): 6 s
+
+ENGINELINK WI-FI (ACCESS POINT, THIS START)
+Phones connected now: 0 · joined 0 · DHCP leases assigned 0 · left 0 · started 0 · restarted by the watchdog 0 · channel 6
+Access point: off (router mode)
+Wi-Fi country (driver): DK 
+
+SYSTEM
+Chip temperature: now 43 C · at the first reading after the start 32 C · highest 45 C
+Chip: ESP32-S3 rev 2 · 240 MHz · Arduino core 3.3.12 · IDF v5.5.5
+Memory: free 93 KB, lowest 71 KB, largest block 51 KB · PSRAM free 7678 KB
+Main loop: longest pass 1125 ms · engine reading in own task: yes · engine task longest wait 180 ms (lock held by xfer when it began) · waits over 100 ms: 1 · longest round of its own work 41 ms
+Longest part of the main loop (ms): (web: own task) 0, sd 15, diag 9, sd scan 123, history 8, network 11, led 9, serial 1125, other 10
+Reset reason: 1 (1 power on, 3 software/update, 4 crash, 5/6/7 watchdog, 9 brownout, 11 reset over USB)
+Recent restarts (newest first): reason 1 after 0 s on 0.17.7 | reason 9 after 0 s on 0.17.7 | reason 1 after 0 s on 0.17.7 | reason 1 after 0 s on 0.17.7 | reason 1 after 0 s on 0.17.7 | reason 3 after 19 s on 0.17.7 | reason 3 after 19 s on 0.17.7 | reason 3 after 20 s on 0.17.7
+Internal memory: free 93 KB, lowest 71 KB, largest block 51 KB · failed allocations since the start: 0
+Slow steps of the network part (100 ms or more, newest last): none
+Tasks, CPU share of one core since the last snapshot (at most 30 s ago) / stack never used (bytes):
+  loopTask 11%/3964 · IDLE0 98%/240 · IDLE1 88%/344 · J7RX 0%/3172 · fw 0%/8932 · ping 0%/1928 · tiT 0%/2732 · J6RX 0%/3176 · xfer 0%/5000 · sys_evt 0%/2696 · httpd 0%/4436 · Tmr Svc 0%/2320 · arduino_events 0%/2936 · ipc1 0%/1288 · esp_timer 0%/7736 · engines 0%/14912 · wifi 0%/4092 · ipc0 0%/1280 · mdns 0%/1588
+Not available in this build of the ESP32 core (not invented here): lwIP's packet and TCP counters (LWIP_STATS off),
+the driver's transmit retry counters (no public API), the ARP table (no thread-safe public read).
+
+HTTP / WEB (esp_http_server, port 80)
+Requests: 4795 · long transfers: 302 · answered busy (503): 0 · refused by the security checks: 0 · send failures (timeout or phone gone): 0
+Connections opened: 208 · closed: 208 · open now: 0 · most at once: 7 · successful answers to other devices: 4794
+On the own Wi-Fi: connections 0 (0 closed without a request, 0 used for more than one) · requests 0 · 2xx 0, 3xx 0, 4xx 0, 5xx 0 · failed while sending 0 · bytes 0 KB · slowest 0 ms ()
+Through the router: connections 208 (4 closed without a request, 46 used for more than one) · requests 4795 · 2xx 4794, 3xx 0, 4xx 1, 5xx 0 · failed while sending 0 · bytes 23602 KB · slowest 1052 ms (/api/wifi/log) · last at uptime 523924 s
+   by address (requests, failed, slowest ms): / 2/0/254 · /api/health 0/0/0 · /api/live 2899/0/15 · other 1894/0/1052
+Own self-test: connections 0 (0 closed without a request, 0 used for more than one) · requests 0 · 2xx 0, 3xx 0, 4xx 0, 5xx 0 · failed while sending 0 · bytes 0 KB · slowest 0 ms ()
+Request log (every request through the router, and failed or slow ones on the own Wi-Fi; newest 32 of 4795):
+  +523908.0s router /api/live -> 200, 744 B, first byte after 2 ms, done in 6 ms (request 255 on its connection)
+  +523908.5s router /api/live -> 200, 744 B, first byte after 2 ms, done in 7 ms (request 255 on its connection)
+  +523909.0s router /api/live -> 200, 744 B, first byte after 2 ms, done in 6 ms (request 255 on its connection)
+  +523909.5s router /api/live -> 200, 744 B, first byte after 2 ms, done in 6 ms (request 255 on its connection)
+  +523910.1s router /api/live -> 200, 744 B, first byte after 2 ms, done in 7 ms (request 255 on its connection)
+  +523910.6s router /api/live -> 200, 744 B, first byte after 2 ms, done in 6 ms (request 255 on its connection)
+  +523911.1s router /api/live -> 200, 744 B, first byte after 2 ms, done in 7 ms (request 255 on its connection)
+  +523911.7s router /api/live -> 200, 744 B, first byte after 2 ms, done in 7 ms (request 255 on its connection)
+  +523912.2s router /api/live -> 200, 744 B, first byte after 1 ms, done in 8 ms (request 255 on its connection)
+  +523912.7s router /api/live -> 200, 744 B, first byte after 2 ms, done in 6 ms (request 255 on its connection)
+  +523913.3s router /api/live -> 200, 744 B, first byte after 2 ms, done in 6 ms (request 255 on its connection)
+  +523913.8s router /api/live -> 200, 744 B, first byte after 1 ms, done in 6 ms (request 255 on its connection)
+  +523914.3s router /api/live -> 200, 744 B, first byte after 2 ms, done in 7 ms (request 255 on its connection)
+  +523914.8s router /api/live -> 200, 744 B, first byte after 2 ms, done in 7 ms (request 255 on its connection)
+  +523915.4s router /api/live -> 200, 744 B, first byte after 2 ms, done in 6 ms (request 255 on its connection)
+  +523915.9s router /api/live -> 200, 744 B, first byte after 2 ms, done in 7 ms (request 255 on its connection)
+  +523916.4s router /api/live -> 200, 744 B, first byte after 1 ms, done in 6 ms (request 255 on its connection)
+  +523917.0s router /api/live -> 200, 744 B, first byte after 1 ms, done in 7 ms (request 255 on its connection)
+  +523917.5s router /api/live -> 200, 744 B, first byte after 2 ms, done in 6 ms (request 255 on its connection)
+  +523918.0s router /api/live -> 200, 744 B, first byte after 2 ms, done in 9 ms (request 255 on its connection)
+  +523918.6s router /api/live -> 200, 744 B, first byte after 2 ms, done in 6 ms (request 255 on its connection)
+  +523919.1s router /api/live -> 200, 744 B, first byte after 2 ms, done in 6 ms (request 255 on its connection)
+  +523919.6s router /api/live -> 200, 744 B, first byte after 2 ms, done in 7 ms (request 255 on its connection)
+  +523920.1s router /api/live -> 200, 744 B, first byte after 2 ms, done in 7 ms (request 255 on its connection)
+  +523920.7s router /api/live -> 200, 744 B, first byte after 2 ms, done in 6 ms (request 255 on its connection)
+  +523921.2s router /api/live -> 200, 744 B, first byte after 2 ms, done in 6 ms (request 255 on its connection)
+  +523921.7s router /api/live -> 200, 744 B, first byte after 2 ms, done in 6 ms (request 255 on its connection)
+  +523922.3s router /api/live -> 200, 744 B, first byte after 2 ms, done in 6 ms (request 255 on its connection)
+  +523922.8s router /api/live -> 200, 744 B, first byte after 2 ms, done in 7 ms (request 255 on its connection)
+  +523923.4s router /api/live -> 200, 744 B, first byte after 2 ms, done in 6 ms (request 255 on its connection)
+  +523923.9s router /api/live -> 200, 744 B, first byte after 1 ms, done in 6 ms (request 255 on its connection)
+  +523924.4s router /api/live -> 200, 744 B, first byte after 1 ms, done in 6 ms (request 255 on its connection)
+A request counts as answered when the server handed the whole answer to TCP. Whether it arrived is seen from the
+next request on the same connection ("used for more than one"); the last 5.7 KB of an answer cannot be confirmed.
+Slowest request: 1052 ms (/api/wifi/log?f=3) · last transfer waited 0 ms for the engine lock
+Stack left (bytes): web server 4436, transfers 5000
+Firmware self-test: not needed (this firmware was confirmed before)
+Last 32 KiB server write: 65536 bytes in 222 ms (16 write calls)
+TCP send window: ESP32 core default (not modified)
+Note: server write time is NOT the same as measured radio throughput.
+
+LATEST WI-FI EVENTS (oldest to newest; uptime seconds)
+  +1s  Connect started
+  +1s  Associated with router
+  +3s  Received router IP
+
+MACHINE-READABLE JSON (copy/send the entire report)
+{"version":"0.17.7","build":"Nov 15 2026 <mac>","uptimeMs":756173438,"mode":"router","recovery":false,"holdWhy":0,"wifiMode":1,"ssid":"<router name hidden>","status":3,"phase":"online","associated":true,"hasRouterIp":true,"ip":"<ip>","gateway":"<ip>","rssi":-46,"associationEvents":1,"dhcpIpEvents":1,"lostIpEvents":0,"associationMs":175,"dhcpMs":1615,"driverReason":0,"unexpectedReason":0,"unexpectedDrops":0,"associationFailures":0,"txReapplied":0,"txTargetQdbm":78,"txDriverQdbm":80,"apLink":{"up":false,"ch":0,"bw":0,"pmfCapable":false,"pmfRequired":false,"inactiveS":0,"country":"","stations":[]},"loopParts":[0,15,9,123,8,11,9,1125,10],"engineMaxWaitMs":180,"engineMaxWaitBy":"xfer","engineSlowWaits":1,"engineMaxRoundMs":41,"apStations":0,"apJoins":0,"apLeaves":0,"apDhcpLeases":0,"apLeaveReason":0,"apRestarts":0,"speedTxBytes":65536,"speedTxMs":222,"speedTxWrites":16,"networkEpoch":1,"httpdRequests":4795,"httpdAsync":302,"httpdBusy503":0,"httpdBusyLock":0,"httpdBusyXfer":0,"httpdBusyXferLock":0,"httpdBusyPath":"","httpdBusyAtMs":0,"httpdRejected":0,"httpdSendFails":0,"httpdOpens":208,"httpdCloses":208,"httpdOpenNow":0,"httpdOpenMax":7,"httpdExternalOk":4794,"httpdSlowMs":1052,"httpdSlowPath":"/api/wifi/log?f=3","httpdRouterOpens":208,"httpdRouterRequests":4795,"httpdRouterOk":4794,"httpdRouterSendFails":0,"httpdRouterLastMs":523924469,"httpdStackFree":4436,"xferStackFree":5000,"routerAttempts":1,"routerFallbacks":0,"routerNextTryS":null,"disconnectEvents":0,"lastGotIpUptimeMs":3029,"lastRouterIp":"<ip>","lastRouterRssi":-46,"lastRouterChannel":1,"lastSecurity":"WPA2-Personal","txLevel":4,"phoneTests":[{"agoS":513618,"level":4,"kbs":249.60,"rttMs":23,"tempC":42,"atS":242555},{"agoS":513617,"level":4,"kbs":216.70,"rttMs":37,"tempC":42,"atS":242556},{"agoS":513615,"level":4,"kbs":197.70,"rttMs":31,"tempC":42,"atS":242557},{"agoS":232416,"level":4,"kbs":249.40,"rttMs":47,"tempC":44,"atS":523757},{"agoS":232382,"level":4,"kbs":234.80,"rttMs":21,"tempC":44,"atS":523790},{"agoS":232380,"level":4,"kbs":198.00,"rttMs":28,"tempC":44,"atS":523792},{"agoS":232379,"level":4,"kbs":249.30,"rttMs":15,"tempC":44,"atS":523793},{"agoS":232378,"level":4,"kbs":194.10,"rttMs":32,"tempC":44,"atS":523794},{"agoS":232377,"level":4,"kbs":277.80,"rttMs":15,"tempC":44,"atS":523795},{"agoS":232376,"level":4,"kbs":335.30,"rttMs":27,"tempC":44,"atS":523796},{"agoS":232375,"level":4,"kbs":247.30,"rttMs":20,"tempC":45,"atS":523797},{"agoS":232374,"level":4,"kbs":275.90,"rttMs":22,"tempC":45,"atS":523798}],"routerSession":{"seen":true,"active":true,"startMs":3629,"endMs":0,"joinMs":175,"dhcpMs":1615,"endReason":0,"rssiEnd":0,"afterOwnWifi":false,"cc":"DK","fastUntilMs":756168004,"bw":40,"proto":7,"txQdbm":80,"ch":1,"second":0,"b":1,"g":1,"n":1,"phy":4,"pairwise":4,"group":3,"ps":0,"ip":"<ip>","mask":"<ip>","gw":"<ip>","dns":"<ip>","rssiStart":-43,"rssiMin":-79,"rssiMax":-30,"rssiAvg":-46,"rssiLast":-46,"pingSent":378085,"pingOk":378085,"pingSumMs":1135120,"pingMaxMs":309,"pingLostRowMax":0,"pingBuckets":[365422,12471,184,8,0],"beaconTimeouts":0,"channelChanges":0,"opens":208,"opensEmpty":4,"opensReused":46,"requests":4795,"ok":4794,"status":[4794,0,1,0],"sendFails":0,"bytes":24169117},"allocFails":0,"routerSessions":[{"seen":true,"active":true,"startMs":3629,"endMs":0,"joinMs":175,"dhcpMs":1615,"endReason":0,"rssiEnd":0,"afterOwnWifi":false,"cc":"DK","fastUntilMs":756168004,"bw":40,"proto":7,"txQdbm":80,"ch":1,"second":0,"b":1,"g":1,"n":1,"phy":4,"pairwise":4,"group":3,"ps":0,"ip":"<ip>","mask":"<ip>","gw":"<ip>","dns":"<ip>","rssiStart":-43,"rssiMin":-79,"rssiMax":-30,"rssiAvg":-46,"rssiLast":-46,"pingSent":378085,"pingOk":378085,"pingSumMs":1135120,"pingMaxMs":309,"pingLostRowMax":0,"pingBuckets":[365422,12471,184,8,0],"beaconTimeouts":0,"channelChanges":0,"opens":208,"opensEmpty":4,"opensReused":46,"requests":4795,"ok":4794,"status":[4794,0,1,0],"sendFails":0,"bytes":24169117}],"slots":[[754343,15,15,3,-46,0,0,0,44],[754373,15,15,2,-47,0,0,0,44],[754403,15,15,2,-47,0,0,0,44],[754433,15,15,3,-43,0,0,0,44],[754463,15,15,3,-44,0,0,0,44],[754493,15,15,3,-46,0,0,0,44],[754523,15,15,4,-47,0,0,0,44],[754553,15,15,4,-45,0,0,0,44],[754583,15,15,3,-48,0,0,0,44],[754613,15,15,3,-43,0,0,0,44],[754643,15,15,2,-47,0,0,0,44],[754673,15,15,3,-42,0,0,0,44],[754703,15,15,4,-46,0,0,0,44],[754733,15,15,4,-41,0,0,0,44],[754763,15,15,4,-50,0,0,0,44],[754793,15,15,2,-42,0,0,0,44],[754823,15,15,4,-48,0,0,0,44],[754853,15,15,3,-50,0,0,0,44],[754883,15,15,4,-44,0,0,0,44],[754913,15,15,2,-45,0,0,0,44],[754943,15,15,2,-46,0,0,0,44],[754973,15,15,2,-45,0,0,0,44],[755003,15,15,3,-47,0,0,0,44],[755033,15,15,4,-49,0,0,0,44],[755063,15,15,3,-44,0,0,0,44],[755093,15,15,3,-44,0,0,0,44],[755123,15,15,3,-44,0,0,0,44],[755153,15,15,3,-42,0,0,0,44],[755183,15,15,2,-44,0,0,0,44],[755213,15,15,3,-43,0,0,0,44],[755243,15,15,3,-44,0,0,0,44],[755273,15,15,3,-42,0,0,0,44],[755303,15,15,3,-46,0,0,0,44],[755333,15,15,4,-45,0,0,0,44],[755363,15,15,3,-45,0,0,0,44],[755393,15,15,3,-41,0,0,0,44],[755423,15,15,3,-42,0,0,0,44],[755453,15,15,3,-44,0,0,0,44],[755483,15,15,3,-42,0,0,0,44],[755513,15,15,2,-41,0,0,0,44],[755543,15,15,3,-44,0,0,0,44],[755573,15,15,3,-45,0,0,0,44],[755603,15,15,3,-43,0,0,0,44],[755633,15,15,4,-49,0,0,0,44],[755663,15,15,2,-46,0,0,0,44],[755693,15,15,3,-44,0,0,0,44],[755723,15,15,3,-43,0,0,0,44],[755753,15,15,4,-45,0,0,0,44],[755783,15,15,3,-46,0,0,0,44],[755813,15,15,2,-47,0,0,0,44],[755843,15,15,2,-47,0,0,0,44],[755873,15,15,3,-41,0,0,0,44],[755903,15,15,2,-44,0,0,0,44],[755933,15,15,2,-44,0,0,0,44],[755963,15,15,2,-46,0,0,0,44],[755993,15,15,3,-45,0,0,0,44],[756023,15,15,3,-46,0,0,0,44],[756053,15,15,3,-45,0,0,0,44],[756083,15,15,3,-43,0,0,0,44],[756113,15,15,4,-46,0,0,0,44]],"slotFields":"startS,pingSent,pingOk,rttAvgMs,rssi,requests,failed,bytes,chipTempC","http":[{"net":"own Wi-Fi","conns":0,"connsEmpty":0,"connsReused":0,"requests":0,"status":[0,0,0,0],"failed":0,"bytes":0,"slowMs":0,"slowPath":"","lastMs":0,"endpoints":[[0,0,0],[0,0,0],[0,0,0],[0,0,0]]},{"net":"router","conns":208,"connsEmpty":4,"connsReused":46,"requests":4795,"status":[4794,0,1,0],"failed":0,"bytes":24169117,"slowMs":1052,"slowPath":"/api/wifi/log","lastMs":523924469,"endpoints":[[2,0,254],[0,0,0],[2899,0,15],[1894,0,1052]]},{"net":"self-test","conns":0,"connsEmpty":0,"connsReused":0,"requests":0,"status":[0,0,0,0],"failed":0,"bytes":0,"slowMs":0,"slowPath":"","lastMs":0,"endpoints":[[0,0,0],[0,0,0],[0,0,0],[0,0,0]]}],"requestLog":[{"atMs":523908001,"net":"router","path":"/api/live","status":200,"bytes":744,"firstMs":2,"ms":6,"failed":false,"nth":255},{"atMs":523908527,"net":"router","path":"/api/live","status":200,"bytes":744,"firstMs":2,"ms":7,"failed":false,"nth":255},{"atMs":523909065,"net":"router","path":"/api/live","status":200,"bytes":744,"firstMs":2,"ms":6,"failed":false,"nth":255},{"atMs":523909586,"net":"router","path":"/api/live","status":200,"bytes":744,"firstMs":2,"ms":6,"failed":false,"nth":255},{"atMs":523910112,"net":"router","path":"/api/live","status":200,"bytes":744,"firstMs":2,"ms":7,"failed":false,"nth":255},{"atMs":523910655,"net":"router","path":"/api/live","status":200,"bytes":744,"firstMs":2,"ms":6,"failed":false,"nth":255},{"atMs":523911179,"net":"router","path":"/api/live","status":200,"bytes":744,"firstMs":2,"ms":7,"failed":false,"nth":255},{"atMs":523911705,"net":"router","path":"/api/live","status":200,"bytes":744,"firstMs":2,"ms":7,"failed":false,"nth":255},{"atMs":523912233,"net":"router","path":"/api/live","status":200,"bytes":744,"firstMs":1,"ms":8,"failed":false,"nth":255},{"atMs":523912773,"net":"router","path":"/api/live","status":200,"bytes":744,"firstMs":2,"ms":6,"failed":false,"nth":255},{"atMs":523913303,"net":"router","path":"/api/live","status":200,"bytes":744,"firstMs":2,"ms":6,"failed":false,"nth":255},{"atMs":523913828,"net":"router","path":"/api/live","status":200,"bytes":744,"firstMs":1,"ms":6,"failed":false,"nth":255},{"atMs":523914351,"net":"router","path":"/api/live","status":200,"bytes":744,"firstMs":2,"ms":7,"failed":false,"nth":255},{"atMs":523914878,"net":"router","path":"/api/live","status":200,"bytes":744,"firstMs":2,"ms":7,"failed":false,"nth":255},{"atMs":523915406,"net":"router","path":"/api/live","status":200,"bytes":744,"firstMs":2,"ms":6,"failed":false,"nth":255},{"atMs":523915963,"net":"router","path":"/api/live","status":200,"bytes":744,"firstMs":2,"ms":7,"failed":false,"nth":255},{"atMs":523916490,"net":"router","path":"/api/live","status":200,"bytes":744,"firstMs":1,"ms":6,"failed":false,"nth":255},{"atMs":523917023,"net":"router","path":"/api/live","status":200,"bytes":744,"firstMs":1,"ms":7,"failed":false,"nth":255},{"atMs":523917549,"net":"router","path":"/api/live","status":200,"bytes":744,"firstMs":2,"ms":6,"failed":false,"nth":255},{"atMs":523918085,"net":"router","path":"/api/live","status":200,"bytes":744,"firstMs":2,"ms":9,"failed":false,"nth":255},{"atMs":523918606,"net":"router","path":"/api/live","status":200,"bytes":744,"firstMs":2,"ms":6,"failed":false,"nth":255},{"atMs":523919136,"net":"router","path":"/api/live","status":200,"bytes":744,"firstMs":2,"ms":6,"failed":false,"nth":255},{"atMs":523919651,"net":"router","path":"/api/live","status":200,"bytes":744,"firstMs":2,"ms":7,"failed":false,"nth":255},{"atMs":523920192,"net":"router","path":"/api/live","status":200,"bytes":744,"firstMs":2,"ms":7,"failed":false,"nth":255},{"atMs":523920737,"net":"router","path":"/api/live","status":200,"bytes":744,"firstMs":2,"ms":6,"failed":false,"nth":255},{"atMs":523921268,"net":"router","path":"/api/live","status":200,"bytes":744,"firstMs":2,"ms":6,"failed":false,"nth":255},{"atMs":523921796,"net":"router","path":"/api/live","status":200,"bytes":744,"firstMs":2,"ms":6,"failed":false,"nth":255},{"atMs":523922332,"net":"router","path":"/api/live","status":200,"bytes":744,"firstMs":2,"ms":6,"failed":false,"nth":255},{"atMs":523922877,"net":"router","path":"/api/live","status":200,"bytes":744,"firstMs":2,"ms":7,"failed":false,"nth":255},{"atMs":523923420,"net":"router","path":"/api/live","status":200,"bytes":744,"firstMs":2,"ms":6,"failed":false,"nth":255},{"atMs":523923934,"net":"router","path":"/api/live","status":200,"bytes":744,"firstMs":1,"ms":6,"failed":false,"nth":255},{"atMs":523924469,"net":"router","path":"/api/live","status":200,"bytes":744,"firstMs":1,"ms":6,"failed":false,"nth":255}],"netSteps":[],"powerSave":0,"events":[{"uptimeMs":1239,"event":"Connect started","reason":0,"count":1,"lastUptimeMs":1239},{"uptimeMs":1414,"event":"Associated with router","reason":0,"count":1,"lastUptimeMs":1414},{"uptimeMs":3029,"event":"Received router IP","reason":0,"count":1,"lastUptimeMs":3029}]}
+
+
+######## 2026-11-26 <mac> UTC ########
+ENGINELINK - WI-FI REPORT
+========================
+
+Firmware: 0.17.7 (built Nov 15 2026 <mac>)
+Uptime: 757973 seconds
+Mode: Router (station)
+Wi-Fi radio mode: 1 (1=station, 2=access point)
+Router: <router name hidden>
+Currently connected: Yes
+Router IP now: <ip>
+Last successful router IP: <ip>
+Last router signal: -48 dBm
+Last router channel: 1
+Last negotiated Wi-Fi security: WPA2-Personal
+Station: as the working test sketch: power save off, everything else the driver's default (no bandwidth, country, scan, protocol or TX-power setting)
+Security: ESP32 core WPA2/WPA3 negotiation (no custom SAE handling)
+Transmit power: ESP32 driver default · driver reports 20.00 dBm (80 quarter-dBm) · set again after the driver changed it: 0 time(s)
+Power save: off
+Negotiated Wi-Fi standard: 802.11n 20 MHz
+CONNECTIVITY (COUNTERS SINCE BOOT)
+Successful Wi-Fi associations: 1
+Successful router IP assignments: 1
+Router IP losses: 0
+Wi-Fi disconnect events: 0
+Dropped active router connections: 0
+Pre-connection failures: 0
+Reconnect: the ESP32 core's own, plus one plain connect after 20 s without any attempt (the core stops after code 202)
+App-initiated router attempts: 1
+Router recovery fallbacks: 0
+Last association time: 175 ms
+Last DHCP time: 1615 ms
+Last successful IP at uptime: 3 seconds
+Last Wi-Fi event reason: 0 - No reason reported
+Last unexpected reason: 0 - No reason reported
+Error 202 means authentication failure; it does not prove the password is wrong.
+
+DOWNLOAD TESTS FROM THE PHONE (newest last)
+  515418 s ago · 19.5 dBm · 249.60 kB/s · request round trip 23 ms · chip 42 C · at uptime 242555 s
+  515417 s ago · 19.5 dBm · 216.70 kB/s · request round trip 37 ms · chip 42 C · at uptime 242556 s
+  515416 s ago · 19.5 dBm · 197.70 kB/s · request round trip 31 ms · chip 42 C · at uptime 242557 s
+  234216 s ago · 19.5 dBm · 249.40 kB/s · request round trip 47 ms · chip 44 C · at uptime 523757 s
+  234182 s ago · 19.5 dBm · 234.80 kB/s · request round trip 21 ms · chip 44 C · at uptime 523790 s
+  234181 s ago · 19.5 dBm · 198.00 kB/s · request round trip 28 ms · chip 44 C · at uptime 523792 s
+  234179 s ago · 19.5 dBm · 249.30 kB/s · request round trip 15 ms · chip 44 C · at uptime 523793 s
+  234178 s ago · 19.5 dBm · 194.10 kB/s · request round trip 32 ms · chip 44 C · at uptime 523794 s
+  234177 s ago · 19.5 dBm · 277.80 kB/s · request round trip 15 ms · chip 44 C · at uptime 523795 s
+  234176 s ago · 19.5 dBm · 335.30 kB/s · request round trip 27 ms · chip 44 C · at uptime 523796 s
+  234175 s ago · 19.5 dBm · 247.30 kB/s · request round trip 20 ms · chip 45 C · at uptime 523797 s
+  234174 s ago · 19.5 dBm · 275.90 kB/s · request round trip 22 ms · chip 45 C · at uptime 523798 s
+
+ROUTER SESSIONS AS ENGINELINK MEASURED THEM (newest first, up to 4 kept since the start)
+#1 RUNNING: started at uptime 3 s (joined in 175 ms, address after 1615 ms), running for 757969 s
+   Radio: EngineLink offered 40 MHz · negotiated 802.11n 20 MHz · router on channel 1 (20 MHz), supports b g n · encryption pairwise CCMP (AES), group TKIP · power save off · transmit power 20.00 dBm
+   Joined straight after the start (as the test sketch) · country code in the driver DK · last ping answered in under 50 ms: 757968 s after the join
+   Addresses: EngineLink <ip> · mask <ip> · gateway <ip> · DNS <ip>
+   Signal (dBm, every 10 s): start -43, lowest -79, highest -30, average -46, last -50
+   Link check (ping to the router every 2 s): 378985 of 378985 answered (0 % lost), average 3 ms, longest 309 ms, most lost in a row 0 (0 s) · answered in <10/<50/<200/<1000/1000+ ms: 366300/12493/184/8/0
+   Driver: beacon-timeout warnings 0 · channel or width changes 0
+   Web through the router: connections 208 (4 closed without a request, 46 used for more than one) · requests 4795 · status 2xx 4794, 3xx 0, 4xx 1, 5xx 0 · failed while sending 0 · bytes sent 24169117
+Reading it: pings lost = packets between EngineLink and the router do not get through. Pings fine but connections
+without a request, or none = the other device's packets do not reach EngineLink. Requests answered but connections
+never reused = the answers do not reach the device.
+
+NEWEST SESSION IN 30 s PIECES (uptime · pings answered/sent, average ms · signal · web requests, failed, bytes · chip temperature)
+  +756143s · 15/15, 3 ms · -46 dBm · 0, 0, 0 B · 44 C
+  +756173s · 15/15, 3 ms · -52 dBm · 0, 0, 0 B · 44 C
+  +756203s · 15/15, 2 ms · -49 dBm · 0, 0, 0 B · 44 C
+  +756233s · 15/15, 3 ms · -50 dBm · 0, 0, 0 B · 44 C
+  +756263s · 15/15, 5 ms · -42 dBm · 0, 0, 0 B · 44 C
+  +756293s · 15/15, 3 ms · -44 dBm · 0, 0, 0 B · 44 C
+  +756323s · 15/15, 3 ms · -44 dBm · 0, 0, 0 B · 44 C
+  +756353s · 15/15, 4 ms · -44 dBm · 0, 0, 0 B · 44 C
+  +756383s · 15/15, 3 ms · -44 dBm · 0, 0, 0 B · 44 C
+  +756413s · 15/15, 3 ms · -44 dBm · 0, 0, 0 B · 44 C
+  +756443s · 15/15, 2 ms · -44 dBm · 0, 0, 0 B · 44 C
+  +756473s · 15/15, 3 ms · -44 dBm · 0, 0, 0 B · 44 C
+  +756503s · 15/15, 2 ms · -44 dBm · 0, 0, 0 B · 44 C
+  +756533s · 15/15, 3 ms · -44 dBm · 0, 0, 0 B · 44 C
+  +756563s · 15/15, 3 ms · -44 dBm · 0, 0, 0 B · 44 C
+  +756593s · 15/15, 4 ms · -44 dBm · 0, 0, 0 B · 44 C
+  +756623s · 15/15, 2 ms · -44 dBm · 0, 0, 0 B · 44 C
+  +756653s · 15/15, 5 ms · -46 dBm · 0, 0, 0 B · 44 C
+  +756683s · 15/15, 3 ms · -44 dBm · 0, 0, 0 B · 44 C
+  +756713s · 15/15, 3 ms · -44 dBm · 0, 0, 0 B · 44 C
+  +756743s · 15/15, 3 ms · -43 dBm · 0, 0, 0 B · 44 C
+  +756773s · 15/15, 3 ms · -44 dBm · 0, 0, 0 B · 44 C
+  +756803s · 15/15, 4 ms · -43 dBm · 0, 0, 0 B · 44 C
+  +756833s · 15/15, 3 ms · -44 dBm · 0, 0, 0 B · 44 C
+  +756863s · 15/15, 3 ms · -44 dBm · 0, 0, 0 B · 44 C
+  +756893s · 15/15, 4 ms · -44 dBm · 0, 0, 0 B · 44 C
+  +756923s · 15/15, 3 ms · -43 dBm · 0, 0, 0 B · 44 C
+  +756953s · 15/15, 3 ms · -42 dBm · 0, 0, 0 B · 44 C
+  +756983s · 15/15, 3 ms · -43 dBm · 0, 0, 0 B · 44 C
+  +757013s · 15/15, 3 ms · -44 dBm · 0, 0, 0 B · 44 C
+  +757043s · 15/15, 3 ms · -44 dBm · 0, 0, 0 B · 44 C
+  +757073s · 15/15, 4 ms · -44 dBm · 0, 0, 0 B · 44 C
+  +757103s · 15/15, 3 ms · -44 dBm · 0, 0, 0 B · 44 C
+  +757133s · 15/15, 3 ms · -48 dBm · 0, 0, 0 B · 44 C
+  +757163s · 15/15, 4 ms · -58 dBm · 0, 0, 0 B · 44 C
+  +757193s · 15/15, 2 ms · -56 dBm · 0, 0, 0 B · 44 C
+  +757223s · 15/15, 3 ms · -49 dBm · 0, 0, 0 B · 44 C
+  +757253s · 15/15, 2 ms · -47 dBm · 0, 0, 0 B · 44 C
+  +757283s · 15/15, 4 ms · -51 dBm · 0, 0, 0 B · 44 C
+  +757313s · 15/15, 3 ms · -52 dBm · 0, 0, 0 B · 44 C
+  +757343s · 15/15, 3 ms · -49 dBm · 0, 0, 0 B · 44 C
+  +757373s · 15/15, 3 ms · -56 dBm · 0, 0, 0 B · 44 C
+  +757403s · 15/15, 3 ms · -45 dBm · 0, 0, 0 B · 43 C
+  +757433s · 15/15, 3 ms · -46 dBm · 0, 0, 0 B · 43 C
+  +757463s · 15/15, 3 ms · -45 dBm · 0, 0, 0 B · 44 C
+  +757493s · 15/15, 3 ms · -45 dBm · 0, 0, 0 B · 44 C
+  +757523s · 15/15, 3 ms · -44 dBm · 0, 0, 0 B · 44 C
+  +757553s · 15/15, 4 ms · -45 dBm · 0, 0, 0 B · 44 C
+  +757583s · 15/15, 3 ms · -45 dBm · 0, 0, 0 B · 44 C
+  +757613s · 15/15, 3 ms · -47 dBm · 0, 0, 0 B · 44 C
+  +757643s · 15/15, 3 ms · -47 dBm · 0, 0, 0 B · 44 C
+  +757673s · 15/15, 3 ms · -45 dBm · 0, 0, 0 B · 44 C
+  +757703s · 15/15, 2 ms · -47 dBm · 0, 0, 0 B · 44 C
+  +757733s · 15/15, 3 ms · -48 dBm · 0, 0, 0 B · 44 C
+  +757763s · 15/15, 3 ms · -49 dBm · 0, 0, 0 B · 44 C
+  +757793s · 15/15, 3 ms · -49 dBm · 0, 0, 0 B · 44 C
+  +757823s · 15/15, 3 ms · -50 dBm · 0, 0, 0 B · 44 C
+  +757853s · 15/15, 3 ms · -46 dBm · 0, 0, 0 B · 44 C
+  +757883s · 15/15, 3 ms · -56 dBm · 0, 0, 0 B · 44 C
+  +757913s · 15/15, 4 ms · -48 dBm · 0, 0, 0 B · 44 C
+
+ROUTER (AS SEEN BY ENGINELINK)
+Maker prefix (first half of the router's MAC address): <mac>
+Router supports: b g n 
+Router channel: 1 (20 MHz)
+Router country:  (channels 0--1)
+Encryption: pairwise CCMP (AES), group TKIP (slow, limits Wi-Fi to 54 Mbit/s)
+Signal now: -48 dBm
+EngineLink allows: b g n 
+EngineLink bandwidth: 40 MHz
+Beacon timeout (driver): 6 s
+
+ENGINELINK WI-FI (ACCESS POINT, THIS START)
+Phones connected now: 0 · joined 0 · DHCP leases assigned 0 · left 0 · started 0 · restarted by the watchdog 0 · channel 6
+Access point: off (router mode)
+Wi-Fi country (driver): DK 
+
+SYSTEM
+Chip temperature: now 44 C · at the first reading after the start 32 C · highest 45 C
+Chip: ESP32-S3 rev 2 · 240 MHz · Arduino core 3.3.12 · IDF v5.5.5
+Memory: free 93 KB, lowest 71 KB, largest block 51 KB · PSRAM free 7678 KB
+Main loop: longest pass 1125 ms · engine reading in own task: yes · engine task longest wait 180 ms (lock held by xfer when it began) · waits over 100 ms: 1 · longest round of its own work 41 ms
+Longest part of the main loop (ms): (web: own task) 0, sd 15, diag 9, sd scan 123, history 8, network 11, led 9, serial 1125, other 10
+Reset reason: 1 (1 power on, 3 software/update, 4 crash, 5/6/7 watchdog, 9 brownout, 11 reset over USB)
+Recent restarts (newest first): reason 1 after 0 s on 0.17.7 | reason 9 after 0 s on 0.17.7 | reason 1 after 0 s on 0.17.7 | reason 1 after 0 s on 0.17.7 | reason 1 after 0 s on 0.17.7 | reason 3 after 19 s on 0.17.7 | reason 3 after 19 s on 0.17.7 | reason 3 after 20 s on 0.17.7
+Internal memory: free 93 KB, lowest 71 KB, largest block 51 KB · failed allocations since the start: 0
+Slow steps of the network part (100 ms or more, newest last): none
+Tasks, CPU share of one core since the last snapshot (at most 30 s ago) / stack never used (bytes):
+  loopTask 11%/3964 · IDLE0 98%/240 · IDLE1 88%/344 · tiT 0%/2732 · J7RX 0%/3172 · J6RX 0%/3176 · fw 0%/8932 · ping 0%/1928 · xfer 0%/5000 · sys_evt 0%/2696 · httpd 0%/4436 · Tmr Svc 0%/2320 · arduino_events 0%/2936 · ipc1 0%/1288 · esp_timer 0%/7736 · engines 0%/14912 · wifi 0%/4092 · ipc0 0%/1280 · mdns 0%/1588
+Not available in this build of the ESP32 core (not invented here): lwIP's packet and TCP counters (LWIP_STATS off),
+the driver's transmit retry counters (no public API), the ARP table (no thread-safe public read).
+
+HTTP / WEB (esp_http_server, port 80)
+Requests: 4795 · long transfers: 302 · answered busy (503): 0 · refused by the security checks: 0 · send failures (timeout or phone gone): 0
+Connections opened: 208 · closed: 208 · open now: 0 · most at once: 7 · successful answers to other devices: 4794
+On the own Wi-Fi: connections 0 (0 closed without a request, 0 used for more than one) · requests 0 · 2xx 0, 3xx 0, 4xx 0, 5xx 0 · failed while sending 0 · bytes 0 KB · slowest 0 ms ()
+Through the router: connections 208 (4 closed without a request, 46 used for more than one) · requests 4795 · 2xx 4794, 3xx 0, 4xx 1, 5xx 0 · failed while sending 0 · bytes 23602 KB · slowest 1052 ms (/api/wifi/log) · last at uptime 523924 s
+   by address (requests, failed, slowest ms): / 2/0/254 · /api/health 0/0/0 · /api/live 2899/0/15 · other 1894/0/1052
+Own self-test: connections 0 (0 closed without a request, 0 used for more than one) · requests 0 · 2xx 0, 3xx 0, 4xx 0, 5xx 0 · failed while sending 0 · bytes 0 KB · slowest 0 ms ()
+Request log (every request through the router, and failed or slow ones on the own Wi-Fi; newest 32 of 4795):
+  +523908.0s router /api/live -> 200, 744 B, first byte after 2 ms, done in 6 ms (request 255 on its connection)
+  +523908.5s router /api/live -> 200, 744 B, first byte after 2 ms, done in 7 ms (request 255 on its connection)
+  +523909.0s router /api/live -> 200, 744 B, first byte after 2 ms, done in 6 ms (request 255 on its connection)
+  +523909.5s router /api/live -> 200, 744 B, first byte after 2 ms, done in 6 ms (request 255 on its connection)
+  +523910.1s router /api/live -> 200, 744 B, first byte after 2 ms, done in 7 ms (request 255 on its connection)
+  +523910.6s router /api/live -> 200, 744 B, first byte after 2 ms, done in 6 ms (request 255 on its connection)
+  +523911.1s router /api/live -> 200, 744 B, first byte after 2 ms, done in 7 ms (request 255 on its connection)
+  +523911.7s router /api/live -> 200, 744 B, first byte after 2 ms, done in 7 ms (request 255 on its connection)
+  +523912.2s router /api/live -> 200, 744 B, first byte after 1 ms, done in 8 ms (request 255 on its connection)
+  +523912.7s router /api/live -> 200, 744 B, first byte after 2 ms, done in 6 ms (request 255 on its connection)
+  +523913.3s router /api/live -> 200, 744 B, first byte after 2 ms, done in 6 ms (request 255 on its connection)
+  +523913.8s router /api/live -> 200, 744 B, first byte after 1 ms, done in 6 ms (request 255 on its connection)
+  +523914.3s router /api/live -> 200, 744 B, first byte after 2 ms, done in 7 ms (request 255 on its connection)
+  +523914.8s router /api/live -> 200, 744 B, first byte after 2 ms, done in 7 ms (request 255 on its connection)
+  +523915.4s router /api/live -> 200, 744 B, first byte after 2 ms, done in 6 ms (request 255 on its connection)
+  +523915.9s router /api/live -> 200, 744 B, first byte after 2 ms, done in 7 ms (request 255 on its connection)
+  +523916.4s router /api/live -> 200, 744 B, first byte after 1 ms, done in 6 ms (request 255 on its connection)
+  +523917.0s router /api/live -> 200, 744 B, first byte after 1 ms, done in 7 ms (request 255 on its connection)
+  +523917.5s router /api/live -> 200, 744 B, first byte after 2 ms, done in 6 ms (request 255 on its connection)
+  +523918.0s router /api/live -> 200, 744 B, first byte after 2 ms, done in 9 ms (request 255 on its connection)
+  +523918.6s router /api/live -> 200, 744 B, first byte after 2 ms, done in 6 ms (request 255 on its connection)
+  +523919.1s router /api/live -> 200, 744 B, first byte after 2 ms, done in 6 ms (request 255 on its connection)
+  +523919.6s router /api/live -> 200, 744 B, first byte after 2 ms, done in 7 ms (request 255 on its connection)
+  +523920.1s router /api/live -> 200, 744 B, first byte after 2 ms, done in 7 ms (request 255 on its connection)
+  +523920.7s router /api/live -> 200, 744 B, first byte after 2 ms, done in 6 ms (request 255 on its connection)
+  +523921.2s router /api/live -> 200, 744 B, first byte after 2 ms, done in 6 ms (request 255 on its connection)
+  +523921.7s router /api/live -> 200, 744 B, first byte after 2 ms, done in 6 ms (request 255 on its connection)
+  +523922.3s router /api/live -> 200, 744 B, first byte after 2 ms, done in 6 ms (request 255 on its connection)
+  +523922.8s router /api/live -> 200, 744 B, first byte after 2 ms, done in 7 ms (request 255 on its connection)
+  +523923.4s router /api/live -> 200, 744 B, first byte after 2 ms, done in 6 ms (request 255 on its connection)
+  +523923.9s router /api/live -> 200, 744 B, first byte after 1 ms, done in 6 ms (request 255 on its connection)
+  +523924.4s router /api/live -> 200, 744 B, first byte after 1 ms, done in 6 ms (request 255 on its connection)
+A request counts as answered when the server handed the whole answer to TCP. Whether it arrived is seen from the
+next request on the same connection ("used for more than one"); the last 5.7 KB of an answer cannot be confirmed.
+Slowest request: 1052 ms (/api/wifi/log?f=3) · last transfer waited 0 ms for the engine lock
+Stack left (bytes): web server 4436, transfers 5000
+Firmware self-test: not needed (this firmware was confirmed before)
+Last 32 KiB server write: 65536 bytes in 222 ms (16 write calls)
+TCP send window: ESP32 core default (not modified)
+Note: server write time is NOT the same as measured radio throughput.
+
+LATEST WI-FI EVENTS (oldest to newest; uptime seconds)
+  +1s  Connect started
+  +1s  Associated with router
+  +3s  Received router IP
+
+MACHINE-READABLE JSON (copy/send the entire report)
+{"version":"0.17.7","build":"Nov 15 2026 <mac>","uptimeMs":757973546,"mode":"router","recovery":false,"holdWhy":0,"wifiMode":1,"ssid":"<router name hidden>","status":3,"phase":"online","associated":true,"hasRouterIp":true,"ip":"<ip>","gateway":"<ip>","rssi":-48,"associationEvents":1,"dhcpIpEvents":1,"lostIpEvents":0,"associationMs":175,"dhcpMs":1615,"driverReason":0,"unexpectedReason":0,"unexpectedDrops":0,"associationFailures":0,"txReapplied":0,"txTargetQdbm":78,"txDriverQdbm":80,"apLink":{"up":false,"ch":0,"bw":0,"pmfCapable":false,"pmfRequired":false,"inactiveS":0,"country":"","stations":[]},"loopParts":[0,15,9,123,8,11,9,1125,10],"engineMaxWaitMs":180,"engineMaxWaitBy":"xfer","engineSlowWaits":1,"engineMaxRoundMs":41,"apStations":0,"apJoins":0,"apLeaves":0,"apDhcpLeases":0,"apLeaveReason":0,"apRestarts":0,"speedTxBytes":65536,"speedTxMs":222,"speedTxWrites":16,"networkEpoch":1,"httpdRequests":4795,"httpdAsync":302,"httpdBusy503":0,"httpdBusyLock":0,"httpdBusyXfer":0,"httpdBusyXferLock":0,"httpdBusyPath":"","httpdBusyAtMs":0,"httpdRejected":0,"httpdSendFails":0,"httpdOpens":208,"httpdCloses":208,"httpdOpenNow":0,"httpdOpenMax":7,"httpdExternalOk":4794,"httpdSlowMs":1052,"httpdSlowPath":"/api/wifi/log?f=3","httpdRouterOpens":208,"httpdRouterRequests":4795,"httpdRouterOk":4794,"httpdRouterSendFails":0,"httpdRouterLastMs":523924469,"httpdStackFree":4436,"xferStackFree":5000,"routerAttempts":1,"routerFallbacks":0,"routerNextTryS":null,"disconnectEvents":0,"lastGotIpUptimeMs":3029,"lastRouterIp":"<ip>","lastRouterRssi":-48,"lastRouterChannel":1,"lastSecurity":"WPA2-Personal","txLevel":4,"phoneTests":[{"agoS":515418,"level":4,"kbs":249.60,"rttMs":23,"tempC":42,"atS":242555},{"agoS":515417,"level":4,"kbs":216.70,"rttMs":37,"tempC":42,"atS":242556},{"agoS":515416,"level":4,"kbs":197.70,"rttMs":31,"tempC":42,"atS":242557},{"agoS":234216,"level":4,"kbs":249.40,"rttMs":47,"tempC":44,"atS":523757},{"agoS":234182,"level":4,"kbs":234.80,"rttMs":21,"tempC":44,"atS":523790},{"agoS":234181,"level":4,"kbs":198.00,"rttMs":28,"tempC":44,"atS":523792},{"agoS":234179,"level":4,"kbs":249.30,"rttMs":15,"tempC":44,"atS":523793},{"agoS":234178,"level":4,"kbs":194.10,"rttMs":32,"tempC":44,"atS":523794},{"agoS":234177,"level":4,"kbs":277.80,"rttMs":15,"tempC":44,"atS":523795},{"agoS":234176,"level":4,"kbs":335.30,"rttMs":27,"tempC":44,"atS":523796},{"agoS":234175,"level":4,"kbs":247.30,"rttMs":20,"tempC":45,"atS":523797},{"agoS":234174,"level":4,"kbs":275.90,"rttMs":22,"tempC":45,"atS":523798}],"routerSession":{"seen":true,"active":true,"startMs":3629,"endMs":0,"joinMs":175,"dhcpMs":1615,"endReason":0,"rssiEnd":0,"afterOwnWifi":false,"cc":"DK","fastUntilMs":757968006,"bw":40,"proto":7,"txQdbm":80,"ch":1,"second":0,"b":1,"g":1,"n":1,"phy":4,"pairwise":4,"group":3,"ps":0,"ip":"<ip>","mask":"<ip>","gw":"<ip>","dns":"<ip>","rssiStart":-43,"rssiMin":-79,"rssiMax":-30,"rssiAvg":-46,"rssiLast":-50,"pingSent":378985,"pingOk":378985,"pingSumMs":1138359,"pingMaxMs":309,"pingLostRowMax":0,"pingBuckets":[366300,12493,184,8,0],"beaconTimeouts":0,"channelChanges":0,"opens":208,"opensEmpty":4,"opensReused":46,"requests":4795,"ok":4794,"status":[4794,0,1,0],"sendFails":0,"bytes":24169117},"allocFails":0,"routerSessions":[{"seen":true,"active":true,"startMs":3629,"endMs":0,"joinMs":175,"dhcpMs":1615,"endReason":0,"rssiEnd":0,"afterOwnWifi":false,"cc":"DK","fastUntilMs":757968006,"bw":40,"proto":7,"txQdbm":80,"ch":1,"second":0,"b":1,"g":1,"n":1,"phy":4,"pairwise":4,"group":3,"ps":0,"ip":"<ip>","mask":"<ip>","gw":"<ip>","dns":"<ip>","rssiStart":-43,"rssiMin":-79,"rssiMax":-30,"rssiAvg":-46,"rssiLast":-50,"pingSent":378985,"pingOk":378985,"pingSumMs":1138359,"pingMaxMs":309,"pingLostRowMax":0,"pingBuckets":[366300,12493,184,8,0],"beaconTimeouts":0,"channelChanges":0,"opens":208,"opensEmpty":4,"opensReused":46,"requests":4795,"ok":4794,"status":[4794,0,1,0],"sendFails":0,"bytes":24169117}],"slots":[[756143,15,15,3,-46,0,0,0,44],[756173,15,15,3,-52,0,0,0,44],[756203,15,15,2,-49,0,0,0,44],[756233,15,15,3,-50,0,0,0,44],[756263,15,15,5,-42,0,0,0,44],[756293,15,15,3,-44,0,0,0,44],[756323,15,15,3,-44,0,0,0,44],[756353,15,15,4,-44,0,0,0,44],[756383,15,15,3,-44,0,0,0,44],[756413,15,15,3,-44,0,0,0,44],[756443,15,15,2,-44,0,0,0,44],[756473,15,15,3,-44,0,0,0,44],[756503,15,15,2,-44,0,0,0,44],[756533,15,15,3,-44,0,0,0,44],[756563,15,15,3,-44,0,0,0,44],[756593,15,15,4,-44,0,0,0,44],[756623,15,15,2,-44,0,0,0,44],[756653,15,15,5,-46,0,0,0,44],[756683,15,15,3,-44,0,0,0,44],[756713,15,15,3,-44,0,0,0,44],[756743,15,15,3,-43,0,0,0,44],[756773,15,15,3,-44,0,0,0,44],[756803,15,15,4,-43,0,0,0,44],[756833,15,15,3,-44,0,0,0,44],[756863,15,15,3,-44,0,0,0,44],[756893,15,15,4,-44,0,0,0,44],[756923,15,15,3,-43,0,0,0,44],[756953,15,15,3,-42,0,0,0,44],[756983,15,15,3,-43,0,0,0,44],[757013,15,15,3,-44,0,0,0,44],[757043,15,15,3,-44,0,0,0,44],[757073,15,15,4,-44,0,0,0,44],[757103,15,15,3,-44,0,0,0,44],[757133,15,15,3,-48,0,0,0,44],[757163,15,15,4,-58,0,0,0,44],[757193,15,15,2,-56,0,0,0,44],[757223,15,15,3,-49,0,0,0,44],[757253,15,15,2,-47,0,0,0,44],[757283,15,15,4,-51,0,0,0,44],[757313,15,15,3,-52,0,0,0,44],[757343,15,15,3,-49,0,0,0,44],[757373,15,15,3,-56,0,0,0,44],[757403,15,15,3,-45,0,0,0,43],[757433,15,15,3,-46,0,0,0,43],[757463,15,15,3,-45,0,0,0,44],[757493,15,15,3,-45,0,0,0,44],[757523,15,15,3,-44,0,0,0,44],[757553,15,15,4,-45,0,0,0,44],[757583,15,15,3,-45,0,0,0,44],[757613,15,15,3,-47,0,0,0,44],[757643,15,15,3,-47,0,0,0,44],[757673,15,15,3,-45,0,0,0,44],[757703,15,15,2,-47,0,0,0,44],[757733,15,15,3,-48,0,0,0,44],[757763,15,15,3,-49,0,0,0,44],[757793,15,15,3,-49,0,0,0,44],[757823,15,15,3,-50,0,0,0,44],[757853,15,15,3,-46,0,0,0,44],[757883,15,15,3,-56,0,0,0,44],[757913,15,15,4,-48,0,0,0,44]],"slotFields":"startS,pingSent,pingOk,rttAvgMs,rssi,requests,failed,bytes,chipTempC","http":[{"net":"own Wi-Fi","conns":0,"connsEmpty":0,"connsReused":0,"requests":0,"status":[0,0,0,0],"failed":0,"bytes":0,"slowMs":0,"slowPath":"","lastMs":0,"endpoints":[[0,0,0],[0,0,0],[0,0,0],[0,0,0]]},{"net":"router","conns":208,"connsEmpty":4,"connsReused":46,"requests":4795,"status":[4794,0,1,0],"failed":0,"bytes":24169117,"slowMs":1052,"slowPath":"/api/wifi/log","lastMs":523924469,"endpoints":[[2,0,254],[0,0,0],[2899,0,15],[1894,0,1052]]},{"net":"self-test","conns":0,"connsEmpty":0,"connsReused":0,"requests":0,"status":[0,0,0,0],"failed":0,"bytes":0,"slowMs":0,"slowPath":"","lastMs":0,"endpoints":[[0,0,0],[0,0,0],[0,0,0],[0,0,0]]}],"requestLog":[{"atMs":523908001,"net":"router","path":"/api/live","status":200,"bytes":744,"firstMs":2,"ms":6,"failed":false,"nth":255},{"atMs":523908527,"net":"router","path":"/api/live","status":200,"bytes":744,"firstMs":2,"ms":7,"failed":false,"nth":255},{"atMs":523909065,"net":"router","path":"/api/live","status":200,"bytes":744,"firstMs":2,"ms":6,"failed":false,"nth":255},{"atMs":523909586,"net":"router","path":"/api/live","status":200,"bytes":744,"firstMs":2,"ms":6,"failed":false,"nth":255},{"atMs":523910112,"net":"router","path":"/api/live","status":200,"bytes":744,"firstMs":2,"ms":7,"failed":false,"nth":255},{"atMs":523910655,"net":"router","path":"/api/live","status":200,"bytes":744,"firstMs":2,"ms":6,"failed":false,"nth":255},{"atMs":523911179,"net":"router","path":"/api/live","status":200,"bytes":744,"firstMs":2,"ms":7,"failed":false,"nth":255},{"atMs":523911705,"net":"router","path":"/api/live","status":200,"bytes":744,"firstMs":2,"ms":7,"failed":false,"nth":255},{"atMs":523912233,"net":"router","path":"/api/live","status":200,"bytes":744,"firstMs":1,"ms":8,"failed":false,"nth":255},{"atMs":523912773,"net":"router","path":"/api/live","status":200,"bytes":744,"firstMs":2,"ms":6,"failed":false,"nth":255},{"atMs":523913303,"net":"router","path":"/api/live","status":200,"bytes":744,"firstMs":2,"ms":6,"failed":false,"nth":255},{"atMs":523913828,"net":"router","path":"/api/live","status":200,"bytes":744,"firstMs":1,"ms":6,"failed":false,"nth":255},{"atMs":523914351,"net":"router","path":"/api/live","status":200,"bytes":744,"firstMs":2,"ms":7,"failed":false,"nth":255},{"atMs":523914878,"net":"router","path":"/api/live","status":200,"bytes":744,"firstMs":2,"ms":7,"failed":false,"nth":255},{"atMs":523915406,"net":"router","path":"/api/live","status":200,"bytes":744,"firstMs":2,"ms":6,"failed":false,"nth":255},{"atMs":523915963,"net":"router","path":"/api/live","status":200,"bytes":744,"firstMs":2,"ms":7,"failed":false,"nth":255},{"atMs":523916490,"net":"router","path":"/api/live","status":200,"bytes":744,"firstMs":1,"ms":6,"failed":false,"nth":255},{"atMs":523917023,"net":"router","path":"/api/live","status":200,"bytes":744,"firstMs":1,"ms":7,"failed":false,"nth":255},{"atMs":523917549,"net":"router","path":"/api/live","status":200,"bytes":744,"firstMs":2,"ms":6,"failed":false,"nth":255},{"atMs":523918085,"net":"router","path":"/api/live","status":200,"bytes":744,"firstMs":2,"ms":9,"failed":false,"nth":255},{"atMs":523918606,"net":"router","path":"/api/live","status":200,"bytes":744,"firstMs":2,"ms":6,"failed":false,"nth":255},{"atMs":523919136,"net":"router","path":"/api/live","status":200,"bytes":744,"firstMs":2,"ms":6,"failed":false,"nth":255},{"atMs":523919651,"net":"router","path":"/api/live","status":200,"bytes":744,"firstMs":2,"ms":7,"failed":false,"nth":255},{"atMs":523920192,"net":"router","path":"/api/live","status":200,"bytes":744,"firstMs":2,"ms":7,"failed":false,"nth":255},{"atMs":523920737,"net":"router","path":"/api/live","status":200,"bytes":744,"firstMs":2,"ms":6,"failed":false,"nth":255},{"atMs":523921268,"net":"router","path":"/api/live","status":200,"bytes":744,"firstMs":2,"ms":6,"failed":false,"nth":255},{"atMs":523921796,"net":"router","path":"/api/live","status":200,"bytes":744,"firstMs":2,"ms":6,"failed":false,"nth":255},{"atMs":523922332,"net":"router","path":"/api/live","status":200,"bytes":744,"firstMs":2,"ms":6,"failed":false,"nth":255},{"atMs":523922877,"net":"router","path":"/api/live","status":200,"bytes":744,"firstMs":2,"ms":7,"failed":false,"nth":255},{"atMs":523923420,"net":"router","path":"/api/live","status":200,"bytes":744,"firstMs":2,"ms":6,"failed":false,"nth":255},{"atMs":523923934,"net":"router","path":"/api/live","status":200,"bytes":744,"firstMs":1,"ms":6,"failed":false,"nth":255},{"atMs":523924469,"net":"router","path":"/api/live","status":200,"bytes":744,"firstMs":1,"ms":6,"failed":false,"nth":255}],"netSteps":[],"powerSave":0,"events":[{"uptimeMs":1239,"event":"Connect started","reason":0,"count":1,"lastUptimeMs":1239},{"uptimeMs":1414,"event":"Associated with router","reason":0,"count":1,"lastUptimeMs":1414},{"uptimeMs":3029,"event":"Received router IP","reason":0,"count":1,"lastUptimeMs":3029}]}
+
+
+######## 2026-11-26 <mac> UTC ########
+ENGINELINK - WI-FI REPORT
+========================
+
+Firmware: 0.17.7 (built Nov 15 2026 <mac>)
+Uptime: 759773 seconds
+Mode: Router (station)
+Wi-Fi radio mode: 1 (1=station, 2=access point)
+Router: <router name hidden>
+Currently connected: Yes
+Router IP now: <ip>
+Last successful router IP: <ip>
+Last router signal: -56 dBm
+Last router channel: 1
+Last negotiated Wi-Fi security: WPA2-Personal
+Station: as the working test sketch: power save off, everything else the driver's default (no bandwidth, country, scan, protocol or TX-power setting)
+Security: ESP32 core WPA2/WPA3 negotiation (no custom SAE handling)
+Transmit power: ESP32 driver default · driver reports 20.00 dBm (80 quarter-dBm) · set again after the driver changed it: 0 time(s)
+Power save: off
+Negotiated Wi-Fi standard: 802.11n 20 MHz
+CONNECTIVITY (COUNTERS SINCE BOOT)
+Successful Wi-Fi associations: 1
+Successful router IP assignments: 1
+Router IP losses: 0
+Wi-Fi disconnect events: 0
+Dropped active router connections: 0
+Pre-connection failures: 0
+Reconnect: the ESP32 core's own, plus one plain connect after 20 s without any attempt (the core stops after code 202)
+App-initiated router attempts: 1
+Router recovery fallbacks: 0
+Last association time: 175 ms
+Last DHCP time: 1615 ms
+Last successful IP at uptime: 3 seconds
+Last Wi-Fi event reason: 0 - No reason reported
+Last unexpected reason: 0 - No reason reported
+Error 202 means authentication failure; it does not prove the password is wrong.
+
+DOWNLOAD TESTS FROM THE PHONE (newest last)
+  517218 s ago · 19.5 dBm · 249.60 kB/s · request round trip 23 ms · chip 42 C · at uptime 242555 s
+  517217 s ago · 19.5 dBm · 216.70 kB/s · request round trip 37 ms · chip 42 C · at uptime 242556 s
+  517216 s ago · 19.5 dBm · 197.70 kB/s · request round trip 31 ms · chip 42 C · at uptime 242557 s
+  236016 s ago · 19.5 dBm · 249.40 kB/s · request round trip 47 ms · chip 44 C · at uptime 523757 s
+  235983 s ago · 19.5 dBm · 234.80 kB/s · request round trip 21 ms · chip 44 C · at uptime 523790 s
+  235981 s ago · 19.5 dBm · 198.00 kB/s · request round trip 28 ms · chip 44 C · at uptime 523792 s
+  235980 s ago · 19.5 dBm · 249.30 kB/s · request round trip 15 ms · chip 44 C · at uptime 523793 s
+  235978 s ago · 19.5 dBm · 194.10 kB/s · request round trip 32 ms · chip 44 C · at uptime 523794 s
+  235978 s ago · 19.5 dBm · 277.80 kB/s · request round trip 15 ms · chip 44 C · at uptime 523795 s
+  235976 s ago · 19.5 dBm · 335.30 kB/s · request round trip 27 ms · chip 44 C · at uptime 523796 s
+  235975 s ago · 19.5 dBm · 247.30 kB/s · request round trip 20 ms · chip 45 C · at uptime 523797 s
+  235975 s ago · 19.5 dBm · 275.90 kB/s · request round trip 22 ms · chip 45 C · at uptime 523798 s
+
+ROUTER SESSIONS AS ENGINELINK MEASURED THEM (newest first, up to 4 kept since the start)
+#1 RUNNING: started at uptime 3 s (joined in 175 ms, address after 1615 ms), running for 759770 s
+   Radio: EngineLink offered 40 MHz · negotiated 802.11n 20 MHz · router on channel 1 (20 MHz), supports b g n · encryption pairwise CCMP (AES), group TKIP · power save off · transmit power 20.00 dBm
+   Joined straight after the start (as the test sketch) · country code in the driver DK · last ping answered in under 50 ms: 759770 s after the join
+   Addresses: EngineLink <ip> · mask <ip> · gateway <ip> · DNS <ip>
+   Signal (dBm, every 10 s): start -43, lowest -79, highest -30, average -46, last -58
+   Link check (ping to the router every 2 s): 379886 of 379886 answered (0 % lost), average 3 ms, longest 309 ms, most lost in a row 0 (0 s) · answered in <10/<50/<200/<1000/1000+ ms: 367176/12518/184/8/0
+   Driver: beacon-timeout warnings 0 · channel or width changes 0
+   Web through the router: connections 208 (4 closed without a request, 46 used for more than one) · requests 4795 · status 2xx 4794, 3xx 0, 4xx 1, 5xx 0 · failed while sending 0 · bytes sent 24169117
+Reading it: pings lost = packets between EngineLink and the router do not get through. Pings fine but connections
+without a request, or none = the other device's packets do not reach EngineLink. Requests answered but connections
+never reused = the answers do not reach the device.
+
+NEWEST SESSION IN 30 s PIECES (uptime · pings answered/sent, average ms · signal · web requests, failed, bytes · chip temperature)
+  +757943s · 16/16, 2 ms · -50 dBm · 0, 0, 0 B · 44 C
+  +757973s · 15/15, 5 ms · -54 dBm · 0, 0, 0 B · 44 C
+  +758003s · 15/15, 3 ms · -52 dBm · 0, 0, 0 B · 44 C
+  +758033s · 15/15, 3 ms · -53 dBm · 0, 0, 0 B · 44 C
+  +758063s · 15/15, 2 ms · -51 dBm · 0, 0, 0 B · 44 C
+  +758093s · 15/15, 3 ms · -53 dBm · 0, 0, 0 B · 44 C
+  +758123s · 15/15, 3 ms · -46 dBm · 0, 0, 0 B · 44 C
+  +758153s · 15/15, 3 ms · -49 dBm · 0, 0, 0 B · 44 C
+  +758183s · 15/15, 3 ms · -50 dBm · 0, 0, 0 B · 44 C
+  +758213s · 15/15, 3 ms · -47 dBm · 0, 0, 0 B · 44 C
+  +758243s · 15/15, 3 ms · -48 dBm · 0, 0, 0 B · 44 C
+  +758273s · 15/15, 3 ms · -50 dBm · 0, 0, 0 B · 44 C
+  +758303s · 15/15, 3 ms · -54 dBm · 0, 0, 0 B · 44 C
+  +758333s · 15/15, 3 ms · -50 dBm · 0, 0, 0 B · 44 C
+  +758363s · 15/15, 2 ms · -49 dBm · 0, 0, 0 B · 44 C
+  +758393s · 15/15, 4 ms · -46 dBm · 0, 0, 0 B · 44 C
+  +758423s · 15/15, 3 ms · -46 dBm · 0, 0, 0 B · 44 C
+  +758453s · 15/15, 4 ms · -45 dBm · 0, 0, 0 B · 43 C
+  +758483s · 15/15, 3 ms · -44 dBm · 0, 0, 0 B · 44 C
+  +758513s · 15/15, 4 ms · -48 dBm · 0, 0, 0 B · 43 C
+  +758543s · 15/15, 2 ms · -44 dBm · 0, 0, 0 B · 44 C
+  +758573s · 15/15, 4 ms · -52 dBm · 0, 0, 0 B · 44 C
+  +758603s · 15/15, 3 ms · -47 dBm · 0, 0, 0 B · 44 C
+  +758633s · 15/15, 4 ms · -47 dBm · 0, 0, 0 B · 44 C
+  +758663s · 15/15, 3 ms · -45 dBm · 0, 0, 0 B · 44 C
+  +758693s · 15/15, 3 ms · -48 dBm · 0, 0, 0 B · 44 C
+  +758723s · 15/15, 3 ms · -49 dBm · 0, 0, 0 B · 44 C
+  +758753s · 15/15, 4 ms · -46 dBm · 0, 0, 0 B · 44 C
+  +758783s · 15/15, 4 ms · -47 dBm · 0, 0, 0 B · 44 C
+  +758813s · 15/15, 2 ms · -47 dBm · 0, 0, 0 B · 44 C
+  +758843s · 15/15, 5 ms · -46 dBm · 0, 0, 0 B · 44 C
+  +758873s · 15/15, 3 ms · -45 dBm · 0, 0, 0 B · 44 C
+  +758903s · 15/15, 4 ms · -45 dBm · 0, 0, 0 B · 44 C
+  +758933s · 15/15, 3 ms · -48 dBm · 0, 0, 0 B · 44 C
+  +758963s · 15/15, 3 ms · -48 dBm · 0, 0, 0 B · 44 C
+  +758993s · 15/15, 3 ms · -46 dBm · 0, 0, 0 B · 44 C
+  +759023s · 15/15, 3 ms · -49 dBm · 0, 0, 0 B · 44 C
+  +759053s · 15/15, 4 ms · -50 dBm · 0, 0, 0 B · 44 C
+  +759083s · 15/15, 2 ms · -48 dBm · 0, 0, 0 B · 44 C
+  +759113s · 15/15, 4 ms · -46 dBm · 0, 0, 0 B · 44 C
+  +759143s · 15/15, 4 ms · -47 dBm · 0, 0, 0 B · 44 C
+  +759173s · 15/15, 3 ms · -46 dBm · 0, 0, 0 B · 44 C
+  +759203s · 15/15, 2 ms · -47 dBm · 0, 0, 0 B · 44 C
+  +759233s · 15/15, 4 ms · -49 dBm · 0, 0, 0 B · 44 C
+  +759263s · 15/15, 5 ms · -49 dBm · 0, 0, 0 B · 44 C
+  +759293s · 15/15, 2 ms · -44 dBm · 0, 0, 0 B · 44 C
+  +759323s · 15/15, 3 ms · -55 dBm · 0, 0, 0 B · 44 C
+  +759353s · 15/15, 3 ms · -53 dBm · 0, 0, 0 B · 44 C
+  +759383s · 15/15, 3 ms · -52 dBm · 0, 0, 0 B · 44 C
+  +759413s · 15/15, 2 ms · -52 dBm · 0, 0, 0 B · 44 C
+  +759443s · 15/15, 2 ms · -49 dBm · 0, 0, 0 B · 44 C
+  +759473s · 15/15, 3 ms · -49 dBm · 0, 0, 0 B · 44 C
+  +759503s · 15/15, 4 ms · -51 dBm · 0, 0, 0 B · 44 C
+  +759533s · 15/15, 2 ms · -51 dBm · 0, 0, 0 B · 44 C
+  +759563s · 15/15, 3 ms · -53 dBm · 0, 0, 0 B · 44 C
+  +759593s · 15/15, 3 ms · -46 dBm · 0, 0, 0 B · 44 C
+  +759623s · 15/15, 3 ms · -46 dBm · 0, 0, 0 B · 44 C
+  +759653s · 15/15, 4 ms · -45 dBm · 0, 0, 0 B · 44 C
+  +759683s · 15/15, 3 ms · -46 dBm · 0, 0, 0 B · 44 C
+  +759713s · 15/15, 3 ms · -52 dBm · 0, 0, 0 B · 44 C
+
+ROUTER (AS SEEN BY ENGINELINK)
+Maker prefix (first half of the router's MAC address): <mac>
+Router supports: b g n 
+Router channel: 1 (20 MHz)
+Router country:  (channels 0--1)
+Encryption: pairwise CCMP (AES), group TKIP (slow, limits Wi-Fi to 54 Mbit/s)
+Signal now: -56 dBm
+EngineLink allows: b g n 
+EngineLink bandwidth: 40 MHz
+Beacon timeout (driver): 6 s
+
+ENGINELINK WI-FI (ACCESS POINT, THIS START)
+Phones connected now: 0 · joined 0 · DHCP leases assigned 0 · left 0 · started 0 · restarted by the watchdog 0 · channel 6
+Access point: off (router mode)
+Wi-Fi country (driver): DK 
+
+SYSTEM
+Chip temperature: now 44 C · at the first reading after the start 32 C · highest 45 C
+Chip: ESP32-S3 rev 2 · 240 MHz · Arduino core 3.3.12 · IDF v5.5.5
+Memory: free 93 KB, lowest 71 KB, largest block 51 KB · PSRAM free 7678 KB
+Main loop: longest pass 1125 ms · engine reading in own task: yes · engine task longest wait 180 ms (lock held by xfer when it began) · waits over 100 ms: 1 · longest round of its own work 41 ms
+Longest part of the main loop (ms): (web: own task) 0, sd 15, diag 9, sd scan 123, history 8, network 11, led 9, serial 1125, other 10
+Reset reason: 1 (1 power on, 3 software/update, 4 crash, 5/6/7 watchdog, 9 brownout, 11 reset over USB)
+Recent restarts (newest first): reason 1 after 0 s on 0.17.7 | reason 9 after 0 s on 0.17.7 | reason 1 after 0 s on 0.17.7 | reason 1 after 0 s on 0.17.7 | reason 1 after 0 s on 0.17.7 | reason 3 after 19 s on 0.17.7 | reason 3 after 19 s on 0.17.7 | reason 3 after 20 s on 0.17.7
+Internal memory: free 93 KB, lowest 71 KB, largest block 51 KB · failed allocations since the start: 0
+Slow steps of the network part (100 ms or more, newest last): none
+Tasks, CPU share of one core since the last snapshot (at most 30 s ago) / stack never used (bytes):
+  engines 0%/14912 · loopTask 11%/3964 · IDLE0 98%/240 · IDLE1 88%/344 · J7RX 0%/3172 · J6RX 0%/3176 · fw 0%/8932 · ping 0%/1928 · tiT 0%/2732 · xfer 0%/5000 · sys_evt 0%/2696 · httpd 0%/4436 · Tmr Svc 0%/2320 · arduino_events 0%/2936 · ipc1 0%/1288 · esp_timer 0%/7736 · wifi 0%/4092 · ipc0 0%/1280 · mdns 0%/1588
+Not available in this build of the ESP32 core (not invented here): lwIP's packet and TCP counters (LWIP_STATS off),
+the driver's transmit retry counters (no public API), the ARP table (no thread-safe public read).
+
+HTTP / WEB (esp_http_server, port 80)
+Requests: 4795 · long transfers: 302 · answered busy (503): 0 · refused by the security checks: 0 · send failures (timeout or phone gone): 0
+Connections opened: 208 · closed: 208 · open now: 0 · most at once: 7 · successful answers to other devices: 4794
+On the own Wi-Fi: connections 0 (0 closed without a request, 0 used for more than one) · requests 0 · 2xx 0, 3xx 0, 4xx 0, 5xx 0 · failed while sending 0 · bytes 0 KB · slowest 0 ms ()
+Through the router: connections 208 (4 closed without a request, 46 used for more than one) · requests 4795 · 2xx 4794, 3xx 0, 4xx 1, 5xx 0 · failed while sending 0 · bytes 23602 KB · slowest 1052 ms (/api/wifi/log) · last at uptime 523924 s
+   by address (requests, failed, slowest ms): / 2/0/254 · /api/health 0/0/0 · /api/live 2899/0/15 · other 1894/0/1052
+Own self-test: connections 0 (0 closed without a request, 0 used for more than one) · requests 0 · 2xx 0, 3xx 0, 4xx 0, 5xx 0 · failed while sending 0 · bytes 0 KB · slowest 0 ms ()
+Request log (every request through the router, and failed or slow ones on the own Wi-Fi; newest 32 of 4795):
+  +523908.0s router /api/live -> 200, 744 B, first byte after 2 ms, done in 6 ms (request 255 on its connection)
+  +523908.5s router /api/live -> 200, 744 B, first byte after 2 ms, done in 7 ms (request 255 on its connection)
+  +523909.0s router /api/live -> 200, 744 B, first byte after 2 ms, done in 6 ms (request 255 on its connection)
+  +523909.5s router /api/live -> 200, 744 B, first byte after 2 ms, done in 6 ms (request 255 on its connection)
+  +523910.1s router /api/live -> 200, 744 B, first byte after 2 ms, done in 7 ms (request 255 on its connection)
+  +523910.6s router /api/live -> 200, 744 B, first byte after 2 ms, done in 6 ms (request 255 on its connection)
+  +523911.1s router /api/live -> 200, 744 B, first byte after 2 ms, done in 7 ms (request 255 on its connection)
+  +523911.7s router /api/live -> 200, 744 B, first byte after 2 ms, done in 7 ms (request 255 on its connection)
+  +523912.2s router /api/live -> 200, 744 B, first byte after 1 ms, done in 8 ms (request 255 on its connection)
+  +523912.7s router /api/live -> 200, 744 B, first byte after 2 ms, done in 6 ms (request 255 on its connection)
+  +523913.3s router /api/live -> 200, 744 B, first byte after 2 ms, done in 6 ms (request 255 on its connection)
+  +523913.8s router /api/live -> 200, 744 B, first byte after 1 ms, done in 6 ms (request 255 on its connection)
+  +523914.3s router /api/live -> 200, 744 B, first byte after 2 ms, done in 7 ms (request 255 on its connection)
+  +523914.8s router /api/live -> 200, 744 B, first byte after 2 ms, done in 7 ms (request 255 on its connection)
+  +523915.4s router /api/live -> 200, 744 B, first byte after 2 ms, done in 6 ms (request 255 on its connection)
+  +523915.9s router /api/live -> 200, 744 B, first byte after 2 ms, done in 7 ms (request 255 on its connection)
+  +523916.4s router /api/live -> 200, 744 B, first byte after 1 ms, done in 6 ms (request 255 on its connection)
+  +523917.0s router /api/live -> 200, 744 B, first byte after 1 ms, done in 7 ms (request 255 on its connection)
+  +523917.5s router /api/live -> 200, 744 B, first byte after 2 ms, done in 6 ms (request 255 on its connection)
+  +523918.0s router /api/live -> 200, 744 B, first byte after 2 ms, done in 9 ms (request 255 on its connection)
+  +523918.6s router /api/live -> 200, 744 B, first byte after 2 ms, done in 6 ms (request 255 on its connection)
+  +523919.1s router /api/live -> 200, 744 B, first byte after 2 ms, done in 6 ms (request 255 on its connection)
+  +523919.6s router /api/live -> 200, 744 B, first byte after 2 ms, done in 7 ms (request 255 on its connection)
+  +523920.1s router /api/live -> 200, 744 B, first byte after 2 ms, done in 7 ms (request 255 on its connection)
+  +523920.7s router /api/live -> 200, 744 B, first byte after 2 ms, done in 6 ms (request 255 on its connection)
+  +523921.2s router /api/live -> 200, 744 B, first byte after 2 ms, done in 6 ms (request 255 on its connection)
+  +523921.7s router /api/live -> 200, 744 B, first byte after 2 ms, done in 6 ms (request 255 on its connection)
+  +523922.3s router /api/live -> 200, 744 B, first byte after 2 ms, done in 6 ms (request 255 on its connection)
+  +523922.8s router /api/live -> 200, 744 B, first byte after 2 ms, done in 7 ms (request 255 on its connection)
+  +523923.4s router /api/live -> 200, 744 B, first byte after 2 ms, done in 6 ms (request 255 on its connection)
+  +523923.9s router /api/live -> 200, 744 B, first byte after 1 ms, done in 6 ms (request 255 on its connection)
+  +523924.4s router /api/live -> 200, 744 B, first byte after 1 ms, done in 6 ms (request 255 on its connection)
+A request counts as answered when the server handed the whole answer to TCP. Whether it arrived is seen from the
+next request on the same connection ("used for more than one"); the last 5.7 KB of an answer cannot be confirmed.
+Slowest request: 1052 ms (/api/wifi/log?f=3) · last transfer waited 0 ms for the engine lock
+Stack left (bytes): web server 4436, transfers 5000
+Firmware self-test: not needed (this firmware was confirmed before)
+Last 32 KiB server write: 65536 bytes in 222 ms (16 write calls)
+TCP send window: ESP32 core default (not modified)
+Note: server write time is NOT the same as measured radio throughput.
+
+LATEST WI-FI EVENTS (oldest to newest; uptime seconds)
+  +1s  Connect started
+  +1s  Associated with router
+  +3s  Received router IP
+
+MACHINE-READABLE JSON (copy/send the entire report)
+{"version":"0.17.7","build":"Nov 15 2026 <mac>","uptimeMs":759773656,"mode":"router","recovery":false,"holdWhy":0,"wifiMode":1,"ssid":"<router name hidden>","status":3,"phase":"online","associated":true,"hasRouterIp":true,"ip":"<ip>","gateway":"<ip>","rssi":-56,"associationEvents":1,"dhcpIpEvents":1,"lostIpEvents":0,"associationMs":175,"dhcpMs":1615,"driverReason":0,"unexpectedReason":0,"unexpectedDrops":0,"associationFailures":0,"txReapplied":0,"txTargetQdbm":78,"txDriverQdbm":80,"apLink":{"up":false,"ch":0,"bw":0,"pmfCapable":false,"pmfRequired":false,"inactiveS":0,"country":"","stations":[]},"loopParts":[0,15,9,123,8,11,9,1125,10],"engineMaxWaitMs":180,"engineMaxWaitBy":"xfer","engineSlowWaits":1,"engineMaxRoundMs":41,"apStations":0,"apJoins":0,"apLeaves":0,"apDhcpLeases":0,"apLeaveReason":0,"apRestarts":0,"speedTxBytes":65536,"speedTxMs":222,"speedTxWrites":16,"networkEpoch":1,"httpdRequests":4795,"httpdAsync":302,"httpdBusy503":0,"httpdBusyLock":0,"httpdBusyXfer":0,"httpdBusyXferLock":0,"httpdBusyPath":"","httpdBusyAtMs":0,"httpdRejected":0,"httpdSendFails":0,"httpdOpens":208,"httpdCloses":208,"httpdOpenNow":0,"httpdOpenMax":7,"httpdExternalOk":4794,"httpdSlowMs":1052,"httpdSlowPath":"/api/wifi/log?f=3","httpdRouterOpens":208,"httpdRouterRequests":4795,"httpdRouterOk":4794,"httpdRouterSendFails":0,"httpdRouterLastMs":523924469,"httpdStackFree":4436,"xferStackFree":5000,"routerAttempts":1,"routerFallbacks":0,"routerNextTryS":null,"disconnectEvents":0,"lastGotIpUptimeMs":3029,"lastRouterIp":"<ip>","lastRouterRssi":-56,"lastRouterChannel":1,"lastSecurity":"WPA2-Personal","txLevel":4,"phoneTests":[{"agoS":517218,"level":4,"kbs":249.60,"rttMs":23,"tempC":42,"atS":242555},{"agoS":517217,"level":4,"kbs":216.70,"rttMs":37,"tempC":42,"atS":242556},{"agoS":517216,"level":4,"kbs":197.70,"rttMs":31,"tempC":42,"atS":242557},{"agoS":236016,"level":4,"kbs":249.40,"rttMs":47,"tempC":44,"atS":523757},{"agoS":235983,"level":4,"kbs":234.80,"rttMs":21,"tempC":44,"atS":523790},{"agoS":235981,"level":4,"kbs":198.00,"rttMs":28,"tempC":44,"atS":523792},{"agoS":235980,"level":4,"kbs":249.30,"rttMs":15,"tempC":44,"atS":523793},{"agoS":235978,"level":4,"kbs":194.10,"rttMs":32,"tempC":44,"atS":523794},{"agoS":235978,"level":4,"kbs":277.80,"rttMs":15,"tempC":44,"atS":523795},{"agoS":235976,"level":4,"kbs":335.30,"rttMs":27,"tempC":44,"atS":523796},{"agoS":235975,"level":4,"kbs":247.30,"rttMs":20,"tempC":45,"atS":523797},{"agoS":235975,"level":4,"kbs":275.90,"rttMs":22,"tempC":45,"atS":523798}],"routerSession":{"seen":true,"active":true,"startMs":3629,"endMs":0,"joinMs":175,"dhcpMs":1615,"endReason":0,"rssiEnd":0,"afterOwnWifi":false,"cc":"DK","fastUntilMs":759770004,"bw":40,"proto":7,"txQdbm":80,"ch":1,"second":0,"b":1,"g":1,"n":1,"phy":4,"pairwise":4,"group":3,"ps":0,"ip":"<ip>","mask":"<ip>","gw":"<ip>","dns":"<ip>","rssiStart":-43,"rssiMin":-79,"rssiMax":-30,"rssiAvg":-46,"rssiLast":-58,"pingSent":379886,"pingOk":379886,"pingSumMs":1141635,"pingMaxMs":309,"pingLostRowMax":0,"pingBuckets":[367176,12518,184,8,0],"beaconTimeouts":0,"channelChanges":0,"opens":208,"opensEmpty":4,"opensReused":46,"requests":4795,"ok":4794,"status":[4794,0,1,0],"sendFails":0,"bytes":24169117},"allocFails":0,"routerSessions":[{"seen":true,"active":true,"startMs":3629,"endMs":0,"joinMs":175,"dhcpMs":1615,"endReason":0,"rssiEnd":0,"afterOwnWifi":false,"cc":"DK","fastUntilMs":759770004,"bw":40,"proto":7,"txQdbm":80,"ch":1,"second":0,"b":1,"g":1,"n":1,"phy":4,"pairwise":4,"group":3,"ps":0,"ip":"<ip>","mask":"<ip>","gw":"<ip>","dns":"<ip>","rssiStart":-43,"rssiMin":-79,"rssiMax":-30,"rssiAvg":-46,"rssiLast":-58,"pingSent":379886,"pingOk":379886,"pingSumMs":1141635,"pingMaxMs":309,"pingLostRowMax":0,"pingBuckets":[367176,12518,184,8,0],"beaconTimeouts":0,"channelChanges":0,"opens":208,"opensEmpty":4,"opensReused":46,"requests":4795,"ok":4794,"status":[4794,0,1,0],"sendFails":0,"bytes":24169117}],"slots":[[757943,16,16,2,-50,0,0,0,44],[757973,15,15,5,-54,0,0,0,44],[758003,15,15,3,-52,0,0,0,44],[758033,15,15,3,-53,0,0,0,44],[758063,15,15,2,-51,0,0,0,44],[758093,15,15,3,-53,0,0,0,44],[758123,15,15,3,-46,0,0,0,44],[758153,15,15,3,-49,0,0,0,44],[758183,15,15,3,-50,0,0,0,44],[758213,15,15,3,-47,0,0,0,44],[758243,15,15,3,-48,0,0,0,44],[758273,15,15,3,-50,0,0,0,44],[758303,15,15,3,-54,0,0,0,44],[758333,15,15,3,-50,0,0,0,44],[758363,15,15,2,-49,0,0,0,44],[758393,15,15,4,-46,0,0,0,44],[758423,15,15,3,-46,0,0,0,44],[758453,15,15,4,-45,0,0,0,43],[758483,15,15,3,-44,0,0,0,44],[758513,15,15,4,-48,0,0,0,43],[758543,15,15,2,-44,0,0,0,44],[758573,15,15,4,-52,0,0,0,44],[758603,15,15,3,-47,0,0,0,44],[758633,15,15,4,-47,0,0,0,44],[758663,15,15,3,-45,0,0,0,44],[758693,15,15,3,-48,0,0,0,44],[758723,15,15,3,-49,0,0,0,44],[758753,15,15,4,-46,0,0,0,44],[758783,15,15,4,-47,0,0,0,44],[758813,15,15,2,-47,0,0,0,44],[758843,15,15,5,-46,0,0,0,44],[758873,15,15,3,-45,0,0,0,44],[758903,15,15,4,-45,0,0,0,44],[758933,15,15,3,-48,0,0,0,44],[758963,15,15,3,-48,0,0,0,44],[758993,15,15,3,-46,0,0,0,44],[759023,15,15,3,-49,0,0,0,44],[759053,15,15,4,-50,0,0,0,44],[759083,15,15,2,-48,0,0,0,44],[759113,15,15,4,-46,0,0,0,44],[759143,15,15,4,-47,0,0,0,44],[759173,15,15,3,-46,0,0,0,44],[759203,15,15,2,-47,0,0,0,44],[759233,15,15,4,-49,0,0,0,44],[759263,15,15,5,-49,0,0,0,44],[759293,15,15,2,-44,0,0,0,44],[759323,15,15,3,-55,0,0,0,44],[759353,15,15,3,-53,0,0,0,44],[759383,15,15,3,-52,0,0,0,44],[759413,15,15,2,-52,0,0,0,44],[759443,15,15,2,-49,0,0,0,44],[759473,15,15,3,-49,0,0,0,44],[759503,15,15,4,-51,0,0,0,44],[759533,15,15,2,-51,0,0,0,44],[759563,15,15,3,-53,0,0,0,44],[759593,15,15,3,-46,0,0,0,44],[759623,15,15,3,-46,0,0,0,44],[759653,15,15,4,-45,0,0,0,44],[759683,15,15,3,-46,0,0,0,44],[759713,15,15,3,-52,0,0,0,44]],"slotFields":"startS,pingSent,pingOk,rttAvgMs,rssi,requests,failed,bytes,chipTempC","http":[{"net":"own Wi-Fi","conns":0,"connsEmpty":0,"connsReused":0,"requests":0,"status":[0,0,0,0],"failed":0,"bytes":0,"slowMs":0,"slowPath":"","lastMs":0,"endpoints":[[0,0,0],[0,0,0],[0,0,0],[0,0,0]]},{"net":"router","conns":208,"connsEmpty":4,"connsReused":46,"requests":4795,"status":[4794,0,1,0],"failed":0,"bytes":24169117,"slowMs":1052,"slowPath":"/api/wifi/log","lastMs":523924469,"endpoints":[[2,0,254],[0,0,0],[2899,0,15],[1894,0,1052]]},{"net":"self-test","conns":0,"connsEmpty":0,"connsReused":0,"requests":0,"status":[0,0,0,0],"failed":0,"bytes":0,"slowMs":0,"slowPath":"","lastMs":0,"endpoints":[[0,0,0],[0,0,0],[0,0,0],[0,0,0]]}],"requestLog":[{"atMs":523908001,"net":"router","path":"/api/live","status":200,"bytes":744,"firstMs":2,"ms":6,"failed":false,"nth":255},{"atMs":523908527,"net":"router","path":"/api/live","status":200,"bytes":744,"firstMs":2,"ms":7,"failed":false,"nth":255},{"atMs":523909065,"net":"router","path":"/api/live","status":200,"bytes":744,"firstMs":2,"ms":6,"failed":false,"nth":255},{"atMs":523909586,"net":"router","path":"/api/live","status":200,"bytes":744,"firstMs":2,"ms":6,"failed":false,"nth":255},{"atMs":523910112,"net":"router","path":"/api/live","status":200,"bytes":744,"firstMs":2,"ms":7,"failed":false,"nth":255},{"atMs":523910655,"net":"router","path":"/api/live","status":200,"bytes":744,"firstMs":2,"ms":6,"failed":false,"nth":255},{"atMs":523911179,"net":"router","path":"/api/live","status":200,"bytes":744,"firstMs":2,"ms":7,"failed":false,"nth":255},{"atMs":523911705,"net":"router","path":"/api/live","status":200,"bytes":744,"firstMs":2,"ms":7,"failed":false,"nth":255},{"atMs":523912233,"net":"router","path":"/api/live","status":200,"bytes":744,"firstMs":1,"ms":8,"failed":false,"nth":255},{"atMs":523912773,"net":"router","path":"/api/live","status":200,"bytes":744,"firstMs":2,"ms":6,"failed":false,"nth":255},{"atMs":523913303,"net":"router","path":"/api/live","status":200,"bytes":744,"firstMs":2,"ms":6,"failed":false,"nth":255},{"atMs":523913828,"net":"router","path":"/api/live","status":200,"bytes":744,"firstMs":1,"ms":6,"failed":false,"nth":255},{"atMs":523914351,"net":"router","path":"/api/live","status":200,"bytes":744,"firstMs":2,"ms":7,"failed":false,"nth":255},{"atMs":523914878,"net":"router","path":"/api/live","status":200,"bytes":744,"firstMs":2,"ms":7,"failed":false,"nth":255},{"atMs":523915406,"net":"router","path":"/api/live","status":200,"bytes":744,"firstMs":2,"ms":6,"failed":false,"nth":255},{"atMs":523915963,"net":"router","path":"/api/live","status":200,"bytes":744,"firstMs":2,"ms":7,"failed":false,"nth":255},{"atMs":523916490,"net":"router","path":"/api/live","status":200,"bytes":744,"firstMs":1,"ms":6,"failed":false,"nth":255},{"atMs":523917023,"net":"router","path":"/api/live","status":200,"bytes":744,"firstMs":1,"ms":7,"failed":false,"nth":255},{"atMs":523917549,"net":"router","path":"/api/live","status":200,"bytes":744,"firstMs":2,"ms":6,"failed":false,"nth":255},{"atMs":523918085,"net":"router","path":"/api/live","status":200,"bytes":744,"firstMs":2,"ms":9,"failed":false,"nth":255},{"atMs":523918606,"net":"router","path":"/api/live","status":200,"bytes":744,"firstMs":2,"ms":6,"failed":false,"nth":255},{"atMs":523919136,"net":"router","path":"/api/live","status":200,"bytes":744,"firstMs":2,"ms":6,"failed":false,"nth":255},{"atMs":523919651,"net":"router","path":"/api/live","status":200,"bytes":744,"firstMs":2,"ms":7,"failed":false,"nth":255},{"atMs":523920192,"net":"router","path":"/api/live","status":200,"bytes":744,"firstMs":2,"ms":7,"failed":false,"nth":255},{"atMs":523920737,"net":"router","path":"/api/live","status":200,"bytes":744,"firstMs":2,"ms":6,"failed":false,"nth":255},{"atMs":523921268,"net":"router","path":"/api/live","status":200,"bytes":744,"firstMs":2,"ms":6,"failed":false,"nth":255},{"atMs":523921796,"net":"router","path":"/api/live","status":200,"bytes":744,"firstMs":2,"ms":6,"failed":false,"nth":255},{"atMs":523922332,"net":"router","path":"/api/live","status":200,"bytes":744,"firstMs":2,"ms":6,"failed":false,"nth":255},{"atMs":523922877,"net":"router","path":"/api/live","status":200,"bytes":744,"firstMs":2,"ms":7,"failed":false,"nth":255},{"atMs":523923420,"net":"router","path":"/api/live","status":200,"bytes":744,"firstMs":2,"ms":6,"failed":false,"nth":255},{"atMs":523923934,"net":"router","path":"/api/live","status":200,"bytes":744,"firstMs":1,"ms":6,"failed":false,"nth":255},{"atMs":523924469,"net":"router","path":"/api/live","status":200,"bytes":744,"firstMs":1,"ms":6,"failed":false,"nth":255}],"netSteps":[],"powerSave":0,"events":[{"uptimeMs":1239,"event":"Connect started","reason":0,"count":1,"lastUptimeMs":1239},{"uptimeMs":1414,"event":"Associated with router","reason":0,"count":1,"lastUptimeMs":1414},{"uptimeMs":3029,"event":"Received router IP","reason":0,"count":1,"lastUptimeMs":3029}]}

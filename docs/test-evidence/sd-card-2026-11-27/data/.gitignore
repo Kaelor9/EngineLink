@@ -1,0 +1,3 @@
+# The repository ignores *.bin (Arduino build output); these .BIN files are trip and event data from the SD card.
+!*.BIN
+!*.bin
